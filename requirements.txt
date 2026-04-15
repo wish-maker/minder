@@ -1,0 +1,59 @@
+# Core
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+pydantic==2.9.0
+pydantic-settings==2.5.0
+python-multipart==0.0.6
+
+# Database
+psycopg2-binary==2.9.9  # Will be replaced with asyncpg
+asyncpg==0.29.0  # NEW: Async PostgreSQL driver
+influxdb-client==1.39.0
+redis==5.0.1
+qdrant-client==1.9.0
+
+# Web Scraping
+beautifulsoup4==4.12.2
+sentence-transformers==2.2.2
+aiohttp>=3.9.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.26.2
+scipy==1.13.0
+
+# AI/ML
+ollama==0.1.6
+openai==1.12.0
+
+# Security - NEW
+pyjwt==2.8.0
+bcrypt==4.1.2
+passlib[bcrypt]==1.7.4
+
+# Rate Limiting - NEW
+slowapi==0.1.9
+
+# Network Detection - Built-in
+# ipaddress is part of Python standard library
+
+# Advanced Analytics
+scipy==1.13.0
+plotly==5.18.0
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+httpx>=0.25.2,<0.26.0
+aiofiles==23.2.1
+
+# Logging
+loguru==0.7.2
+
+# API
+requests==2.31.0
+
+# Monitoring - NEW
+prometheus-client==0.19.0
+prometheus-fastapi-instrumentator==7.0.0
+httpx

@@ -1,0 +1,75 @@
+name: Minder CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov bandit safety
+
+    - name: Run unit tests
+      run: |
+        pytest tests/ -v --cov=. --cov-report=xml
+
+    - name: Code coverage
+      run: |
+        pytest tests/ --cov=. --cov-report=term-missing
+
+    - name: Linting
+      run: |
+        flake8 . --count --show-source --statistics
+
+    - name: Security scan
+      run: |
+        bandit -r api/ -f json
+
+    - name: Vulnerability scan
+      run: |
+        safety check
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Build Docker image
+      run: |
+        docker build -t minder-api:test .
+
+    - name: Security scan
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: 'minder-api:test'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Deploy to production
+      run: |
+        echo "Deploying to production..."
+        # Add deployment commands here

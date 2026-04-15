@@ -1,0 +1,167 @@
+services:
+  # PostgreSQL - use stable version
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      # Use POSTGRES_PASSWORD from .env file
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Multiple databases will be created via init script
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql  # Init script for separate databases
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # InfluxDB - always use latest
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    restart: unless-stopped
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: minder
+      # Use INFLUXDB_INIT_PASSWORD from .env file
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_INIT_PASSWORD:-minder123}
+      DOCKER_INFLUXDB_INIT_ORG: minder
+      DOCKER_INFLUXDB_INIT_BUCKET: metrics
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    ports:
+      - "8086:8086"
+
+  # Qdrant - always use latest
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+  # Redis - always use latest
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # Ollama - always use latest
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+  # OpenWebUI - always use latest
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=minder-secret-key-change-me
+    volumes:
+      - openwebui_data:/app/backend/data
+    ports:
+      - "3000:8080"
+    depends_on:
+      - ollama
+
+  # Minder API - only custom service gets named
+  minder-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: minder-api:latest
+    container_name: minder-api
+    restart: unless-stopped
+    network_mode: host  # Use host network to access Tailscale VPN
+    env_file:
+      - .env  # Load environment variables from .env file
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=fundmind
+      - POSTGRES_USER=postgres
+      # Loaded from .env file
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - INFLUXDB_HOST=influxdb
+      - INFLUXDB_PORT=8086
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=localhost
+      - REDIS_PORT=6379
+      - OLLAMA_HOST=ollama
+      - OLLAMA_PORT=11434
+      # Loaded from .env file
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      # Security - Authentication
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_EXPIRE_MINUTES=30
+      # Security - Plugin Store
+      - PLUGIN_SECURITY_LEVEL=${PLUGIN_SECURITY_LEVEL:-moderate}
+      - PLUGIN_TRUSTED_AUTHORS=${PLUGIN_TRUSTED_AUTHORS:-}
+      - PLUGIN_BLOCKED_AUTHORS=${PLUGIN_BLOCKED_AUTHORS:-}
+      - PLUGIN_REQUIRE_SIGNATURE=${PLUGIN_REQUIRE_SIGNATURE:-false}
+      - PLUGIN_MAX_SIZE_MB=${PLUGIN_MAX_SIZE_MB:-10}
+      # Network Configuration
+      - LOCAL_NETWORK_CIDR=192.168.68.0/24
+      - TAILSCALE_CIDR=100.64.0.0/10
+      - TRUST_LOCAL_NETWORK=true
+      - TRUST_VPN_NETWORK=true
+      - ALLOWED_ORIGINS=http://localhost:3000,http://192.168.68.*,http://100.*.*.*
+      # Application Settings
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./logs:/var/log/minder
+      - ./data:/var/lib/minder
+      - ./config.yaml:/app/config.yaml
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - influxdb
+      - qdrant
+      - redis
+      - ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - always use latest
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=minder123
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3002:3000"
+
+volumes:
+  postgres_data:
+  influxdb_data:
+  qdrant_data:
+  ollama_data:
+  openwebui_data:
+  grafana_data:

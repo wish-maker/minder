@@ -1,0 +1,168 @@
+# Minder Configuration
+
+# Kernel settings
+kernel:
+  name: "minder"
+  version: "1.0.0"
+  environment: "production"
+
+# Database connections
+databases:
+  postgres:
+    host: localhost
+    port: 5432
+
+  # Plugin-specific databases
+  news_db:
+    host: postgres
+    port: 5432
+    database: minder_news
+    user: postgres
+    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+
+  tefas_db:
+    host: postgres
+    port: 5432
+    database: minder_tefas
+    user: postgres
+    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+
+  weather_db:
+    host: postgres
+    port: 5432
+    database: minder_weather
+    user: postgres
+    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+
+  crypto_db:
+    host: postgres
+    port: 5432
+    database: minder_crypto
+    user: postgres
+    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+
+  network_db:
+    host: postgres
+    port: 5432
+    database: minder_network
+    user: postgres
+    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+
+  influxdb:
+    host: influxdb
+    port: 8086
+    database: minder
+    username: minder
+    password: minder123
+
+  qdrant:
+    host: qdrant
+    port: 6333
+    collection_prefix: "minder"
+
+# Plugin configurations
+plugins:
+  network:
+    enabled: true
+    influxdb:
+      host: influxdb
+      port: 8086
+
+  weather:
+    enabled: true
+    api_source: "open-meteo"
+    locations:
+      - Istanbul
+      - Ankara
+      - Izmir
+
+  crypto:
+    enabled: true
+    symbols:
+      - BTC
+      - ETH
+      - USDT
+
+  news:
+    enabled: true
+    sources:
+      - reuters
+      - bloomberg
+      - anadolu
+
+  tefas:
+    enabled: true
+    database:
+      host: postgres
+      port: 5432
+      database: fundmind
+      user: postgres
+      password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+    influxdb:
+      host: influxdb
+      port: 8086
+      token: minder123
+      org: minder
+      bucket: metrics
+    qdrant:
+      host: qdrant
+      port: 6333
+    batch_size: 100
+    historical_start_date: '2020-01-01'
+    collection_interval: 86400
+
+# Voice interface
+voice:
+  enabled: true
+  stt_model: "whisper-medium"
+  tts_model: "tts_models/multilingual/multi-dataset/xtts_v2"
+  default_language: "tr"
+  supported_languages:
+    - tr
+    - en
+    - de
+    - fr
+    - es
+    - it
+
+# Character system
+character:
+  default: "finbot"
+  custom_characters_path: "/var/lib/minder/characters"
+
+# OpenWebUI integration
+openwebui:
+  enabled: true
+  api_url: http://openwebui:8080
+  agent_endpoint: /api/agents/minder
+
+# Logging
+logging:
+  level: INFO
+  file: /var/log/minder/minder.log
+  rotation: daily
+  retention: 30
+
+# Performance
+performance:
+  max_workers: 4
+  batch_size: 100
+  cache_ttl: 3600
+  max_event_history: 10000
+
+# Plugin Store (GitHub reposundan plugin yükleme)
+plugin_store:
+  enabled: true
+  store_path: /var/lib/minder/plugins
+  index_url: https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json
+  github_token: ""  # Opsiyonel: GitHub token for private repos
+
+  # Güvenlik ayarları
+  security:
+    require_signature: false
+    allow_unsigned: true
+    scan_for_malware: false
+
+  # Otomatik güncelleme
+  auto_update: false
+  update_interval: 86400  # Günlük
