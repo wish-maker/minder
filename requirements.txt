@@ -21,6 +21,9 @@ requests==2.31.0
 pandas==2.1.4
 numpy==1.26.2
 
+# System Monitoring
+psutil==5.9.6  # For NetworkModule system monitoring
+
 # AI/ML
 ollama==0.1.6
 
