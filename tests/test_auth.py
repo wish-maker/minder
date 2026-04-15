@@ -146,7 +146,7 @@ class TestTokenVerification:
 
         # Verify the token
         async def verify():
-            payload = await auth_manager.verify_token(token)
+            payload = await test_auth_manager.verify_token(token)
             assert payload is not None
             assert payload.get("username") == "admin"
 
@@ -158,7 +158,7 @@ class TestTokenVerification:
 
         # Should return None for invalid token
         async def verify():
-            payload = await auth_manager.verify_token(invalid_token)
+            payload = await test_auth_manager.verify_token(invalid_token)
             assert payload is None
 
         asyncio.run(verify())
@@ -182,7 +182,7 @@ class TestTokenVerification:
 
             # Should return None for expired token
             async def verify():
-                payload = await auth_manager.verify_token(expired_token)
+                payload = await test_auth_manager.verify_token(expired_token)
                 assert payload is None
 
             asyncio.run(verify())
@@ -199,7 +199,7 @@ class TestUserAuthentication:
         password = "admin123"  # Default admin password
 
         async def authenticate():
-            result = await auth_manager.authenticate(username, password)
+            result = await test_auth_manager.authenticate(username, password)
             # Should return user data
             assert result is not None
             assert result.get("username") == "admin"
@@ -213,7 +213,7 @@ class TestUserAuthentication:
         password = "wrong_password"
 
         async def authenticate():
-            result = await auth_manager.authenticate(username, password)
+            result = await test_auth_manager.authenticate(username, password)
             # Should return None for invalid credentials
             assert result is None
 
@@ -225,7 +225,7 @@ class TestUserAuthentication:
         password = "wrong_password"
 
         async def authenticate():
-            result = await auth_manager.authenticate(username, password)
+            result = await test_auth_manager.authenticate(username, password)
             # Should return None for wrong password
             assert result is None
 
@@ -279,7 +279,7 @@ class TestSecurityFeatures:
 
         # Token should be verifiable with same secret key
         async def verify():
-            payload = await auth_manager.verify_token(token)
+            payload = await test_auth_manager.verify_token(token)
             return payload
 
         payload = asyncio.run(verify())
@@ -288,7 +288,7 @@ class TestSecurityFeatures:
     def test_password_not_stored_in_plaintext(self, test_auth_manager):
         """Test that passwords are not stored in plaintext"""
         password = "test_password_123"
-        hashed = auth_manager._hash_password(password)
+        hashed = test_auth_manager._hash_password(password)
 
         # Hash should not contain plaintext password
         assert password not in hashed
