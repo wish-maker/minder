@@ -2,6 +2,7 @@
 Authentication & Authorization Module
 JWT-based authentication with role-based access control
 """
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
@@ -25,8 +26,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "30"))
 
 # Context variable for current user
 current_user_var: ContextVar[Dict[str, Any]] = ContextVar(
-    'current_user',
-    default={}
+    "current_user", default={}
 )
 
 # Security scheme
@@ -48,14 +48,13 @@ class AuthManager:
     def _create_default_admin(self):
         """Create default admin user"""
         admin_password = bcrypt.hashpw(
-            "admin123".encode(),
-            bcrypt.gensalt()
+            "admin123".encode(), bcrypt.gensalt()
         ).decode()
         self.users["admin"] = {
             "username": "admin",
             "password_hash": admin_password,
             "role": "admin",
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
         logger.info(
             "✅ Default admin user created "
@@ -63,9 +62,7 @@ class AuthManager:
         )
 
     async def authenticate(
-        self,
-        username: str,
-        password: str
+        self, username: str, password: str
     ) -> Optional[Dict[str, Any]]:
         """Verify credentials against database"""
         user = self.users.get(username)
@@ -79,16 +76,13 @@ class AuthManager:
         # Verify password
         try:
             if bcrypt.checkpw(
-                password.encode(),
-                user['password_hash'].encode()
+                password.encode(), user["password_hash"].encode()
             ):
-                logger.info(
-                    f"✅ User authenticated successfully: {username}"
-                )
+                logger.info(f"✅ User authenticated successfully: {username}")
                 return {
-                    'username': user['username'],
-                    'role': user['role'],
-                    'created_at': user['created_at']
+                    "username": user["username"],
+                    "role": user["role"],
+                    "created_at": user["created_at"],
                 }
         except Exception as e:
             logger.error(f"Password verification failed: {e}")
@@ -106,10 +100,7 @@ class AuthManager:
         expire = datetime.utcnow() + timedelta(
             minutes=ACCESS_TOKEN_EXPIRE_MINUTES
         )
-        to_encode.update({
-            "exp": expire,
-            "iat": datetime.utcnow()
-        })
+        to_encode.update({"exp": expire, "iat": datetime.utcnow()})
 
         # Generate token
         token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -118,10 +109,7 @@ class AuthManager:
         )
         return token
 
-    async def verify_token(
-        self,
-        token: str
-    ) -> Optional[Dict[str, Any]]:
+    async def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
         """Verify JWT token and return user data"""
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -137,28 +125,23 @@ class AuthManager:
 
             logger.info(f"✅ Token verified successfully for user: {username}")
             return {
-                'username': user['username'],
-                'role': user['role'],
-                'exp': payload.get('exp'),
-                'iat': payload.get('iat')
+                "username": user["username"],
+                "role": user["role"],
+                "exp": payload.get("exp"),
+                "iat": payload.get("iat"),
             }
         except jwt.ExpiredSignatureError:
             logger.warning("Token verification failed: Token expired")
             return None
         except jwt.InvalidTokenError as e:
-            logger.warning(
-                f"Token verification failed: Invalid token - {e}"
-            )
+            logger.warning(f"Token verification failed: Invalid token - {e}")
             return None
         except Exception as e:
             logger.error(f"Token verification error: {e}")
             return None
 
     def create_user(
-        self,
-        username: str,
-        password: str,
-        role: str = "user"
+        self, username: str, password: str, role: str = "user"
     ) -> Dict[str, Any]:
         """Create a new user"""
         if username in self.users:
@@ -166,21 +149,18 @@ class AuthManager:
 
         # Hash password
         password_hash = bcrypt.hashpw(
-            password.encode(),
-            bcrypt.gensalt()
+            password.encode(), bcrypt.gensalt()
         ).decode()
 
         user = {
             "username": username,
             "password_hash": password_hash,
             "role": role,
-            "created_at": datetime.utcnow().isoformat()
+            "created_at": datetime.utcnow().isoformat(),
         }
 
         self.users[username] = user
-        logger.info(
-            f"✅ User created successfully: {username} (role: {role})"
-        )
+        logger.info(f"✅ User created successfully: {username} (role: {role})")
         return user
 
 
@@ -192,14 +172,13 @@ def get_auth_manager() -> AuthManager:
     """Get global auth manager instance"""
     if auth_manager is None:
         raise HTTPException(
-            status_code=500,
-            detail="Authentication manager not initialized"
+            status_code=500, detail="Authentication manager not initialized"
         )
     return auth_manager
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Dict[str, Any]:
     """
     FastAPI dependency for protected routes
@@ -215,7 +194,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No authentication token provided",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     user = await auth_mgr.verify_token(token)
@@ -224,7 +203,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
-            headers={"WWW-Authenticate": "Bearer"}
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     # Store in context variable for access in other functions
@@ -235,7 +214,7 @@ async def get_current_user(
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(
         HTTPBearer(auto_error=False)
-    )
+    ),
 ) -> Optional[Dict[str, Any]]:
     """
     Optional authentication dependency - returns None if no token provided
@@ -259,8 +238,9 @@ async def require_role(*required_roles: str):
         async def admin_endpoint(user: dict = Depends(require_role("admin"))):
             return {"message": "Admin access granted"}
     """
+
     async def role_checker(user: dict = Depends(get_current_user)) -> dict:
-        if user['role'] not in required_roles:
+        if user["role"] not in required_roles:
             logger.warning(
                 f"Authorization failed: User {user['username']} "
                 f"with role {user['role']} attempted to access "
@@ -271,7 +251,7 @@ async def require_role(*required_roles: str):
                 detail=(
                     f"Insufficient permissions. "
                     f"Required role: {required_roles[0]}"
-                )
+                ),
             )
         return user
 
@@ -280,17 +260,16 @@ async def require_role(*required_roles: str):
 
 class LoginRequest(BaseModel):
     """Login request model"""
+
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6, max_length=100)
 
-    @validator('username')
+    @validator("username")
     def validate_username(cls, v):
         """Validate username format and sanitize"""
         # Check for security issues
         is_valid, error_msg = InputSanitizer.validate_input(
-            v,
-            check_sql=False,
-            check_xss=False
+            v, check_sql=False, check_xss=False
         )
         if not is_valid:
             raise ValueError(error_msg)
@@ -299,22 +278,20 @@ class LoginRequest(BaseModel):
         v = InputSanitizer.sanitize_string(v, max_length=50)
 
         # Validate format
-        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError(
-                'Username can only contain letters, numbers, '
-                'hyphens, and underscores'
+                "Username can only contain letters, numbers, "
+                "hyphens, and underscores"
             )
 
         return v
 
-    @validator('password')
+    @validator("password")
     def validate_password(cls, v):
         """Validate password and sanitize (only check for security issues)"""
         # Check for security issues (but don't modify password)
         is_valid, error_msg = InputSanitizer.validate_input(
-            v,
-            check_sql=False,
-            check_xss=False
+            v, check_sql=False, check_xss=False
         )
         if not is_valid:
             raise ValueError(error_msg)
@@ -322,13 +299,14 @@ class LoginRequest(BaseModel):
         # Don't sanitize password (we need exact value for bcrypt)
         # Just check length
         if len(v) > 100:
-            raise ValueError('Password too long (max 100 characters)')
+            raise ValueError("Password too long (max 100 characters)")
 
         return v
 
 
 class LoginResponse(BaseModel):
     """Login response model"""
+
     access_token: str
     token_type: str = "bearer"
     expires_in: int
@@ -337,18 +315,17 @@ class LoginResponse(BaseModel):
 
 class UserCreateRequest(BaseModel):
     """User creation request model"""
+
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6, max_length=100)
     role: str = Field("user", pattern="^(admin|user|readonly)$")
 
-    @validator('username')
+    @validator("username")
     def validate_username(cls, v):
         """Validate username format and sanitize"""
         # Check for security issues
         is_valid, error_msg = InputSanitizer.validate_input(
-            v,
-            check_sql=False,
-            check_xss=False
+            v, check_sql=False, check_xss=False
         )
         if not is_valid:
             raise ValueError(error_msg)
@@ -357,28 +334,26 @@ class UserCreateRequest(BaseModel):
         v = InputSanitizer.sanitize_string(v, max_length=50)
 
         # Validate format
-        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError(
-                'Username can only contain letters, numbers, '
-                'hyphens, and underscores'
+                "Username can only contain letters, numbers, "
+                "hyphens, and underscores"
             )
 
         return v
 
-    @validator('password')
+    @validator("password")
     def validate_password(cls, v):
         """Validate password"""
         # Check for security issues (but don't modify password)
         is_valid, error_msg = InputSanitizer.validate_input(
-            v,
-            check_sql=False,
-            check_xss=False
+            v, check_sql=False, check_xss=False
         )
         if not is_valid:
             raise ValueError(error_msg)
 
         # Don't sanitize password (we need exact value for bcrypt)
         if len(v) > 100:
-            raise ValueError('Password too long (max 100 characters)')
+            raise ValueError("Password too long (max 100 characters)")
 
         return v

@@ -2,6 +2,7 @@
 Minder FastAPI Application
 Main REST API for Minder platform
 """
+
 from fastapi import FastAPI
 import logging
 import os
@@ -17,7 +18,7 @@ from .middleware import setup_middleware
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -131,49 +132,48 @@ For detailed plugin development guide, see the [`/plugins/docs`](/plugins/docs) 
     contact={
         "name": "Minder AI Team",
         "url": "https://github.com/minder-project",
-        "email": "info@minder.ai"
+        "email": "info@minder.ai",
     },
     license_info={
         "name": "MIT License",
-        "url": "https://opensource.org/licenses/MIT"
+        "url": "https://opensource.org/licenses/MIT",
     },
     openapi_tags=[
         {
             "name": "Authentication",
-            "description": "JWT authentication and user management endpoints"
+            "description": "JWT authentication and user management endpoints",
         },
         {
             "name": "Plugins",
-            "description": "Plugin discovery, loading, and management endpoints"
+            "description": "Plugin discovery, loading, and management endpoints",
         },
         {
             "name": "AI Chat",
-            "description": "AI-powered chat interface with Ollama LLM integration"
+            "description": "AI-powered chat interface with Ollama LLM integration",
         },
         {
             "name": "System",
-            "description": "System health, monitoring, and configuration endpoints"
+            "description": "System health, monitoring, and configuration endpoints",
         },
         {
             "name": "Plugin Store",
-            "description": "GitHub plugin installation and management"
+            "description": "GitHub plugin installation and management",
         },
         {
             "name": "Knowledge Graph",
-            "description": "Entity relationships and knowledge graph operations"
+            "description": "Entity relationships and knowledge graph operations",
         },
         {
             "name": "Characters",
-            "description": "AI character system management"
-        }
-    ]
+            "description": "AI character system management",
+        },
+    ],
 )
 
 # Get allowed origins from environment
 ALLOWED_ORIGINS = os.getenv(
-    'ALLOWED_ORIGINS',
-    'http://localhost:3000,http://192.168.68.*'
-).split(',')
+    "ALLOWED_ORIGINS", "http://localhost:3000,http://192.168.68.*"
+).split(",")
 
 # Setup security middleware (CORS, rate limiting, network detection)
 setup_middleware(app, ALLOWED_ORIGINS)
@@ -194,27 +194,25 @@ async def startup():
     _validate_secrets()
 
     config = {
-        'fund': {
-            'database': {
-                'host': 'postgres',
-                'port': 5432,
-                'database': 'fundmind',
-                'user': 'postgres',
-                'password': os.getenv('POSTGRES_PASSWORD', 'id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=')
+        "fund": {
+            "database": {
+                "host": "postgres",
+                "port": 5432,
+                "database": "fundmind",
+                "user": "postgres",
+                "password": os.getenv(
+                    "POSTGRES_PASSWORD",
+                    "id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=",
+                ),
             }
         },
-        'plugins': {
-            'network': {},
-            'weather': {},
-            'crypto': {},
-            'news': {}
+        "plugins": {"network": {}, "weather": {}, "crypto": {}, "news": {}},
+        "plugin_store": {
+            "enabled": True,
+            "store_path": "/var/lib/minder/plugins",
+            "index_url": "https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json",
+            "github_token": "",
         },
-        'plugin_store': {
-            'enabled': True,
-            'store_path': '/var/lib/minder/plugins',
-            'index_url': 'https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json',
-            'github_token': ''
-        }
     }
 
     # Initialize authentication manager
@@ -228,7 +226,7 @@ async def startup():
     plugin_store.set_kernel(kernel)
 
     character_engine = CharacterEngine(config)
-    voice_interface = VoiceInterface(config.get('voice', {}))
+    voice_interface = VoiceInterface(config.get("voice", {}))
 
     # Setup modular routes
     _setup_routes(kernel, character_engine)
@@ -239,8 +237,6 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """Cleanup on shutdown"""
-    global kernel
-
     if kernel:
         await kernel.stop()
     logger.info("✅ Minder API stopped")
@@ -249,9 +245,9 @@ async def shutdown():
 def _validate_secrets():
     """Validate required secrets are present and production-ready"""
     required_secrets = {
-        'JWT_SECRET_KEY': 'JWT_SECRET_KEY',
-        'POSTGRES_PASSWORD': 'POSTGRES_PASSWORD',
-        'INFLUXDB_PASSWORD': 'INFLUXDB_PASSWORD'
+        "JWT_SECRET_KEY": "JWT_SECRET_KEY",
+        "POSTGRES_PASSWORD": "POSTGRES_PASSWORD",
+        "INFLUXDB_PASSWORD": "INFLUXDB_PASSWORD",
     }
 
     missing = []
@@ -263,13 +259,16 @@ def _validate_secrets():
         if not value:
             # Check if value is set but empty
             missing.append(display_name)
-        elif env_var == 'JWT_SECRET_KEY' and value == 'change-this-in-production':
+        elif (
+            env_var == "JWT_SECRET_KEY"
+            and value == "change-this-in-production"
+        ):
             using_defaults.append(display_name)
-        elif env_var == 'INFLUXDB_PASSWORD' and value == 'minder123':
+        elif env_var == "INFLUXDB_PASSWORD" and value == "minder123":
             weak_secrets.append(display_name)
 
     # Check if running in production mode
-    production_mode = os.getenv('PRODUCTION_MODE', 'false').lower() == 'true'
+    production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
 
     if missing:
         raise RuntimeError(
@@ -305,7 +304,9 @@ def _validate_secrets():
     if production_mode:
         logger.info("✅ Production secrets validated successfully")
     else:
-        logger.info("✅ Development mode: Secrets validated (production checks disabled)")
+        logger.info(
+            "✅ Development mode: Secrets validated (production checks disabled)"
+        )
 
 
 def _setup_routes(kernel, character_engine):
@@ -319,11 +320,27 @@ def _setup_routes(kernel, character_engine):
 
     # Include routers
     app.include_router(auth_routes.router)
-    app.include_router(plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel))
-    app.include_router(chat_endpoints.setup_chat_routes(chat_endpoints.router, kernel, character_engine))
-    app.include_router(characters_endpoints.setup_character_routes(characters_endpoints.router, character_engine))
-    app.include_router(system_endpoints.setup_system_routes(system_endpoints.router, kernel))
-    app.include_router(correlations_endpoints.setup_correlation_routes(correlations_endpoints.router, kernel))
+    app.include_router(
+        plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel)
+    )
+    app.include_router(
+        chat_endpoints.setup_chat_routes(
+            chat_endpoints.router, kernel, character_engine
+        )
+    )
+    app.include_router(
+        characters_endpoints.setup_character_routes(
+            characters_endpoints.router, character_engine
+        )
+    )
+    app.include_router(
+        system_endpoints.setup_system_routes(system_endpoints.router, kernel)
+    )
+    app.include_router(
+        correlations_endpoints.setup_correlation_routes(
+            correlations_endpoints.router, kernel
+        )
+    )
 
 
 # Root endpoint
@@ -335,5 +352,5 @@ async def root():
         "version": "1.0.0",
         "status": "running",
         "authentication": "enabled",
-        "network_access": "dual (local + VPN)"
+        "network_access": "dual (local + VPN)",
     }

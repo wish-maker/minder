@@ -2,6 +2,7 @@
 Chat endpoints
 Handles AI chat interface with Ollama integration
 """
+
 from fastapi import APIRouter, HTTPException, Request, Depends
 import logging
 import httpx
@@ -24,13 +25,12 @@ def setup_chat_routes(router, kernel, character_engine):
     async def chat(
         request: Request,
         chat_request: ChatRequest,
-        current_user: dict = Depends(get_current_user_optional)
+        current_user: dict = Depends(get_current_user_optional),
     ):
         """Chat with Minder AI - Rate limited"""
         if not kernel:
             raise HTTPException(
-                status_code=503,
-                detail="Kernel not initialized"
+                status_code=503, detail="Kernel not initialized"
             )
 
         try:
@@ -38,23 +38,21 @@ def setup_chat_routes(router, kernel, character_engine):
             character_name = chat_request.character or "finbot"
             character = character_engine.get_character(character_name)
             if not character:
-                character = character_engine.presets['finbot']
+                character = character_engine.presets["finbot"]
 
             # Query plugins for context
             plugin_results = await kernel.query_plugins(chat_request.message)
 
             # Generate AI response using Ollama
             response = await _generate_ai_response(
-                chat_request.message,
-                plugin_results,
-                character
+                chat_request.message, plugin_results, character
             )
 
             return {
                 "response": response,
                 "character": character.name,
-                "plugins_used": [r['plugin'] for r in plugin_results],
-                "model": "ollama"
+                "plugins_used": [r["plugin"] for r in plugin_results],
+                "model": "ollama",
             }
 
         except Exception as e:
@@ -65,9 +63,7 @@ def setup_chat_routes(router, kernel, character_engine):
 
 
 async def _generate_ai_response(
-    message: str,
-    plugin_results: list,
-    character
+    message: str, plugin_results: list, character
 ) -> str:
     """Generate AI response using Ollama"""
 
@@ -75,15 +71,16 @@ async def _generate_ai_response(
     context_parts = []
     if plugin_results:
         for result in plugin_results:
-            plugin_name = result.get('plugin', 'unknown')
-            data = result.get('data', {})
+            plugin_name = result.get("plugin", "unknown")
+            data = result.get("data", {})
             if data:
                 json_str = json.dumps(data, ensure_ascii=False)[:200]
                 context_parts.append(f"{plugin_name}: {json_str}")
 
     # Build system prompt
     system_prompt = (
-        character.system_prompt if hasattr(character, 'system_prompt')
+        character.system_prompt
+        if hasattr(character, "system_prompt")
         else (
             "Sen Minder adlı yapay zeka bir asistansın. "
             "Türkçe konuşuyorsun. "
@@ -106,16 +103,13 @@ async def _generate_ai_response(
                     "prompt": user_prompt,
                     "system": system_prompt,
                     "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_ctx": 2048
-                    }
-                }
+                    "options": {"temperature": 0.7, "num_ctx": 2048},
+                },
             )
 
             if response.status_code == 200:
                 result = response.json()
-                ai_response = result.get('response', '')
+                ai_response = result.get("response", "")
                 if ai_response:
                     return ai_response.strip()
                 else:
@@ -129,7 +123,7 @@ async def _generate_ai_response(
         logger.error(f"Ollama connection error: {e}")
         # Fallback to simple response
         if plugin_results:
-            plugins_used = ", ".join([r['plugin'] for r in plugin_results])
+            plugins_used = ", ".join([r["plugin"] for r in plugin_results])
             return (
                 f"Minder olarak {plugins_used} eklentilerinden "
                 f"bilgiler topladım. Size nasıl yardımcı olabilirim?"

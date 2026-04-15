@@ -21,7 +21,8 @@ class ModuleTemplate(BaseModule):
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.logger = logging.getLogger(f"minder.module.{self.__class__.__name__}")
+        self.logger = logging.getLogger(
+            f"minder.module.{self.__class__.__name__}")
 
         # TODO: Modüle özgü yapılandırma
         self.api_endpoint = config.get('api_endpoint', '')
@@ -49,7 +50,8 @@ class ModuleTemplate(BaseModule):
             ]
         )
 
-    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
+    async def collect_data(
+            self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Veri toplama
 

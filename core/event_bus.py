@@ -2,6 +2,7 @@
 Minder Event Bus
 Pub/Sub messaging for inter-module communication
 """
+
 from typing import Dict, List, Callable, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -12,8 +13,10 @@ import json
 
 logger = logging.getLogger(__name__)
 
+
 class EventType(Enum):
     """Standard event types"""
+
     MODULE_REGISTERED = "module_registered"
     MODULE_READY = "module_ready"
     MODULE_ERROR = "module_error"
@@ -26,9 +29,11 @@ class EventType(Enum):
     USER_QUERY = "user_query"
     SYSTEM_SHUTDOWN = "system_shutdown"
 
+
 @dataclass
 class Event:
     """Event message"""
+
     type: EventType
     source: str
     data: Dict[str, Any] = field(default_factory=dict)
@@ -38,13 +43,14 @@ class Event:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            'type': self.type.value,
-            'source': self.source,
-            'data': self.data,
-            'timestamp': self.timestamp.isoformat(),
-            'correlation_id': self.correlation_id,
-            'metadata': self.metadata
+            "type": self.type.value,
+            "source": self.source,
+            "data": self.data,
+            "timestamp": self.timestamp.isoformat(),
+            "correlation_id": self.correlation_id,
+            "metadata": self.metadata,
         }
+
 
 class EventBus:
     """
@@ -62,7 +68,7 @@ class EventBus:
         self._subscribers: Dict[EventType, List[Callable]] = {}
         self._event_history: List[Event] = []
         self._dead_letter_queue: List[Event] = []
-        self._max_history = config.get('max_event_history', 10000)
+        self._max_history = config.get("max_event_history", 10000)
         self._lock = asyncio.Lock()
 
     async def publish(self, event: Event) -> bool:
@@ -89,7 +95,9 @@ class EventBus:
             # Check for failures
             failed = sum(1 for r in results if isinstance(r, Exception))
             if failed > 0:
-                logger.warning(f"{failed}/{len(results)} subscribers failed for event: {event.type.value}")
+                logger.warning(
+                    f"{failed}/{len(results)} subscribers failed for event: {event.type.value}"
+                )
 
             return failed == 0
 
@@ -99,9 +107,7 @@ class EventBus:
             return False
 
     async def subscribe(
-        self,
-        event_type: EventType,
-        handler: Callable[[Event], Any]
+        self, event_type: EventType, handler: Callable[[Event], Any]
     ) -> str:
         """Subscribe to event type"""
         async with self._lock:
@@ -120,7 +126,8 @@ class EventBus:
         async with self._lock:
             for event_type, handlers in self._subscribers.items():
                 self._subscribers[event_type] = [
-                    h for h in handlers
+                    h
+                    for h in handlers
                     if f"{event_type.value}_{id(h)}" != subscription_id
                 ]
 
@@ -130,9 +137,7 @@ class EventBus:
             return self._subscribers.get(event_type, []).copy()
 
     async def _notify_subscriber(
-        self,
-        subscriber: Callable[[Event], Any],
-        event: Event
+        self, subscriber: Callable[[Event], Any], event: Event
     ):
         """Notify single subscriber"""
         try:
@@ -151,7 +156,7 @@ class EventBus:
 
             # Trim history if needed
             if len(self._event_history) > self._max_history:
-                self._event_history = self._event_history[-self._max_history:]
+                self._event_history = self._event_history[-self._max_history :]
 
     async def _dead_letter(self, event: Event):
         """Add event to dead letter queue"""
@@ -162,7 +167,7 @@ class EventBus:
         self,
         event_type: Optional[EventType] = None,
         source: Optional[str] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Event]:
         """Get event history with optional filters"""
         events = self._event_history
@@ -178,12 +183,14 @@ class EventBus:
     def get_statistics(self) -> Dict[str, Any]:
         """Get event bus statistics"""
         return {
-            'total_subscribers': sum(len(handlers) for handlers in self._subscribers.values()),
-            'event_types': len(self._subscribers),
-            'events_published': len(self._event_history),
-            'dead_letter_count': len(self._dead_letter_queue),
-            'subscribers_by_type': {
+            "total_subscribers": sum(
+                len(handlers) for handlers in self._subscribers.values()
+            ),
+            "event_types": len(self._subscribers),
+            "events_published": len(self._event_history),
+            "dead_letter_count": len(self._dead_letter_queue),
+            "subscribers_by_type": {
                 event_type.value: len(handlers)
                 for event_type, handlers in self._subscribers.items()
-            }
+            },
         }

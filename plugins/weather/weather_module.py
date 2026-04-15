@@ -1,6 +1,7 @@
 """
 Minder Weather Analysis Module
 """
+
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import asyncio
@@ -13,6 +14,7 @@ from core.module_interface import BaseModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 
+
 class WeatherModule(BaseModule):
     """Weather data collection and analysis"""
 
@@ -21,19 +23,19 @@ class WeatherModule(BaseModule):
 
         # Database configuration
         self.db_config = {
-            'host': config.get('database', {}).get('host', 'localhost'),
-            'port': config.get('database', {}).get('port', 5432),
-            'database': config.get('database', {}).get('database', 'fundmind'),
-            'user': config.get('database', {}).get('user', 'postgres'),
-            'password': config.get('database', {}).get('password', '')
+            "host": config.get("database", {}).get("host", "localhost"),
+            "port": config.get("database", {}).get("port", 5432),
+            "database": config.get("database", {}).get("database", "fundmind"),
+            "user": config.get("database", {}).get("user", "postgres"),
+            "password": config.get("database", {}).get("password", ""),
         }
 
         # Open-Meteo API configuration (no API key required - completely free)
         self.api_base = "https://api.open-meteo.com/v1/forecast"
         self.locations = {
-            'Istanbul': {'lat': 41.0082, 'lon': 28.9784},
-            'Ankara': {'lat': 39.9334, 'lon': 32.8597},
-            'Izmir': {'lat': 38.4237, 'lon': 27.1428}
+            "Istanbul": {"lat": 41.0082, "lon": 28.9784},
+            "Ankara": {"lat": 39.9334, "lon": 32.8597},
+            "Izmir": {"lat": 38.4237, "lon": 27.1428},
         }
 
     async def register(self) -> ModuleMetadata:
@@ -46,16 +48,18 @@ class WeatherModule(BaseModule):
             capabilities=[
                 "weather_data_collection",
                 "forecast_analysis",
-                "seasonal_pattern_detection"
+                "seasonal_pattern_detection",
             ],
             data_sources=["Open-Meteo API"],
-            databases=["postgresql"]
+            databases=["postgresql"],
         )
 
-        logger.info(f"🌤️  Registering Weather Module")
+        logger.info("🌤️  Registering Weather Module")
         return self.metadata
 
-    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
+    async def collect_data(
+        self, since: Optional[datetime] = None
+    ) -> Dict[str, int]:
         """
         Collect real weather data from OpenWeatherMap API
         Store collected data to PostgreSQL database
@@ -83,7 +87,9 @@ class WeatherModule(BaseModule):
                         logger.info(f"✓ Collected weather data for {location}")
                     else:
                         errors += 1
-                        logger.warning(f"✗ Failed to collect weather data for {location}")
+                        logger.warning(
+                            f"✗ Failed to collect weather data for {location}"
+                        )
 
                 except Exception as e:
                     errors += 1
@@ -96,15 +102,19 @@ class WeatherModule(BaseModule):
             logger.error(f"Database connection error: {e}")
             errors += 1
 
-        logger.info(f"✓ Weather collection complete: {records_collected} records, {errors} errors")
+        logger.info(
+            f"✓ Weather collection complete: {records_collected} records, {errors} errors"
+        )
 
         return {
-            'records_collected': records_collected,
-            'records_updated': records_updated,
-            'errors': errors
+            "records_collected": records_collected,
+            "records_updated": records_updated,
+            "errors": errors,
         }
 
-    async def _fetch_weather_data(self, location: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_weather_data(
+        self, location: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Fetch real weather data from Open-Meteo API
         No API key required - completely free service
@@ -118,102 +128,115 @@ class WeatherModule(BaseModule):
             async with aiohttp.ClientSession() as session:
                 url = f"{self.api_base}"
                 params = {
-                    'latitude': coords['lat'],
-                    'longitude': coords['lon'],
-                    'current_weather': 'true',
-                    'hourly': 'temperature_2m,relativehumidity_2m,surface_pressure,windspeed_10m'
+                    "latitude": coords["lat"],
+                    "longitude": coords["lon"],
+                    "current_weather": "true",
+                    "hourly": "temperature_2m,relativehumidity_2m,surface_pressure,windspeed_10m",
                 }
 
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         return self._parse_openmeteo_data(data, location)
                     else:
-                        logger.error(f"Open-Meteo API returned status {response.status} for {location}")
+                        logger.error(
+                            f"Open-Meteo API returned status {response.status} for {location}"
+                        )
                         return None
 
         except Exception as e:
             logger.error(f"Error fetching weather data for {location}: {e}")
             return None
 
-    def _parse_openmeteo_data(self, api_data: Dict, location: str) -> Dict[str, Any]:
+    def _parse_openmeteo_data(
+        self, api_data: Dict, location: str
+    ) -> Dict[str, Any]:
         """Parse Open-Meteo API response"""
-        current = api_data.get('current_weather', {})
-        hourly = api_data.get('hourly', {})
+        current = api_data.get("current_weather", {})
+        hourly = api_data.get("hourly", {})
 
         # Get current hour's data
-        current_hour_index = len(hourly.get('time', [])) - 1
+        current_hour_index = len(hourly.get("time", [])) - 1
 
         return {
-            'location': location,
-            'temperature_c': current.get('temperature', 0),
-            'humidity_pct': hourly.get('relativehumidity_2m', [50])[current_hour_index],
-            'pressure_hpa': hourly.get('surface_pressure', [1013])[current_hour_index],
-            'wind_speed_kmh': current.get('windspeed', 0),
-            'weather_description': self._map_weather_code(current.get('weathercode', 0)),
-            'timestamp': datetime.now()
+            "location": location,
+            "temperature_c": current.get("temperature", 0),
+            "humidity_pct": hourly.get("relativehumidity_2m", [50])[
+                current_hour_index
+            ],
+            "pressure_hpa": hourly.get("surface_pressure", [1013])[
+                current_hour_index
+            ],
+            "wind_speed_kmh": current.get("windspeed", 0),
+            "weather_description": self._map_weather_code(
+                current.get("weathercode", 0)
+            ),
+            "timestamp": datetime.now(),
         }
 
     def _map_weather_code(self, code: int) -> str:
         """Map Open-Meteo weather codes to descriptions"""
         weather_codes = {
-            0: 'clear sky',
-            1: 'mainly clear',
-            2: 'partly cloudy',
-            3: 'overcast',
-            45: 'fog',
-            48: 'fog',
-            51: 'light drizzle',
-            53: 'moderate drizzle',
-            55: 'dense drizzle',
-            61: 'slight rain',
-            63: 'moderate rain',
-            65: 'heavy rain',
-            80: 'rain showers',
-            81: 'moderate showers',
-            82: 'violent showers',
-            95: 'thunderstorm'
+            0: "clear sky",
+            1: "mainly clear",
+            2: "partly cloudy",
+            3: "overcast",
+            45: "fog",
+            48: "fog",
+            51: "light drizzle",
+            53: "moderate drizzle",
+            55: "dense drizzle",
+            61: "slight rain",
+            63: "moderate rain",
+            65: "heavy rain",
+            80: "rain showers",
+            81: "moderate showers",
+            82: "violent showers",
+            95: "thunderstorm",
         }
-        return weather_codes.get(code, 'unknown')
+        return weather_codes.get(code, "unknown")
 
     def _generate_sample_weather_data(self, location: str) -> Dict[str, Any]:
         """Generate realistic sample weather data"""
         import random
 
-        base_temps = {
-            'Istanbul,TR': 18.5,
-            'Ankara,TR': 16.0,
-            'Izmir,TR': 21.0
-        }
+        base_temps = {"Istanbul,TR": 18.5, "Ankara,TR": 16.0, "Izmir,TR": 21.0}
 
         base_temp = base_temps.get(location, 20.0)
 
         return {
-            'location': location,
-            'temperature_c': round(base_temp + random.uniform(-3, 3), 1),
-            'humidity_pct': random.randint(50, 80),
-            'pressure_hpa': random.randint(1005, 1020),
-            'wind_speed_kmh': round(random.uniform(5, 25), 1),
-            'weather_description': random.choice(['clear sky', 'few clouds', 'scattered clouds', 'overcast']),
-            'timestamp': datetime.now()
+            "location": location,
+            "temperature_c": round(base_temp + random.uniform(-3, 3), 1),
+            "humidity_pct": random.randint(50, 80),
+            "pressure_hpa": random.randint(1005, 1020),
+            "wind_speed_kmh": round(random.uniform(5, 25), 1),
+            "weather_description": random.choice(
+                ["clear sky", "few clouds", "scattered clouds", "overcast"]
+            ),
+            "timestamp": datetime.now(),
         }
 
     async def _store_weather_data(self, cursor, weather_data: Dict[str, Any]):
         """Store weather data to PostgreSQL"""
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO weather_data (
                 location, temperature_c, humidity_pct, pressure_hpa,
                 wind_speed_kmh, weather_description, timestamp
             ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-        """, (
-            weather_data['location'],
-            weather_data['temperature_c'],
-            weather_data['humidity_pct'],
-            weather_data['pressure_hpa'],
-            weather_data['wind_speed_kmh'],
-            weather_data['weather_description'],
-            weather_data['timestamp']
-        ))
+        """,
+            (
+                weather_data["location"],
+                weather_data["temperature_c"],
+                weather_data["humidity_pct"],
+                weather_data["pressure_hpa"],
+                weather_data["wind_speed_kmh"],
+                weather_data["weather_description"],
+                weather_data["timestamp"],
+            ),
+        )
 
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected weather data"""
@@ -237,81 +260,74 @@ class WeatherModule(BaseModule):
 
             if result and result[0]:
                 return {
-                    'metrics': {
-                        'avg_temp_c': round(float(result[0]), 1),
-                        'avg_humidity_pct': round(float(result[1]), 1),
-                        'avg_pressure_hpa': round(float(result[2]), 1),
-                        'avg_wind_speed_kmh': round(float(result[3]), 1)
+                    "metrics": {
+                        "avg_temp_c": round(float(result[0]), 1),
+                        "avg_humidity_pct": round(float(result[1]), 1),
+                        "avg_pressure_hpa": round(float(result[2]), 1),
+                        "avg_wind_speed_kmh": round(float(result[3]), 1),
                     },
-                    'patterns': [
+                    "patterns": [
                         {
-                            'type': 'seasonal',
-                            'description': 'Temperature follows seasonal pattern'
+                            "type": "seasonal",
+                            "description": "Temperature follows seasonal pattern",
                         }
                     ],
-                    'insights': [
-                        'Weather data collected successfully',
-                        f'Average temperature: {round(float(result[0]), 1)}°C'
-                    ]
+                    "insights": [
+                        "Weather data collected successfully",
+                        f"Average temperature: {round(float(result[0]), 1)}°C",
+                    ],
                 }
             else:
                 return {
-                    'metrics': {},
-                    'patterns': [],
-                    'insights': ['No data available for analysis']
+                    "metrics": {},
+                    "patterns": [],
+                    "insights": ["No data available for analysis"],
                 }
 
         except Exception as e:
             logger.error(f"Error analyzing weather data: {e}")
             return {
-                'metrics': {},
-                'patterns': [],
-                'insights': [f'Analysis error: {e}']
+                "metrics": {},
+                "patterns": [],
+                "insights": [f"Analysis error: {e}"],
             }
 
     async def train_ai(self, model_type: str = "default") -> Dict[str, Any]:
         return {
-            'model_id': 'weather_forecast_v1',
-            'accuracy': 0.82,
-            'training_samples': 10000,
-            'metrics': {
-                'mae_temp': 2.5,
-                'mae_humidity': 8
-            }
+            "model_id": "weather_forecast_v1",
+            "accuracy": 0.82,
+            "training_samples": 10000,
+            "metrics": {"mae_temp": 2.5, "mae_humidity": 8},
         }
 
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
         return {
-            'vectors_created': 1000,
-            'vectors_updated': 100,
-            'collections': 1
+            "vectors_created": 1000,
+            "vectors_updated": 100,
+            "collections": 1,
         }
 
     async def get_correlations(
-        self,
-        other_module: str,
-        correlation_type: str = "auto"
+        self, other_module: str, correlation_type: str = "auto"
     ) -> List[Dict[str, Any]]:
 
         if other_module == "tefas":
             return [
                 {
-                    'field': 'weather.temperature',
-                    'other_field': 'fund_returns.daily_return_pct',
-                    'correlation_type': 'temporal',
-                    'strength': 0.35,
-                    'description': 'Weather may affect market sentiment'
+                    "field": "weather.temperature",
+                    "other_field": "fund_returns.daily_return_pct",
+                    "correlation_type": "temporal",
+                    "strength": 0.35,
+                    "description": "Weather may affect market sentiment",
                 }
             ]
 
         return []
 
     async def get_anomalies(
-        self,
-        severity: str = "medium",
-        limit: int = 100
+        self, severity: str = "medium", limit: int = 100
     ) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:
-        return {'query': query, 'results': []}
+        return {"query": query, "results": []}

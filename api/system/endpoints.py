@@ -2,6 +2,7 @@
 System endpoints
 Handles health checks and system status
 """
+
 from fastapi import APIRouter, HTTPException
 import logging
 
@@ -17,7 +18,9 @@ def setup_system_routes(router, kernel):
     async def system_status():
         """Get detailed system status"""
         if not kernel:
-            raise HTTPException(status_code=503, detail="Kernel not initialized")
+            raise HTTPException(
+                status_code=503, detail="Kernel not initialized"
+            )
 
         return await kernel.get_system_status()
 
@@ -25,14 +28,18 @@ def setup_system_routes(router, kernel):
     async def health():
         """Health check - publicly accessible"""
         if not kernel:
-            raise HTTPException(status_code=503, detail="Kernel not initialized")
+            raise HTTPException(
+                status_code=503, detail="Kernel not initialized"
+            )
 
         status = await kernel.get_system_status()
         return {
-            "status": "healthy" if status['status'] == 'running' else "unhealthy",
+            "status": (
+                "healthy" if status["status"] == "running" else "unhealthy"
+            ),
             "system": status,
             "authentication": "enabled",
-            "network_detection": "enabled"
+            "network_detection": "enabled",
         }
 
     return router

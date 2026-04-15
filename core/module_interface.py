@@ -2,13 +2,16 @@
 Minder Module Interface Standard
 All modules must implement this interface for compatibility
 """
+
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 from enum import Enum
 
+
 class ModuleStatus(Enum):
     """Module lifecycle status"""
+
     UNREGISTERED = "unregistered"
     REGISTERED = "registered"
     INITIALIZING = "initializing"
@@ -20,8 +23,10 @@ class ModuleStatus(Enum):
     ERROR = "error"
     STOPPED = "stopped"
 
+
 class ModuleMetadata:
     """Module metadata and capabilities"""
+
     def __init__(
         self,
         name: str,
@@ -31,7 +36,7 @@ class ModuleMetadata:
         dependencies: List[str] = None,
         capabilities: List[str] = None,
         data_sources: List[str] = None,
-        databases: List[str] = None
+        databases: List[str] = None,
     ):
         self.name = name
         self.version = version
@@ -42,6 +47,7 @@ class ModuleMetadata:
         self.data_sources = data_sources or []
         self.databases = databases or []
         self.registered_at = datetime.now()
+
 
 class BaseModule(ABC):
     """
@@ -69,7 +75,9 @@ class BaseModule(ABC):
         pass
 
     @abstractmethod
-    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
+    async def collect_data(
+        self, since: Optional[datetime] = None
+    ) -> Dict[str, int]:
         """
         Collect data from sources
 
@@ -123,9 +131,7 @@ class BaseModule(ABC):
 
     @abstractmethod
     async def get_correlations(
-        self,
-        other_module: str,
-        correlation_type: str = "auto"
+        self, other_module: str, correlation_type: str = "auto"
     ) -> List[Dict[str, Any]]:
         """
         Provide correlation hints with another module
@@ -144,9 +150,7 @@ class BaseModule(ABC):
 
     @abstractmethod
     async def get_anomalies(
-        self,
-        severity: str = "medium",
-        limit: int = 100
+        self, severity: str = "medium", limit: int = 100
     ) -> List[Dict[str, Any]]:
         """
         Return detected anomalies
@@ -166,10 +170,14 @@ class BaseModule(ABC):
     async def health_check(self) -> Dict[str, Any]:
         """Return module health status"""
         return {
-            'name': self.metadata.name if self.metadata else 'unknown',
-            'status': self.status.value,
-            'uptime_seconds': (datetime.now() - self.metadata.registered_at).total_seconds() if self.metadata else 0,
-            'state': self.state
+            "name": self.metadata.name if self.metadata else "unknown",
+            "status": self.status.value,
+            "uptime_seconds": (
+                (datetime.now() - self.metadata.registered_at).total_seconds()
+                if self.metadata
+                else 0
+            ),
+            "state": self.state,
         }
 
     async def shutdown(self):

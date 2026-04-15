@@ -2,6 +2,7 @@
 Correlation endpoints
 Handles knowledge graph correlations
 """
+
 from fastapi import APIRouter, HTTPException
 import logging
 
@@ -18,8 +19,7 @@ def setup_correlation_routes(router, kernel):
         """Get all correlations"""
         if not kernel:
             raise HTTPException(
-                status_code=503,
-                detail="Kernel not initialized"
+                status_code=503, detail="Kernel not initialized"
             )
 
         return await kernel.correlation_engine.get_all_correlations()

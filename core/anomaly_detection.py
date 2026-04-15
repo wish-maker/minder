@@ -2,6 +2,7 @@
 Real-Time Anomaly Detection System
 Implements Isolation Forest, LSTM Autoencoders, and statistical methods
 """
+
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import numpy as np
@@ -14,8 +15,10 @@ from collections import deque
 
 logger = logging.getLogger(__name__)
 
+
 class AnomalyType(Enum):
     """Types of anomalies"""
+
     PRICE_SPIKE = "price_spike"
     PRICE_DROP = "price_drop"
     VOLUME_SURGE = "volume_surge"
@@ -25,16 +28,20 @@ class AnomalyType(Enum):
     STATISTICAL = "statistical"
     CONTEXTUAL = "contextual"
 
+
 class AnomalySeverity(Enum):
     """Severity levels"""
+
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
     CRITICAL = "critical"
 
+
 @dataclass
 class Anomaly:
     """Anomaly detection result"""
+
     type: AnomalyType
     severity: AnomalySeverity
     module: str
@@ -45,6 +52,7 @@ class Anomaly:
     data: Dict[str, Any]
     confidence: float
     suggested_action: Optional[str] = None
+
 
 class AnomalyDetector:
     """
@@ -59,9 +67,9 @@ class AnomalyDetector:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.threshold = config.get('threshold', 0.95)
-        self.window_size = config.get('window_size', 100)
-        self.min_samples = config.get('min_samples', 50)
+        self.threshold = config.get("threshold", 0.95)
+        self.window_size = config.get("window_size", 100)
+        self.min_samples = config.get("min_samples", 50)
 
         # Model storage
         self.isolation_forests = {}
@@ -73,10 +81,7 @@ class AnomalyDetector:
         self.anomaly_history = deque(maxlen=1000)
 
     async def detect_anomalies_isolation_forest(
-        self,
-        data: pd.DataFrame,
-        module: str,
-        entity_id: str
+        self, data: pd.DataFrame, module: str, entity_id: str
     ) -> List[Anomaly]:
         """
         Detect anomalies using Isolation Forest
@@ -99,9 +104,7 @@ class AnomalyDetector:
 
             # Train/fit Isolation Forest
             iso_forest = IsolationForest(
-                contamination=0.1,
-                random_state=42,
-                n_jobs=-1
+                contamination=0.1, random_state=42, n_jobs=-1
             )
 
             # Fit on all data
@@ -129,7 +132,7 @@ class AnomalyDetector:
                             timestamp=datetime.now(),
                             data=data.iloc[i].to_dict(),
                             confidence=anomaly_score,
-                            suggested_action="Investigate unusual pattern"
+                            suggested_action="Investigate unusual pattern",
                         )
                         anomalies.append(anomaly)
 
@@ -144,7 +147,7 @@ class AnomalyDetector:
         data: pd.DataFrame,
         module: str,
         entity_id: str,
-        column: str = 'value'
+        column: str = "value",
     ) -> List[Anomaly]:
         """
         Detect anomalies using statistical methods
@@ -158,7 +161,11 @@ class AnomalyDetector:
             return []
 
         anomalies = []
-        values = data[column].values if column in data.columns else data.iloc[:, 0].values
+        values = (
+            data[column].values
+            if column in data.columns
+            else data.iloc[:, 0].values
+        )
 
         # Z-score method
         mean = np.mean(values)
@@ -171,15 +178,19 @@ class AnomalyDetector:
                 if z_score > 3:  # 3-sigma rule
                     anomaly = Anomaly(
                         type=AnomalyType.STATISTICAL,
-                        severity=AnomalySeverity.HIGH if z_score > 5 else AnomalySeverity.MEDIUM,
+                        severity=(
+                            AnomalySeverity.HIGH
+                            if z_score > 5
+                            else AnomalySeverity.MEDIUM
+                        ),
                         module=module,
                         entity_id=entity_id,
                         description=f"Z-score outlier: {z_score:.2f}σ",
                         score=min(z_score / 5, 1.0),
                         timestamp=datetime.now(),
-                        data={'value': values[i], 'z_score': z_score},
+                        data={"value": values[i], "z_score": z_score},
                         confidence=min(z_score / 5, 1.0),
-                        suggested_action="Check data quality"
+                        suggested_action="Check data quality",
                     )
                     anomalies.append(anomaly)
 
@@ -193,7 +204,11 @@ class AnomalyDetector:
 
         for i, value in enumerate(values):
             if value < lower_bound or value > upper_bound:
-                severity = AnomalySeverity.CRITICAL if value < Q1 - 3*IQR or value > Q3 + 3*IQR else AnomalySeverity.HIGH
+                severity = (
+                    AnomalySeverity.CRITICAL
+                    if value < Q1 - 3 * IQR or value > Q3 + 3 * IQR
+                    else AnomalySeverity.HIGH
+                )
 
                 anomaly = Anomaly(
                     type=AnomalyType.STATISTICAL,
@@ -203,9 +218,13 @@ class AnomalyDetector:
                     description=f"IQR outlier: {value:.2f} (bounds: [{lower_bound:.2f}, {upper_bound:.2f}])",
                     score=0.8,
                     timestamp=datetime.now(),
-                    data={'value': value, 'lower_bound': lower_bound, 'upper_bound': upper_bound},
+                    data={
+                        "value": value,
+                        "lower_bound": lower_bound,
+                        "upper_bound": upper_bound,
+                    },
                     confidence=0.8,
-                    suggested_action="Verify data accuracy"
+                    suggested_action="Verify data accuracy",
                 )
                 anomalies.append(anomaly)
 
@@ -216,7 +235,7 @@ class AnomalyDetector:
         data: pd.DataFrame,
         module: str,
         entity_id: str,
-        context_window: int = 30
+        context_window: int = 30,
     ) -> List[Anomaly]:
         """
         Detect contextual anomalies
@@ -233,23 +252,27 @@ class AnomalyDetector:
         # For time series: compare with same time period in history
 
         # Extract day of week patterns
-        data['timestamp'] = pd.to_datetime(data['date']) if 'date' in data.columns else datetime.now()
-        data['day_of_week'] = data['timestamp'].dt.dayofweek
-        data['hour'] = data['timestamp'].dt.hour
+        data["timestamp"] = (
+            pd.to_datetime(data["date"])
+            if "date" in data.columns
+            else datetime.now()
+        )
+        data["day_of_week"] = data["timestamp"].dt.dayofweek
+        data["hour"] = data["timestamp"].dt.hour
 
         # Group by context and calculate statistics
-        context_stats = data.groupby(['day_of_week']).agg({
-            data.columns[0]: ['mean', 'std']
-        })
+        context_stats = data.groupby(["day_of_week"]).agg(
+            {data.columns[0]: ["mean", "std"]}
+        )
 
         # Check for deviations from expected
         for _, row in data.iterrows():
-            dow = row['day_of_week']
+            dow = row["day_of_week"]
             value = row[data.columns[0]]
 
             if dow in context_stats.index:
-                expected_mean = context_stats.loc[dow][data.columns[0]]['mean']
-                expected_std = context_stats.loc[dow][data.columns[0]]['std']
+                expected_mean = context_stats.loc[dow][data.columns[0]]["mean"]
+                expected_std = context_stats.loc[dow][data.columns[0]]["std"]
 
                 if expected_std > 0:
                     z_score = abs((value - expected_mean) / expected_std)
@@ -257,31 +280,31 @@ class AnomalyDetector:
                     if z_score > 2.5:
                         anomaly = Anomaly(
                             type=AnomalyType.CONTEXTUAL,
-                            severity=AnomalySeverity.MEDIUM if z_score < 4 else AnomalySeverity.HIGH,
+                            severity=(
+                                AnomalySeverity.MEDIUM
+                                if z_score < 4
+                                else AnomalySeverity.HIGH
+                            ),
                             module=module,
                             entity_id=entity_id,
                             description=f"Contextual anomaly for day {dow}: {z_score:.2f}σ deviation",
                             score=min(z_score / 4, 1.0),
-                            timestamp=row['timestamp'],
+                            timestamp=row["timestamp"],
                             data={
-                                'value': value,
-                                'expected': expected_mean,
-                                'z_score': z_score,
-                                'context': f"day_of_week={dow}"
+                                "value": value,
+                                "expected": expected_mean,
+                                "z_score": z_score,
+                                "context": f"day_of_week={dow}",
                             },
                             confidence=min(z_score / 4, 1.0),
-                            suggested_action="Check if special circumstances apply"
+                            suggested_action="Check if special circumstances apply",
                         )
                         anomalies.append(anomaly)
 
         return anomalies
 
     async def detect_anomalies_pattern_break(
-        self,
-        data: pd.DataFrame,
-        module: str,
-        entity_id: str,
-        window: int = 20
+        self, data: pd.DataFrame, module: str, entity_id: str, window: int = 20
     ) -> List[Anomaly]:
         """
         Detect pattern breaks
@@ -302,8 +325,8 @@ class AnomalyDetector:
         # Detect sudden changes
         for i in range(window, len(values)):
             current_value = values[i]
-            expected_mean = rolling_mean.iloc[i-1]
-            expected_std = rolling_std.iloc[i-1]
+            expected_mean = rolling_mean.iloc[i - 1]
+            expected_std = rolling_std.iloc[i - 1]
 
             if expected_std > 0:
                 deviation = abs(current_value - expected_mean) / expected_std
@@ -311,29 +334,30 @@ class AnomalyDetector:
                 if deviation > 4:  # 4-sigma deviation
                     anomaly = Anomaly(
                         type=AnomalyType.PATTERN_BREAK,
-                        severity=AnomalySeverity.HIGH if deviation > 6 else AnomalySeverity.MEDIUM,
+                        severity=(
+                            AnomalySeverity.HIGH
+                            if deviation > 6
+                            else AnomalySeverity.MEDIUM
+                        ),
                         module=module,
                         entity_id=entity_id,
                         description=f"Pattern break detected: {deviation:.2f}σ deviation from {window}-period mean",
                         score=min(deviation / 6, 1.0),
                         timestamp=datetime.now(),
                         data={
-                            'value': current_value,
-                            'expected_mean': expected_mean,
-                            'deviation': deviation
+                            "value": current_value,
+                            "expected_mean": expected_mean,
+                            "deviation": deviation,
                         },
                         confidence=min(deviation / 6, 1.0),
-                        suggested_action="Investigate cause of pattern change"
+                        suggested_action="Investigate cause of pattern change",
                     )
                     anomalies.append(anomaly)
 
         return anomalies
 
     async def realtime_detect(
-        self,
-        module: str,
-        entity_id: str,
-        new_data: Dict[str, Any]
+        self, module: str, entity_id: str, new_data: Dict[str, Any]
     ) -> Optional[Anomaly]:
         """
         Real-time anomaly detection for streaming data
@@ -358,7 +382,9 @@ class AnomalyDetector:
         df = pd.DataFrame(list(buffer))
 
         # Run detection
-        anomalies = await self.detect_anomalies_statistical(df, module, entity_id)
+        anomalies = await self.detect_anomalies_statistical(
+            df, module, entity_id
+        )
 
         # Store in history
         for anomaly in anomalies:
@@ -372,8 +398,7 @@ class AnomalyDetector:
         return None
 
     async def detect_anomaly_clusters(
-        self,
-        time_window: timedelta = timedelta(minutes=10)
+        self, time_window: timedelta = timedelta(minutes=10)
     ) -> List[List[Anomaly]]:
         """
         Find clusters of related anomalies
@@ -385,8 +410,7 @@ class AnomalyDetector:
 
         # Sort anomalies by time
         sorted_anomalies = sorted(
-            self.anomaly_history,
-            key=lambda a: a.timestamp
+            self.anomaly_history, key=lambda a: a.timestamp
         )
 
         for anomaly in sorted_anomalies:
@@ -435,11 +459,11 @@ class AnomalyDetector:
         """Get summary of detected anomalies"""
         if not self.anomaly_history:
             return {
-                'total_anomalies': 0,
-                'by_type': {},
-                'by_severity': {},
-                'by_module': {},
-                'recent_anomalies': []
+                "total_anomalies": 0,
+                "by_type": {},
+                "by_severity": {},
+                "by_module": {},
+                "recent_anomalies": [],
             }
 
         # Count by various dimensions
@@ -463,19 +487,19 @@ class AnomalyDetector:
         recent = list(self.anomaly_history)[-10:]
 
         return {
-            'total_anomalies': len(self.anomaly_history),
-            'by_type': by_type,
-            'by_severity': by_severity,
-            'by_module': by_module,
-            'recent_anomalies': [
+            "total_anomalies": len(self.anomaly_history),
+            "by_type": by_type,
+            "by_severity": by_severity,
+            "by_module": by_module,
+            "recent_anomalies": [
                 {
-                    'type': a.type.value,
-                    'severity': a.severity.value,
-                    'module': a.module,
-                    'description': a.description,
-                    'score': a.score,
-                    'timestamp': a.timestamp.isoformat()
+                    "type": a.type.value,
+                    "severity": a.severity.value,
+                    "module": a.module,
+                    "description": a.description,
+                    "score": a.score,
+                    "timestamp": a.timestamp.isoformat(),
                 }
                 for a in recent
-            ]
+            ],
         }

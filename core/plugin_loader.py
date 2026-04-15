@@ -2,6 +2,7 @@
 Minder Plugin Loader
 Dynamic plugin discovery and loading
 """
+
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 import importlib.util
@@ -12,6 +13,7 @@ import sys
 from .module_interface import BaseModule
 
 logger = logging.getLogger(__name__)
+
 
 class PluginLoader:
     """
@@ -26,7 +28,7 @@ class PluginLoader:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.plugins_path = Path(config.get('plugins_path', 'plugins'))
+        self.plugins_path = Path(config.get("plugins_path", "plugins"))
         self.loaded_plugins: Dict[str, BaseModule] = {}
         self.failed_plugins: Dict[str, str] = {}
 
@@ -35,7 +37,7 @@ class PluginLoader:
         discovered = []
 
         # Directories to exclude from plugin discovery
-        excluded_dirs = {'store', '__pycache__', '.git'}
+        excluded_dirs = {"store", "__pycache__", ".git"}
 
         if not self.plugins_path.exists():
             logger.warning(f"Plugins path not found: {self.plugins_path}")
@@ -47,7 +49,9 @@ class PluginLoader:
 
             # Skip excluded directories
             if plugin_dir.name in excluded_dirs:
-                logger.debug(f"⏭️  Skipping excluded directory: {plugin_dir.name}")
+                logger.debug(
+                    f"⏭️  Skipping excluded directory: {plugin_dir.name}"
+                )
                 continue
 
             # Try both _plugin.py and _module.py extensions
@@ -64,26 +68,31 @@ class PluginLoader:
         return discovered
 
     async def load_plugin(
-        self,
-        plugin_name: str,
-        config: Optional[Dict[str, Any]] = None
+        self, plugin_name: str, config: Optional[Dict[str, Any]] = None
     ) -> Optional[BaseModule]:
         """Load a single plugin"""
 
         try:
             # Try both _plugin.py and _module.py extensions
-            plugin_file = self.plugins_path / plugin_name / f"{plugin_name}_plugin.py"
+            plugin_file = (
+                self.plugins_path / plugin_name / f"{plugin_name}_plugin.py"
+            )
             if not plugin_file.exists():
-                plugin_file = self.plugins_path / plugin_name / f"{plugin_name}_module.py"
+                plugin_file = (
+                    self.plugins_path
+                    / plugin_name
+                    / f"{plugin_name}_module.py"
+                )
             if not plugin_file.exists():
                 plugin_file = self.plugins_path / plugin_name / "__init__.py"
 
             if not plugin_file.exists():
-                raise FileNotFoundError(f"Plugin file not found for: {plugin_name}")
+                raise FileNotFoundError(
+                    f"Plugin file not found for: {plugin_name}"
+                )
 
             spec = importlib.util.spec_from_file_location(
-                f"minder.plugins.{plugin_name}",
-                plugin_file
+                f"minder.plugins.{plugin_name}", plugin_file
             )
 
             if spec is None or spec.loader is None:
@@ -100,9 +109,13 @@ class PluginLoader:
                     break
 
             if plugin_class is None:
-                raise TypeError(f"No BaseModule subclass found in: {plugin_name}")
+                raise TypeError(
+                    f"No BaseModule subclass found in: {plugin_name}"
+                )
 
-            plugin_config = config or self.config.get('plugins', {}).get(plugin_name, {})
+            plugin_config = config or self.config.get("plugins", {}).get(
+                plugin_name, {}
+            )
             instance = plugin_class(plugin_config)
 
             await instance.register()
@@ -119,8 +132,7 @@ class PluginLoader:
             return None
 
     async def load_all_plugins(
-        self,
-        exclude: Optional[List[str]] = None
+        self, exclude: Optional[List[str]] = None
     ) -> Dict[str, BaseModule]:
 
         exclude = exclude or []
@@ -133,8 +145,8 @@ class PluginLoader:
                 continue
 
             # Check if plugin is enabled in config
-            plugin_config = self.config.get('plugins', {}).get(plugin_name, {})
-            if not plugin_config.get('enabled', True):
+            plugin_config = self.config.get("plugins", {}).get(plugin_name, {})
+            if not plugin_config.get("enabled", True):
                 logger.info(f"⏭️  Skipping disabled plugin: {plugin_name}")
                 continue
 

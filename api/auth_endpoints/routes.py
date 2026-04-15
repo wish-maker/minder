@@ -2,6 +2,7 @@
 Authentication endpoints
 Handles JWT authentication and user management
 """
+
 from fastapi import APIRouter, HTTPException, Request
 import logging
 
@@ -25,21 +26,16 @@ async def login(request: Request, login_request):
     auth_mgr = get_auth_manager()
 
     # Authenticate user
-    user = await auth_mgr.authenticate(
-        request.username,
-        request.password
-    )
+    user = await auth_mgr.authenticate(request.username, request.password)
     if not user:
         raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password"
+            status_code=401, detail="Invalid username or password"
         )
 
     # Generate access token
-    access_token = auth_mgr.create_access_token({
-        "sub": user['username'],
-        "role": user['role']
-    })
+    access_token = auth_mgr.create_access_token(
+        {"sub": user["username"], "role": user["role"]}
+    )
 
     logger.info(
         f"✅ User logged in: {user['username']} (role: {user['role']})"
@@ -49,8 +45,5 @@ async def login(request: Request, login_request):
         access_token=access_token,
         token_type="bearer",
         expires_in=30 * 60,  # 30 minutes
-        user={
-            "username": user['username'],
-            "role": user['role']
-        }
+        user={"username": user["username"], "role": user["role"]},
     )

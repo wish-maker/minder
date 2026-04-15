@@ -11,7 +11,7 @@ from datetime import datetime
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from plugins.tefas.tefas_module import TefasModule
+from plugins.tefas.tefas_module import TefasModule  # noqa: E402
 
 
 async def test_module():

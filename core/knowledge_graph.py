@@ -2,6 +2,7 @@
 Minder Knowledge Graph
 Stores and queries entity relationships across modules
 """
+
 from typing import Dict, List, Set, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -11,8 +12,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class EntityType(Enum):
     """Types of entities in the graph"""
+
     FUND = "fund"
     NETWORK = "network"
     WEATHER = "weather"
@@ -26,8 +29,10 @@ class EntityType(Enum):
     CONCEPT = "concept"
     CUSTOM = "custom"
 
+
 class RelationType(Enum):
     """Types of relationships"""
+
     CORRELATES = "correlates"
     CAUSES = "causes"
     PRECEDES = "precedes"
@@ -38,9 +43,11 @@ class RelationType(Enum):
     PART_OF = "part_of"
     AFFECTS = "affects"
 
+
 @dataclass
 class Entity:
     """Node in knowledge graph"""
+
     id: str
     type: EntityType
     name: str
@@ -54,9 +61,11 @@ class Entity:
     def __eq__(self, other):
         return isinstance(other, Entity) and self.id == other.id
 
+
 @dataclass
 class Relation:
     """Edge in knowledge graph"""
+
     source: Entity
     target: Entity
     relation_type: RelationType
@@ -69,11 +78,12 @@ class Relation:
 
     def __eq__(self, other):
         return (
-            isinstance(other, Relation) and
-            self.source.id == other.source.id and
-            self.target.id == other.target.id and
-            self.relation_type == other.relation_type
+            isinstance(other, Relation)
+            and self.source.id == other.source.id
+            and self.target.id == other.target.id
+            and self.relation_type == other.relation_type
         )
+
 
 class KnowledgeGraph:
     """
@@ -127,7 +137,7 @@ class KnowledgeGraph:
         self,
         entity_id: str,
         relation_type: Optional[RelationType] = None,
-        direction: str = "both"
+        direction: str = "both",
     ) -> List[Relation]:
         """Get relations for entity"""
         relations = []
@@ -136,7 +146,10 @@ class KnowledgeGraph:
             if relation_type and relation.relation_type != relation_type:
                 continue
 
-            if direction in ["out", "both"] and relation.source.id == entity_id:
+            if (
+                direction in ["out", "both"]
+                and relation.source.id == entity_id
+            ):
                 relations.append(relation)
 
             if direction in ["in", "both"] and relation.target.id == entity_id:
@@ -145,10 +158,7 @@ class KnowledgeGraph:
         return relations
 
     async def find_path(
-        self,
-        source_id: str,
-        target_id: str,
-        max_depth: int = 5
+        self, source_id: str, target_id: str, max_depth: int = 5
     ) -> Optional[List[Relation]]:
         """Find shortest path between entities using BFS"""
         if source_id not in self.entities or target_id not in self.entities:
@@ -186,7 +196,7 @@ class KnowledgeGraph:
         self,
         entity_type: Optional[EntityType] = None,
         attributes: Optional[Dict[str, Any]] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[Entity]:
         """Query entities by type and attributes"""
         results = []
@@ -220,14 +230,14 @@ class KnowledgeGraph:
     def get_statistics(self) -> Dict[str, Any]:
         """Get graph statistics"""
         return {
-            'total_entities': len(self.entities),
-            'total_relations': len(self.relations),
-            'entities_by_type': {
+            "total_entities": len(self.entities),
+            "total_relations": len(self.relations),
+            "entities_by_type": {
                 entity_type.value: len(entity_ids)
                 for entity_type, entity_ids in self.entity_index.items()
             },
-            'relations_by_type': self._count_relations_by_type(),
-            'avg_degree': len(self.relations) / max(len(self.entities), 1)
+            "relations_by_type": self._count_relations_by_type(),
+            "avg_degree": len(self.relations) / max(len(self.entities), 1),
         }
 
     def _count_relations_by_type(self) -> Dict[str, int]:

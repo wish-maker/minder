@@ -2,6 +2,8 @@
 Security Utilities Module
 Input validation, sanitization, and protection against common attacks
 """
+
+from pydantic import validator
 import re
 import html
 import logging
@@ -62,7 +64,9 @@ class InputSanitizer:
     ]
 
     @classmethod
-    def sanitize_string(cls, input_string: str, max_length: int = 10000) -> str:
+    def sanitize_string(
+        cls, input_string: str, max_length: int = 10000
+    ) -> str:
         """
         Comprehensive string sanitization
 
@@ -82,7 +86,9 @@ class InputSanitizer:
 
         # Truncate if too long
         if len(input_string) > max_length:
-            logger.warning(f"Input truncated from {len(input_string)} to {max_length} characters")
+            logger.warning(
+                f"Input truncated from {len(input_string)} to {max_length} characters"
+            )
             input_string = input_string[:max_length]
 
         # Remove null bytes
@@ -111,7 +117,9 @@ class InputSanitizer:
 
         for pattern in cls.SQL_INJECTION_PATTERNS:
             if re.search(pattern, input_upper, re.IGNORECASE | re.MULTILINE):
-                logger.warning(f"SQL injection detected: {input_string[:100]}...")
+                logger.warning(
+                    f"SQL injection detected: {input_string[:100]}..."
+                )
                 return True
 
         return False
@@ -153,7 +161,9 @@ class InputSanitizer:
 
         for pattern in cls.PATH_TRAVERSAL_PATTERNS:
             if re.search(pattern, input_string, re.IGNORECASE):
-                logger.warning(f"Path traversal detected: {input_string[:100]}...")
+                logger.warning(
+                    f"Path traversal detected: {input_string[:100]}..."
+                )
                 return True
 
         return False
@@ -174,13 +184,17 @@ class InputSanitizer:
 
         for pattern in cls.COMMAND_INJECTION_PATTERNS:
             if re.search(pattern, input_string):
-                logger.warning(f"Command injection detected: {input_string[:100]}...")
+                logger.warning(
+                    f"Command injection detected: {input_string[:100]}..."
+                )
                 return True
 
         return False
 
     @classmethod
-    def validate_file_path(cls, file_path: str, allowed_dirs: Optional[List[str]] = None) -> bool:
+    def validate_file_path(
+        cls, file_path: str, allowed_dirs: Optional[List[str]] = None
+    ) -> bool:
         """
         Validate file path is safe and within allowed directories
 
@@ -235,7 +249,11 @@ class InputSanitizer:
                 sanitized[key] = cls.sanitize_dict(value, max_length)
             elif isinstance(value, list):
                 sanitized[key] = [
-                    cls.sanitize_string(item, max_length) if isinstance(item, str) else item
+                    (
+                        cls.sanitize_string(item, max_length)
+                        if isinstance(item, str)
+                        else item
+                    )
                     for item in value
                 ]
             else:
@@ -244,8 +262,13 @@ class InputSanitizer:
         return sanitized
 
     @classmethod
-    def validate_input(cls, input_value: Any, check_sql: bool = True,
-                      check_xss: bool = True, check_cmd: bool = True) -> tuple[bool, Optional[str]]:
+    def validate_input(
+        cls,
+        input_value: Any,
+        check_sql: bool = True,
+        check_xss: bool = True,
+        check_cmd: bool = True,
+    ) -> tuple[bool, Optional[str]]:
         """
         Comprehensive input validation
 
@@ -270,17 +293,22 @@ class InputSanitizer:
 
         # Check XSS
         if check_xss and cls.check_xss(input_str):
-            return False, "Input contains potentially dangerous script patterns"
+            return (
+                False,
+                "Input contains potentially dangerous script patterns",
+            )
 
         # Check command injection
         if check_cmd and cls.check_command_injection(input_str):
-            return False, "Input contains potentially dangerous command patterns"
+            return (
+                False,
+                "Input contains potentially dangerous command patterns",
+            )
 
         return True, None
 
 
 # Pydantic validators
-from pydantic import validator
 
 
 def add_security_validators(model_class):
@@ -292,9 +320,8 @@ def add_security_validators(model_class):
         class MyModel(BaseModel):
             field_name: str
     """
-    original_validators = getattr(model_class, '__validators__', {})
 
-    @validator('*', pre=True)
+    @validator("*", pre=True)
     def validate_all_fields(cls, v, field):
         """Validate all fields for security issues"""
         if v is None:
@@ -313,7 +340,7 @@ def add_security_validators(model_class):
         return InputSanitizer.sanitize_string(v)
 
     # Add validator to model
-    model_class.__validators__['validate_security'] = validate_all_fields
+    model_class.__validators__["validate_security"] = validate_all_fields
 
     return model_class
 
@@ -331,7 +358,9 @@ def sanitize_form_input(data: dict) -> dict:
     return InputSanitizer.sanitize_dict(data)
 
 
-def validate_json_input(data: dict, required_fields: Optional[List[str]] = None) -> tuple[bool, Optional[str]]:
+def validate_json_input(
+    data: dict, required_fields: Optional[List[str]] = None
+) -> tuple[bool, Optional[str]]:
     """
     Validate JSON input data
 
@@ -347,9 +376,14 @@ def validate_json_input(data: dict, required_fields: Optional[List[str]] = None)
 
     # Check required fields
     if required_fields:
-        missing_fields = [field for field in required_fields if field not in data]
+        missing_fields = [
+            field for field in required_fields if field not in data
+        ]
         if missing_fields:
-            return False, f"Missing required fields: {', '.join(missing_fields)}"
+            return (
+                False,
+                f"Missing required fields: {', '.join(missing_fields)}",
+            )
 
     # Validate all string fields
     for key, value in data.items():

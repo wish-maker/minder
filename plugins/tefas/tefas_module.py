@@ -3,6 +3,7 @@ Minder TEKAS Module
 Türkiye yatırım fonları analizi ve takibi
 TEFAS API entegrasyonu ile 2020'den beri veri
 """
+
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import asyncio
@@ -16,6 +17,7 @@ from psycopg2.extras import RealDictCursor
 try:
     from influxdb_client import InfluxDBClient, Point, WritePrecision
     from influxdb_client.client.write_api import SYNCHRONOUS
+
     INFLUXDB_AVAILABLE = True
 except ImportError:
     INFLUXDB_AVAILABLE = False
@@ -23,7 +25,6 @@ except ImportError:
 import numpy as np
 
 from core.module_interface import BaseModule, ModuleMetadata, ModuleStatus
-from core.module_interface import ModuleStatus
 from core.event_bus import EventType, Event
 
 
@@ -45,44 +46,51 @@ class TefasModule(BaseModule):
         self.logger = logging.getLogger("minder.module.tefas")
 
         # Initialize event_bus (inherited from BaseModule)
-        if not hasattr(self, 'event_bus'):
+        if not hasattr(self, "event_bus"):
             from core.event_bus import EventBus
+
             self.event_bus = EventBus(config)
 
         # TEFAS API endpoints
         self.tefas_api_base = "https://api.tefas.org.tr"
         self.fund_list_api = f"{self.tefas_api_base}/api/v1/funds"
-        self.fund_detail_api = f"{self.tefas_api_base}/api/v1/funds/{{fund_code}}"
+        self.fund_detail_api = (
+            f"{self.tefas_api_base}/api/v1/funds/{{fund_code}}"
+        )
 
         # Veritabanı bağlantıları
         self.db_config = {
-            'host': config.get('database', {}).get('host', 'localhost'),
-            'port': config.get('database', {}).get('port', 5432),
-            'database': config.get('database', {}).get('database', 'fundmind'),
-            'user': config.get('database', {}).get('user', 'postgres'),
-            'password': config.get('database', {}).get('password', '')
+            "host": config.get("database", {}).get("host", "localhost"),
+            "port": config.get("database", {}).get("port", 5432),
+            "database": config.get("database", {}).get("database", "fundmind"),
+            "user": config.get("database", {}).get("user", "postgres"),
+            "password": config.get("database", {}).get("password", ""),
         }
 
         # InfluxDB bağlantısı
-        influxdb_host = config.get('influxdb', {}).get('host', 'localhost')
-        influxdb_port = config.get('influxdb', {}).get('port', 8086)
+        influxdb_host = config.get("influxdb", {}).get("host", "localhost")
+        influxdb_port = config.get("influxdb", {}).get("port", 8086)
         self.influxdb_config = {
-            'url': f"http://{influxdb_host}:{influxdb_port}",
-            'token': config.get('influxdb', {}).get('token', 'minder-token'),
-            'org': config.get('influxdb', {}).get('org', 'minder'),
-            'bucket': config.get('influxdb', {}).get('bucket', 'metrics')
+            "url": f"http://{influxdb_host}:{influxdb_port}",
+            "token": config.get("influxdb", {}).get("token", "minder-token"),
+            "org": config.get("influxdb", {}).get("org", "minder"),
+            "bucket": config.get("influxdb", {}).get("bucket", "metrics"),
         }
 
         # Qdrant bağlantısı
         self.qdrant_config = {
-            'host': config.get('qdrant', {}).get('host', 'localhost'),
-            'port': config.get('qdrant', {}).get('port', 6333)
+            "host": config.get("qdrant", {}).get("host", "localhost"),
+            "port": config.get("qdrant", {}).get("port", 6333),
         }
 
         # Ayarlar
-        self.batch_size = config.get('batch_size', 100)
-        self.historical_start_date = config.get('historical_start_date', '2020-01-01')
-        self.collection_interval = config.get('collection_interval', 86400)  # Günlük
+        self.batch_size = config.get("batch_size", 100)
+        self.historical_start_date = config.get(
+            "historical_start_date", "2020-01-01"
+        )
+        self.collection_interval = config.get(
+            "collection_interval", 86400
+        )  # Günlük
 
     def _parse_turkish_float(self, text: str) -> float:
         """Parse Turkish format numbers (1.234,56) to float"""
@@ -90,7 +98,7 @@ class TefasModule(BaseModule):
             return 0.0
         try:
             # Remove dots (thousands separator), replace comma with dot
-            cleaned = text.replace('.', '').replace(',', '.')
+            cleaned = text.replace(".", "").replace(",", ".")
             return float(cleaned)
         except (ValueError, AttributeError):
             self.logger.warning(f"Could not parse Turkish float from: {text}")
@@ -103,32 +111,35 @@ class TefasModule(BaseModule):
             description="TEFAS Türkiye yatırım fonları analizi ve takibi",
             author="Minder AI",
             capabilities=[
-                "real_time_data",           # Gerçek zamanlı API verisi
-                "historical_analysis",      # Tarihsel veri analizi
-                "return_calculation",        # Günlük/yıllık getiri
-                "volatility_analysis",       # Volatilite hesaplama
-                "performance_metrics",      # Sharpe, sortino vb.
-                "risk_assessment",         # Risk analizi
-                "anomaly_detection",        # Anomali tespiti
-                "portfolio_optimization"   # Portföy optimizasyonu
+                "real_time_data",  # Gerçek zamanlı API verisi
+                "historical_analysis",  # Tarihsel veri analizi
+                "return_calculation",  # Günlük/yıllık getiri
+                "volatility_analysis",  # Volatilite hesaplama
+                "performance_metrics",  # Sharpe, sortino vb.
+                "risk_assessment",  # Risk analizi
+                "anomaly_detection",  # Anomali tespiti
+                "portfolio_optimization",  # Portföy optimizasyonu
             ],
             data_sources=[
-                "tefas_api",              # TEFAS public API
-                "tefas_website"           # Web scraping (backup)
+                "tefas_api",  # TEFAS public API
+                "tefas_website",  # Web scraping (backup)
             ],
             databases=[
-                "postgresql",             # Fon verileri
-                "influxdb"                # Time-series metrikler
-            ]
+                "postgresql",  # Fon verileri
+                "influxdb",  # Time-series metrikler
+            ],
         )
 
         # Update status
         from core.module_interface import ModuleStatus
+
         self.status = ModuleStatus.READY
 
         return self.metadata
 
-    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
+    async def collect_data(
+        self, since: Optional[datetime] = None
+    ) -> Dict[str, int]:
         """
         TEFAS fon verilerini toplama
 
@@ -155,17 +166,21 @@ class TefasModule(BaseModule):
             if INFLUXDB_AVAILABLE:
                 try:
                     influx_client = InfluxDBClient(
-                        url=self.influxdb_config['url'],
-                        token=self.influxdb_config['token'],
-                        org=self.influxdb_config['org']
+                        url=self.influxdb_config["url"],
+                        token=self.influxdb_config["token"],
+                        org=self.influxdb_config["org"],
                     )
-                    write_api = influx_client.write_api(write_options=SYNCHRONOUS)
+                    write_api = influx_client.write_api(
+                        write_options=SYNCHRONOUS
+                    )
                     self.logger.info("InfluxDB client initialized")
                 except Exception as e:
                     self.logger.warning(f"InfluxDB initialization failed: {e}")
                     influx_client = None
             else:
-                self.logger.warning("InfluxDB client not available, skipping time-series storage")
+                self.logger.warning(
+                    "InfluxDB client not available, skipping time-series storage"
+                )
 
             # Tabloyu oluştur (yoksa)
             await self._ensure_tables(cursor)
@@ -174,31 +189,44 @@ class TefasModule(BaseModule):
             funds = await self._fetch_fund_list()
             self.logger.info(f"Found {len(funds)} funds")
 
-            # 2. Her fon için veri çek (SADECE fon metadatası, tarihsel veri yok)
+            # 2. Her fon için veri çek (SADECE fon metadatası, tarihsel veri
+            # yok)
             for fund in funds:
                 try:
                     # Fon detaylarını çek
-                    fund_detail = await self._fetch_fund_detail(fund['fund_code'])
+                    fund_detail = await self._fetch_fund_detail(
+                        fund["fund_code"]
+                    )
                     records_collected += 1
 
-                    # Tarihsel fiyat verilerini çekME (gerçek API yok, fake data istemiyoruz)
-                    historical_data = []  # Boş liste - fake data oluşturmayacağız
+                    # Tarihsel fiyat verilerini çekME (gerçek API yok, fake
+                    # data istemiyoruz)
+                    historical_data = (
+                        []
+                    )  # Boş liste - fake data oluşturmayacağız
 
                     # PostgreSQL'e kaydet (sadece fon metadata)
                     await self._save_fund_metadata(cursor, fund, fund_detail)
                     records_updated += 1
 
-                    # InfluxDB'ye time-series veri yaz (opsiyonel - şu anda boş)
+                    # InfluxDB'ye time-series veri yaz (opsiyonel - şu anda
+                    # boş)
                     if write_api and historical_data:
-                        await self._write_to_influxdb(write_api, fund, fund_detail, historical_data)
+                        await self._write_to_influxdb(
+                            write_api, fund, fund_detail, historical_data
+                        )
 
-                    self.logger.info(f"Processed {fund['fund_code']}: metadata only (no historical data)")
+                    self.logger.info(
+                        f"Processed {fund['fund_code']}: metadata only (no historical data)"
+                    )
 
                     # Rate limiting - TEFAS API'yi yormamak için
                     await asyncio.sleep(0.5)
 
                 except Exception as e:
-                    self.logger.error(f"Error processing fund {fund.get('fund_code')}: {e}")
+                    self.logger.error(
+                        f"Error processing fund {fund.get('fund_code')}: {e}"
+                    )
                     errors += 1
 
             conn.commit()
@@ -209,15 +237,17 @@ class TefasModule(BaseModule):
                 influx_client.close()
 
             # Event publish
-            await self.event_bus.publish(Event(
-                type=EventType.DATA_COLLECTED,
-                source="tefas",
-                data={
-                    "funds_processed": len(funds),
-                    "records_collected": records_collected,
-                    "timestamp": datetime.now().isoformat()
-                }
-            ))
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.DATA_COLLECTED,
+                    source="tefas",
+                    data={
+                        "funds_processed": len(funds),
+                        "records_collected": records_collected,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
+            )
 
         except Exception as e:
             self.logger.error(f"TEKAS data collection failed: {e}")
@@ -229,7 +259,7 @@ class TefasModule(BaseModule):
         return {
             "records_collected": records_collected,
             "records_updated": records_updated,
-            "errors": errors
+            "errors": errors,
         }
 
     async def analyze(self) -> Dict[str, Any]:
@@ -251,12 +281,15 @@ class TefasModule(BaseModule):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Fon verilerini çek
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT fund_code, fund_name, price, date
                 FROM tefas_funds
                 WHERE date >= %s
                 ORDER BY fund_code, date
-            """, (self.historical_start_date,))
+            """,
+                (self.historical_start_date,),
+            )
 
             df = pd.DataFrame(cursor.fetchall())
             conn.close()
@@ -266,7 +299,7 @@ class TefasModule(BaseModule):
                 return {"metrics": {}, "patterns": [], "insights": []}
 
             # Convert DECIMAL to float
-            df['price'] = df['price'].astype(float)
+            df["price"] = df["price"].astype(float)
 
             # Metrikleri hesapla
             metrics = {}
@@ -274,29 +307,33 @@ class TefasModule(BaseModule):
             insights = []
 
             # Her fon için metrikler
-            for fund_code in df['fund_code'].unique():
-                fund_df = df[df['fund_code'] == fund_code].copy()
-                fund_df['daily_return'] = fund_df['price'].pct_change()
+            for fund_code in df["fund_code"].unique():
+                fund_df = df[df["fund_code"] == fund_code].copy()
+                fund_df["daily_return"] = fund_df["price"].pct_change()
 
                 # Günlük ortalama getiri
-                avg_daily_return = fund_df['daily_return'].mean()
+                avg_daily_return = fund_df["daily_return"].mean()
 
                 # Volatilite (standart sapma)
-                volatility = fund_df['daily_return'].std()
+                volatility = fund_df["daily_return"].std()
 
                 # Sharpe oranı (risksiz getiri)
                 risk_free_rate = 0.05 / 252  # %5 yıllık tahvil getirisi
-                sharpe_ratio = (avg_daily_return - risk_free_rate) / volatility if volatility > 0 else 0
+                sharpe_ratio = (
+                    (avg_daily_return - risk_free_rate) / volatility
+                    if volatility > 0
+                    else 0
+                )
 
                 # Yıllık getiri
                 annual_return = avg_daily_return * 252
 
                 metrics[fund_code] = {
-                    'avg_daily_return': float(avg_daily_return),
-                    'volatility': float(volatility),
-                    'sharpe_ratio': float(sharpe_ratio),
-                    'annual_return': float(annual_return),
-                    'total_days': len(fund_df)
+                    "avg_daily_return": float(avg_daily_return),
+                    "volatility": float(volatility),
+                    "sharpe_ratio": float(sharpe_ratio),
+                    "annual_return": float(annual_return),
+                    "total_days": len(fund_df),
                 }
 
                 # Insight: Sharpe oranı > 1 olan fonlar
@@ -307,20 +344,22 @@ class TefasModule(BaseModule):
 
             # En iyi performans
             best_funds = sorted(
-                [(code, m['sharpe_ratio']) for code, m in metrics.items()],
+                [(code, m["sharpe_ratio"]) for code, m in metrics.items()],
                 key=lambda x: x[1],
-                reverse=True
+                reverse=True,
             )[:5]
 
             patterns = [
                 {
-                    'type': 'top_performers',
-                    'funds': [code for code, _ in best_funds],
-                    'description': 'En yüksek Sharpe oranlı fonlar'
+                    "type": "top_performers",
+                    "funds": [code for code, _ in best_funds],
+                    "description": "En yüksek Sharpe oranlı fonlar",
                 }
             ]
 
-            self.logger.info(f"Analysis complete: {len(metrics)} funds analyzed")
+            self.logger.info(
+                f"Analysis complete: {len(metrics)} funds analyzed"
+            )
 
         except Exception as e:
             self.logger.error(f"TEKAS analysis failed: {e}")
@@ -328,11 +367,7 @@ class TefasModule(BaseModule):
         finally:
             self.status = ModuleStatus.READY
 
-        return {
-            "metrics": metrics,
-            "patterns": patterns,
-            "insights": insights
-        }
+        return {"metrics": metrics, "patterns": patterns, "insights": insights}
 
     async def train_ai(self, model_type: str = "lstm") -> Dict[str, Any]:
         """
@@ -348,12 +383,15 @@ class TefasModule(BaseModule):
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT fund_code, date, price, volume
                 FROM tefas_funds
                 WHERE date >= %s
                 ORDER BY fund_code, date
-            """, (self.historical_start_date,))
+            """,
+                (self.historical_start_date,),
+            )
 
             df = pd.DataFrame(cursor.fetchall())
             conn.close()
@@ -361,7 +399,7 @@ class TefasModule(BaseModule):
             if df.empty or len(df) < 100:
                 return {
                     "model_id": f"tefas_{model_type}",
-                    "error": "Yetersiz veri"
+                    "error": "Yetersiz veri",
                 }
 
             # Model eğitimi (basit örnek)
@@ -374,18 +412,12 @@ class TefasModule(BaseModule):
                 "model_id": f"tefas_{model_type}",
                 "accuracy": 0.85,  # Placeholder
                 "training_samples": training_samples,
-                "metrics": {
-                    "mse": 0.001,
-                    "mae": 0.0005
-                }
+                "metrics": {"mse": 0.001, "mae": 0.0005},
             }
 
         except Exception as e:
             self.logger.error(f"Model training failed: {e}")
-            return {
-                "model_id": f"tefas_{model_type}",
-                "error": str(e)
-            }
+            return {"model_id": f"tefas_{model_type}", "error": str(e)}
 
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
         """RAG için vektör indexing"""
@@ -399,12 +431,16 @@ class TefasModule(BaseModule):
             # Optional: Qdrant integration
             try:
                 from qdrant_client import QdrantClient
-                from qdrant_client.models import Distance, VectorParams, PointStruct
+                from qdrant_client.models import (
+                    Distance,
+                    VectorParams,
+                    PointStruct,
+                )
 
                 # Qdrant client
                 qdrant = QdrantClient(
-                    host=self.qdrant_config['host'],
-                    port=self.qdrant_config['port']
+                    host=self.qdrant_config["host"],
+                    port=self.qdrant_config["port"],
                 )
 
                 # Collection'ı oluştur (yoksa)
@@ -413,16 +449,22 @@ class TefasModule(BaseModule):
                 if force:
                     try:
                         qdrant.delete_collection(collection_name)
-                        self.logger.info(f"Deleted existing collection: {collection_name}")
-                    except:
+                        self.logger.info(
+                            f"Deleted existing collection: {collection_name}"
+                        )
+                    except BaseException:
                         pass
 
                 # Collection'ı kontrol et ve oluştur
-                collections_list = [c.name for c in qdrant.get_collections().collections]
+                collections_list = [
+                    c.name for c in qdrant.get_collections().collections
+                ]
                 if collection_name not in collections_list:
                     qdrant.create_collection(
                         collection_name=collection_name,
-                        vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+                        vectors_config=VectorParams(
+                            size=384, distance=Distance.COSINE
+                        ),
                     )
                     collections += 1
                     self.logger.info(f"Created collection: {collection_name}")
@@ -440,11 +482,13 @@ class TefasModule(BaseModule):
                 funds = cursor.fetchall()
                 conn.close()
 
-                # Basit vektörler oluştur (gerçek implementasyonda sentence-transformers kullanılır)
+                # Basit vektörler oluştur (gerçek implementasyonda
+                # sentence-transformers kullanılır)
                 points = []
                 for idx, fund in enumerate(funds):
                     # Basit hash-based vektör (placeholder)
                     import hashlib
+
                     text = f"{fund['fund_name']} {fund['fund_code']}"
                     hash_obj = hashlib.md5(text.encode())
                     hash_bytes = hash_obj.digest()
@@ -458,10 +502,10 @@ class TefasModule(BaseModule):
                         id=idx + 1,
                         vector=vector,
                         payload={
-                            "fund_code": fund['fund_code'],
-                            "fund_name": fund['fund_name'],
-                            "text": text
-                        }
+                            "fund_code": fund["fund_code"],
+                            "fund_name": fund["fund_name"],
+                            "text": text,
+                        },
                     )
                     points.append(point)
                     vectors_created += 1
@@ -469,14 +513,17 @@ class TefasModule(BaseModule):
                 # Batch upsert
                 if points:
                     qdrant.upsert(
-                        collection_name=collection_name,
-                        points=points
+                        collection_name=collection_name, points=points
                     )
 
-                self.logger.info(f"Indexed {vectors_created} vectors in {collection_name}")
+                self.logger.info(
+                    f"Indexed {vectors_created} vectors in {collection_name}"
+                )
 
             except ImportError:
-                self.logger.warning("Qdrant client not available, skipping vector indexing")
+                self.logger.warning(
+                    "Qdrant client not available, skipping vector indexing"
+                )
             except Exception as e:
                 self.logger.error(f"Qdrant indexing failed: {e}")
 
@@ -486,13 +533,11 @@ class TefasModule(BaseModule):
         return {
             "vectors_created": vectors_created,
             "vectors_updated": vectors_updated,
-            "collections": collections
+            "collections": collections,
         }
 
     async def get_correlations(
-        self,
-        other_module: str,
-        correlation_type: str = "auto"
+        self, other_module: str, correlation_type: str = "auto"
     ) -> List[Dict[str, Any]]:
         """
         Çapraz korelasyon ipuçları
@@ -505,29 +550,31 @@ class TefasModule(BaseModule):
         correlations = []
 
         if other_module == "interest_rate":
-            correlations.append({
-                'field': 'tefas_funds.daily_return',
-                'other_field': 'cbrc.policy_rate',
-                'correlation_type': 'temporal',
-                'strength': 0.7,
-                'description': 'Faiz artışı fon getirilerini etkiler'
-            })
+            correlations.append(
+                {
+                    "field": "tefas_funds.daily_return",
+                    "other_field": "cbrc.policy_rate",
+                    "correlation_type": "temporal",
+                    "strength": 0.7,
+                    "description": "Faiz artışı fon getirilerini etkiler",
+                }
+            )
 
         elif other_module == "news":
-            correlations.append({
-                'field': 'tefas_funds.volatility',
-                'other_field': 'news.sentiment_score',
-                'correlation_type': 'temporal',
-                'strength': 0.5,
-                'description': 'Haber duygusu volatiliteyi etkiler'
-            })
+            correlations.append(
+                {
+                    "field": "tefas_funds.volatility",
+                    "other_field": "news.sentiment_score",
+                    "correlation_type": "temporal",
+                    "strength": 0.5,
+                    "description": "Haber duygusu volatiliteyi etkiler",
+                }
+            )
 
         return correlations
 
     async def get_anomalies(
-        self,
-        severity: str = "high",
-        limit: int = 10
+        self, severity: str = "high", limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
         TEKAS fon anomalileri
@@ -545,7 +592,8 @@ class TefasModule(BaseModule):
             cursor = conn.cursor(cursor_factory=RealDictCursor)
 
             # Anormal getiri değişimlerini bul
-            cursor.execute("""
+            cursor.execute(
+                """
                 WITH daily_returns AS (
                     SELECT
                         fund_code,
@@ -566,21 +614,33 @@ class TefasModule(BaseModule):
                   AND prev_price IS NOT NULL
                 ORDER BY ABS(daily_return) DESC
                 LIMIT %s
-            """, (limit,))
+            """,
+                (limit,),
+            )
 
             rows = cursor.fetchall()
             conn.close()
 
             for row in rows:
-                anomalies.append({
-                    'fund_code': row['fund_code'],
-                    'date': row['date'].isoformat(),
-                    'price': float(row['price']),
-                    'prev_price': float(row['prev_price']) if row['prev_price'] else 0,
-                    'daily_return': float(row['daily_return']),
-                    'severity': 'high' if abs(row['daily_return']) > 0.10 else 'medium',
-                    'description': f"{row['fund_code']} fonunda {row['daily_return']*100:.1f}% günlük değişim"
-                })
+                anomalies.append(
+                    {
+                        "fund_code": row["fund_code"],
+                        "date": row["date"].isoformat(),
+                        "price": float(row["price"]),
+                        "prev_price": (
+                            float(row["prev_price"])
+                            if row["prev_price"]
+                            else 0
+                        ),
+                        "daily_return": float(row["daily_return"]),
+                        "severity": (
+                            "high"
+                            if abs(row["daily_return"]) > 0.10
+                            else "medium"
+                        ),
+                        "description": f"{row['fund_code']} fonunda {row['daily_return']*100:.1f}% günlük değişim",
+                    }
+                )
 
         except Exception as e:
             self.logger.error(f"Anomaly detection failed: {e}")
@@ -617,29 +677,30 @@ class TefasModule(BaseModule):
         async with aiohttp.ClientSession() as session:
             try:
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7",
                 }
 
                 async with session.get(
                     "https://www.tefas.org.tr/FonAnaliz.aspx",
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=30)
+                    timeout=aiohttp.ClientTimeout(total=30),
                 ) as response:
                     if response.status == 200:
                         from bs4 import BeautifulSoup
+
                         html = await response.text()
-                        soup = BeautifulSoup(html, 'html.parser')
+                        soup = BeautifulSoup(html, "html.parser")
 
                         # Find the fund table - try multiple selectors
                         table = None
                         for selector in [
-                            'table#MainContent_ctl00_dgFonlar',
-                            'table.data-table',
+                            "table#MainContent_ctl00_dgFonlar",
+                            "table.data-table",
                             'table[id*="dgFon"]',
                             'table[class*="fund"]',
-                            'table'  # Last resort
+                            "table",  # Last resort
                         ]:
                             table = soup.select_one(selector)
                             if table:
@@ -647,37 +708,57 @@ class TefasModule(BaseModule):
 
                         funds = []
                         if table:
-                            rows = table.find_all('tr')[1:]  # Skip header row
+                            rows = table.find_all("tr")[1:]  # Skip header row
 
                             for row in rows:
-                                cells = row.find_all('td')
-                                if len(cells) >= 2:  # At least fund code and name
+                                cells = row.find_all("td")
+                                if (
+                                    len(cells) >= 2
+                                ):  # At least fund code and name
                                     fund_code = cells[0].get_text(strip=True)
                                     fund_name = cells[1].get_text(strip=True)
 
-                                    # Try to extract price from 3rd column if available
+                                    # Try to extract price from 3rd column if
+                                    # available
                                     price = 0.0
                                     if len(cells) >= 3:
-                                        price_text = cells[2].get_text(strip=True)
-                                        price = self._parse_turkish_float(price_text)
+                                        price_text = cells[2].get_text(
+                                            strip=True
+                                        )
+                                        price = self._parse_turkish_float(
+                                            price_text
+                                        )
 
-                                    # Validate fund code (alphanumeric, 3-6 chars)
-                                    if fund_code and fund_code.isalnum() and 2 < len(fund_code) <= 6:
-                                        funds.append({
-                                            "fund_code": fund_code,
-                                            "fund_name": fund_name,
-                                            "price": price  # ← REAL PRICE from web scraping
-                                        })
+                                    # Validate fund code (alphanumeric, 3-6
+                                    # chars)
+                                    if (
+                                        fund_code
+                                        and fund_code.isalnum()
+                                        and 2 < len(fund_code) <= 6
+                                    ):
+                                        funds.append(
+                                            {
+                                                "fund_code": fund_code,
+                                                "fund_name": fund_name,
+                                                "price": price,  # ← REAL PRICE from web scraping
+                                            }
+                                        )
 
                         if funds:
-                            self.logger.info(f"✓ Scraped {len(funds)} real funds from TEFAS")
+                            self.logger.info(
+                                f"✓ Scraped {len(funds)} real funds from TEFAS"
+                            )
                             return funds
                         else:
-                            self.logger.warning("No funds found in HTML, checking alternative sources")
+                            self.logger.warning(
+                                "No funds found in HTML, checking alternative sources"
+                            )
                             # Fallback: Try alternative TEFAS endpoints
                             return await self._fetch_tefas_alternative(session)
                     else:
-                        self.logger.warning(f"TEFAS returned status {response.status}")
+                        self.logger.warning(
+                            f"TEFAS returned status {response.status}"
+                        )
                         return await self._fetch_tefas_alternative(session)
 
             except Exception as e:
@@ -690,14 +771,17 @@ class TefasModule(BaseModule):
         try:
             async with session.get(
                 "https://www.tefas.org.tr/api/funds",
-                headers={'Accept': 'application/json'},
-                timeout=aiohttp.ClientTimeout(total=15)
+                headers={"Accept": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=15),
             ) as response:
                 if response.status == 200:
                     data = await response.json()
                     if isinstance(data, list) and len(data) > 5:
-                        return [{"fund_code": f["code"], "fund_name": f["name"]} for f in data]
-        except:
+                        return [
+                            {"fund_code": f["code"], "fund_name": f["name"]}
+                            for f in data
+                        ]
+        except BaseException:
             pass
 
         # Last resort - use known major Turkish funds (not just 5)
@@ -727,7 +811,8 @@ class TefasModule(BaseModule):
             {"fund_code": "ROK", "fund_name": "Rok Yatırım Fonu"},
         ]
 
-    # Removed _get_sample_funds - replaced with _get_major_turkish_funds (15 funds instead of 5)
+    # Removed _get_sample_funds - replaced with _get_major_turkish_funds (15
+    # funds instead of 5)
 
     async def _fetch_fund_detail(self, fund_code: str) -> Dict:
         """Fon detaylarını çek - temel bilgiler döndürür"""
@@ -737,13 +822,11 @@ class TefasModule(BaseModule):
             "fund_type": "Yatırım Fonu",
             "management_company": "TEFAS Yatırım",
             "inception_date": "2020-01-01",
-            "nav_color": "Blue"
+            "nav_color": "Blue",
         }
 
     async def _fetch_historical_prices(
-        self,
-        fund_code: str,
-        start_date: datetime
+        self, fund_code: str, start_date: datetime
     ) -> List[Dict]:
         """
         Tarihsel fiyat verilerini çek
@@ -751,36 +834,48 @@ class TefasModule(BaseModule):
         Fake data oluşturmak yerine boş liste döndürüyoruz
         """
         # TODO: Implement real TEFAS historical API when available
-        self.logger.warning(f"Historical data not yet implemented for {fund_code} - returning empty list")
+        self.logger.warning(
+            f"Historical data not yet implemented for {fund_code} - returning empty list"
+        )
         return []  # Return empty list instead of fake data
 
     async def _save_fund_metadata(self, cursor, fund, detail):
         """Save fund with REAL data or skip if no price data available"""
         try:
             # Only save if we have real price data
-            price = fund.get('price', 0.0)
+            price = fund.get("price", 0.0)
             if price == 0.0:
-                self.logger.warning(f"Skipping {fund['fund_code']} - no price data available (not saving fake data)")
+                self.logger.warning(
+                    f"Skipping {fund['fund_code']} - no price data available (not saving fake data)"
+                )
                 return
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO tefas_funds (fund_code, fund_name, price, date, volume, daily_return)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fund_code, date) DO UPDATE SET
                     fund_name = EXCLUDED.fund_name,
                     price = EXCLUDED.price,
                     volume = EXCLUDED.volume
-            """, (
-                fund['fund_code'],
-                fund['fund_name'],
-                price,  # ← REAL PRICE from web scraping (not 0.0!)
-                datetime.now().date(),  # Today's date
-                fund.get('volume', 0),    # ← REAL VOLUME if available
-                fund.get('daily_return', 0.0)  # ← CALCULATED from price change if available
-            ))
-            self.logger.info(f"✓ Saved REAL data for {fund['fund_code']}: price={price}")
+            """,
+                (
+                    fund["fund_code"],
+                    fund["fund_name"],
+                    price,  # ← REAL PRICE from web scraping (not 0.0!)
+                    datetime.now().date(),  # Today's date
+                    fund.get("volume", 0),  # ← REAL VOLUME if available
+                    # ← CALCULATED from price change if available
+                    fund.get("daily_return", 0.0),
+                ),
+            )
+            self.logger.info(
+                f"✓ Saved REAL data for {fund['fund_code']}: price={price}"
+            )
         except Exception as e:
-            self.logger.error(f"Error saving metadata for {fund['fund_code']}: {e}")
+            self.logger.error(
+                f"Error saving metadata for {fund['fund_code']}: {e}"
+            )
             raise
 
     async def _save_fund_data(self, cursor, fund, detail, historical_data):
@@ -790,7 +885,8 @@ class TefasModule(BaseModule):
 
         for record in historical_data:
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO tefas_funds (fund_code, fund_name, price, date, volume)
                     VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (fund_code, date)
@@ -798,37 +894,49 @@ class TefasModule(BaseModule):
                         price = EXCLUDED.price,
                         volume = EXCLUDED.volume,
                         daily_return = (EXCLUDED.price - tefas_funds.price) / NULLIF(tefas_funds.price, 0)
-                """, (
-                    fund['fund_code'],
-                    fund['fund_name'],
-                    record['price'],
-                    record['date'],
-                    record['volume']
-                ))
+                """,
+                    (
+                        fund["fund_code"],
+                        fund["fund_name"],
+                        record["price"],
+                        record["date"],
+                        record["volume"],
+                    ),
+                )
             except Exception as e:
-                self.logger.error(f"Error saving data for {fund['fund_code']}: {e}")
+                self.logger.error(
+                    f"Error saving data for {fund['fund_code']}: {e}"
+                )
                 raise
 
-    async def _write_to_influxdb(self, write_api, fund, detail, historical_data):
+    async def _write_to_influxdb(
+        self, write_api, fund, detail, historical_data
+    ):
         """InfluxDB'ye time-series veri yaz"""
         try:
             for record in historical_data:
-                point = Point("tefas_funds") \
-                    .tag("fund_code", fund['fund_code']) \
-                    .tag("fund_name", fund['fund_name']) \
-                    .tag("fund_type", detail.get('fund_type', 'Unknown')) \
-                    .time(record['date']) \
-                    .field("price", float(record['price'])) \
-                    .field("volume", int(record['volume']))
-
-                write_api.write(
-                    bucket=self.influxdb_config['bucket'],
-                    org=self.influxdb_config['org'],
-                    record=point
+                point = (
+                    Point("tefas_funds")
+                    .tag("fund_code", fund["fund_code"])
+                    .tag("fund_name", fund["fund_name"])
+                    .tag("fund_type", detail.get("fund_type", "Unknown"))
+                    .time(record["date"])
+                    .field("price", float(record["price"]))
+                    .field("volume", int(record["volume"]))
                 )
 
-            self.logger.debug(f"Wrote {len(historical_data)} records to InfluxDB for {fund['fund_code']}")
+                write_api.write(
+                    bucket=self.influxdb_config["bucket"],
+                    org=self.influxdb_config["org"],
+                    record=point,
+                )
+
+            self.logger.debug(
+                f"Wrote {len(historical_data)} records to InfluxDB for {fund['fund_code']}"
+            )
 
         except Exception as e:
-            self.logger.error(f"Error writing to InfluxDB for {fund['fund_code']}: {e}")
+            self.logger.error(
+                f"Error writing to InfluxDB for {fund['fund_code']}: {e}"
+            )
             raise

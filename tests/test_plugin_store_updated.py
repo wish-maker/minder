@@ -10,12 +10,12 @@ import sys
 import os
 import tempfile
 import shutil
+from typing import Dict, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.plugin_loader import PluginLoader
-from core.module_interface import BaseModule, ModuleMetadata
-from typing import Dict, Any, Optional
+from core.plugin_loader import PluginLoader  # noqa: E402
+from core.module_interface import BaseModule, ModuleMetadata  # noqa: E402
 
 
 class MockPlugin(BaseModule):
@@ -39,7 +39,8 @@ class MockPlugin(BaseModule):
         )
         return self.metadata
 
-    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
+    async def collect_data(
+            self, since: Optional[datetime] = None) -> Dict[str, int]:
         """Collect data"""
         return {"records_collected": 0}
 
@@ -341,7 +342,6 @@ class TestRealPlugins:
 
     def test_discover_real_plugins(self):
         """Test discovery of actual plugins"""
-        import os
         from pathlib import Path
 
         # Use actual project path
@@ -363,7 +363,6 @@ class TestRealPlugins:
 
     def test_load_real_plugin(self):
         """Test loading a real plugin"""
-        import os
         from pathlib import Path
 
         # Use actual project path
@@ -382,7 +381,9 @@ class TestRealPlugins:
 
             # discovered is a list of plugin names, not a dict
             # Try loading first available plugin
-            plugin_name = discovered[0] if isinstance(discovered, list) else list(discovered.keys())[0]
+            plugin_name = discovered[0] if isinstance(
+                discovered, list) else list(
+                discovered.keys())[0]
             plugin = await loader.load_plugin(plugin_name)
 
             # Plugin loading might fail if dependencies are missing

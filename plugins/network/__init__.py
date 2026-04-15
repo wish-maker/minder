@@ -5,4 +5,4 @@ Network performance monitoring and security analysis
 
 from .network_module import NetworkModule
 
-__all__ = ['NetworkModule']
+__all__ = ["NetworkModule"]

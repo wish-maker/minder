@@ -13,7 +13,7 @@ import bcrypt
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.auth import (
+from api.auth import (  # noqa: E401
     AuthManager,
     get_current_user,
     get_current_user_optional,
@@ -22,6 +22,7 @@ from api.auth import (
 
 # Test configuration
 TEST_SECRET_KEY = "test_secret_key_for_testing_purposes_only"
+
 
 @pytest.fixture
 def test_auth_manager():
@@ -73,7 +74,9 @@ class TestPasswordHashing:
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         # Should return False for incorrect password
-        assert bcrypt.checkpw(wrong_password.encode(), hashed.encode()) is False
+        assert bcrypt.checkpw(
+            wrong_password.encode(),
+            hashed.encode()) is False
 
     def test_password_hash_uniqueness(self, test_auth_manager):
         """Test that same password generates different hashes"""
@@ -178,7 +181,8 @@ class TestTokenVerification:
                 "exp": datetime.utcnow() - timedelta(minutes=1),  # Expired 1 min ago
                 "iat": datetime.utcnow() - timedelta(minutes=31)
             }
-            expired_token = jwt.encode(expired_payload, TEST_SECRET_KEY, algorithm="HS256")
+            expired_token = jwt.encode(
+                expired_payload, TEST_SECRET_KEY, algorithm="HS256")
 
             # Should return None for expired token
             async def verify():
@@ -259,7 +263,10 @@ class TestTokenExpiration:
         token = test_auth_manager.create_access_token(data)
 
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
-        time_until_exp = (datetime.fromtimestamp(payload["exp"]) - datetime.utcnow()).total_seconds()
+        time_until_exp = (
+            datetime.fromtimestamp(
+                payload["exp"]) -
+            datetime.utcnow()).total_seconds()
 
         # Should have some expiration time
         assert time_until_exp > 0
@@ -288,7 +295,8 @@ class TestSecurityFeatures:
     def test_password_not_stored_in_plaintext(self, test_auth_manager):
         """Test that passwords are not stored in plaintext"""
         password = "test_password_123"
-        # Hash password using bcrypt directly (AuthManager doesn't expose _hash_password)
+        # Hash password using bcrypt directly (AuthManager doesn't expose
+        # _hash_password)
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         # Hash should not contain plaintext password
