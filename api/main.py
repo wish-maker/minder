@@ -2,23 +2,17 @@
 Minder FastAPI Application
 Main REST API for Minder platform
 """
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Request, Body
-from pydantic import BaseModel, field_validator
-from typing import Dict, List, Any, Optional
+from fastapi import FastAPI, Request
 import logging
 import os
 
 from core.kernel import MinderKernel
-from core.character_system import CharacterEngine, Character
+from core.character_system import CharacterEngine
 from core.voice_interface import VoiceInterface
-from .mobile import setup_mobile_routes, MobileAPIHandler
 from . import plugin_store
-from .auth import (
-    AuthManager, get_auth_manager, get_current_user, get_current_user_optional,
-    LoginRequest, LoginResponse
-)
-from .middleware import setup_middleware, expensive_limiter, limiter
-from .security import InputSanitizer
+from . import auth
+from .auth import AuthManager
+from .middleware import setup_middleware
 
 # Configure logging
 logging.basicConfig(
@@ -28,10 +22,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global variables
-kernel: Optional[MinderKernel] = None
-character_engine: Optional[CharacterEngine] = None
-voice_interface: Optional[VoiceInterface] = None
-mobile_handler: Optional[MobileAPIHandler] = None
+kernel = None
+character_engine = None
+voice_interface = None
 
 # FastAPI app
 app = FastAPI(
@@ -66,7 +59,7 @@ AI-powered knowledge management platform with hot-swappable plugins for intellig
 Most endpoints require JWT authentication. Include your token in the Authorization header:
 
 ```bash
-curl -H \"Authorization: Bearer YOUR_TOKEN\" http://localhost:8000/plugins
+curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8000/plugins
 ```
 
 ### Get Your Token
@@ -120,10 +113,10 @@ from core.module_interface import BaseModule, ModuleMetadata
 class MyPlugin(BaseModule):
     async def register(self) -> ModuleMetadata:
         return ModuleMetadata(
-            name=\"my_plugin\",
-            version=\"1.0.0\",
-            description=\"My awesome plugin\",
-            author=\"Your Name\"
+            name="my_plugin",
+            version="1.0.0",
+            description="My awesome plugin",
+            author="Your Name"
         )
 
     async def collect_data(self, since=None):
@@ -170,8 +163,8 @@ For detailed plugin development guide, see the [`/plugins/docs`](/plugins/docs) 
             "description": "Entity relationships and knowledge graph operations"
         },
         {
-            "name": "Voice Interface",
-            "description": "Speech-to-text and text-to-speech capabilities"
+            "name": "Characters",
+            "description": "AI character system management"
         }
     ]
 )
@@ -188,112 +181,6 @@ setup_middleware(app, ALLOWED_ORIGINS)
 # Include Plugin Store router
 app.include_router(plugin_store.router)
 
-# Request/Response models
-class ChatRequest(BaseModel):
-    message: str
-    character: Optional[str] = None
-    voice_mode: bool = False
-
-    @field_validator('message')
-    @classmethod
-    def validate_message(cls, v):
-        """Validate and sanitize chat message"""
-        # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(v)
-        if not is_valid:
-            raise ValueError(error_msg)
-
-        # Sanitize input
-        return InputSanitizer.sanitize_string(v, max_length=5000)
-
-    @field_validator('character')
-    @classmethod
-    def validate_character(cls, v):
-        """Validate character name"""
-        if v is None:
-            return v
-
-        # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
-        if not is_valid:
-            raise ValueError(error_msg)
-
-        # Sanitize input
-        return InputSanitizer.sanitize_string(v, max_length=50)
-
-class PipelineRequest(BaseModel):
-    module: str
-    pipeline: Optional[List[str]] = None
-
-    @field_validator('module')
-    @classmethod
-    def validate_module(cls, v):
-        """Validate module name"""
-        # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
-        if not is_valid:
-            raise ValueError(error_msg)
-
-        # Sanitize input
-        return InputSanitizer.sanitize_string(v, max_length=100)
-
-    @field_validator('pipeline')
-    @classmethod
-    def validate_pipeline(cls, v):
-        """Validate pipeline steps"""
-        if v is None:
-            return v
-
-        # Sanitize all pipeline steps
-        sanitized = []
-        for step in v:
-            if step is None:
-                continue
-            # Check for security issues
-            is_valid, error_msg = InputSanitizer.validate_input(step, check_sql=False, check_xss=False)
-            if not is_valid:
-                raise ValueError(error_msg)
-            # Sanitize input
-            sanitized.append(InputSanitizer.sanitize_string(step, max_length=100))
-
-        return sanitized
-
-class CharacterCreateRequest(BaseModel):
-    name: str
-    description: str
-    personality: Dict[str, float]
-    voice_profile: Dict[str, Any]
-    system_prompt: str
-
-    @field_validator('name')
-    @classmethod
-    def validate_name(cls, v):
-        """Validate character name"""
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
-        if not is_valid:
-            raise ValueError(error_msg)
-
-        return InputSanitizer.sanitize_string(v, max_length=100)
-
-    @field_validator('description')
-    @classmethod
-    def validate_description(cls, v):
-        """Validate character description"""
-        is_valid, error_msg = InputSanitizer.validate_input(v)
-        if not is_valid:
-            raise ValueError(error_msg)
-
-        return InputSanitizer.sanitize_string(v, max_length=1000)
-
-    @field_validator('system_prompt')
-    @classmethod
-    def validate_system_prompt(cls, v):
-        """Validate system prompt"""
-        is_valid, error_msg = InputSanitizer.validate_input(v)
-        if not is_valid:
-            raise ValueError(error_msg)
-
-        return InputSanitizer.sanitize_string(v, max_length=5000)
 
 # Startup/Shutdown
 @app.on_event("startup")
@@ -331,7 +218,6 @@ async def startup():
     }
 
     # Initialize authentication manager
-    from . import auth
     auth.auth_manager = AuthManager()
     logger.info("✅ Authentication manager initialized")
 
@@ -344,7 +230,20 @@ async def startup():
     character_engine = CharacterEngine(config)
     voice_interface = VoiceInterface(config.get('voice', {}))
 
+    # Setup modular routes
+    _setup_routes(kernel, character_engine)
+
     logger.info("✅ Minder API ready")
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    """Cleanup on shutdown"""
+    global kernel
+
+    if kernel:
+        await kernel.stop()
+    logger.info("✅ Minder API stopped")
 
 
 def _validate_secrets():
@@ -408,16 +307,26 @@ def _validate_secrets():
     else:
         logger.info("✅ Development mode: Secrets validated (production checks disabled)")
 
-@app.on_event("shutdown")
-async def shutdown():
-    """Cleanup on shutdown"""
-    global kernel
 
-    if kernel:
-        await kernel.stop()
-    logger.info("✅ Minder API stopped")
+def _setup_routes(kernel, character_engine):
+    """Setup modular routes"""
+    from .auth import endpoints as auth_endpoints
+    from .plugins import endpoints as plugins_endpoints
+    from .chat import endpoints as chat_endpoints
+    from .characters import endpoints as characters_endpoints
+    from .system import endpoints as system_endpoints
+    from .correlations import endpoints as correlations_endpoints
 
-# Endpoints
+    # Include routers
+    app.include_router(auth_endpoints.router)
+    app.include_router(plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel))
+    app.include_router(chat_endpoints.setup_chat_routes(chat_endpoints.router, kernel, character_engine))
+    app.include_router(characters_endpoints.setup_character_routes(characters_endpoints.router, character_engine))
+    app.include_router(system_endpoints.setup_system_routes(system_endpoints.router, kernel))
+    app.include_router(correlations_endpoints.setup_correlation_routes(correlations_endpoints.router, kernel))
+
+
+# Root endpoint
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -428,348 +337,3 @@ async def root():
         "authentication": "enabled",
         "network_access": "dual (local + VPN)"
     }
-
-@app.post("/auth/login")
-@limiter.limit("10/minute")  # Brute force protection
-async def login(request: Request, login_request: LoginRequest):
-    """
-    Login endpoint - returns JWT access token
-
-    This endpoint can be accessed from trusted networks without authentication
-    Rate limited: 10/minute for VPN/public, unlimited for local
-    """
-    from .auth import LoginResponse, get_auth_manager
-
-    auth_mgr = get_auth_manager()
-
-    # Authenticate user
-    user = await auth_mgr.authenticate(request.username, request.password)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid username or password"
-        )
-
-    # Generate access token
-    access_token = auth_mgr.create_access_token({
-        "sub": user['username'],
-        "role": user['role']
-    })
-
-    logger.info(f"✅ User logged in: {user['username']} (role: {user['role']})")
-
-    return LoginResponse(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=30 * 60,  # 30 minutes
-        user={
-            "username": user['username'],
-            "role": user['role']
-        }
-    )
-
-@app.get("/health")
-async def health():
-    """Health check - publicly accessible"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    status = await kernel.get_system_status()
-    return {
-        "status": "healthy" if status['status'] == 'running' else "unhealthy",
-        "system": status,
-        "authentication": "enabled",
-        "network_detection": "enabled"
-    }
-
-@app.get("/plugins")
-@limiter.limit("200/hour")  # Standard API endpoint
-async def list_plugins(
-    request: Request,
-    status: Optional[str] = None,
-    current_user: dict = Depends(get_current_user_optional)
-):
-    """
-    List all plugins
-
-    Accessible from:
-    - Trusted networks (local/VPN): No authentication required
-    - Public networks: JWT authentication required
-
-    Rate limited: 200/hour for VPN, 50/hour for public, unlimited for local
-    """
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    plugins = await kernel.registry.list_plugins(status=status)
-
-    # Add enabled status for each plugin
-    for plugin in plugins:
-        plugin_name = plugin['name']
-        plugin['enabled'] = kernel.registry.is_plugin_enabled(plugin_name)
-
-    # Also list available but disabled plugins
-    available_plugins = kernel.registry.list_available_plugins()
-    loaded_plugin_names = {p['name'] for p in plugins}
-
-    disabled_plugins = [
-        {
-            "name": name,
-            "enabled": False,
-            "status": "disabled"
-        }
-        for name in available_plugins
-        if name not in loaded_plugin_names
-    ]
-
-    return {
-        "plugins": plugins + disabled_plugins,
-        "total": len(plugins) + len(disabled_plugins),
-        "enabled": len(plugins),
-        "disabled": len(disabled_plugins),
-        "authenticated": current_user is not None,
-        "network_type": "trusted" if current_user and not current_user.get('authenticated', True) else "public"
-    }
-
-@app.post("/plugins/{plugin_name}/pipeline")
-async def run_pipeline(request: PipelineRequest, background_tasks: BackgroundTasks):
-    """Run pipeline on a plugin"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    try:
-        results = await kernel.run_plugin_pipeline(
-            request.plugin,
-            request.pipeline
-        )
-        return {"plugin": request.plugin, "results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/plugins/{plugin_name}/enable")
-async def enable_plugin(plugin_name: str):
-    """Enable a plugin at runtime"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    try:
-        success = await kernel.registry.enable_plugin(plugin_name)
-        if success:
-            return {
-                "plugin": plugin_name,
-                "status": "enabled",
-                "message": f"Plugin {plugin_name} will be enabled on next restart"
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Failed to enable plugin")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/plugins/{plugin_name}/disable")
-async def disable_plugin(plugin_name: str):
-    """Disable a plugin at runtime"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    try:
-        success = await kernel.registry.disable_plugin(plugin_name)
-        if success:
-            return {
-                "plugin": plugin_name,
-                "status": "disabled",
-                "message": f"Plugin {plugin_name} has been disabled and unloaded"
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Failed to disable plugin")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/chat")
-@expensive_limiter.limit("10/minute")  # Expensive operation (AI)
-async def chat(request: Request, chat_request: ChatRequest, current_user: dict = Depends(get_current_user_optional)):
-    """Chat with Minder AI - Rate limited: 10/minute for VPN, 5/minute for public"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    try:
-        # Get character
-        character_name = chat_request.character or "finbot"
-        character = character_engine.get_character(character_name)
-        if not character:
-            character = character_engine.presets['finbot']
-
-        # Query plugins for context
-        plugin_results = await kernel.query_plugins(chat_request.message)
-
-        # Generate AI response using Ollama
-        response = await _generate_ai_response(
-            chat_request.message,
-            plugin_results,
-            character
-        )
-
-        return {
-            "response": response,
-            "character": character.name,
-            "plugins_used": [r['plugin'] for r in plugin_results],
-            "model": "ollama"
-        }
-
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/characters")
-async def list_characters():
-    """List all characters"""
-    if not character_engine:
-        raise HTTPException(status_code=503, detail="Character engine not initialized")
-
-    return {
-        "characters": character_engine.list_characters()
-    }
-
-@app.post("/characters")
-async def create_character(request: CharacterCreateRequest):
-    """Create custom character"""
-    if not character_engine:
-        raise HTTPException(status_code=503, detail="Character engine not initialized")
-
-    try:
-        from ..core.character_system import Personality, VoiceProfile
-
-        personality = Personality(**request.personality)
-        voice_profile = VoiceProfile(**request.voice_profile)
-
-        character = character_engine.create_character(
-            name=request.name,
-            description=request.description,
-            personality=personality,
-            voice_profile=voice_profile,
-            system_prompt=request.system_prompt
-        )
-
-        return {
-            "character": request.name,
-            "status": "created"
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/correlations")
-async def get_correlations():
-    """Get all correlations"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    return await kernel.correlation_engine.get_all_correlations()
-
-
-# Plugin Store helper endpoints
-@app.get("/store")
-async def plugin_store_info():
-    """Get plugin store info"""
-    from plugins.store import PluginStore
-
-    if not kernel or not kernel.plugin_store:
-        return {
-            "enabled": False,
-            "message": "Plugin store is not enabled"
-        }
-
-    installed = await kernel.plugin_store.list_installed_plugins()
-
-    return {
-        "enabled": True,
-        "plugins": installed,
-        "total": len(installed),
-        "store_path": str(kernel.plugin_store.store_path)
-    }
-
-@app.get("/system/status")
-async def system_status():
-    """Get detailed system status"""
-    if not kernel:
-        raise HTTPException(status_code=503, detail="Kernel not initialized")
-
-    return await kernel.get_system_status()
-
-async def _generate_ai_response(
-    message: str,
-    plugin_results: List[Dict],
-    character: Character
-) -> str:
-    """Generate AI response using Ollama"""
-
-    import httpx
-    import json
-
-    # Build context from plugins
-    context_parts = []
-    if plugin_results:
-        for result in plugin_results:
-            plugin_name = result.get('plugin', 'unknown')
-            data = result.get('data', {})
-            if data:
-                context_parts.append(f"{plugin_name}: {json.dumps(data, ensure_ascii=False)[:200]}")
-
-    # Build system prompt
-    system_prompt = character.system_prompt if hasattr(character, 'system_prompt') else (
-        "Sen Minder adlı yapay zeka bir asistansın. Türkçe konuşuyorsun. "
-        "Kullanıcıya yardımcı ol, bilgileri net ve açık şekilde sun."
-    )
-
-    # Build user prompt
-    user_prompt = f"Kullanıcı mesajı: {message}\n"
-    if context_parts:
-        user_prompt += f"\nEklenti bilgileri:\n" + "\n".join(context_parts)
-
-    try:
-        # Call Ollama API
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "http://ollama:11434/api/generate",
-                json={
-                    "model": "llama3.2",
-                    "prompt": user_prompt,
-                    "system": system_prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_ctx": 2048
-                    }
-                }
-            )
-
-            if response.status_code == 200:
-                result = response.json()
-                ai_response = result.get('response', '')
-                if ai_response:
-                    return ai_response.strip()
-                else:
-                    logger.warning("Ollama returned empty response")
-                    return "Üzgünüm, şu an yanıt veremiyorum."
-            else:
-                logger.error(f"Ollama API error: {response.status_code}")
-                return "AI servisi şu an kullanılamıyor."
-
-    except Exception as e:
-        logger.error(f"Ollama connection error: {e}")
-        # Fallback to simple response
-        if plugin_results:
-            plugins_used = ", ".join([r['plugin'] for r in plugin_results])
-            return f"Minder olarak {plugins_used} eklentilerinden bilgiler topladım. Size nasıl yardımcı olabilirim?"
-
-        return "Minder olarak size nasıl yardımcı olabilirim? Fon analizi, network monitoring veya başka bir konu hakkında bilgi alabilirsiniz."
-
-# Setup mobile routes
-@app.on_event("startup")
-async def setup_mobile():
-    """Setup mobile routes after startup"""
-    global mobile_handler
-
-    if kernel and character_engine:
-        mobile_handler = MobileAPIHandler(kernel, character_engine)
-        setup_mobile_routes(app, kernel, character_engine)
-
