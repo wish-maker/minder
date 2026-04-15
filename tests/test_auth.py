@@ -104,7 +104,7 @@ class TestTokenCreation:
     def test_create_token_with_expiration(self, test_auth_manager):
         """Test token creation with expiration (using default 30 min)"""
         data = {"sub": "admin"}
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
 
         # Decode token to check expiration
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
@@ -126,7 +126,7 @@ class TestTokenCreation:
             "role": "admin",
             "permissions": ["read", "write", "delete"]
         }
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
 
         # Decode and verify extra data
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
@@ -142,7 +142,7 @@ class TestTokenVerification:
     def test_verify_valid_token(self, test_auth_manager):
         """Test verification of valid token"""
         data = {"sub": "admin"}
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
 
         # Verify the token
         async def verify():
@@ -239,7 +239,7 @@ class TestTokenExpiration:
         """Test that tokens expire at the correct time"""
         expires_delta = timedelta(minutes=30)
         data = {"sub": "admin"}
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
 
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
         exp_time = datetime.fromtimestamp(payload["exp"])
@@ -256,7 +256,7 @@ class TestTokenExpiration:
         # Note: Current implementation uses fixed 30 min expiration
         # This test verifies that tokens have reasonable expiration
         data = {"sub": "admin"}
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
 
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
         time_until_exp = (datetime.fromtimestamp(payload["exp"]) - datetime.utcnow()).total_seconds()
@@ -274,7 +274,7 @@ class TestSecurityFeatures:
         data = {"sub": "admin"}
 
         # Should work with valid secret key
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
         assert token is not None
 
         # Token should be verifiable with same secret key

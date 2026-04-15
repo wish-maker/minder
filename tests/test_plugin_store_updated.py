@@ -380,8 +380,9 @@ class TestRealPlugins:
                 # Skip test if no plugins found
                 return
 
+            # discovered is a list of plugin names, not a dict
             # Try loading first available plugin
-            plugin_name = list(discovered.keys())[0]
+            plugin_name = discovered[0] if isinstance(discovered, list) else list(discovered.keys())[0]
             plugin = await loader.load_plugin(plugin_name)
 
             # Plugin loading might fail if dependencies are missing
