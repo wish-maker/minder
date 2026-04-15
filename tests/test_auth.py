@@ -288,12 +288,15 @@ class TestSecurityFeatures:
     def test_password_not_stored_in_plaintext(self, test_auth_manager):
         """Test that passwords are not stored in plaintext"""
         password = "test_password_123"
-        hashed = test_auth_manager._hash_password(password)
+        # Hash password using bcrypt directly (AuthManager doesn't expose _hash_password)
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         # Hash should not contain plaintext password
         assert password not in hashed
         # Hash should be significantly longer than password
         assert len(hashed) > len(password)
+        # Hash should contain bcrypt identifier
+        assert hashed.startswith("$2b$")
 
 
 # Run tests
