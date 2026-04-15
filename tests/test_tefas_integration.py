@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from modules.tefas.tefas_module import TefasModule
+from plugins.tefas.tefas_module import TefasModule
 
 
 async def test_full_integration():
