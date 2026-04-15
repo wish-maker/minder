@@ -1,3 +1,4 @@
+import asyncio
 """
 Minder Event Bus
 Pub/Sub messaging for inter-module communication
@@ -7,9 +8,7 @@ from typing import Dict, List, Callable, Any, Optional
 from datetime import datetime
 from dataclasses import dataclass, field
 from enum import Enum
-import asyncio
 import logging
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +155,7 @@ class EventBus:
 
             # Trim history if needed
             if len(self._event_history) > self._max_history:
-                self._event_history = self._event_history[-self._max_history :]
+                self._event_history = self._event_history[-self._max_history:]
 
     async def _dead_letter(self, event: Event):
         """Add event to dead letter queue"""

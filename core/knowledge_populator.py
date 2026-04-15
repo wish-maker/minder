@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 import logging
-import asyncio
 
 from .knowledge_graph import (
     KnowledgeGraph,
@@ -17,7 +16,6 @@ from .knowledge_graph import (
     EntityType,
     RelationType,
 )
-from .module_interface import BaseModule
 
 logger = logging.getLogger(__name__)
 
@@ -254,10 +252,12 @@ class KnowledgeGraphPopulator:
                         "description": anomaly.get("description"),
                         "score": anomaly.get("score"),
                         "timestamp": anomaly.get(
-                            "detected_at", datetime.now()
-                        ).isoformat(),
+                            "detected_at",
+                            datetime.now()).isoformat(),
                     },
-                    module=anomaly.get("module", "unknown"),
+                    module=anomaly.get(
+                        "module",
+                        "unknown"),
                 )
 
                 await self.kg.add_entity(anomaly_entity)
@@ -307,7 +307,7 @@ class KnowledgeGraphPopulator:
             series_names = list(time_series_data.keys())
 
             for i, name1 in enumerate(series_names):
-                for name2 in series_names[i + 1 :]:
+                for name2 in series_names[i + 1:]:
                     df1 = time_series_data[name1]
                     df2 = time_series_data[name2]
 
@@ -405,7 +405,7 @@ class KnowledgeGraphPopulator:
 
             # Prepare batches
             for i in range(0, len(all_entities), self.batch_size):
-                batch = all_entities[i : i + self.batch_size]
+                batch = all_entities[i: i + self.batch_size]
 
                 # Create embeddings
                 texts = [

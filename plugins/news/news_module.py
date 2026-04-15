@@ -4,7 +4,6 @@ Minder News Analysis Module
 
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-import asyncio
 import logging
 import aiohttp
 import psycopg2

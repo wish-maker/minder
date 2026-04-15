@@ -280,8 +280,7 @@ def _validate_secrets():
         if production_mode:
             raise RuntimeError(
                 f"❌ Using default values for: {', '.join(using_defaults)}. "
-                "This is not safe for production! Please set strong secrets in .env file."
-            )
+                "This is not safe for production! Please set strong secrets in .env file.")
         else:
             logger.warning(
                 f"⚠️  Using default values for: {', '.join(using_defaults)}. "

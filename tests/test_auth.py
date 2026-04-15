@@ -11,9 +11,10 @@ import os
 import jwt
 import bcrypt
 
+# Import after sys.path modification
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.auth import (  # noqa: E401
+from api.auth import (  # noqa: E402
     AuthManager,
     get_current_user,
     get_current_user_optional,
@@ -241,7 +242,7 @@ class TestTokenExpiration:
 
     def test_token_expiration_time(self, test_auth_manager):
         """Test that tokens expire at the correct time"""
-        expires_delta = timedelta(minutes=30)
+        # expires_delta = timedelta(minutes=30)
         data = {"sub": "admin"}
         token = test_auth_manager.create_access_token(data)
 

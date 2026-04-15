@@ -10,7 +10,6 @@ import pandas as pd
 import logging
 from dataclasses import dataclass
 from enum import Enum
-import asyncio
 from collections import deque
 
 logger = logging.getLogger(__name__)
@@ -125,15 +124,12 @@ class AnomalyDetector:
                         anomaly = Anomaly(
                             type=AnomalyType.STATISTICAL,
                             severity=self._calculate_severity(anomaly_score),
-                            module=module,
-                            entity_id=entity_id,
+                            module=module, entity_id=entity_id,
                             description=f"Isolation Forest detected outlier (score: {anomaly_score:.3f})",
-                            score=anomaly_score,
-                            timestamp=datetime.now(),
+                            score=anomaly_score, timestamp=datetime.now(),
                             data=data.iloc[i].to_dict(),
                             confidence=anomaly_score,
-                            suggested_action="Investigate unusual pattern",
-                        )
+                            suggested_action="Investigate unusual pattern",)
                         anomalies.append(anomaly)
 
             return anomalies

@@ -1,10 +1,10 @@
+import asyncio
 """
 Minder Voice Interface
 Handles STT/TTS for natural voice interaction
 """
 
 from typing import Dict, Optional, Any
-import asyncio
 import logging
 
 logger = logging.getLogger(__name__)

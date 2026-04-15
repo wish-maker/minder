@@ -6,7 +6,6 @@ Customizable AI personalities for voice interactions
 from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 from datetime import datetime
-import json
 import logging
 
 logger = logging.getLogger(__name__)

@@ -4,7 +4,6 @@ Connects Minder with OpenWebUI for function calling and character-based interact
 """
 
 from typing import Dict, List, Any, Optional
-import asyncio
 import logging
 from datetime import datetime
 import json
@@ -215,9 +214,9 @@ class MinderOpenWebUIAgent:
                     character = self.character_engine.presets["finbot"]
 
             # Inject personality into system prompt
-            system_prompt = self.character_engine.inject_personality(
-                self._get_base_system_prompt(), character
-            )
+            # system_prompt = self.character_engine.inject_personality(
+            #     self._get_base_system_prompt(), character
+            # )
 
             # Analyze intent
             intent = await self._analyze_intent(message, language)
@@ -427,8 +426,8 @@ class MinderOpenWebUIAgent:
     ) -> Dict[str, Any]:
         """Get personalized fund recommendations"""
         risk_tolerance = params.get("risk_tolerance", "medium")
-        horizon = params.get("investment_horizon", "medium")
-        goal = params.get("investment_goal", "balanced")
+        # horizon = params.get("investment_horizon", "medium")
+        # goal = params.get("investment_goal", "balanced")
 
         # Get fund module
         fund_module = await self.kernel.registry.get_module("fund")

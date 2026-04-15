@@ -1,3 +1,4 @@
+import asyncio
 """
 Minder TEKAS Module
 Türkiye yatırım fonları analizi ve takibi
@@ -6,7 +7,6 @@ TEFAS API entegrasyonu ile 2020'den beri veri
 
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-import asyncio
 import logging
 import aiohttp
 import pandas as pd
@@ -22,7 +22,6 @@ try:
 except ImportError:
     INFLUXDB_AVAILABLE = False
 
-import numpy as np
 
 from core.module_interface import BaseModule, ModuleMetadata, ModuleStatus
 from core.event_bus import EventType, Event

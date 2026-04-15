@@ -6,13 +6,10 @@ Implements Granger Causality, DTW, Cross-Correlation, and Mutual Information
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import numpy as np
-import pandas as pd
 import logging
 from scipy import signal
 from scipy.stats import pearsonr, spearmanr, entropy
-from scipy.spatial.distance import euclidean
 from dtaidistance import dtw
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -353,7 +350,7 @@ class AdvancedCorrelationEngine:
 
         # Compare all pairs
         for i, name1 in enumerate(series_names):
-            for name2 in series_names[i + 1 :]:
+            for name2 in series_names[i + 1:]:
                 series1 = data_dict[name1]
                 series2 = data_dict[name2]
 

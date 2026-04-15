@@ -4,11 +4,9 @@ Minder Weather Analysis Module
 
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-import asyncio
 import logging
 import aiohttp
 import psycopg2
-from psycopg2.extras import RealDictCursor
 
 from core.module_interface import BaseModule, ModuleMetadata
 

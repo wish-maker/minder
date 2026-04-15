@@ -3,7 +3,6 @@ Voice Service - Complete Whisper STT and Coqui TTS Integration
 """
 
 from typing import Dict, List, Any, Optional
-import asyncio
 import logging
 import numpy as np
 from datetime import datetime

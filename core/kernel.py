@@ -1,10 +1,10 @@
+import asyncio
 """
 Minder Microkernel
 Core engine that manages modules and orchestrates operations
 """
 
 from typing import Dict, List, Any, Optional
-import asyncio
 import logging
 from datetime import datetime
 
@@ -13,7 +13,6 @@ from .correlation_engine import CorrelationEngine
 from .event_bus import EventBus, EventType, Event
 from .knowledge_graph import KnowledgeGraph
 from .plugin_loader import PluginLoader
-from .module_interface import BaseModule, ModuleStatus
 from plugins.store import PluginStore
 
 logger = logging.getLogger(__name__)
@@ -210,7 +209,7 @@ class MinderKernel:
         all_correlations = {}
 
         for i, plugin_a in enumerate(plugin_names):
-            for plugin_b in plugin_names[i + 1 :]:
+            for plugin_b in plugin_names[i + 1:]:
                 pair_key = f"{plugin_a}:{plugin_b}"
                 correlations = (
                     await self.correlation_engine.discover_correlations(

@@ -5,7 +5,6 @@ Discovers relationships between different module data sources
 
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
-import asyncio
 import logging
 
 logger = logging.getLogger(__name__)

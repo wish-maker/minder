@@ -1,10 +1,10 @@
+import asyncio
 """
 Minder Plugin Registry
 Discovers, registers, and manages all plugins
 """
 
 from typing import Dict, List, Optional, Any
-import asyncio
 import logging
 from pathlib import Path
 
