@@ -5,12 +5,16 @@ JWT-based authentication with role-based access control
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field, validator
 import jwt
 from datetime import datetime, timedelta
 import bcrypt
 import os
+import re
 from contextvars import ContextVar
 import logging
+
+from .security import InputSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "30"))
 
 # Context variable for current user
-current_user_var: ContextVar[Dict[str, Any]] = ContextVar('current_user', default={})
+current_user_var: ContextVar[Dict[str, Any]] = ContextVar(
+    'current_user',
+    default={}
+)
 
 # Security scheme
 security = HTTPBearer()
@@ -31,7 +38,8 @@ class AuthManager:
 
     def __init__(self, db_pool=None):
         self.db_pool = db_pool
-        self.users = {}  # In-memory user storage (will be replaced with database)
+        # In-memory user storage (will be replaced with database)
+        self.users = {}
 
         # Add default admin user if no users exist
         if not self.users:
@@ -39,27 +47,44 @@ class AuthManager:
 
     def _create_default_admin(self):
         """Create default admin user"""
-        admin_password = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+        admin_password = bcrypt.hashpw(
+            "admin123".encode(),
+            bcrypt.gensalt()
+        ).decode()
         self.users["admin"] = {
             "username": "admin",
             "password_hash": admin_password,
             "role": "admin",
             "created_at": datetime.utcnow().isoformat()
         }
-        logger.info("✅ Default admin user created (username: admin, password: admin123)")
+        logger.info(
+            "✅ Default admin user created "
+            "(username: admin, password: admin123)"
+        )
 
-    async def authenticate(self, username: str, password: str) -> Optional[Dict[str, Any]]:
+    async def authenticate(
+        self,
+        username: str,
+        password: str
+    ) -> Optional[Dict[str, Any]]:
         """Verify credentials against database"""
         user = self.users.get(username)
 
         if not user:
-            logger.warning(f"Authentication failed: User not found: {username}")
+            logger.warning(
+                f"Authentication failed: User not found: {username}"
+            )
             return None
 
         # Verify password
         try:
-            if bcrypt.checkpw(password.encode(), user['password_hash'].encode()):
-                logger.info(f"✅ User authenticated successfully: {username}")
+            if bcrypt.checkpw(
+                password.encode(),
+                user['password_hash'].encode()
+            ):
+                logger.info(
+                    f"✅ User authenticated successfully: {username}"
+                )
                 return {
                     'username': user['username'],
                     'role': user['role'],
@@ -68,7 +93,9 @@ class AuthManager:
         except Exception as e:
             logger.error(f"Password verification failed: {e}")
 
-        logger.warning(f"Authentication failed: Invalid password for user: {username}")
+        logger.warning(
+            f"Authentication failed: Invalid password for user: {username}"
+        )
         return None
 
     def create_access_token(self, data: Dict[str, Any]) -> str:
@@ -76,7 +103,9 @@ class AuthManager:
         to_encode = data.copy()
 
         # Add expiration time
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.utcnow() + timedelta(
+            minutes=ACCESS_TOKEN_EXPIRE_MINUTES
+        )
         to_encode.update({
             "exp": expire,
             "iat": datetime.utcnow()
@@ -84,10 +113,15 @@ class AuthManager:
 
         # Generate token
         token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        logger.info(f"✅ Access token created for user: {data.get('username')}")
+        logger.info(
+            f"✅ Access token created for user: {data.get('username')}"
+        )
         return token
 
-    async def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
+    async def verify_token(
+        self,
+        token: str
+    ) -> Optional[Dict[str, Any]]:
         """Verify JWT token and return user data"""
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -96,7 +130,9 @@ class AuthManager:
             # Get user from database
             user = self.users.get(username)
             if not user:
-                logger.warning(f"Token verification failed: User not found: {username}")
+                logger.warning(
+                    f"Token verification failed: User not found: {username}"
+                )
                 return None
 
             logger.info(f"✅ Token verified successfully for user: {username}")
@@ -110,19 +146,29 @@ class AuthManager:
             logger.warning("Token verification failed: Token expired")
             return None
         except jwt.InvalidTokenError as e:
-            logger.warning(f"Token verification failed: Invalid token - {e}")
+            logger.warning(
+                f"Token verification failed: Invalid token - {e}"
+            )
             return None
         except Exception as e:
             logger.error(f"Token verification error: {e}")
             return None
 
-    def create_user(self, username: str, password: str, role: str = "user") -> Dict[str, Any]:
+    def create_user(
+        self,
+        username: str,
+        password: str,
+        role: str = "user"
+    ) -> Dict[str, Any]:
         """Create a new user"""
         if username in self.users:
             raise ValueError(f"User already exists: {username}")
 
         # Hash password
-        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        password_hash = bcrypt.hashpw(
+            password.encode(),
+            bcrypt.gensalt()
+        ).decode()
 
         user = {
             "username": username,
@@ -132,7 +178,9 @@ class AuthManager:
         }
 
         self.users[username] = user
-        logger.info(f"✅ User created successfully: {username} (role: {role})")
+        logger.info(
+            f"✅ User created successfully: {username} (role: {role})"
+        )
         return user
 
 
@@ -142,7 +190,6 @@ auth_manager: Optional[AuthManager] = None
 
 def get_auth_manager() -> AuthManager:
     """Get global auth manager instance"""
-    global auth_manager
     if auth_manager is None:
         raise HTTPException(
             status_code=500,
@@ -186,7 +233,9 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False))
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
+        HTTPBearer(auto_error=False)
+    )
 ) -> Optional[Dict[str, Any]]:
     """
     Optional authentication dependency - returns None if no token provided
@@ -219,16 +268,14 @@ async def require_role(*required_roles: str):
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Insufficient permissions. Required role: {required_roles[0]}"
+                detail=(
+                    f"Insufficient permissions. "
+                    f"Required role: {required_roles[0]}"
+                )
             )
         return user
 
     return role_checker
-
-
-# Login request/response models
-from pydantic import BaseModel, Field, validator
-from .security import InputSanitizer
 
 
 class LoginRequest(BaseModel):
@@ -240,7 +287,11 @@ class LoginRequest(BaseModel):
     def validate_username(cls, v):
         """Validate username format and sanitize"""
         # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
+        is_valid, error_msg = InputSanitizer.validate_input(
+            v,
+            check_sql=False,
+            check_xss=False
+        )
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -248,9 +299,11 @@ class LoginRequest(BaseModel):
         v = InputSanitizer.sanitize_string(v, max_length=50)
 
         # Validate format
-        import re
         if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-            raise ValueError('Username can only contain letters, numbers, hyphens, and underscores')
+            raise ValueError(
+                'Username can only contain letters, numbers, '
+                'hyphens, and underscores'
+            )
 
         return v
 
@@ -258,7 +311,11 @@ class LoginRequest(BaseModel):
     def validate_password(cls, v):
         """Validate password and sanitize (only check for security issues)"""
         # Check for security issues (but don't modify password)
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
+        is_valid, error_msg = InputSanitizer.validate_input(
+            v,
+            check_sql=False,
+            check_xss=False
+        )
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -288,7 +345,11 @@ class UserCreateRequest(BaseModel):
     def validate_username(cls, v):
         """Validate username format and sanitize"""
         # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
+        is_valid, error_msg = InputSanitizer.validate_input(
+            v,
+            check_sql=False,
+            check_xss=False
+        )
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -296,9 +357,11 @@ class UserCreateRequest(BaseModel):
         v = InputSanitizer.sanitize_string(v, max_length=50)
 
         # Validate format
-        import re
         if not re.match(r'^[a-zA-Z0-9_-]+$', v):
-            raise ValueError('Username can only contain letters, numbers, hyphens, and underscores')
+            raise ValueError(
+                'Username can only contain letters, numbers, '
+                'hyphens, and underscores'
+            )
 
         return v
 
@@ -306,7 +369,11 @@ class UserCreateRequest(BaseModel):
     def validate_password(cls, v):
         """Validate password"""
         # Check for security issues (but don't modify password)
-        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
+        is_valid, error_msg = InputSanitizer.validate_input(
+            v,
+            check_sql=False,
+            check_xss=False
+        )
         if not is_valid:
             raise ValueError(error_msg)
 

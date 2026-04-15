@@ -69,8 +69,8 @@ class CorrelationEngine:
 
     async def _analyze_correlations(
         self,
-        mod_a: 'BaseModule',
-        mod_b: 'BaseModule',
+        mod_a: Any,
+        mod_b: Any,
         hints_a: List[Dict],
         hints_b: List[Dict]
     ) -> List[Dict[str, Any]]:

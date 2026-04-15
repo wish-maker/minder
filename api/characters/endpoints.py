@@ -19,7 +19,10 @@ def setup_character_routes(router, character_engine):
     async def list_characters():
         """List all characters"""
         if not character_engine:
-            raise HTTPException(status_code=503, detail="Character engine not initialized")
+            raise HTTPException(
+                status_code=503,
+                detail="Character engine not initialized"
+            )
 
         return {
             "characters": character_engine.list_characters()
@@ -29,7 +32,10 @@ def setup_character_routes(router, character_engine):
     async def create_character(request: CharacterCreateRequest):
         """Create custom character"""
         if not character_engine:
-            raise HTTPException(status_code=503, detail="Character engine not initialized")
+            raise HTTPException(
+                status_code=503,
+                detail="Character engine not initialized"
+            )
 
         try:
             from core.character_system import Personality, VoiceProfile
@@ -37,7 +43,7 @@ def setup_character_routes(router, character_engine):
             personality = Personality(**request.personality)
             voice_profile = VoiceProfile(**request.voice_profile)
 
-            character = character_engine.create_character(
+            character_engine.create_character(
                 name=request.name,
                 description=request.description,
                 personality=personality,

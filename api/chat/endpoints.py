@@ -26,9 +26,12 @@ def setup_chat_routes(router, kernel, character_engine):
         chat_request: ChatRequest,
         current_user: dict = Depends(get_current_user_optional)
     ):
-        """Chat with Minder AI - Rate limited: 10/minute for VPN, 5/minute for public"""
+        """Chat with Minder AI - Rate limited"""
         if not kernel:
-            raise HTTPException(status_code=503, detail="Kernel not initialized")
+            raise HTTPException(
+                status_code=503,
+                detail="Kernel not initialized"
+            )
 
         try:
             # Get character
@@ -75,18 +78,23 @@ async def _generate_ai_response(
             plugin_name = result.get('plugin', 'unknown')
             data = result.get('data', {})
             if data:
-                context_parts.append(f"{plugin_name}: {json.dumps(data, ensure_ascii=False)[:200]}")
+                json_str = json.dumps(data, ensure_ascii=False)[:200]
+                context_parts.append(f"{plugin_name}: {json_str}")
 
     # Build system prompt
-    system_prompt = character.system_prompt if hasattr(character, 'system_prompt') else (
-        "Sen Minder adlı yapay zeka bir asistansın. Türkçe konuşuyorsun. "
-        "Kullanıcıya yardımcı ol, bilgileri net ve açık şekilde sun."
+    system_prompt = (
+        character.system_prompt if hasattr(character, 'system_prompt')
+        else (
+            "Sen Minder adlı yapay zeka bir asistansın. "
+            "Türkçe konuşuyorsun. "
+            "Kullanıcıya yardımcı ol, bilgileri net ve açık şekilde sun."
+        )
     )
 
     # Build user prompt
     user_prompt = f"Kullanıcı mesajı: {message}\n"
     if context_parts:
-        user_prompt += f"\nEklenti bilgileri:\n" + "\n".join(context_parts)
+        user_prompt += "\nEklenti bilgileri:\n" + "\n".join(context_parts)
 
     try:
         # Call Ollama API
@@ -122,6 +130,13 @@ async def _generate_ai_response(
         # Fallback to simple response
         if plugin_results:
             plugins_used = ", ".join([r['plugin'] for r in plugin_results])
-            return f"Minder olarak {plugins_used} eklentilerinden bilgiler topladım. Size nasıl yardımcı olabilirim?"
+            return (
+                f"Minder olarak {plugins_used} eklentilerinden "
+                f"bilgiler topladım. Size nasıl yardımcı olabilirim?"
+            )
 
-        return "Minder olarak size nasıl yardımcı olabilirim? Fon analizi, network monitoring veya başka bir konu hakkında bilgi alabilirsiniz."
+        return (
+            "Minder olarak size nasıl yardımcı olabilirim? "
+            "Fon analizi, network monitoring veya başka bir konu hakkında "
+            "bilgi alabilirsiniz."
+        )

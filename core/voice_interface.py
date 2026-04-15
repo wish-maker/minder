@@ -94,7 +94,7 @@ class VoiceInterface:
     async def generate_voice_response(
         self,
         text: str,
-        character: Optional['Character'] = None
+        character: Optional[Any] = None
     ) -> bytes:
         """Generate voice response with character voice profile"""
 

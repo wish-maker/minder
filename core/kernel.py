@@ -159,7 +159,7 @@ class MinderKernel:
 
                 await self.event_bus.publish(Event(
                     type=EventType.MODULE_ERROR,
-                    source=module_name,
+                    source=plugin_name,
                     data={'operation': operation, 'error': str(e)}
                 ))
 

@@ -2,7 +2,7 @@
 Minder FastAPI Application
 Main REST API for Minder platform
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 import logging
 import os
 
@@ -124,7 +124,7 @@ class MyPlugin(BaseModule):
 ```
 
 For detailed plugin development guide, see the [`/plugins/docs`](/plugins/docs) endpoint.
-    """,
+    """,  # noqa: E501
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
