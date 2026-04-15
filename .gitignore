@@ -24,6 +24,7 @@ wheels/
 venv/
 ENV/
 env/
+.venv/
 
 # IDE
 .vscode/
@@ -31,10 +32,12 @@ env/
 *.swp
 *.swo
 *~
+*.sublime-*
 
 # Environment Variables
 .env
 .env.local
+.env.*.local
 
 # Logs
 logs/
@@ -53,15 +56,20 @@ data/*.parquet
 
 # Docker
 *.pid
+docker-compose.override.yml
 
 # OS
 .DS_Store
 Thumbs.db
+*.bak
+*.backup
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.nox/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -75,8 +83,30 @@ models/
 
 # Temporary Files
 *.tmp
-*.bak
-*.backup
+*.temp
+*.cache
 
 # Plugin Store
 plugins/store/*.pyc
+plugins/store/__pycache__/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+.pytype/
+
+# cython extensions
+*.pyx
+
+# Documentation builds
+docs/_build/
+site/
+
+# Backup files
+*.swp
+*.swo
+*~.nib

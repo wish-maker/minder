@@ -1,24 +1,34 @@
-# Minder - Modular RAG Platform
+# Minder
 
-> **Minder** is a modular Retrieval-Augmented Generation (RAG) platform that enables cross-database correlation and AI-powered insights across diverse data sources.
+**Modular RAG Platform** - Cross-database correlation and AI-powered insights
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
-[![GitHub Organization](https://img.shields.io/badge/GitHub-wish--maker-blue.svg)](https://github.com/wish-maker)
+[![GitHub](https://img.shields.io/badge/GitHub-wish--maker-blue.svg)](https://github.com/wish-maker/minder)
 
 ## 🎯 Overview
 
-Minder is a comprehensive, modular AI platform where each domain operates as an independent plugin that can:
+Minder is a comprehensive, modular AI platform that enables cross-database correlation and AI-powered insights across diverse data sources. Each domain operates as an independent plugin that can collect data, analyze patterns, train AI models, index knowledge, and correlate with other plugins.
 
-- **Collect data** from its own sources
-- **Analyze** patterns and generate insights
-- **Train AI models** on domain-specific data
-- **Index knowledge** for RAG queries
-- **Correlate** with other plugins across databases
+## ✨ Features
+
+### Core Capabilities
+- **Hot-swappable plugins**: Add/remove plugins without kernel restart
+- **Cross-plugin correlation**: Discover relationships between different data sources
+- **Event-driven architecture**: Pub/sub messaging for real-time updates
+- **Knowledge graph**: Entity resolution and relationship inference
+- **Plugin Store**: Install plugins from GitHub repositories
+- **Voice interface**: Whisper STT + Coqui XTTS v2 TTS
+- **Character system**: Pre-built AI personalities (FinBot, SysBot, etc.)
+
+### Security
+- JWT authentication with bcrypt password hashing
+- Role-based access control (admin/user/readonly)
+- Network-aware rate limiting (Redis backend)
+- CORS & security headers
+- Input validation & sanitization
 
 ## 🏗️ Architecture
-
-### Jellyfin-Style Plugin System
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -27,7 +37,6 @@ Minder is a comprehensive, modular AI platform where each domain operates as an 
 │  - Event Bus (Pub/Sub)                              │
 │  - Knowledge Graph                                  │
 │  - Correlation Engine                               │
-│  - Plugin Store (GitHub Integration)                │
 └─────────────────────────────────────────────────────┘
                           │
         ┌─────────────────┼─────────────────┐
@@ -36,105 +45,33 @@ Minder is a comprehensive, modular AI platform where each domain operates as an 
    │  TEFAS  │      │ Network │       │ Weather │
    │ Plugin  │      │ Plugin  │       │ Plugin  │
    └─────────┘      └─────────┘       └─────────┘
-        │                 │                 │
-   ┌────▼────┐      ┌───▼────┐       ┌───▼────┐
-   │  Crypto │      │  News  │       │ Custom  │
-   │ Plugin  │      │ Plugin  │       │ Plugin  │
-   └─────────┘      └─────────┘       └─────────┘
 ```
-
-### Plugin Interface
-
-All plugins implement `BaseModule` with these methods:
-
-```python
-class BaseModule(ABC):
-    async def register() -> ModuleMetadata
-    async def collect_data() -> Dict[str, int]
-    async def analyze() -> Dict[str, Any]
-    async def train_ai() -> Dict[str, Any]
-    async def index_knowledge() -> Dict[str, int]
-    async def get_correlations() -> List[Dict]
-    async def get_anomalies() -> List[Dict]
-```
-
-## 🚀 Features
-
-### ✅ Core Capabilities
-
-- **Hot-swappable plugins**: Add/remove plugins without kernel restart
-- **Cross-plugin correlation**: Discover relationships between different data sources
-- **Event-driven architecture**: Pub/sub messaging for real-time updates
-- **Knowledge graph**: Entity resolution and relationship inference
-- **Parallel processing**: Multi-plugin data collection and analysis
-- **GitHub integration**: Install plugins from any git repository
-
-### 🏪 Plugin Store
-
-Jellyfin-style plugin management:
-- Install plugins from GitHub repositories
-- Version control and automatic updates
-- 3rd party plugin support
-- Plugin validation and security scanning
-- Community plugin index
-
-### 🎤 Voice Interface
-
-- **STT**: Whisper (OpenAI) for speech recognition
-- **TTS**: Coqui XTTS v2 for natural voice synthesis
-- **Languages**: Turkish, English, German, French, Spanish, Italian
-- **Voice cloning**: Custom voice profiles for each character
-
-### 🤖 Character System
-
-Pre-built personalities:
-
-- **FinBot** (Turkish): Professional financial assistant
-- **SysBot** (English): Technical system administrator
-- **ResearchBot** (English): Academic research assistant
-- **BossBot** (Turkish): Executive decision support
 
 ## 📦 Included Plugins
 
-### TEFAS Plugin
-- **Data Sources**: TEFAS API, PostgreSQL
-- **Capabilities**: Real-time fund data, historical analysis (2020+), return calculation, volatility analysis, performance metrics, risk assessment
-- **Correlations**: Network latency, weather patterns, market sentiment
+| Plugin | Description | Data Sources |
+|--------|-------------|--------------|
+| **TEFAS** | Turkish fund analysis | TEFAS API, PostgreSQL |
+| **Network** | Performance monitoring | InfluxDB, NetFlow |
+| **Weather** | Weather data collection | Open-Meteo API |
+| **Crypto** | Cryptocurrency tracking | CoinGecko, Binance |
+| **News** | News aggregation | Reuters, Bloomberg, Anadolu |
 
-### Network Plugin
-- **Data Sources**: InfluxDB, NetFlow
-- **Capabilities**: Performance monitoring, anomaly detection, intrusion detection, traffic analysis
-- **Correlations**: Trading volumes, system capacity
-
-### Weather Plugin
-- **Data Sources**: OpenWeatherMap API
-- **Capabilities**: Weather data collection, forecast analysis, seasonal pattern detection
-- **Correlations**: Market sentiment, fund flows
-
-### Crypto Plugin
-- **Data Sources**: CoinGecko, Binance
-- **Capabilities**: Price tracking, volume analysis, sentiment analysis
-
-### News Plugin
-- **Data Sources**: Reuters, Bloomberg, Anadolu
-- **Capabilities**: News aggregation, sentiment analysis, trend detection
-
-## 🛠️ Installation
+## 🚀 Quick Start
 
 ### Prerequisites
-
 - Docker & Docker Compose
-- NVIDIA GPU (optional, for Ollama)
 - 8GB+ RAM recommended
+- NVIDIA GPU (optional, for Ollama)
 
-### Quick Start
+### Installation
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 
-# Build and start with Docker
+# Start with Docker
 docker-compose up -d
 
 # Check status
@@ -144,9 +81,45 @@ curl http://localhost:8000/health
 open http://localhost:3000
 ```
 
+### Environment Variables
+
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
+
+Key variables:
+- `JWT_SECRET_KEY`: Secret key for JWT tokens
+- `POSTGRES_PASSWORD`: PostgreSQL password
+- `REDIS_HOST`: Redis server host
+
 ## 📡 API Usage
 
-### Chat with Minder
+### Authentication
+
+```bash
+# Login
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "admin123"}'
+```
+
+### Plugin Management
+
+```bash
+# List plugins
+curl http://localhost:8000/plugins
+
+# Run pipeline
+curl -X POST http://localhost:8000/plugins/tefas/pipeline \
+  -H "Content-Type: application/json" \
+  -d '{"pipeline": ["collect", "analyze", "train"]}'
+
+# Get correlations
+curl http://localhost:8000/correlations
+```
+
+### Chat Interface
 
 ```bash
 curl -X POST http://localhost:8000/chat \
@@ -157,50 +130,9 @@ curl -X POST http://localhost:8000/chat \
   }'
 ```
 
-### List Plugins
+## 🧩 Creating Plugins
 
-```bash
-curl http://localhost:8000/plugins
-```
-
-### Plugin Store Operations
-
-```bash
-# Search plugins
-curl http://localhost:8000/plugins/store/search?q=finance
-
-# Install from GitHub
-curl -X POST http://localhost:8000/plugins/store/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo_url": "https://github.com/username/minder-plugin",
-    "branch": "main"
-  }'
-
-# List installed plugins
-curl http://localhost:8000/plugins/store/installed
-```
-
-### Run Pipeline
-
-```bash
-curl -X POST http://localhost:8000/plugins/tefas/pipeline \
-  -H "Content-Type: application/json" \
-  -d '{
-    "plugin": "tefas",
-    "pipeline": ["collect", "analyze", "train"]
-  }'
-```
-
-### Get Correlations
-
-```bash
-curl http://localhost:8000/correlations
-```
-
-## 🧩 Creating Custom Plugins
-
-### 1. Create Plugin Structure
+### Plugin Structure
 
 ```bash
 mkdir my-plugin
@@ -210,11 +142,10 @@ name: my-plugin
 version: 1.0.0
 description: My custom Minder plugin
 author: Your Name
-repository: https://github.com/username/my-plugin
 EOF
 ```
 
-### 2. Implement Plugin Class
+### Implementation
 
 ```python
 # my_plugin.py
@@ -232,55 +163,35 @@ class MyPlugin(BaseModule):
     async def collect_data(self, since=None):
         # Your data collection logic
         return {'records_collected': 100}
-
-    # Implement other methods...
 ```
 
-### 3. Deploy to GitHub
-
-```bash
-git init
-git add .
-git commit -m "Initial plugin"
-git remote add origin https://github.com/username/my-plugin
-git push -u origin main
-```
-
-### 4. Install to Minder
-
-```bash
-curl -X POST http://localhost:8000/plugins/store/install \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo_url": "https://github.com/username/my-plugin"
-  }'
-```
+See [Plugin Development Guide](docs/development/module-development.md) for details.
 
 ## 📊 Monitoring
 
-- **Grafana**: http://localhost:3002 (admin/minder123)
-- **OpenWebUI**: http://localhost:3000
 - **API Health**: http://localhost:8000/health
+- **OpenWebUI**: http://localhost:3000
+- **Grafana**: http://localhost:3002 (admin/minder123)
 
-## 🔬 Cross-Plugin Correlation Examples
+## 🧪 Testing
 
-### Financial Risk Analysis
-```
-TEFAS Returns ↔ Network Latency ↔ Weather Events
-└── Discover: Trading system delays during storms correlate with price slippage
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run specific test
+pytest tests/test_auth.py -v
+
+# Check coverage
+pytest tests/ --cov=. --cov-report=html
 ```
 
-### Capacity Planning
-```
-Network Throughput ↔ Trading Volume ↔ Crypto Market Activity
-└── Predict: Bandwidth needs during market rallies
-```
+## 📚 Documentation
 
-### Research Validation
-```
-News Sentiment ↔ Fund Flows ↔ Weather Patterns
-└── Validate: Bad weather → negative news → fund outflows
-```
+- [Architecture](docs/architecture.md)
+- [Plugin Development](docs/development/module-development.md)
+- [Module Management](docs/guides/module-management.md)
+- [API Reference](docs/api/)
 
 ## 🗺️ Roadmap
 
@@ -291,28 +202,25 @@ News Sentiment ↔ Fund Flows ↔ Weather Patterns
 - [ ] Multi-language support expansion
 - [ ] Voice cloning marketplace
 - [ ] Custom plugin builder UI
-- [ ] Community plugin marketplace
-
-## 📄 License
-
-MIT License - see LICENSE file for details
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
-
-### Plugin Development
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 1. Fork the repository
-2. Create your plugin following the [Plugin Development Guide](PLUGIN_DEVELOPMENT.md)
-3. Submit your plugin to our community index
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
 ## 📧 Contact
 
-- **Author**: Minder AI
-- **Email**: contact@minder.ai
-- **Website**: https://minder.ai
-- **GitHub**: https://github.com/minder-ai/minder
+- **Organization**: [wish-maker](https://github.com/wish-maker)
+- **Repository**: [minder](https://github.com/wish-maker/minder)
 
 ---
 
