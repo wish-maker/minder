@@ -6,6 +6,7 @@ pydantic-settings==2.5.0
 python-multipart==0.0.6
 
 # Database Clients
+psycopg2-binary==2.9.9  # Synchronous PostgreSQL (needed by some plugins)
 asyncpg==0.29.0  # Async PostgreSQL (lighter than psycopg2-binary)
 influxdb-client==1.39.0
 redis==5.0.1

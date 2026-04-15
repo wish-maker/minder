@@ -310,7 +310,7 @@ def _validate_secrets():
 
 def _setup_routes(kernel, character_engine):
     """Setup modular routes"""
-    from .auth import endpoints as auth_endpoints
+    from .auth_endpoints import routes as auth_routes
     from .plugins import endpoints as plugins_endpoints
     from .chat import endpoints as chat_endpoints
     from .characters import endpoints as characters_endpoints
@@ -318,7 +318,7 @@ def _setup_routes(kernel, character_engine):
     from .correlations import endpoints as correlations_endpoints
 
     # Include routers
-    app.include_router(auth_endpoints.router)
+    app.include_router(auth_routes.router)
     app.include_router(plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel))
     app.include_router(chat_endpoints.setup_chat_routes(chat_endpoints.router, kernel, character_engine))
     app.include_router(characters_endpoints.setup_character_routes(characters_endpoints.router, character_engine))
