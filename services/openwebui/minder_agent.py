@@ -6,7 +6,6 @@ Connects Minder with OpenWebUI for function calling and character-based interact
 from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime
-import json
 
 from core.kernel import MinderKernel
 from core.character_system import CharacterEngine

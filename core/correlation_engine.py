@@ -3,7 +3,7 @@ Minder Cross-Database Correlation Engine
 Discovers relationships between different module data sources
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import logging
 
@@ -33,7 +33,7 @@ class CorrelationEngine:
         self.config = config
         self.correlations: Dict[str, List[Dict]] = {}
         self.cache_ttl = timedelta(hours=1)
-        self._cache: Dict[str, Tuple[datetime, Any]] = {}
+        self._cache: Dict[str[datetime, Any]] = {}
 
     async def discover_correlations(
         self, module_a: str, module_b: str, force_refresh: bool = False

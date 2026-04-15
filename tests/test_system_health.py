@@ -3,8 +3,8 @@
 Minder System Health Check
 Comprehensive system test to verify all components
 """
+
 import requests
-import json
 from typing import Dict, List, Any
 
 BASE_URL = "http://localhost:8000"
@@ -16,10 +16,11 @@ def test_container_health() -> Dict[str, bool]:
     print("=" * 60)
 
     import subprocess
+
     result = subprocess.run(
         ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}"],
         capture_output=True,
-        text=True
+        text=True,
     )
 
     print(result.stdout)
@@ -146,7 +147,7 @@ def test_database_connections() -> Dict[str, bool]:
         result = subprocess.run(
             ["docker", "exec", "postgres", "pg_isready", "-U", "postgres"],
             capture_output=True,
-            text=True
+            text=True,
         )
         if "accepting connections" in result.stdout:
             print("✅ PostgreSQL - accepting connections")
@@ -163,7 +164,7 @@ def test_database_connections() -> Dict[str, bool]:
         result = subprocess.run(
             ["docker", "exec", "redis", "redis-cli", "ping"],
             capture_output=True,
-            text=True
+            text=True,
         )
         if "PONG" in result.stdout:
             print("✅ Redis - PONG")
@@ -214,14 +215,14 @@ def test_plugin_status() -> Dict[str, bool]:
         response = requests.get(f"{BASE_URL}/health")
         data = response.json()
 
-        plugins = data['system']['plugins']['details']
-        ready_count = data['system']['plugins']['ready']
-        total_count = data['system']['plugins']['total']
+        plugins = data["system"]["plugins"]["details"]
+        ready_count = data["system"]["plugins"]["ready"]
+        total_count = data["system"]["plugins"]["total"]
 
         print(f"📊 Plugins: {ready_count}/{total_count} ready\n")
 
         for plugin in plugins:
-            status_icon = "✅" if plugin['status'] == 'ready' else "❌"
+            status_icon = "✅" if plugin["status"] == "ready" else "❌"
             print(
                 f"  {status_icon} {plugin['name']:12} - "
                 f"{plugin['metadata']['description']}"
@@ -230,7 +231,7 @@ def test_plugin_status() -> Dict[str, bool]:
         return {
             "plugin_status": ready_count == total_count,
             "ready_count": ready_count,
-            "total_count": total_count
+            "total_count": total_count,
         }
     except Exception as e:
         print(f"❌ Error getting plugin status: {e}")
@@ -284,4 +285,5 @@ def main():
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

@@ -3,6 +3,7 @@
 TEFAS Module Test Script
 Modülün doğru çalışıp çalışmadığını test eder
 """
+
 import asyncio
 import sys
 import os
@@ -18,20 +19,20 @@ async def test_module():
 
     # Test konfigürasyonu
     config = {
-        'database': {
-            'host': 'localhost',
-            'port': 5432,
-            'database': 'fundmind',
-            'user': 'postgres',
-            'password': 'id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4='
+        "database": {
+            "host": "localhost",
+            "port": 5432,
+            "database": "fundmind",
+            "user": "postgres",
+            "password": "id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=",
         },
-        'influxdb': {
-            'host': 'localhost',
-            'port': 8086,
-            'database': 'minder',
-            'username': 'minder',
-            'password': 'minder123'
-        }
+        "influxdb": {
+            "host": "localhost",
+            "port": 8086,
+            "database": "minder",
+            "username": "minder",
+            "password": "minder123",
+        },
     }
 
     try:
@@ -56,6 +57,7 @@ async def test_module():
     except Exception as e:
         print(f"❌ Test başarısız: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

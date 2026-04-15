@@ -3,8 +3,8 @@ Advanced Correlation Algorithms
 Implements Granger Causality, DTW, Cross-Correlation, and Mutual Information
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+from datetime import datetime
 import numpy as np
 import logging
 from scipy import signal

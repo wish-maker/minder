@@ -1,4 +1,5 @@
 import asyncio
+
 """
 Minder Plugin Registry
 Discovers, registers, and manages all plugins

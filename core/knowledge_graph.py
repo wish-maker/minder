@@ -1,10 +1,11 @@
 import asyncio
+
 """
 Minder Knowledge Graph
 Stores and queries entity relationships across modules
 """
 
-from typing import Dict, List, Set, Any, Optional, Tuple
+from typing import Dict, List, Set, Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum

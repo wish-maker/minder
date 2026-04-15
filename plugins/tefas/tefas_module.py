@@ -1,4 +1,5 @@
 import asyncio
+
 """
 Minder TEKAS Module
 Türkiye yatırım fonları analizi ve takibi
@@ -6,7 +7,7 @@ TEFAS API entegrasyonu ile 2020'den beri veri
 """
 
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 import aiohttp
 import pandas as pd

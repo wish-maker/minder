@@ -8,7 +8,6 @@ from pathlib import Path
 import logging
 import subprocess
 import shutil
-import json
 from datetime import datetime
 
 try:

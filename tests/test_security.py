@@ -2,13 +2,9 @@
 Unit Tests for Security System
 Tests input validation, sanitization, and security features
 """
-import pytest
-import asyncio
+
 from pathlib import Path
 import sys
-import re
-from fastapi import Request
-from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -26,13 +22,13 @@ class TestInputSanitization:
             "1' OR '1'='1",
             "admin'--",
             "1' UNION SELECT * FROM users--",
-            "'; INSERT INTO users VALUES ('hacker', 'password'); --"
+            "'; INSERT INTO users VALUES ('hacker', 'password'); --",
         ]
 
         for malicious_input in malicious_inputs:
             is_valid, error_msg = InputSanitizer.validate_input(
-                malicious_input,
-                check_sql=True)
+                malicious_input, check_sql=True
+            )
             # Should detect SQL injection
             assert is_valid is False
             assert error_msg is not None
@@ -45,16 +41,18 @@ class TestInputSanitization:
             "<img src=x onerror=alert('XSS')>",
             "<svg onload=alert('XSS')>",
             "javascript:alert('XSS')",
-            "<iframe src='javascript:alert(XSS)'>"
+            "<iframe src='javascript:alert(XSS)'>",
         ]
 
         for xss_input in xss_inputs:
             # Test with only XSS check, not SQL check
             is_valid, error_msg = InputSanitizer.validate_input(
-                xss_input, check_sql=False, check_xss=True)
+                xss_input, check_sql=False, check_xss=True
+            )
             # Should detect XSS or at least reject input
             assert is_valid is False or (
-                is_valid and "dangerous" in error_msg.lower())
+                is_valid and "dangerous" in error_msg.lower()
+            )
 
     def test_validate_safe_input(self):
         """Test safe input passes validation"""
@@ -62,7 +60,7 @@ class TestInputSanitization:
             "Hello World",
             "user@example.com",
             "My name is John Doe",
-            "Price: $100.00"
+            "Price: $100.00",
         ]
 
         for safe_input in safe_inputs:
@@ -89,9 +87,7 @@ class TestInputSanitization:
         """Test combined validation (SQL + XSS)"""
         malicious_input = "<script>alert('XSS'); DROP TABLE users;</script>"
         is_valid, error_msg = InputSanitizer.validate_input(
-            malicious_input,
-            check_sql=True,
-            check_xss=True
+            malicious_input, check_sql=True, check_xss=True
         )
         assert is_valid is False
         assert error_msg is not None
@@ -124,7 +120,7 @@ class TestNetworkDetection:
             "192.168.1.100",
             "192.168.68.50",
             "172.22.0.1",
-            "10.0.0.50"
+            "10.0.0.50",
         ]
 
         for ip in local_ips:
@@ -135,10 +131,7 @@ class TestNetworkDetection:
         """Test VPN network detection"""
         middleware = NetworkDetectionMiddleware(lambda r: None)
 
-        vpn_ips = [
-            "100.64.0.1",
-            "100.100.0.50"
-        ]
+        vpn_ips = ["100.64.0.1", "100.100.0.50"]
 
         for ip in vpn_ips:
             network_type = middleware.detect_network(ip)
@@ -148,11 +141,7 @@ class TestNetworkDetection:
         """Test public network detection"""
         middleware = NetworkDetectionMiddleware(lambda r: None)
 
-        public_ips = [
-            "8.8.8.8",
-            "1.1.1.1",
-            "93.184.216.34"
-        ]
+        public_ips = ["8.8.8.8", "1.1.1.1", "93.184.216.34"]
 
         for ip in public_ips:
             network_type = middleware.detect_network(ip)
@@ -175,7 +164,7 @@ class TestSecurityFeatures:
         special_chars = [
             "!@#$%^&*()",
             "[]{};':\",./<>?",
-            "\n\t\r"  # Control characters
+            "\n\t\r",  # Control characters
         ]
 
         for special_char in special_chars:

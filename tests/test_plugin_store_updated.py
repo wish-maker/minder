@@ -2,12 +2,12 @@
 Updated Unit Tests for Plugin Store System
 Tests plugin installation, loading, and management with correct BaseModule interface
 """
+
 import pytest
 import asyncio
 from datetime import datetime
 from pathlib import Path
 import sys
-import os
 import tempfile
 import shutil
 from typing import Dict, Any, Optional
@@ -35,12 +35,13 @@ class MockPlugin(BaseModule):
             version=self.version,
             description=self.description,
             author=self.author,
-            capabilities=["test_capability"]
+            capabilities=["test_capability"],
         )
         return self.metadata
 
     async def collect_data(
-            self, since: Optional[datetime] = None) -> Dict[str, int]:
+        self, since: Optional[datetime] = None
+    ) -> Dict[str, int]:
         """Collect data"""
         return {"records_collected": 0}
 
@@ -57,9 +58,7 @@ class MockPlugin(BaseModule):
         return {"documents_indexed": 0}
 
     async def get_correlations(
-        self,
-        correlation_type: str = "all",
-        limit: int = 10
+        self, correlation_type: str = "all", limit: int = 10
     ) -> Dict[str, Any]:
         """Get correlations"""
         return {"correlations": []}
@@ -86,14 +85,14 @@ class TestPluginInterface:
 
         # Check required methods exist
         required_methods = [
-            'register',
-            'collect_data',
-            'analyze',
-            'train_ai',
-            'index_knowledge',
-            'get_correlations',
-            'get_anomalies',
-            'shutdown'
+            "register",
+            "collect_data",
+            "analyze",
+            "train_ai",
+            "index_knowledge",
+            "get_correlations",
+            "get_anomalies",
+            "shutdown",
         ]
 
         for method in required_methods:
@@ -105,9 +104,9 @@ class TestPluginInterface:
         plugin = MockPlugin(config)
 
         # Should have all attributes
-        assert hasattr(plugin, 'name')
-        assert hasattr(plugin, 'version')
-        assert hasattr(plugin, 'config')
+        assert hasattr(plugin, "name")
+        assert hasattr(plugin, "version")
+        assert hasattr(plugin, "config")
         assert plugin.name == "mock_plugin"
 
 
@@ -171,7 +170,7 @@ class TestPlugin(BaseModule):
 
     def test_load_plugin_success(self, mock_plugin_dir):
         """Test successful plugin loading"""
-        loader = PluginLoader({'plugins_path': mock_plugin_dir})
+        loader = PluginLoader({"plugins_path": mock_plugin_dir})
 
         async def run_loading():
             plugin = await loader.load_plugin("test_plugin")
@@ -182,7 +181,7 @@ class TestPlugin(BaseModule):
 
     def test_load_nonexistent_plugin(self, mock_plugin_dir):
         """Test loading non-existent plugin"""
-        loader = PluginLoader({'plugins_path': mock_plugin_dir})
+        loader = PluginLoader({"plugins_path": mock_plugin_dir})
 
         async def run_loading():
             plugin = await loader.load_plugin("nonexistent")
@@ -253,7 +252,7 @@ class TestPlugin(BaseModule):
 
     def test_discover_plugins(self, test_plugins_dir):
         """Test plugin discovery"""
-        loader = PluginLoader({'plugins_path': test_plugins_dir})
+        loader = PluginLoader({"plugins_path": test_plugins_dir})
 
         async def run_discovery():
             discovered = await loader.discover_plugins()
@@ -267,7 +266,7 @@ class TestPluginLifecycle:
 
     def test_plugin_lifecycle(self, tmp_path):
         """Test complete plugin lifecycle"""
-        loader = PluginLoader({'plugins_path': tmp_path})
+        loader = PluginLoader({"plugins_path": tmp_path})
 
         # Create mock plugin
         plugin_dir = tmp_path / "lifecycle_plugin"
@@ -323,16 +322,16 @@ class LifecyclePlugin(BaseModule):
         async def run_lifecycle():
             plugin = await loader.load_plugin("lifecycle_plugin")
             assert plugin is not None
-            assert 'registered' in plugin.lifecycle
+            assert "registered" in plugin.lifecycle
 
             # Test health check
             health = await plugin.health_check()
             assert health["status"] == "healthy"
-            assert 'lifecycle' in health
+            assert "lifecycle" in health
 
             # Test shutdown
             await plugin.shutdown()
-            assert 'shutdown' in plugin.lifecycle
+            assert "shutdown" in plugin.lifecycle
 
         asyncio.run(run_lifecycle())
 
@@ -346,9 +345,9 @@ class TestRealPlugins:
 
         # Use actual project path
         project_root = Path(__file__).parent.parent
-        plugins_path = project_root / 'plugins'
+        plugins_path = project_root / "plugins"
 
-        loader = PluginLoader({'plugins_path': plugins_path})
+        loader = PluginLoader({"plugins_path": plugins_path})
 
         async def test():
             discovered = await loader.discover_plugins()
@@ -367,9 +366,9 @@ class TestRealPlugins:
 
         # Use actual project path
         project_root = Path(__file__).parent.parent
-        plugins_path = project_root / 'plugins'
+        plugins_path = project_root / "plugins"
 
-        loader = PluginLoader({'plugins_path': plugins_path})
+        loader = PluginLoader({"plugins_path": plugins_path})
 
         async def test():
             # Discover what plugins are available

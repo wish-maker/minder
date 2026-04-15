@@ -2,6 +2,7 @@
 Unit Tests for Authentication System
 Tests JWT authentication, token validation, and user management
 """
+
 import pytest
 import asyncio
 from datetime import datetime, timedelta
@@ -16,9 +17,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from api.auth import (  # noqa: E402
     AuthManager,
-    get_current_user,
-    get_current_user_optional,
-    get_auth_manager
 )
 
 # Test configuration
@@ -34,6 +32,7 @@ def test_auth_manager():
     # Re-import auth module to pick up new secret
     import importlib
     import api.auth as auth_module
+
     importlib.reload(auth_module)
 
     manager = AuthManager()
@@ -75,9 +74,9 @@ class TestPasswordHashing:
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         # Should return False for incorrect password
-        assert bcrypt.checkpw(
-            wrong_password.encode(),
-            hashed.encode()) is False
+        assert (
+            bcrypt.checkpw(wrong_password.encode(), hashed.encode()) is False
+        )
 
     def test_password_hash_uniqueness(self, test_auth_manager):
         """Test that same password generates different hashes"""
@@ -128,7 +127,7 @@ class TestTokenCreation:
         data = {
             "sub": "admin",
             "role": "admin",
-            "permissions": ["read", "write", "delete"]
+            "permissions": ["read", "write", "delete"],
         }
         token = test_auth_manager.create_access_token(data)
 
@@ -172,6 +171,7 @@ class TestTokenVerification:
 
         # Create an expired token manually
         import api.auth as auth_module
+
         original_secret = auth_module.SECRET_KEY
         auth_module.SECRET_KEY = TEST_SECRET_KEY
 
@@ -179,11 +179,13 @@ class TestTokenVerification:
             # Create expired payload
             expired_payload = {
                 "sub": "admin",
-                "exp": datetime.utcnow() - timedelta(minutes=1),  # Expired 1 min ago
-                "iat": datetime.utcnow() - timedelta(minutes=31)
+                "exp": datetime.utcnow()
+                - timedelta(minutes=1),  # Expired 1 min ago
+                "iat": datetime.utcnow() - timedelta(minutes=31),
             }
             expired_token = jwt.encode(
-                expired_payload, TEST_SECRET_KEY, algorithm="HS256")
+                expired_payload, TEST_SECRET_KEY, algorithm="HS256"
+            )
 
             # Should return None for expired token
             async def verify():
@@ -265,9 +267,8 @@ class TestTokenExpiration:
 
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
         time_until_exp = (
-            datetime.fromtimestamp(
-                payload["exp"]) -
-            datetime.utcnow()).total_seconds()
+            datetime.fromtimestamp(payload["exp"]) - datetime.utcnow()
+        ).total_seconds()
 
         # Should have some expiration time
         assert time_until_exp > 0

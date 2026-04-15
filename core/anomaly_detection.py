@@ -3,7 +3,7 @@ Real-Time Anomaly Detection System
 Implements Isolation Forest, LSTM Autoencoders, and statistical methods
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd

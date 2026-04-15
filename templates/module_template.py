@@ -2,9 +2,9 @@
 Minder Module Template
 Kopyalayıp yeni modül oluşturun
 """
+
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
-import asyncio
+from datetime import datetime
 import logging
 
 from core.module_interface import BaseModule, ModuleMetadata, ModuleStatus
@@ -22,11 +22,12 @@ class ModuleTemplate(BaseModule):
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.logger = logging.getLogger(
-            f"minder.module.{self.__class__.__name__}")
+            f"minder.module.{self.__class__.__name__}"
+        )
 
         # TODO: Modüle özgü yapılandırma
-        self.api_endpoint = config.get('api_endpoint', '')
-        self.collection_interval = config.get('collection_interval', 3600)
+        self.api_endpoint = config.get("api_endpoint", "")
+        self.collection_interval = config.get("collection_interval", 3600)
 
     async def register(self) -> ModuleMetadata:
         """Modül metadata ve kapasiteler"""
@@ -36,22 +37,17 @@ class ModuleTemplate(BaseModule):
             description="Modül açıklaması",  # TODO: Açıklama
             author="Your Name",
             capabilities=[
-                "data_collection",      # Veri toplama
-                "analysis",              # Analiz
-                "prediction"             # Tahmin (opsiyonel)
+                "data_collection",  # Veri toplama
+                "analysis",  # Analiz
+                "prediction",  # Tahmin (opsiyonel)
             ],
-            data_sources=[
-                "api",                  # TODO: Veri kaynakları
-                "database"
-            ],
-            databases=[
-                "postgresql",           # TODO: Kullanılacak DB'ler
-                "influxdb"
-            ]
+            data_sources=["api", "database"],  # TODO: Veri kaynakları
+            databases=["postgresql", "influxdb"],  # TODO: Kullanılacak DB'ler
         )
 
     async def collect_data(
-            self, since: Optional[datetime] = None) -> Dict[str, int]:
+        self, since: Optional[datetime] = None
+    ) -> Dict[str, int]:
         """
         Veri toplama
 
@@ -85,14 +81,16 @@ class ModuleTemplate(BaseModule):
             self.logger.info(f"Collected {records_collected} records")
 
             # Event publish
-            await self.event_bus.publish(Event(
-                type=EventType.DATA_COLLECTED,
-                source=self.metadata.name,
-                data={
-                    "records_collected": records_collected,
-                    "timestamp": datetime.now().isoformat()
-                }
-            ))
+            await self.event_bus.publish(
+                Event(
+                    type=EventType.DATA_COLLECTED,
+                    source=self.metadata.name,
+                    data={
+                        "records_collected": records_collected,
+                        "timestamp": datetime.now().isoformat(),
+                    },
+                )
+            )
 
         except Exception as e:
             self.logger.error(f"Data collection failed: {e}")
@@ -104,7 +102,7 @@ class ModuleTemplate(BaseModule):
         return {
             "records_collected": records_collected,
             "records_updated": records_updated,
-            "errors": errors
+            "errors": errors,
         }
 
     async def analyze(self) -> Dict[str, Any]:
@@ -140,11 +138,7 @@ class ModuleTemplate(BaseModule):
         finally:
             self.status = ModuleStatus.READY
 
-        return {
-            "metrics": metrics,
-            "patterns": patterns,
-            "insights": insights
-        }
+        return {"metrics": metrics, "patterns": patterns, "insights": insights}
 
     async def train_ai(self, model_type: str = "default") -> Dict[str, Any]:
         """
@@ -165,7 +159,7 @@ class ModuleTemplate(BaseModule):
             "model_id": f"{self.metadata.name}_{model_type}",
             "accuracy": 0.0,
             "training_samples": 0,
-            "metrics": {}
+            "metrics": {},
         }
 
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
@@ -182,16 +176,10 @@ class ModuleTemplate(BaseModule):
         self.logger.info("Indexing knowledge")
 
         # TODO: Vektör embedding oluşturma
-        return {
-            "vectors_created": 0,
-            "vectors_updated": 0,
-            "collections": 0
-        }
+        return {"vectors_created": 0, "vectors_updated": 0, "collections": 0}
 
     async def get_correlations(
-        self,
-        other_module: str,
-        correlation_type: str = "auto"
+        self, other_module: str, correlation_type: str = "auto"
     ) -> List[Dict[str, Any]]:
         """
         Çapraz modül korelasyon ipuçları
@@ -211,9 +199,7 @@ class ModuleTemplate(BaseModule):
         return []
 
     async def get_anomalies(
-        self,
-        severity: str = "medium",
-        limit: int = 10
+        self, severity: str = "medium", limit: int = 10
     ) -> List[Dict[str, Any]]:
         """
         Anomali tespiti

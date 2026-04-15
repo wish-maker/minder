@@ -3,8 +3,8 @@
 Test Module Enable/Disable System
 Integration tests - require API server running on localhost:8000
 """
+
 import requests
-import json
 import pytest
 
 BASE_URL = "http://localhost:8000"
@@ -24,10 +24,11 @@ def test_list_modules():
         print(f"   - Disabled: {data['disabled']}")
 
         print("\n   Plugin Status:")
-        for plugin in data['plugins']:
-            status_icon = "✅" if plugin.get('enabled', False) else "❌"
+        for plugin in data["plugins"]:
+            status_icon = "✅" if plugin.get("enabled", False) else "❌"
             print(
-                f"      {status_icon} {plugin['name']}: {plugin.get('enabled', False)}")
+                f"      {status_icon} {plugin['name']}: {plugin.get('enabled', False)}"
+            )
 
         return data
     except requests.exceptions.ConnectionError:
@@ -41,7 +42,8 @@ def test_enable_plugin():
     try:
         # Try to enable network plugin
         response = requests.post(
-            f"{BASE_URL}/plugins/network/enable", timeout=5)
+            f"{BASE_URL}/plugins/network/enable", timeout=5
+        )
         response.raise_for_status()
         data = response.json()
         print(f"✅ {data.get('message', 'Plugin enabled')}")
@@ -57,7 +59,8 @@ def test_disable_plugin():
     try:
         # Try to disable network plugin
         response = requests.post(
-            f"{BASE_URL}/plugins/network/disable", timeout=5)
+            f"{BASE_URL}/plugins/network/disable", timeout=5
+        )
         response.raise_for_status()
         data = response.json()
         print(f"✅ {data.get('message', 'Plugin disabled')}")
@@ -76,8 +79,9 @@ def main():
         plugins = test_list_modules()
 
         # Get first enabled plugin for testing
-        enabled_plugins = [p['name']
-                           for p in plugins['plugins'] if p.get('enabled', False)]
+        enabled_plugins = [
+            p["name"] for p in plugins["plugins"] if p.get("enabled", False)
+        ]
         # disabled_plugins = [
         #     p['name'] for p in plugins['plugins']
         #     if not p.get('enabled', False)]
@@ -99,6 +103,7 @@ def main():
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback
+
         traceback.print_exc()
 
 
