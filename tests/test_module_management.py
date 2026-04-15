@@ -1,64 +1,84 @@
 #!/usr/bin/env python3
 """
 Test Module Enable/Disable System
+Integration tests - require API server running on localhost:8000
 """
 import requests
 import json
+import pytest
 
 BASE_URL = "http://localhost:8000"
 
+@pytest.mark.integration
 def test_list_modules():
     """Test listing modules"""
     print("\n📋 Testing module listing...")
-    response = requests.get(f"{BASE_URL}/modules")
-    data = response.json()
+    try:
+        response = requests.get(f"{BASE_URL}/plugins", timeout=5)
+        response.raise_for_status()
+        data = response.json()
 
-    print(f"✅ Total modules: {data['total']}")
-    print(f"   - Enabled: {data['enabled']}")
-    print(f"   - Disabled: {data['disabled']}")
+        print(f"✅ Total plugins: {data['total']}")
+        print(f"   - Enabled: {data['enabled']}")
+        print(f"   - Disabled: {data['disabled']}")
 
-    print("\n   Module Status:")
-    for module in data['modules']:
-        status_icon = "✅" if module['enabled'] else "❌"
-        print(f"      {status_icon} {module['name']}: {module['enabled']}")
+        print("\n   Plugin Status:")
+        for plugin in data['plugins']:
+            status_icon = "✅" if plugin.get('enabled', False) else "❌"
+            print(f"      {status_icon} {plugin['name']}: {plugin.get('enabled', False)}")
 
-    return data
+        return data
+    except requests.exceptions.ConnectionError:
+        pytest.skip("API server not running on localhost:8000")
 
-def test_enable_module(module_name):
-    """Test enabling a module"""
-    print(f"\n🔛 Enabling module: {module_name}")
-    response = requests.post(f"{BASE_URL}/modules/{module_name}/enable")
-    data = response.json()
-    print(f"✅ {data['message']}")
-    return data
+@pytest.mark.integration
+def test_enable_plugin():
+    """Test enabling a plugin"""
+    print("\n🔛 Testing plugin enable...")
+    try:
+        # Try to enable network plugin
+        response = requests.post(f"{BASE_URL}/plugins/network/enable", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        print(f"✅ {data.get('message', 'Plugin enabled')}")
+        return data
+    except requests.exceptions.ConnectionError:
+        pytest.skip("API server not running on localhost:8000")
 
-def test_disable_module(module_name):
-    """Test disabling a module"""
-    print(f"\n🔴 Disabling module: {module_name}")
-    response = requests.post(f"{BASE_URL}/modules/{module_name}/disable")
-    data = response.json()
-    print(f"✅ {data['message']}")
-    return data
+@pytest.mark.integration
+def test_disable_plugin():
+    """Test disabling a plugin"""
+    print("\n🔴 Testing plugin disable...")
+    try:
+        # Try to disable network plugin
+        response = requests.post(f"{BASE_URL}/plugins/network/disable", timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        print(f"✅ {data.get('message', 'Plugin disabled')}")
+        return data
+    except requests.exceptions.ConnectionError:
+        pytest.skip("API server not running on localhost:8000")
 
 def main():
-    print("🧪 Module Management Test")
+    """Run integration tests manually"""
+    print("🧪 Module Management Integration Test")
     print("=" * 60)
 
     try:
-        # List all modules
-        modules = test_list_modules()
+        # List all plugins
+        plugins = test_list_modules()
 
-        # Get first enabled module for testing
-        enabled_modules = [m['name'] for m in modules['modules'] if m['enabled']]
-        disabled_modules = [m['name'] for m in modules['modules'] if not m['enabled']]
+        # Get first enabled plugin for testing
+        enabled_plugins = [p['name'] for p in plugins['plugins'] if p.get('enabled', False)]
+        disabled_plugins = [p['name'] for p in plugins['plugins'] if not p.get('enabled', False)]
 
-        if enabled_modules:
-            test_module = enabled_modules[0]
-            print(f"\n📝 Testing with module: {test_module}")
+        if enabled_plugins:
+            test_plugin = enabled_plugins[0]
+            print(f"\n📝 Testing with plugin: {test_plugin}")
 
             # Disable and re-enable
-            test_disable_module(test_module)
-            test_enable_module(test_module)
+            test_disable_plugin()
+            test_enable_plugin()
 
             # List again to verify
             test_list_modules()
