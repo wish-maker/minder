@@ -22,38 +22,33 @@ from api.auth import (
 
 # Test configuration
 TEST_SECRET_KEY = "test_secret_key_for_testing_purposes_only"
-TEST_USERS = {
-    "admin": {
-        "password": "admin123",
-        "role": "admin",
-        "permissions": ["read", "write", "delete", "manage_users"]
-    },
-    "user": {
-        "password": "user123",
-        "role": "user",
-        "permissions": ["read", "write"]
-    }
-}
 
-# Mock AuthManager for testing
-class TestAuthManager(AuthManager):
-    """Test AuthManager with custom secret key"""
-    def __init__(self):
-        # Use test secret key temporarily
-        import api.auth as auth_module
-        original_secret = auth_module.SECRET_KEY
-        auth_module.SECRET_KEY = TEST_SECRET_KEY
+@pytest.fixture
+def test_auth_manager():
+    """Create AuthManager with test secret key"""
+    original_secret = os.getenv("JWT_SECRET_KEY")
+    os.environ["JWT_SECRET_KEY"] = TEST_SECRET_KEY
 
-        super().__init__()
+    # Re-import auth module to pick up new secret
+    import importlib
+    import api.auth as auth_module
+    importlib.reload(auth_module)
 
-        # Restore original secret
-        auth_module.SECRET_KEY = original_secret
+    manager = AuthManager()
+
+    yield manager
+
+    # Restore original secret
+    if original_secret:
+        os.environ["JWT_SECRET_KEY"] = original_secret
+    else:
+        os.environ.pop("JWT_SECRET_KEY", None)
 
 
 class TestPasswordHashing:
     """Test password hashing and verification"""
 
-    def test_password_hashing(self):
+    def test_password_hashing(self, test_auth_manager):
         """Test password hashing"""
         password = "test_password_123"
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -63,7 +58,7 @@ class TestPasswordHashing:
         # Hash should contain bcrypt identifier
         assert hashed.startswith("$2b$")
 
-    def test_password_verification_correct(self):
+    def test_password_verification_correct(self, test_auth_manager):
         """Test password verification with correct password"""
         password = "test_password_123"
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -71,7 +66,7 @@ class TestPasswordHashing:
         # Should return True for correct password
         assert bcrypt.checkpw(password.encode(), hashed.encode()) is True
 
-    def test_password_verification_incorrect(self):
+    def test_password_verification_incorrect(self, test_auth_manager):
         """Test password verification with incorrect password"""
         password = "test_password_123"
         wrong_password = "wrong_password"
@@ -80,7 +75,7 @@ class TestPasswordHashing:
         # Should return False for incorrect password
         assert bcrypt.checkpw(wrong_password.encode(), hashed.encode()) is False
 
-    def test_password_hash_uniqueness(self):
+    def test_password_hash_uniqueness(self, test_auth_manager):
         """Test that same password generates different hashes"""
         password = "test_password_123"
         hash1 = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -96,20 +91,18 @@ class TestPasswordHashing:
 class TestTokenCreation:
     """Test JWT token creation"""
 
-    def test_create_token_basic(self):
+    def test_create_token_basic(self, test_auth_manager):
         """Test basic token creation"""
-        auth_manager = TestAuthManager()
         data = {"sub": "admin"}
-        token = auth_manager.create_access_token(data)
+        token = test_auth_manager.create_access_token(data)
 
         # Token should be a string
         assert isinstance(token, str)
         # Token should have 3 parts (header.payload.signature)
         assert len(token.split(".")) == 3
 
-    def test_create_token_with_expiration(self):
+    def test_create_token_with_expiration(self, test_auth_manager):
         """Test token creation with expiration (using default 30 min)"""
-        auth_manager = TestAuthManager()
         data = {"sub": "admin"}
         token = auth_manager.create_access_token(data)
 
@@ -126,9 +119,8 @@ class TestTokenCreation:
         # Should be around 30 minutes (± 60 seconds for test execution time)
         assert 1740 <= time_diff <= 1860  # 29-31 minutes
 
-    def test_create_token_with_extra_data(self):
+    def test_create_token_with_extra_data(self, test_auth_manager):
         """Test token creation with additional data"""
-        auth_manager = TestAuthManager()
         data = {
             "sub": "admin",
             "role": "admin",
@@ -147,9 +139,8 @@ class TestTokenCreation:
 class TestTokenVerification:
     """Test JWT token verification"""
 
-    def test_verify_valid_token(self):
+    def test_verify_valid_token(self, test_auth_manager):
         """Test verification of valid token"""
-        auth_manager = TestAuthManager()
         data = {"sub": "admin"}
         token = auth_manager.create_access_token(data)
 
@@ -161,9 +152,8 @@ class TestTokenVerification:
 
         asyncio.run(verify())
 
-    def test_verify_invalid_token(self):
+    def test_verify_invalid_token(self, test_auth_manager):
         """Test verification of invalid token"""
-        auth_manager = TestAuthManager()
         invalid_token = "invalid.token.string"
 
         # Should return None for invalid token
@@ -173,9 +163,8 @@ class TestTokenVerification:
 
         asyncio.run(verify())
 
-    def test_verify_expired_token(self):
+    def test_verify_expired_token(self, test_auth_manager):
         """Test verification of expired token"""
-        auth_manager = TestAuthManager()
 
         # Create an expired token manually
         import api.auth as auth_module
@@ -204,9 +193,8 @@ class TestTokenVerification:
 class TestUserAuthentication:
     """Test user authentication flow"""
 
-    def test_authenticate_valid_user(self):
+    def test_authenticate_valid_user(self, test_auth_manager):
         """Test authentication with valid credentials"""
-        auth_manager = TestAuthManager()
         username = "admin"
         password = "admin123"  # Default admin password
 
@@ -219,9 +207,8 @@ class TestUserAuthentication:
 
         asyncio.run(authenticate())
 
-    def test_authenticate_invalid_user(self):
+    def test_authenticate_invalid_user(self, test_auth_manager):
         """Test authentication with invalid credentials"""
-        auth_manager = TestAuthManager()
         username = "nonexistent_user"
         password = "wrong_password"
 
@@ -232,9 +219,8 @@ class TestUserAuthentication:
 
         asyncio.run(authenticate())
 
-    def test_authenticate_wrong_password(self):
+    def test_authenticate_wrong_password(self, test_auth_manager):
         """Test authentication with wrong password"""
-        auth_manager = TestAuthManager()
         username = "admin"
         password = "wrong_password"
 
@@ -249,9 +235,8 @@ class TestUserAuthentication:
 class TestTokenExpiration:
     """Test token expiration behavior"""
 
-    def test_token_expiration_time(self):
+    def test_token_expiration_time(self, test_auth_manager):
         """Test that tokens expire at the correct time"""
-        auth_manager = TestAuthManager()
         expires_delta = timedelta(minutes=30)
         data = {"sub": "admin"}
         token = auth_manager.create_access_token(data)
@@ -266,9 +251,8 @@ class TestTokenExpiration:
         time_until_exp = (exp_time - datetime.utcnow()).total_seconds()
         assert 1700 <= time_until_exp <= 1900  # ~30 minutes
 
-    def test_short_lived_token(self):
+    def test_short_lived_token(self, test_auth_manager):
         """Test creation of short-lived token"""
-        auth_manager = TestAuthManager()
         # Note: Current implementation uses fixed 30 min expiration
         # This test verifies that tokens have reasonable expiration
         data = {"sub": "admin"}
@@ -285,9 +269,8 @@ class TestTokenExpiration:
 class TestSecurityFeatures:
     """Test security-related features"""
 
-    def test_token_secret_key_required(self):
+    def test_token_secret_key_required(self, test_auth_manager):
         """Test that secret key is required for token creation"""
-        auth_manager = TestAuthManager()
         data = {"sub": "admin"}
 
         # Should work with valid secret key
@@ -302,9 +285,8 @@ class TestSecurityFeatures:
         payload = asyncio.run(verify())
         assert payload is not None
 
-    def test_password_not_stored_in_plaintext(self):
+    def test_password_not_stored_in_plaintext(self, test_auth_manager):
         """Test that passwords are not stored in plaintext"""
-        auth_manager = TestAuthManager()
         password = "test_password_123"
         hashed = auth_manager._hash_password(password)
 
