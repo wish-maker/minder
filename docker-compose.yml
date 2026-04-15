@@ -82,6 +82,8 @@ services:
       - ollama
 
   # Minder API - only custom service gets named
+  # Optimized multi-stage build: 493MB (down from 5.93GB - 91.7% reduction)
+  # For ML features (sentence-transformers), see requirements-ml.txt
   minder-api:
     build:
       context: .

@@ -1,0 +1,76 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+.eggs
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.hypothesis
+
+# Logs
+*.log
+logs/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Development files
+.env.example
+.env.local
+.env.development
+.env.test
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Memory and cache
+.memory/
+.remember/
+.claude/
+
+# ML models (too large for image)
+models/
+*.pkl
+*.h5
+*.pb

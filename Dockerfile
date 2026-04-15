@@ -1,26 +1,50 @@
+# Multi-stage build for smaller image
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies to /install
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Final stage - minimal runtime image
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    git \
     postgresql-client \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+
+# Make sure scripts in .local are usable
+ENV PATH=/root/.local/bin:$PATH
 
 # Copy application
 COPY . .
 
 # Create directories
 RUN mkdir -p /var/log/minder /var/lib/minder
+
+# Create non-root user
+RUN useradd -m -u 1000 minder && \
+    chown -R minder:minder /app /var/log/minder /var/lib/minder
+USER minder
 
 # Expose port
 EXPOSE 8000

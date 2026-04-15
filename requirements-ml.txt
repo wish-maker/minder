@@ -1,0 +1,10 @@
+# Optional ML/AI dependencies
+# Install only if using advanced features
+
+# ML/AI for plugins
+sentence-transformers==2.2.2  # Heavy: pulls PyTorch (~2GB)
+scipy==1.13.0
+plotly==5.18.0
+
+# Advanced analytics
+scikit-learn==1.3.2
