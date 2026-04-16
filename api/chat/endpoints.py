@@ -8,7 +8,7 @@ import logging
 import httpx
 import json
 
-from ..models import ChatRequest
+from ..models import ChatRequest, ChatResponse
 from ..auth import get_current_user_optional
 from ..middleware import expensive_limiter
 
@@ -20,13 +20,13 @@ router = APIRouter(prefix="/chat", tags=["AI Chat"])
 def setup_chat_routes(router, kernel, character_engine):
     """Setup chat routes with kernel and character engine references"""
 
-    @router.post("")
+    @router.post("", response_model=ChatResponse, tags=["chat"])
     @expensive_limiter.limit("10/minute")  # Expensive operation (AI)
     async def chat(
         request: Request,
         chat_request: ChatRequest,
         current_user: dict = Depends(get_current_user_optional),
-    ):
+    ) -> ChatResponse:
         """Chat with Minder AI - Rate limited"""
         if not kernel:
             raise HTTPException(

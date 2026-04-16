@@ -7,6 +7,71 @@ from typing import Dict, List, Any, Optional
 from .security import InputSanitizer
 
 
+# ============================================================================
+# Response Models for OpenAPI Documentation
+# ============================================================================
+
+
+class HealthResponse(BaseModel):
+    """Health check response"""
+    status: str
+    system: Dict[str, Any]
+    authentication: str
+    network_detection: str
+
+
+class PluginInfo(BaseModel):
+    """Plugin information"""
+    name: str
+    version: Optional[str] = None
+    status: str
+    enabled: bool
+    description: Optional[str] = None
+
+
+class PluginsListResponse(BaseModel):
+    """Plugins list response"""
+    plugins: List[PluginInfo]
+    total: int
+    enabled: int
+    disabled: int
+    authenticated: bool
+    network_type: str
+
+
+class ChatResponse(BaseModel):
+    """AI chat response"""
+    response: str
+    character: str
+    plugins_used: List[str]
+    model: str
+
+
+class CharacterInfo(BaseModel):
+    """Character information"""
+    name: str
+    description: Optional[str] = None
+
+
+class CharactersListResponse(BaseModel):
+    """Characters list response"""
+    characters: List[CharacterInfo]
+
+
+class CharacterCreateResponse(BaseModel):
+    """Character creation response"""
+    character: str
+    status: str
+
+
+class SystemStatusResponse(BaseModel):
+    """System status response"""
+    status: str
+    version: str
+    plugins: Dict[str, Any]
+    uptime_seconds: float
+
+
 class ChatRequest(BaseModel):
     """Chat request model"""
 

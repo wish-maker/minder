@@ -6,7 +6,7 @@ Handles AI character system management
 from fastapi import APIRouter, HTTPException
 import logging
 
-from ..models import CharacterCreateRequest
+from ..models import CharacterCreateRequest, CharactersListResponse, CharacterCreateResponse
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +16,8 @@ router = APIRouter(prefix="/characters", tags=["Characters"])
 def setup_character_routes(router, character_engine):
     """Setup character routes with character engine reference"""
 
-    @router.get("")
-    async def list_characters():
+    @router.get("", response_model=CharactersListResponse, tags=["characters"])
+    async def list_characters() -> CharactersListResponse:
         """List all characters"""
         if not character_engine:
             raise HTTPException(
@@ -26,8 +26,8 @@ def setup_character_routes(router, character_engine):
 
         return {"characters": character_engine.list_characters()}
 
-    @router.post("")
-    async def create_character(request: CharacterCreateRequest):
+    @router.post("", response_model=CharacterCreateResponse, tags=["characters"])
+    async def create_character(request: CharacterCreateRequest) -> CharacterCreateResponse:
         """Create custom character"""
         if not character_engine:
             raise HTTPException(

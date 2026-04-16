@@ -4,10 +4,10 @@ Handles plugin discovery, loading, and management
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
-from typing import Optional
+from typing import Optional, Dict, Any, List
 import logging
 
-from ..models import PipelineRequest
+from ..models import PipelineRequest, PluginsListResponse
 from ..auth import get_current_user_optional
 from ..middleware import limiter
 
@@ -19,13 +19,13 @@ router = APIRouter(prefix="/plugins", tags=["Plugins"])
 def setup_plugin_routes(router, kernel):
     """Setup plugin routes with kernel reference"""
 
-    @router.get("")
+    @router.get("", response_model=PluginsListResponse, tags=["plugins"])
     @limiter.limit("200/hour")  # Standard API endpoint
     async def list_plugins(
         request: Request,
         status: Optional[str] = None,
         current_user: dict = Depends(get_current_user_optional),
-    ):
+    ) -> PluginsListResponse:
         """
         List all plugins
 
@@ -70,10 +70,10 @@ def setup_plugin_routes(router, kernel):
             ),
         }
 
-    @router.post("/{plugin_name}/pipeline")
+    @router.post("/{plugin_name}/pipeline", tags=["plugins"])
     async def run_pipeline(
         pipeline_request: PipelineRequest, background_tasks: BackgroundTasks
-    ):
+    ) -> Dict[str, Any]:
         """Run pipeline on a plugin"""
         if not kernel:
             raise HTTPException(
@@ -88,8 +88,8 @@ def setup_plugin_routes(router, kernel):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/{plugin_name}/enable")
-    async def enable_plugin(plugin_name: str):
+    @router.post("/{plugin_name}/enable", tags=["plugins"])
+    async def enable_plugin(plugin_name: str) -> Dict[str, str]:
         """Enable a plugin at runtime"""
         if not kernel:
             raise HTTPException(
@@ -111,8 +111,8 @@ def setup_plugin_routes(router, kernel):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @router.post("/{plugin_name}/disable")
-    async def disable_plugin(plugin_name: str):
+    @router.post("/{plugin_name}/disable", tags=["plugins"])
+    async def disable_plugin(plugin_name: str) -> Dict[str, str]:
         """Disable a plugin at runtime"""
         if not kernel:
             raise HTTPException(
