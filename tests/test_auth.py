@@ -5,7 +5,7 @@ Tests JWT authentication, token validation, and user management
 
 import pytest
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import os
@@ -114,9 +114,9 @@ class TestTokenCreation:
 
         # Should have expiration time
         assert "exp" in payload
-        # Should be approximately 30 minutes from now
-        exp_time = datetime.fromtimestamp(payload["exp"])
-        now = datetime.utcnow()
+        # Should be approximately 30 minutes from now (explicit UTC)
+        exp_time = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
+        now = datetime.now(timezone.utc)
         time_diff = (exp_time - now).total_seconds()
 
         # Should be around 30 minutes (± 60 seconds for test execution time)
@@ -137,6 +137,25 @@ class TestTokenCreation:
         assert payload.get("sub") == "admin"
         # Note: Additional fields might be preserved in token
         assert "sub" in payload
+
+    def test_explicit_utc_timezone_handling(self, test_auth_manager):
+        """Test that token creation and verification use explicit UTC timezone"""
+        data = {"sub": "admin"}
+        token = test_auth_manager.create_access_token(data)
+
+        # Decode token to check timezone handling
+        payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
+
+        # Expiration time should be timezone-aware
+        exp_timestamp = payload["exp"]
+        exp_time_utc = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+        now_utc = datetime.now(timezone.utc)
+
+        # Time difference should be approximately 30 minutes
+        time_diff = (exp_time_utc - now_utc).total_seconds()
+
+        # Should be around 30 minutes (± 60 seconds for test execution time)
+        assert 1740 <= time_diff <= 1860  # 29-31 minutes
 
 
 class TestTokenVerification:
@@ -249,13 +268,14 @@ class TestTokenExpiration:
         token = test_auth_manager.create_access_token(data)
 
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
-        exp_time = datetime.fromtimestamp(payload["exp"])
+        exp_time = datetime.fromtimestamp(payload["exp"], tz=timezone.utc)
 
-        # Expiration should be in the future
-        assert exp_time > datetime.utcnow()
+        # Expiration should be in the future (explicit UTC)
+        now_utc = datetime.now(timezone.utc)
+        assert exp_time > now_utc
 
         # But not too far in the future
-        time_until_exp = (exp_time - datetime.utcnow()).total_seconds()
+        time_until_exp = (exp_time - now_utc).total_seconds()
         assert 1700 <= time_until_exp <= 1900  # ~30 minutes
 
     def test_short_lived_token(self, test_auth_manager):
@@ -267,7 +287,7 @@ class TestTokenExpiration:
 
         payload = jwt.decode(token, TEST_SECRET_KEY, algorithms=["HS256"])
         time_until_exp = (
-            datetime.fromtimestamp(payload["exp"]) - datetime.utcnow()
+            datetime.fromtimestamp(payload["exp"], tz=timezone.utc) - datetime.now(timezone.utc)
         ).total_seconds()
 
         # Should have some expiration time

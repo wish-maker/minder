@@ -8,7 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, validator
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import bcrypt
 import os
 import re
@@ -54,7 +54,7 @@ class AuthManager:
             "username": "admin",
             "password_hash": admin_password,
             "role": "admin",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         logger.info(
             "✅ Default admin user created "
@@ -96,11 +96,11 @@ class AuthManager:
         """Generate JWT access token"""
         to_encode = data.copy()
 
-        # Add expiration time
-        expire = datetime.utcnow() + timedelta(
+        # Add expiration time (explicit UTC timezone)
+        expire = datetime.now(timezone.utc) + timedelta(
             minutes=ACCESS_TOKEN_EXPIRE_MINUTES
         )
-        to_encode.update({"exp": expire, "iat": datetime.utcnow()})
+        to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc)})
 
         # Generate token
         token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
@@ -156,7 +156,7 @@ class AuthManager:
             "username": username,
             "password_hash": password_hash,
             "role": role,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
         self.users[username] = user
