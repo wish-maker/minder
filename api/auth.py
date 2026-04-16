@@ -110,7 +110,12 @@ class AuthManager:
         return token
 
     async def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """Verify JWT token and return user data"""
+        """Verify JWT token and return user data.
+
+        Note: This function does not directly use datetime functions.
+        JWT expiration validation is handled by the jwt library internally.
+        Token expiration times are timezone-aware from create_access_token.
+        """
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
             username = payload.get("sub")
