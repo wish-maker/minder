@@ -49,9 +49,7 @@ class PluginLoader:
 
             # Skip excluded directories
             if plugin_dir.name in excluded_dirs:
-                logger.debug(
-                    f"⏭️  Skipping excluded directory: {plugin_dir.name}"
-                )
+                logger.debug(f"⏭️  Skipping excluded directory: {plugin_dir.name}")
                 continue
 
             # Try both _plugin.py and _module.py extensions
@@ -67,33 +65,21 @@ class PluginLoader:
 
         return discovered
 
-    async def load_plugin(
-        self, plugin_name: str, config: Optional[Dict[str, Any]] = None
-    ) -> Optional[BaseModule]:
+    async def load_plugin(self, plugin_name: str, config: Optional[Dict[str, Any]] = None) -> Optional[BaseModule]:
         """Load a single plugin"""
 
         try:
             # Try both _plugin.py and _module.py extensions
-            plugin_file = (
-                self.plugins_path / plugin_name / f"{plugin_name}_plugin.py"
-            )
+            plugin_file = self.plugins_path / plugin_name / f"{plugin_name}_plugin.py"
             if not plugin_file.exists():
-                plugin_file = (
-                    self.plugins_path
-                    / plugin_name
-                    / f"{plugin_name}_module.py"
-                )
+                plugin_file = self.plugins_path / plugin_name / f"{plugin_name}_module.py"
             if not plugin_file.exists():
                 plugin_file = self.plugins_path / plugin_name / "__init__.py"
 
             if not plugin_file.exists():
-                raise FileNotFoundError(
-                    f"Plugin file not found for: {plugin_name}"
-                )
+                raise FileNotFoundError(f"Plugin file not found for: {plugin_name}")
 
-            spec = importlib.util.spec_from_file_location(
-                f"minder.plugins.{plugin_name}", plugin_file
-            )
+            spec = importlib.util.spec_from_file_location(f"minder.plugins.{plugin_name}", plugin_file)
 
             if spec is None or spec.loader is None:
                 raise ImportError(f"Cannot load plugin spec: {plugin_name}")
@@ -109,13 +95,9 @@ class PluginLoader:
                     break
 
             if plugin_class is None:
-                raise TypeError(
-                    f"No BaseModule subclass found in: {plugin_name}"
-                )
+                raise TypeError(f"No BaseModule subclass found in: {plugin_name}")
 
-            plugin_config = config or self.config.get("plugins", {}).get(
-                plugin_name, {}
-            )
+            plugin_config = config or self.config.get("plugins", {}).get(plugin_name, {})
             instance = plugin_class(plugin_config)
 
             await instance.register()
@@ -131,10 +113,7 @@ class PluginLoader:
             self.failed_plugins[plugin_name] = error_msg
             return None
 
-    async def load_all_plugins(
-        self, exclude: Optional[List[str]] = None
-    ) -> Dict[str, BaseModule]:
-
+    async def load_all_plugins(self, exclude: Optional[List[str]] = None) -> Dict[str, BaseModule]:
         exclude = exclude or []
         discovered = await self.discover_plugins()
 

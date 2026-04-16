@@ -4,7 +4,7 @@ Handles plugin discovery, loading, and management
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import logging
 
 from ..models import PipelineRequest, PluginsListResponse
@@ -36,9 +36,7 @@ def setup_plugin_routes(router, kernel):
         Rate limited: 200/hour for VPN, 50/hour for public, unlimited for local
         """
         if not kernel:
-            raise HTTPException(
-                status_code=503, detail="Kernel not initialized"
-            )
+            raise HTTPException(status_code=503, detail="Kernel not initialized")
 
         plugins = await kernel.registry.list_plugins(status=status)
 
@@ -63,27 +61,17 @@ def setup_plugin_routes(router, kernel):
             "enabled": len(plugins),
             "disabled": len(disabled_plugins),
             "authenticated": current_user is not None,
-            "network_type": (
-                "trusted"
-                if current_user and not current_user.get("authenticated", True)
-                else "public"
-            ),
+            "network_type": ("trusted" if current_user and not current_user.get("authenticated", True) else "public"),
         }
 
     @router.post("/{plugin_name}/pipeline", tags=["plugins"])
-    async def run_pipeline(
-        pipeline_request: PipelineRequest, background_tasks: BackgroundTasks
-    ) -> Dict[str, Any]:
+    async def run_pipeline(pipeline_request: PipelineRequest, background_tasks: BackgroundTasks) -> Dict[str, Any]:
         """Run pipeline on a plugin"""
         if not kernel:
-            raise HTTPException(
-                status_code=503, detail="Kernel not initialized"
-            )
+            raise HTTPException(status_code=503, detail="Kernel not initialized")
 
         try:
-            results = await kernel.run_plugin_pipeline(
-                pipeline_request.module, pipeline_request.pipeline
-            )
+            results = await kernel.run_plugin_pipeline(pipeline_request.module, pipeline_request.pipeline)
             return {"plugin": pipeline_request.module, "results": results}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -92,9 +80,7 @@ def setup_plugin_routes(router, kernel):
     async def enable_plugin(plugin_name: str) -> Dict[str, str]:
         """Enable a plugin at runtime"""
         if not kernel:
-            raise HTTPException(
-                status_code=503, detail="Kernel not initialized"
-            )
+            raise HTTPException(status_code=503, detail="Kernel not initialized")
 
         try:
             success = await kernel.registry.enable_plugin(plugin_name)
@@ -105,9 +91,7 @@ def setup_plugin_routes(router, kernel):
                     "message": f"Plugin {plugin_name} will be enabled on next restart",
                 }
             else:
-                raise HTTPException(
-                    status_code=400, detail="Failed to enable plugin"
-                )
+                raise HTTPException(status_code=400, detail="Failed to enable plugin")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -115,9 +99,7 @@ def setup_plugin_routes(router, kernel):
     async def disable_plugin(plugin_name: str) -> Dict[str, str]:
         """Disable a plugin at runtime"""
         if not kernel:
-            raise HTTPException(
-                status_code=503, detail="Kernel not initialized"
-            )
+            raise HTTPException(status_code=503, detail="Kernel not initialized")
 
         try:
             success = await kernel.registry.disable_plugin(plugin_name)
@@ -128,9 +110,7 @@ def setup_plugin_routes(router, kernel):
                     "message": f"Plugin {plugin_name} has been disabled and unloaded",
                 }
             else:
-                raise HTTPException(
-                    status_code=400, detail="Failed to disable plugin"
-                )
+                raise HTTPException(status_code=400, detail="Failed to disable plugin")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 

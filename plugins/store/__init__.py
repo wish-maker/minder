@@ -31,9 +31,7 @@ class PluginStore:
 
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.store_path = Path(
-            config.get("store_path", "/var/lib/minder/plugins")
-        )
+        self.store_path = Path(config.get("store_path", "/var/lib/minder/plugins"))
         self.store_path.mkdir(parents=True, exist_ok=True)
 
         self.index_url = config.get("index_url", "")
@@ -53,9 +51,7 @@ class PluginStore:
         # Yüklü plugin'leri tara
         await self._scan_installed_plugins()
 
-        logger.info(
-            f"✅ Plugin Store ready: {len(self.installed_plugins)} plugins installed"
-        )
+        logger.info(f"✅ Plugin Store ready: {len(self.installed_plugins)} plugins installed")
 
     async def _load_index(self):
         """Plugin index'ini yükle"""
@@ -67,9 +63,7 @@ class PluginStore:
                     if response.status == 200:
                         data = await response.json()
                         self.plugin_index = data.get("plugins", [])
-                        logger.info(
-                            f"📋 Loaded {len(self.plugin_index)} plugins from index"
-                        )
+                        logger.info(f"📋 Loaded {len(self.plugin_index)} plugins from index")
         except Exception as e:
             logger.warning(f"Failed to load plugin index: {e}")
 
@@ -93,17 +87,13 @@ class PluginStore:
                             "version": manifest.get("version", "unknown"),
                             "repository": repo_url,
                             "is_git": is_git,
-                            "installed_at": datetime.fromtimestamp(
-                                plugin_dir.stat().st_mtime
-                            ).isoformat(),
+                            "installed_at": datetime.fromtimestamp(plugin_dir.stat().st_mtime).isoformat(),
                         }
 
                         logger.info(f"📦 Found plugin: {plugin_dir.name}")
 
                     except Exception as e:
-                        logger.error(
-                            f"Error loading plugin {plugin_dir.name}: {e}"
-                        )
+                        logger.error(f"Error loading plugin {plugin_dir.name}: {e}")
 
     async def search_plugins(self, query: str) -> List[Dict[str, Any]]:
         """Plugin ara"""
@@ -111,9 +101,7 @@ class PluginStore:
 
         for plugin in self.plugin_index:
             searchable_text = (
-                plugin.get("name", "")
-                + plugin.get("description", "")
-                + " ".join(plugin.get("tags", []))
+                plugin.get("name", "") + plugin.get("description", "") + " ".join(plugin.get("tags", []))
             ).lower()
 
             if query.lower() in searchable_text:
@@ -121,9 +109,7 @@ class PluginStore:
 
         return results
 
-    async def install_plugin(
-        self, repo_url: str, branch: str = "main", version: str = "latest"
-    ) -> Dict[str, Any]:
+    async def install_plugin(self, repo_url: str, branch: str = "main", version: str = "latest") -> Dict[str, Any]:
         """Plugin'i GitHub reposundan kur"""
 
         plugin_name = repo_url.split("/")[-1].replace(".git", "")
@@ -154,9 +140,7 @@ class PluginStore:
 
             # 2. Manifest'i yükle
             manifest = await self._load_manifest(install_path)
-            logger.info(
-                f"📋 Plugin: {manifest['name']} v{manifest['version']}"
-            )
+            logger.info(f"📋 Plugin: {manifest['name']} v{manifest['version']}")
 
             # 3. Version kontrolü
             if version != "latest":
@@ -166,15 +150,11 @@ class PluginStore:
             await self._install_dependencies(install_path)
 
             # 5. Plugin'i validate et
-            validation_result = await self._validate_plugin(
-                install_path, manifest
-            )
+            validation_result = await self._validate_plugin(install_path, manifest)
 
             if not validation_result["valid"]:
                 shutil.rmtree(install_path)
-                raise ValueError(
-                    f"Plugin validation failed: {validation_result['errors']}"
-                )
+                raise ValueError(f"Plugin validation failed: {validation_result['errors']}")
 
             # 6. Plugin'i kaydet
             self.installed_plugins[plugin_name] = {
@@ -255,9 +235,7 @@ class PluginStore:
         # Yeni versiyonu kur
         result = await self.install_plugin(repo_url, current_branch)
 
-        logger.info(
-            f"✅ Plugin updated: {plugin_name} {old_version} → {result['version']}"
-        )
+        logger.info(f"✅ Plugin updated: {plugin_name} {old_version} → {result['version']}")
 
         return result
 
@@ -282,9 +260,7 @@ class PluginStore:
 
         return plugins
 
-    async def get_plugin_info(
-        self, plugin_name: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_plugin_info(self, plugin_name: str) -> Optional[Dict[str, Any]]:
         """Plugin detayını al"""
 
         if plugin_name not in self.installed_plugins:
@@ -325,14 +301,10 @@ class PluginStore:
         manifest_file = plugin_path / "plugin.yml"
 
         if not manifest_file.exists():
-            raise FileNotFoundError(
-                f"Plugin manifest not found: {manifest_file}"
-            )
+            raise FileNotFoundError(f"Plugin manifest not found: {manifest_file}")
 
         if yaml is None:
-            raise ImportError(
-                "PyYAML not installed. Install: pip install pyyaml"
-            )
+            raise ImportError("PyYAML not installed. Install: pip install pyyaml")
 
         with open(manifest_file) as f:
             return yaml.safe_load(f)
@@ -343,13 +315,9 @@ class PluginStore:
         requirements_file = plugin_path / "requirements.txt"
 
         if requirements_file.exists():
-            logger.info(
-                f"📦 Installing dependencies for {plugin_path.name}..."
-            )
+            logger.info(f"📦 Installing dependencies for {plugin_path.name}...")
 
-            subprocess.run(
-                ["pip", "install", "-r", str(requirements_file)], check=True
-            )
+            subprocess.run(["pip", "install", "-r", str(requirements_file)], check=True)
 
     async def _checkout_version(self, plugin_path: Path, version: str):
         """Belirli bir versiyona checkout et"""
@@ -363,9 +331,7 @@ class PluginStore:
             capture_output=True,
         )
 
-    async def _validate_plugin(
-        self, plugin_path: Path, manifest: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def _validate_plugin(self, plugin_path: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
         """Plugin'i validate et"""
 
         errors = []
@@ -393,13 +359,9 @@ class PluginStore:
 
         try:
             if pv.parse(minder_version) < pv.parse(min_version):
-                errors.append(
-                    f"Minder version too old. Required: {min_version}"
-                )
+                errors.append(f"Minder version too old. Required: {min_version}")
             if pv.parse(minder_version) > pv.parse(max_version):
-                errors.append(
-                    f"Minder version too new. Max supported: {max_version}"
-                )
+                errors.append(f"Minder version too new. Max supported: {max_version}")
         except Exception as e:
             warnings.append(f"Could not verify version compatibility: {e}")
 
@@ -416,9 +378,7 @@ class PluginStore:
                 break
 
         if plugin_file is None:
-            errors.append(
-                "No plugin implementation file found (*_plugin.py or *_module.py)"
-            )
+            errors.append("No plugin implementation file found (*_plugin.py or *_module.py)")
 
         # 4. Python syntax kontrolü
         if plugin_file:
@@ -531,8 +491,6 @@ class PluginStore:
                     }
 
             except Exception as e:
-                logger.warning(
-                    f"Could not check updates for {plugin_name}: {e}"
-                )
+                logger.warning(f"Could not check updates for {plugin_name}: {e}")
 
         return updates

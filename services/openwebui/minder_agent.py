@@ -27,9 +27,7 @@ class MinderOpenWebUIAgent:
     - Knowledge graph queries
     """
 
-    def __init__(
-        self, kernel: MinderKernel, character_engine: CharacterEngine
-    ):
+    def __init__(self, kernel: MinderKernel, character_engine: CharacterEngine):
         self.kernel = kernel
         self.character_engine = character_engine
         self.voice_service = VoiceService({})
@@ -223,38 +221,28 @@ class MinderOpenWebUIAgent:
             # Route to appropriate handler
             if intent["action"] == "function_call":
                 # Function calling
-                result = await self._handle_function_call(
-                    intent["function"], intent["parameters"], character
-                )
+                result = await self._handle_function_call(intent["function"], intent["parameters"], character)
 
                 response_text = result.get("response", "")
 
             elif intent["action"] == "general_query":
                 # General knowledge query
-                result = await self._handle_general_query(
-                    message, character, language
-                )
+                result = await self._handle_general_query(message, character, language)
                 response_text = result.get("response", "")
 
             elif intent["action"] == "conversation":
                 # General conversation
-                response_text = await self._generate_conversational_response(
-                    message, character, language
-                )
+                response_text = await self._generate_conversational_response(message, character, language)
 
             else:
-                response_text = await self._generate_fallback_response(
-                    message, character, language
-                )
+                response_text = await self._generate_fallback_response(message, character, language)
 
             # Generate voice if requested
             audio_data = None
             audio_duration = 0
 
             if voice_mode and response_text:
-                synthesis = await self.voice_service.synthesize_with_character(
-                    text=response_text, character=character
-                )
+                synthesis = await self.voice_service.synthesize_with_character(text=response_text, character=character)
 
                 if "audio_data" in synthesis:
                     audio_data = synthesis["audio_data"]
@@ -292,9 +280,7 @@ class MinderOpenWebUIAgent:
         else:
             return "en"
 
-    async def _analyze_intent(
-        self, message: str, language: str
-    ) -> Dict[str, Any]:
+    async def _analyze_intent(self, message: str, language: str) -> Dict[str, Any]:
         """Analyze user intent"""
         message_lower = message.lower()
 
@@ -306,71 +292,45 @@ class MinderOpenWebUIAgent:
         }
 
         # Check for fund recommendations (Turkish & English)
-        if any(
-            word in message_lower
-            for word in ["öner", "recommend", " tavsiye", "ön"]
-        ):
+        if any(word in message_lower for word in ["öner", "recommend", " tavsiye", "ön"]):
             intent["action"] = "function_call"
             intent["function"] = "get_fund_recommendations"
             intent["confidence"] = 0.8
 
             # Extract parameters
-            if (
-                "düşük" in message_lower
-                or "low" in message_lower
-                or "az" in message_lower
-            ):
+            if "düşük" in message_lower or "low" in message_lower or "az" in message_lower:
                 intent["parameters"]["risk_tolerance"] = "low"
-            elif (
-                "yüksek" in message_lower
-                or "high" in message_lower
-                or "çok" in message_lower
-            ):
+            elif "yüksek" in message_lower or "high" in message_lower or "çok" in message_lower:
                 intent["parameters"]["risk_tolerance"] = "high"
             else:
                 intent["parameters"]["risk_tolerance"] = "medium"
 
         # Check for fund analysis
-        elif any(
-            word in message_lower
-            for word in ["analiz", "analyze", "durum", "performance"]
-        ):
+        elif any(word in message_lower for word in ["analiz", "analyze", "durum", "performance"]):
             intent["action"] = "function_call"
             intent["function"] = "analyze_fund_performance"
             intent["confidence"] = 0.7
 
         # Check for system status
-        elif any(
-            word in message_lower
-            for word in ["durum", "status", "health", "working"]
-        ):
+        elif any(word in message_lower for word in ["durum", "status", "health", "working"]):
             intent["action"] = "function_call"
             intent["function"] = "get_system_status"
             intent["confidence"] = 0.9
 
         # Check for anomalies
-        elif any(
-            word in message_lower
-            for word in ["anomaly", "anomali", "sorun", "problem", "hata"]
-        ):
+        elif any(word in message_lower for word in ["anomaly", "anomali", "sorun", "problem", "hata"]):
             intent["action"] = "function_call"
             intent["function"] = "detect_anomalies"
             intent["confidence"] = 0.8
 
         # Check for correlations
-        elif any(
-            word in message_lower
-            for word in ["korelasyon", "correlation", "ilişki", "relation"]
-        ):
+        elif any(word in message_lower for word in ["korelasyon", "correlation", "ilişki", "relation"]):
             intent["action"] = "function_call"
             intent["function"] = "get_correlations"
             intent["confidence"] = 0.7
 
         # Check for knowledge graph query
-        elif any(
-            word in message_lower
-            for word in ["bilgi", "information", "knowledge", "graph"]
-        ):
+        elif any(word in message_lower for word in ["bilgi", "information", "knowledge", "graph"]):
             intent["action"] = "function_call"
             intent["function"] = "query_knowledge_graph"
             intent["confidence"] = 0.6
@@ -383,14 +343,10 @@ class MinderOpenWebUIAgent:
         """Handle function call"""
         try:
             if function_name == "get_fund_recommendations":
-                return await self._get_fund_recommendations(
-                    parameters, character
-                )
+                return await self._get_fund_recommendations(parameters, character)
 
             elif function_name == "analyze_fund_performance":
-                return await self._analyze_fund_performance(
-                    parameters, character
-                )
+                return await self._analyze_fund_performance(parameters, character)
 
             elif function_name == "get_system_status":
                 return await self._get_system_status(character)
@@ -420,9 +376,7 @@ class MinderOpenWebUIAgent:
                 "error": str(e),
             }
 
-    async def _get_fund_recommendations(
-        self, params: Dict[str, Any], character: Any
-    ) -> Dict[str, Any]:
+    async def _get_fund_recommendations(self, params: Dict[str, Any], character: Any) -> Dict[str, Any]:
         """Get personalized fund recommendations"""
         risk_tolerance = params.get("risk_tolerance", "medium")
         # horizon = params.get("investment_horizon", "medium")
@@ -439,29 +393,21 @@ class MinderOpenWebUIAgent:
 
         # Filter by risk tolerance
         if risk_tolerance == "low":
-            filtered = [
-                f for f in top_performers if f.get("volatility", 1) < 0.02
-            ]
+            filtered = [f for f in top_performers if f.get("volatility", 1) < 0.02]
         elif risk_tolerance == "high":
-            filtered = [
-                f for f in top_performers if f.get("sharpe_ratio", 0) > 0.5
-            ]
+            filtered = [f for f in top_performers if f.get("sharpe_ratio", 0) > 0.5]
         else:
             filtered = top_performers[:10]
 
         # Generate response
         if character.voice_profile.language == "tr":
-            response = (
-                f"Risk profilinize ({risk_tolerance}) uygun fon önerileri:\n\n"
-            )
+            response = f"Risk profilinize ({risk_tolerance}) uygun fon önerileri:\n\n"
             for i, fund in enumerate(filtered[:5], 1):
                 response += f"{i}. **{fund['fund_code']}** - Sharpe: {fund['sharpe_ratio']:.2f}\n"
 
             response += "\nBu dağıtım Modern Portföy Teorisi'ne göre optimize edilmiştir."
         else:
-            response = (
-                f"Fund recommendations for {risk_tolerance} risk profile:\n\n"
-            )
+            response = f"Fund recommendations for {risk_tolerance} risk profile:\n\n"
             for i, fund in enumerate(filtered[:5], 1):
                 response += f"{i}. **{fund['fund_code']}** - Sharpe: {fund['sharpe_ratio']:.2f}\n"
 
@@ -481,9 +427,7 @@ class MinderOpenWebUIAgent:
             response = "📊 **Minder Sistem Durumu**\n\n"
             response += f"Modüller: {status['modules']['ready']}/{status['modules']['total']} hazır\n"
             response += f"Korelasyonlar: {status['correlations']['total_correlations']} tane\n"
-            response += (
-                f"Çalışma süresi: {status['uptime_seconds']/60:.1} dakika\n"
-            )
+            response += f"Çalışma süresi: {status['uptime_seconds']/60:.1} dakika\n"
             response += f"Durum: {'✅ Çalışıyor' if status['status'] == 'running' else '❌ Çalışmıyor'}"
         else:
             response = "📊 **Minder System Status**\n\n"
@@ -494,9 +438,7 @@ class MinderOpenWebUIAgent:
 
         return {"response": response, "status": status}
 
-    async def _detect_anomalies(
-        self, params: Dict[str, Any], character: Any
-    ) -> Dict[str, Any]:
+    async def _detect_anomalies(self, params: Dict[str, Any], character: Any) -> Dict[str, Any]:
         """Detect anomalies"""
         severity = params.get("severity", "medium")
         limit = params.get("limit", 10)
@@ -508,9 +450,7 @@ class MinderOpenWebUIAgent:
         for module_info in modules:
             module = await self.kernel.registry.get_module(module_info["name"])
             if module:
-                anomalies = await module.get_anomalies(
-                    severity=severity, limit=limit
-                )
+                anomalies = await module.get_anomalies(severity=severity, limit=limit)
                 all_anomalies.extend(anomalies)
 
         # Sort by severity
@@ -522,9 +462,7 @@ class MinderOpenWebUIAgent:
 
         # Generate response
         if character.voice_profile.language == "tr":
-            response = (
-                f"⚠️  **Tespit Edilen Anomaliler** ({severity} üzeri)\n\n"
-            )
+            response = f"⚠️  **Tespit Edilen Anomaliler** ({severity} üzeri)\n\n"
             for anomaly in all_anomalies[:limit]:
                 response += f"- {anomaly['description']}\n"
         else:
@@ -534,26 +472,18 @@ class MinderOpenWebUIAgent:
 
         return {"response": response, "anomalies": all_anomalies[:limit]}
 
-    async def _get_correlations(
-        self, params: Dict[str, Any], character: Any
-    ) -> Dict[str, Any]:
+    async def _get_correlations(self, params: Dict[str, Any], character: Any) -> Dict[str, Any]:
         """Get correlations"""
         module_a = params.get("module_a")
         module_b = params.get("module_b")
 
         if module_a and module_b:
             # Specific pair
-            correlations = (
-                await self.kernel.correlation_engine.discover_correlations(
-                    module_a, module_b
-                )
-            )
+            correlations = await self.kernel.correlation_engine.discover_correlations(module_a, module_b)
             correlations_list = correlations
         else:
             # All correlations
-            all_correlations = (
-                await self.kernel.correlation_engine.get_all_correlations()
-            )
+            all_correlations = await self.kernel.correlation_engine.get_all_correlations()
             correlations_list = []
             for pair, corrs in all_correlations.items():
                 correlations_list.extend(corrs)
@@ -562,17 +492,19 @@ class MinderOpenWebUIAgent:
         if character.voice_profile.language == "tr":
             response = "🔗 **Bulunan Korelasyonlar**\n\n"
             for corr in correlations_list[:5]:
-                response += f"- {corr['module_a']} ↔ {corr['module_b']}: {corr['description']} (güç: {corr['strength']:.2f})\n"
+                response += (
+                    f"- {corr['module_a']} ↔ {corr['module_b']}: {corr['description']} "
+                    f"(güç: {corr['strength']:.2f})\n"
+                )
         else:
             response = "🔗 **Discovered Correlations**\n\n"
             for corr in correlations_list[:5]:
-                response += f"- {corr['module_a']} ↔ {corr['module_b']}: {corr['description']} (strength: {corr['strength']:.2f})\n"
+                line = f"- {corr['module_a']} ↔ {corr['module_b']}: {corr['description']} "
+                response += f"{line}(strength: {corr['strength']:.2f})\n"
 
         return {"response": response, "correlations": correlations_list[:5]}
 
-    async def _query_knowledge_graph(
-        self, params: Dict[str, Any], character: Any
-    ) -> Dict[str, Any]:
+    async def _query_knowledge_graph(self, params: Dict[str, Any], character: Any) -> Dict[str, Any]:
         """Query knowledge graph"""
         kg = self.kernel.knowledge_graph
 
@@ -599,9 +531,7 @@ class MinderOpenWebUIAgent:
 
         return {"response": "Varlık bulunamadı.", "entity": None}
 
-    async def _run_module_pipeline(
-        self, params: Dict[str, Any], character: Any
-    ) -> Dict[str, Any]:
+    async def _run_module_pipeline(self, params: Dict[str, Any], character: Any) -> Dict[str, Any]:
         """Run module pipeline"""
         module_name = params["module"]
         pipeline = params.get("pipeline", ["collect", "analyze"])
@@ -625,9 +555,7 @@ class MinderOpenWebUIAgent:
 
         return {"response": response, "results": results}
 
-    async def _handle_general_query(
-        self, query: str, character: Any, language: str
-    ) -> Dict[str, Any]:
+    async def _handle_general_query(self, query: str, character: Any, language: str) -> Dict[str, Any]:
         """Handle general knowledge query"""
         # Query all modules
         module_results = await self.kernel.query_modules(query)
@@ -647,30 +575,34 @@ class MinderOpenWebUIAgent:
 
             return {"response": response, "module_results": module_results}
 
-        return {
-            "response": await self._generate_fallback_response(
-                query, character, language
-            )
-        }
+        return {"response": await self._generate_fallback_response(query, character, language)}
 
-    async def _generate_conversational_response(
-        self, message: str, character: Any, language: str
-    ) -> str:
+    async def _generate_conversational_response(self, message: str, character: Any, language: str) -> str:
         """Generate conversational response"""
         # This would use Ollama in production
         if language == "tr":
-            return f"{character.name} olarak size yardımcı olabilirim. Fon analizi, portföy optimizasyonu veya sistem durumu hakkında sorular sorabilirsiniz."
+            return (
+                f"{character.name} olarak size yardımcı olabilirim. "
+                f"Fon analizi, portföy optimizasyonu veya sistem durumu hakkında sorular sorabilirsiniz."
+            )
         else:
-            return f"As {character.name}, I'm here to help! You can ask me about fund analysis, portfolio optimization, or system status."
+            return (
+                f"As {character.name}, I'm here to help! You can ask me about "
+                f"fund analysis, portfolio optimization, or system status."
+            )
 
-    async def _generate_fallback_response(
-        self, message: str, character: Any, language: str
-    ) -> str:
+    async def _generate_fallback_response(self, message: str, character: Any, language: str) -> str:
         """Generate fallback response"""
         if language == "tr":
-            return "Minder AI platformu olarak size yardımcı olabilirim. Fonlar, portföy, network analizi veya diğer konular hakkında sorularınızı bekliyorum."
+            return (
+                "Minder AI platformu olarak size yardımcı olabilirim. "
+                "Fonlar, portföy, network analizi veya diğer konular hakkında sorularınızı bekliyorum."
+            )
         else:
-            return "As the Minder AI platform, I'm here to help! Feel free to ask about funds, portfolios, network analysis, or other topics."
+            return (
+                "As the Minder AI platform, I'm here to help! Feel free to ask "
+                "about funds, portfolios, network analysis, or other topics."
+            )
 
     def _get_base_system_prompt(self) -> str:
         """Get base system prompt"""

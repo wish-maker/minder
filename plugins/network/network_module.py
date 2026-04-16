@@ -30,12 +30,8 @@ class NetworkModule(BaseModule):
         }
 
         # Network monitoring configuration
-        self.interfaces = config.get("network", {}).get(
-            "interfaces", ["eth0", "wlan0"]
-        )
-        self.collection_interval = config.get("network", {}).get(
-            "collection_interval", 60
-        )
+        self.interfaces = config.get("network", {}).get("interfaces", ["eth0", "wlan0"])
+        self.collection_interval = config.get("network", {}).get("collection_interval", 60)
 
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
@@ -58,9 +54,7 @@ class NetworkModule(BaseModule):
         logger.info("🌐 Registering Network Module")
         return self.metadata
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect real network and system metrics
         Store collected metrics to PostgreSQL database
@@ -95,9 +89,7 @@ class NetworkModule(BaseModule):
             logger.error(f"Database connection error: {e}")
             errors += 1
 
-        logger.info(
-            f"✓ Network collection complete: {records_collected} metrics, {errors} errors"
-        )
+        logger.info(f"✓ Network collection complete: {records_collected} metrics, {errors} errors")
 
         return {
             "records_collected": records_collected,
@@ -328,14 +320,16 @@ class NetworkModule(BaseModule):
             cursor = conn.cursor()
 
             # Calculate average metrics
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     AVG(CASE WHEN metric_name = 'cpu_usage_percent' THEN metric_value END) as avg_cpu,
                     AVG(CASE WHEN metric_name = 'memory_usage_percent' THEN metric_value END) as avg_memory,
                     AVG(CASE WHEN metric_name = 'load_average_1min' THEN metric_value END) as avg_load
                 FROM network_metrics
                 WHERE timestamp >= NOW() - INTERVAL '1 hour'
-            """)
+            """
+            )
 
             result = cursor.fetchone()
             conn.close()
@@ -343,15 +337,9 @@ class NetworkModule(BaseModule):
             if result and result[0]:
                 return {
                     "metrics": {
-                        "avg_cpu_usage_pct": (
-                            round(float(result[0]), 1) if result[0] else 0
-                        ),
-                        "avg_memory_usage_pct": (
-                            round(float(result[1]), 1) if result[1] else 0
-                        ),
-                        "avg_load_avg": (
-                            round(float(result[2]), 2) if result[2] else 0
-                        ),
+                        "avg_cpu_usage_pct": (round(float(result[0]), 1) if result[0] else 0),
+                        "avg_memory_usage_pct": (round(float(result[1]), 1) if result[1] else 0),
+                        "avg_load_avg": (round(float(result[2]), 2) if result[2] else 0),
                         "packet_loss_pct": 0.01,
                     },
                     "patterns": [
@@ -395,14 +383,10 @@ class NetworkModule(BaseModule):
             "collections": 2,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

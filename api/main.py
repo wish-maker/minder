@@ -38,6 +38,7 @@ voice_interface = None
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     system: Dict[str, Any]
     authentication: str
@@ -46,6 +47,7 @@ class HealthResponse(BaseModel):
 
 class PluginInfo(BaseModel):
     """Plugin information"""
+
     name: str
     version: Optional[str] = None
     status: str
@@ -55,6 +57,7 @@ class PluginInfo(BaseModel):
 
 class PluginsListResponse(BaseModel):
     """Plugins list response"""
+
     plugins: List[PluginInfo]
     total: int
     enabled: int
@@ -65,6 +68,7 @@ class PluginsListResponse(BaseModel):
 
 class ChatResponse(BaseModel):
     """AI chat response"""
+
     response: str
     character: str
     plugins_used: List[str]
@@ -73,23 +77,27 @@ class ChatResponse(BaseModel):
 
 class CharacterInfo(BaseModel):
     """Character information"""
+
     name: str
     description: Optional[str] = None
 
 
 class CharactersListResponse(BaseModel):
     """Characters list response"""
+
     characters: List[CharacterInfo]
 
 
 class CharacterCreateResponse(BaseModel):
     """Character creation response"""
+
     character: str
     status: str
 
 
 class SystemStatusResponse(BaseModel):
     """System status response"""
+
     status: str
     version: str
     plugins: Dict[str, Any]
@@ -98,11 +106,13 @@ class SystemStatusResponse(BaseModel):
 
 class RootResponse(BaseModel):
     """Root endpoint response"""
+
     name: str
     version: str
     status: str
     authentication: str
     network_access: str
+
 
 # ============================================================================
 # FastAPI Application with Enhanced OpenAPI Documentation
@@ -216,10 +226,7 @@ For detailed plugin development guide, see the [`/plugins/docs`](/plugins/docs) 
         "name": "wish-maker",
         "url": "https://github.com/wish-maker/minder",
     },
-    license_info={
-        "name": "MIT",
-        "url": "https://opensource.org/licenses/MIT"
-    },
+    license_info={"name": "MIT", "url": "https://opensource.org/licenses/MIT"},
     openapi_tags=[
         {
             "name": "authentication",
@@ -273,33 +280,25 @@ def custom_openapi():
     )
 
     # Add logo
-    openapi_schema["info"]["x-logo"] = {
-        "url": "https://raw.githubusercontent.com/wish-maker/minder/main/docs/logo.png"
-    }
+    openapi_schema["info"]["x-logo"] = {"url": "https://raw.githubusercontent.com/wish-maker/minder/main/docs/logo.png"}
 
     # Add servers information
     openapi_schema["servers"] = [
-        {
-            "url": "http://localhost:8000",
-            "description": "Local development server"
-        },
-        {
-            "url": "http://192.168.68.10:8000",
-            "description": "Local network access"
-        }
+        {"url": "http://localhost:8000", "description": "Local development server"},
+        {"url": "http://192.168.68.10:8000", "description": "Local network access"},
     ]
 
     # Add external documentation
     openapi_schema["externalDocs"] = {
         "description": "Minder Documentation",
-        "url": "https://github.com/wish-maker/minder#readme"
+        "url": "https://github.com/wish-maker/minder#readme",
     }
 
     # Add contact information
     openapi_schema["info"]["contact"] = {
         "name": "wish-maker",
         "url": "https://github.com/wish-maker/minder",
-        "email": "noreply@github.com"
+        "email": "noreply@github.com",
     }
 
     app.openapi_schema = openapi_schema
@@ -309,9 +308,7 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 # Get allowed origins from environment
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS", "http://localhost:3000,http://192.168.68.*"
-).split(",")
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://192.168.68.*").split(",")
 
 # Setup security middleware (CORS, rate limiting, network detection)
 setup_middleware(app, ALLOWED_ORIGINS)
@@ -397,10 +394,7 @@ def _validate_secrets():
         if not value:
             # Check if value is set but empty
             missing.append(display_name)
-        elif (
-            env_var == "JWT_SECRET_KEY"
-            and value == "change-this-in-production"
-        ):
+        elif env_var == "JWT_SECRET_KEY" and value == "change-this-in-production":
             using_defaults.append(display_name)
         elif env_var == "INFLUXDB_PASSWORD" and value == "minder123":
             weak_secrets.append(display_name)
@@ -418,11 +412,11 @@ def _validate_secrets():
         if production_mode:
             raise RuntimeError(
                 f"❌ Using default values for: {', '.join(using_defaults)}. "
-                "This is not safe for production! Please set strong secrets in .env file.")
+                "This is not safe for production! Please set strong secrets in .env file."
+            )
         else:
             logger.warning(
-                f"⚠️  Using default values for: {', '.join(using_defaults)}. "
-                "This is not safe for production!"
+                f"⚠️  Using default values for: {', '.join(using_defaults)}. " "This is not safe for production!"
             )
 
     if weak_secrets:
@@ -441,9 +435,7 @@ def _validate_secrets():
     if production_mode:
         logger.info("✅ Production secrets validated successfully")
     else:
-        logger.info(
-            "✅ Development mode: Secrets validated (production checks disabled)"
-        )
+        logger.info("✅ Development mode: Secrets validated (production checks disabled)")
 
 
 def _setup_routes(kernel, character_engine):
@@ -457,27 +449,11 @@ def _setup_routes(kernel, character_engine):
 
     # Include routers
     app.include_router(auth_routes.router)
-    app.include_router(
-        plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel)
-    )
-    app.include_router(
-        chat_endpoints.setup_chat_routes(
-            chat_endpoints.router, kernel, character_engine
-        )
-    )
-    app.include_router(
-        characters_endpoints.setup_character_routes(
-            characters_endpoints.router, character_engine
-        )
-    )
-    app.include_router(
-        system_endpoints.setup_system_routes(system_endpoints.router, kernel)
-    )
-    app.include_router(
-        correlations_endpoints.setup_correlation_routes(
-            correlations_endpoints.router, kernel
-        )
-    )
+    app.include_router(plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel))
+    app.include_router(chat_endpoints.setup_chat_routes(chat_endpoints.router, kernel, character_engine))
+    app.include_router(characters_endpoints.setup_character_routes(characters_endpoints.router, character_engine))
+    app.include_router(system_endpoints.setup_system_routes(system_endpoints.router, kernel))
+    app.include_router(correlations_endpoints.setup_correlation_routes(correlations_endpoints.router, kernel))
 
 
 # Root endpoint

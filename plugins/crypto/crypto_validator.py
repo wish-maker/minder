@@ -49,9 +49,7 @@ class PluginDataValidator:
         # Check for outliers (price changed >50% in 5 min)
         if "previous_price" in data and data.get("price"):
             try:
-                change = abs(data["price"] - data["previous_price"]) / data[
-                    "previous_price"
-                ]
+                change = abs(data["price"] - data["previous_price"]) / data["previous_price"]
                 if change > 0.5:
                     logger.warning(f"Price outlier detected: {change * 100}% change")
                     score -= 0.3

@@ -26,9 +26,7 @@ class TestInputSanitization:
         ]
 
         for malicious_input in malicious_inputs:
-            is_valid, error_msg = InputSanitizer.validate_input(
-                malicious_input, check_sql=True
-            )
+            is_valid, error_msg = InputSanitizer.validate_input(malicious_input, check_sql=True)
             # Should detect SQL injection
             assert is_valid is False
             assert error_msg is not None
@@ -46,13 +44,9 @@ class TestInputSanitization:
 
         for xss_input in xss_inputs:
             # Test with only XSS check, not SQL check
-            is_valid, error_msg = InputSanitizer.validate_input(
-                xss_input, check_sql=False, check_xss=True
-            )
+            is_valid, error_msg = InputSanitizer.validate_input(xss_input, check_sql=False, check_xss=True)
             # Should detect XSS or at least reject input
-            assert is_valid is False or (
-                is_valid and "dangerous" in error_msg.lower()
-            )
+            assert is_valid is False or (is_valid and "dangerous" in error_msg.lower())
 
     def test_validate_safe_input(self):
         """Test safe input passes validation"""
@@ -86,9 +80,7 @@ class TestInputSanitization:
     def test_combined_validation(self):
         """Test combined validation (SQL + XSS)"""
         malicious_input = "<script>alert('XSS'); DROP TABLE users;</script>"
-        is_valid, error_msg = InputSanitizer.validate_input(
-            malicious_input, check_sql=True, check_xss=True
-        )
+        is_valid, error_msg = InputSanitizer.validate_input(malicious_input, check_sql=True, check_xss=True)
         assert is_valid is False
         assert error_msg is not None
 

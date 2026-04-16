@@ -18,9 +18,7 @@ def setup_correlation_routes(router, kernel):
     async def get_correlations():
         """Get all correlations"""
         if not kernel:
-            raise HTTPException(
-                status_code=503, detail="Kernel not initialized"
-            )
+            raise HTTPException(status_code=503, detail="Kernel not initialized")
 
         return await kernel.correlation_engine.get_all_correlations()
 

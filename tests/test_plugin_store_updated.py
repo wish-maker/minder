@@ -39,9 +39,7 @@ class MockPlugin(BaseModule):
         )
         return self.metadata
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """Collect data"""
         return {"records_collected": 0}
 
@@ -57,9 +55,7 @@ class MockPlugin(BaseModule):
         """Index knowledge"""
         return {"documents_indexed": 0}
 
-    async def get_correlations(
-        self, correlation_type: str = "all", limit: int = 10
-    ) -> Dict[str, Any]:
+    async def get_correlations(self, correlation_type: str = "all", limit: int = 10) -> Dict[str, Any]:
         """Get correlations"""
         return {"correlations": []}
 
@@ -121,7 +117,8 @@ class TestPluginLoading:
 
         # Create proper plugin file
         plugin_file = plugin_dir / "test_plugin_plugin.py"
-        plugin_file.write_text("""
+        plugin_file.write_text(
+            """
 from core.module_interface import BaseModule, ModuleMetadata
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -164,7 +161,8 @@ class TestPlugin(BaseModule):
 
     async def shutdown(self):
         pass
-""")
+"""
+        )
 
         return tmp_path
 
@@ -205,7 +203,8 @@ class TestPluginDiscovery:
         test_plugin.mkdir()
 
         plugin_file = test_plugin / "test_plugin_plugin.py"
-        plugin_file.write_text("""
+        plugin_file.write_text(
+            """
 from core.module_interface import BaseModule, ModuleMetadata
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -245,7 +244,8 @@ class TestPlugin(BaseModule):
 
     async def shutdown(self):
         pass
-""")
+"""
+        )
 
         yield plugins_dir
         shutil.rmtree(test_dir, ignore_errors=True)
@@ -273,7 +273,8 @@ class TestPluginLifecycle:
         plugin_dir.mkdir()
 
         plugin_file = plugin_dir / "lifecycle_plugin_plugin.py"
-        plugin_file.write_text("""
+        plugin_file.write_text(
+            """
 from core.module_interface import BaseModule, ModuleMetadata
 from typing import Dict, Any, Optional
 from datetime import datetime
@@ -317,7 +318,8 @@ class LifecyclePlugin(BaseModule):
 
     async def shutdown(self):
         self.lifecycle.append('shutdown')
-""")
+"""
+        )
 
         async def run_lifecycle():
             plugin = await loader.load_plugin("lifecycle_plugin")

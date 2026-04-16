@@ -14,6 +14,7 @@ from .security import InputSanitizer
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     system: Dict[str, Any]
     authentication: str
@@ -22,6 +23,7 @@ class HealthResponse(BaseModel):
 
 class PluginInfo(BaseModel):
     """Plugin information"""
+
     name: str
     version: Optional[str] = None
     status: str
@@ -31,6 +33,7 @@ class PluginInfo(BaseModel):
 
 class PluginsListResponse(BaseModel):
     """Plugins list response"""
+
     plugins: List[PluginInfo]
     total: int
     enabled: int
@@ -41,6 +44,7 @@ class PluginsListResponse(BaseModel):
 
 class ChatResponse(BaseModel):
     """AI chat response"""
+
     response: str
     character: str
     plugins_used: List[str]
@@ -49,23 +53,27 @@ class ChatResponse(BaseModel):
 
 class CharacterInfo(BaseModel):
     """Character information"""
+
     name: str
     description: Optional[str] = None
 
 
 class CharactersListResponse(BaseModel):
     """Characters list response"""
+
     characters: List[CharacterInfo]
 
 
 class CharacterCreateResponse(BaseModel):
     """Character creation response"""
+
     character: str
     status: str
 
 
 class SystemStatusResponse(BaseModel):
     """System status response"""
+
     status: str
     version: str
     plugins: Dict[str, Any]
@@ -99,9 +107,7 @@ class ChatRequest(BaseModel):
             return v
 
         # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(
-            v, check_sql=False, check_xss=False
-        )
+        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -120,9 +126,7 @@ class PipelineRequest(BaseModel):
     def validate_module(cls, v):
         """Validate module name"""
         # Check for security issues
-        is_valid, error_msg = InputSanitizer.validate_input(
-            v, check_sql=False, check_xss=False
-        )
+        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
         if not is_valid:
             raise ValueError(error_msg)
 
@@ -142,15 +146,11 @@ class PipelineRequest(BaseModel):
             if step is None:
                 continue
             # Check for security issues
-            is_valid, error_msg = InputSanitizer.validate_input(
-                step, check_sql=False, check_xss=False
-            )
+            is_valid, error_msg = InputSanitizer.validate_input(step, check_sql=False, check_xss=False)
             if not is_valid:
                 raise ValueError(error_msg)
             # Sanitize input
-            sanitized.append(
-                InputSanitizer.sanitize_string(step, max_length=100)
-            )
+            sanitized.append(InputSanitizer.sanitize_string(step, max_length=100))
 
         return sanitized
 
@@ -168,9 +168,7 @@ class CharacterCreateRequest(BaseModel):
     @classmethod
     def validate_name(cls, v):
         """Validate character name"""
-        is_valid, error_msg = InputSanitizer.validate_input(
-            v, check_sql=False, check_xss=False
-        )
+        is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
         if not is_valid:
             raise ValueError(error_msg)
 

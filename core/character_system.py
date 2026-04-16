@@ -65,7 +65,6 @@ class CharacterEngine:
         self.presets = self._load_presets()
 
     def _load_presets(self) -> Dict[str, Character]:
-
         return {
             "finbot": Character(
                 name="FinBot",
@@ -78,9 +77,7 @@ class CharacterEngine:
                     empathy=0.5,
                     proactivity=0.7,
                 ),
-                voice_profile=VoiceProfile(
-                    language="tr", speed=1.0, pitch=0.0, emotion="neutral"
-                ),
+                voice_profile=VoiceProfile(language="tr", speed=1.0, pitch=0.0, emotion="neutral"),
                 system_prompt="""You are FinBot, a professional financial assistant for Turkish investors.
 
 Your role:
@@ -104,9 +101,7 @@ Language: Turkish (primary), English (secondary)
                     empathy=0.3,
                     proactivity=0.8,
                 ),
-                voice_profile=VoiceProfile(
-                    language="en", speed=1.2, pitch=-2.0, emotion="neutral"
-                ),
+                voice_profile=VoiceProfile(language="en", speed=1.2, pitch=-2.0, emotion="neutral"),
                 system_prompt="""You are SysBot, a technical system administrator.
 
 Your role:
@@ -130,9 +125,7 @@ Language: English
                     empathy=0.4,
                     proactivity=0.6,
                 ),
-                voice_profile=VoiceProfile(
-                    language="en", speed=0.9, pitch=2.0, emotion="neutral"
-                ),
+                voice_profile=VoiceProfile(language="en", speed=0.9, pitch=2.0, emotion="neutral"),
                 system_prompt="""You are ResearchBot, an academic research assistant.
 
 Your role:
@@ -156,9 +149,7 @@ Language: English (primary), Turkish (secondary)
                     empathy=0.7,
                     proactivity=0.9,
                 ),
-                voice_profile=VoiceProfile(
-                    language="tr", speed=0.95, pitch=-1.0, emotion="confident"
-                ),
+                voice_profile=VoiceProfile(language="tr", speed=0.95, pitch=-1.0, emotion="confident"),
                 system_prompt="""You are BossBot, an executive decision support assistant.
 
 Your role:
@@ -186,7 +177,6 @@ Language: Turkish (primary), English (secondary)
         voice_profile: VoiceProfile,
         system_prompt: str,
     ) -> Character:
-
         character = Character(
             name=name,
             description=description,
@@ -200,10 +190,7 @@ Language: Turkish (primary), English (secondary)
 
         return character
 
-    def inject_personality(
-        self, base_prompt: str, character: Character
-    ) -> str:
-
+    def inject_personality(self, base_prompt: str, character: Character) -> str:
         personality_guide = f"""
 
 Personality Guidelines for {character.name}:
@@ -222,12 +209,9 @@ Voice Characteristics:
 Remember: {character.description}
 """
 
-        return (
-            character.system_prompt + personality_guide + "\n\n" + base_prompt
-        )
+        return character.system_prompt + personality_guide + "\n\n" + base_prompt
 
     def list_characters(self) -> Dict[str, Dict[str, Any]]:
-
         all_chars = {**self.presets, **self.characters}
 
         return {

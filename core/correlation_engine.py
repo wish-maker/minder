@@ -58,9 +58,7 @@ class CorrelationEngine:
         hints_a = await mod_a.get_correlations(module_b)
         hints_b = await mod_b.get_correlations(module_a)
 
-        correlations = await self._analyze_correlations(
-            mod_a, mod_b, hints_a, hints_b
-        )
+        correlations = await self._analyze_correlations(mod_a, mod_b, hints_a, hints_b)
 
         self._cache[cache_key] = (datetime.now(), correlations)
         self.correlations[cache_key] = correlations
@@ -88,11 +86,7 @@ class CorrelationEngine:
             correlations.append(correlation)
 
         for hint in hints_b:
-            if not any(
-                c["field_a"] == hint["other_field"]
-                and c["field_b"] == hint["field"]
-                for c in correlations
-            ):
+            if not any(c["field_a"] == hint["other_field"] and c["field_b"] == hint["field"] for c in correlations):
                 correlation = {
                     "module_a": mod_b.metadata.name,
                     "module_b": mod_a.metadata.name,
@@ -112,9 +106,7 @@ class CorrelationEngine:
         """Get all discovered correlations"""
         return self.correlations
 
-    async def find_anomaly_patterns(
-        self, module: str, anomaly_type: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    async def find_anomaly_patterns(self, module: str, anomaly_type: Optional[str] = None) -> List[Dict[str, Any]]:
         """Find patterns in anomalies across modules"""
         mod = await self.registry.get_module(module)
         if not mod:
@@ -128,21 +120,12 @@ class CorrelationEngine:
                 if other_module_name == module:
                     continue
 
-                other_module = await self.registry.get_module(
-                    other_module_name
-                )
+                other_module = await self.registry.get_module(other_module_name)
                 if other_module:
-                    other_anomalies = await other_module.get_anomalies(
-                        severity="high", limit=100
-                    )
+                    other_anomalies = await other_module.get_anomalies(severity="high", limit=100)
 
                     for other_anomaly in other_anomalies:
-                        time_diff = abs(
-                            (
-                                anomaly["detected_at"]
-                                - other_anomaly["detected_at"]
-                            ).total_seconds()
-                        )
+                        time_diff = abs((anomaly["detected_at"] - other_anomaly["detected_at"]).total_seconds())
 
                         if time_diff < 300:
                             patterns.append(

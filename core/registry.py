@@ -31,26 +31,18 @@ class PluginRegistry:
                 metadata = await plugin.register()
 
                 if metadata.name in self.plugins:
-                    logger.warning(
-                        f"Plugin {metadata.name} already registered, skipping"
-                    )
+                    logger.warning(f"Plugin {metadata.name} already registered, skipping")
                     return False
 
                 # Check if plugin is enabled in config
-                plugin_config = self.config.get("plugins", {}).get(
-                    metadata.name, {}
-                )
+                plugin_config = self.config.get("plugins", {}).get(metadata.name, {})
                 if not plugin_config.get("enabled", True):
-                    logger.info(
-                        f"⏭️  Plugin {metadata.name} is disabled in config, skipping"
-                    )
+                    logger.info(f"⏭️  Plugin {metadata.name} is disabled in config, skipping")
                     return False
 
                 for dep in metadata.dependencies:
                     if dep not in self.plugins:
-                        logger.error(
-                            f"Plugin {metadata.name} depends on {dep} which is not registered"
-                        )
+                        logger.error(f"Plugin {metadata.name} depends on {dep} which is not registered")
                         return False
 
                 self.plugins[metadata.name] = plugin
@@ -58,9 +50,7 @@ class PluginRegistry:
                 self.dependency_graph[metadata.name] = metadata.dependencies
 
                 plugin.status = ModuleStatus.REGISTERED
-                logger.info(
-                    f"✅ Plugin registered: {metadata.name} v{metadata.version}"
-                )
+                logger.info(f"✅ Plugin registered: {metadata.name} v{metadata.version}")
 
                 return True
 
@@ -85,9 +75,7 @@ class PluginRegistry:
             except Exception as e:
                 plugin.status = ModuleStatus.ERROR
                 results[plugin_name] = False
-                logger.error(
-                    f"❌ Plugin initialization failed: {plugin_name} - {e}"
-                )
+                logger.error(f"❌ Plugin initialization failed: {plugin_name} - {e}")
 
         return results
 
@@ -95,9 +83,7 @@ class PluginRegistry:
         """Get registered plugin by name"""
         return self.plugins.get(name)
 
-    async def list_plugins(
-        self, status: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    async def list_plugins(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
         """List all plugins, optionally filtered by status"""
         plugins = []
         for name, plugin in self.plugins.items():
@@ -203,9 +189,5 @@ class PluginRegistry:
         if not plugins_dir.exists():
             return []
 
-        plugin_dirs = [
-            d.name
-            for d in plugins_dir.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        ]
+        plugin_dirs = [d.name for d in plugins_dir.iterdir() if d.is_dir() and not d.name.startswith("_")]
         return plugin_dirs

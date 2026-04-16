@@ -46,15 +46,9 @@ class MinderKernel:
 
     async def _subscribe_to_events(self):
         """Subscribe to event bus"""
-        await self.event_bus.subscribe(
-            EventType.ANOMALY_DETECTED, self._handle_anomaly
-        )
-        await self.event_bus.subscribe(
-            EventType.CORRELATION_FOUND, self._handle_correlation
-        )
-        await self.event_bus.subscribe(
-            EventType.MODULE_ERROR, self._handle_module_error
-        )
+        await self.event_bus.subscribe(EventType.ANOMALY_DETECTED, self._handle_anomaly)
+        await self.event_bus.subscribe(EventType.CORRELATION_FOUND, self._handle_correlation)
+        await self.event_bus.subscribe(EventType.MODULE_ERROR, self._handle_module_error)
 
     async def _handle_anomaly(self, event: Event):
         """Handle anomaly detection event"""
@@ -85,9 +79,7 @@ class MinderKernel:
         # Initialize Plugin Store (if enabled)
         if self.config.get("plugin_store", {}).get("enabled", False):
             logger.info("🏪 Initializing Plugin Store...")
-            self.plugin_store = PluginStore(
-                self.config.get("plugin_store", {})
-            )
+            self.plugin_store = PluginStore(self.config.get("plugin_store", {}))
             await self.plugin_store.initialize()
         else:
             self.plugin_store = None
@@ -103,9 +95,7 @@ class MinderKernel:
         success_count = sum(1 for v in init_results.values() if v)
         total_count = len(init_results)
 
-        logger.info(
-            f"✅ Enhanced kernel started: {success_count}/{total_count} plugins ready"
-        )
+        logger.info(f"✅ Enhanced kernel started: {success_count}/{total_count} plugins ready")
 
     async def stop(self):
         """Stop the Minder kernel"""
@@ -115,13 +105,7 @@ class MinderKernel:
             Event(
                 type=EventType.SYSTEM_SHUTDOWN,
                 source="kernel",
-                data={
-                    "uptime": (
-                        (datetime.now() - self.startup_time).total_seconds()
-                        if self.startup_time
-                        else 0
-                    )
-                },
+                data={"uptime": ((datetime.now() - self.startup_time).total_seconds() if self.startup_time else 0)},
             )
         )
 
@@ -130,10 +114,7 @@ class MinderKernel:
 
         logger.info("✅ Enhanced kernel stopped")
 
-    async def run_plugin_pipeline(
-        self, plugin_name: str, pipeline: List[str] = None
-    ) -> Dict[str, Any]:
-
+    async def run_plugin_pipeline(self, plugin_name: str, pipeline: List[str] = None) -> Dict[str, Any]:
         if pipeline is None:
             pipeline = ["collect", "analyze", "train", "index"]
 
@@ -149,11 +130,7 @@ class MinderKernel:
 
                 await self.event_bus.publish(
                     Event(
-                        type=(
-                            EventType.DATA_COLLECTED
-                            if operation == "collect"
-                            else EventType.ANALYSIS_COMPLETE
-                        ),
+                        type=(EventType.DATA_COLLECTED if operation == "collect" else EventType.ANALYSIS_COMPLETE),
                         source=plugin_name,
                         data={"operation": operation, "status": "started"},
                     )
@@ -210,13 +187,9 @@ class MinderKernel:
         all_correlations = {}
 
         for i, plugin_a in enumerate(plugin_names):
-            for plugin_b in plugin_names[i + 1:]:
+            for plugin_b in plugin_names[i + 1 :]:
                 pair_key = f"{plugin_a}:{plugin_b}"
-                correlations = (
-                    await self.correlation_engine.discover_correlations(
-                        plugin_a, plugin_b
-                    )
-                )
+                correlations = await self.correlation_engine.discover_correlations(plugin_a, plugin_b)
                 all_correlations[pair_key] = correlations
 
         return all_correlations
@@ -226,11 +199,7 @@ class MinderKernel:
         plugins = await self.registry.list_plugins()
         correlations = await self.correlation_engine.get_all_correlations()
 
-        uptime = (
-            (datetime.now() - self.startup_time).total_seconds()
-            if self.startup_time
-            else 0
-        )
+        uptime = (datetime.now() - self.startup_time).total_seconds() if self.startup_time else 0
 
         return {
             "status": "running" if self.running else "stopped",
@@ -243,18 +212,13 @@ class MinderKernel:
             },
             "correlations": {
                 "total_pairs": len(correlations),
-                "total_correlations": sum(
-                    len(c) for c in correlations.values()
-                ),
+                "total_correlations": sum(len(c) for c in correlations.values()),
             },
             "knowledge_graph": self.knowledge_graph.get_statistics(),
             "event_bus": self.event_bus.get_statistics(),
         }
 
-    async def query_plugins(
-        self, query: str, plugins: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
-
+    async def query_plugins(self, query: str, plugins: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         if plugins is None:
             plugin_list = await self.registry.list_plugins(status="ready")
             plugins = [p["name"] for p in plugin_list]

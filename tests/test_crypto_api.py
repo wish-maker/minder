@@ -5,7 +5,7 @@ Tests the multi-source fallback pattern, data validation, and caching
 """
 import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from plugins.crypto.crypto_module import CryptoModule
 from plugins.crypto.crypto_validator import PluginDataValidator
 
@@ -76,9 +76,7 @@ class TestDataValidation:
     def test_stale_data_reduces_score(self, validator):
         """Test that stale data reduces validity score"""
         # Create a timestamp that's definitely older than 5 minutes
-        stale_timestamp = datetime.now(timezone.utc).replace(
-            year=2024, month=1, day=1, hour=0, minute=0, second=0
-        )
+        stale_timestamp = datetime.now(timezone.utc).replace(year=2024, month=1, day=1, hour=0, minute=0, second=0)
         stale_data = {
             "price": 50000.0,
             "timestamp": stale_timestamp,
@@ -112,7 +110,6 @@ class TestDataValidation:
         }
         is_valid, score = validator.validate_crypto_data(stale_outlier_data)
         assert not is_valid, f"Expected invalid for outlier + stale but got score {score}"
-
 
 
 class TestCryptoModuleInitialization:

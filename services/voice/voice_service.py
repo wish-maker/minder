@@ -51,9 +51,7 @@ class VoiceService:
             logger.error(f"❌ Failed to load Whisper: {e}")
             return False
 
-    async def initialize_tts(
-        self, model_name: str = "tts_models/multilingual/multi-dataset/xtts_v2"
-    ):
+    async def initialize_tts(self, model_name: str = "tts_models/multilingual/multi-dataset/xtts_v2"):
         """Initialize Coqui TTS model"""
         try:
             from TTS.api import TTS
@@ -103,9 +101,7 @@ class VoiceService:
             # Calculate confidence (average segment probability if available)
             confidence = 0.0
             if "segments" in result:
-                probs = [
-                    s.get("no_speech_prob", 0) for s in result["segments"]
-                ]
+                probs = [s.get("no_speech_prob", 0) for s in result["segments"]]
                 confidence = 1.0 - np.mean(probs)
 
             return {
@@ -125,9 +121,7 @@ class VoiceService:
                 "timestamp": datetime.now().isoformat(),
             }
 
-    async def transcribe_audio_bytes(
-        self, audio_bytes: bytes, language: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def transcribe_audio_bytes(self, audio_bytes: bytes, language: Optional[str] = None) -> Dict[str, Any]:
         """
         Transcribe audio from bytes
 
@@ -138,9 +132,7 @@ class VoiceService:
             import os
 
             # Save to temporary file
-            with tempfile.NamedTemporaryFile(
-                suffix=".wav", delete=False
-            ) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
                 tmp_file.write(audio_bytes)
                 tmp_path = tmp_file.name
 
@@ -271,9 +263,7 @@ class VoiceService:
         """
         try:
             # Step 1: Transcribe
-            transcription = await self.transcribe_audio_bytes(
-                audio_input, language=character.voice_profile.language
-            )
+            transcription = await self.transcribe_audio_bytes(audio_input, language=character.voice_profile.language)
 
             if "error" in transcription:
                 return transcription
@@ -286,9 +276,7 @@ class VoiceService:
             logger.info(f"🤖 Assistant: {response_text}")
 
             # Step 3: Synthesize
-            synthesis = await self.synthesize_with_character(
-                text=response_text, character=character
-            )
+            synthesis = await self.synthesize_with_character(text=response_text, character=character)
 
             if "error" in synthesis:
                 return {
@@ -326,9 +314,7 @@ class VoiceService:
             # In production, this would train a voice model
             # For now, we'll just store the reference
 
-            voice_id = (
-                f"{voice_name}_clone_{datetime.now().strftime('%Y%m%d')}"
-            )
+            voice_id = f"{voice_name}_clone_{datetime.now().strftime('%Y%m%d')}"
 
             return {
                 "voice_id": voice_id,

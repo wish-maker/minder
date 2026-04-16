@@ -23,9 +23,7 @@ REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 LOCAL_NETWORK_CIDR = os.getenv("LOCAL_NETWORK_CIDR", "192.168.1.0/24")
 TAILSCALE_CIDR = os.getenv("TAILSCALE_CIDR", "100.64.0.0/10")
-TRUST_LOCAL_NETWORK = (
-    os.getenv("TRUST_LOCAL_NETWORK", "true").lower() == "true"
-)
+TRUST_LOCAL_NETWORK = os.getenv("TRUST_LOCAL_NETWORK", "true").lower() == "true"
 TRUST_VPN_NETWORK = os.getenv("TRUST_VPN_NETWORK", "true").lower() == "true"
 
 # Redis client for rate limiting
@@ -38,13 +36,9 @@ try:
         socket_timeout=5,
         retry_on_timeout=True,
     )
-    logger.info(
-        f"✅ Redis connected for rate limiting: {REDIS_HOST}:{REDIS_PORT}"
-    )
+    logger.info(f"✅ Redis connected for rate limiting: {REDIS_HOST}:{REDIS_PORT}")
 except Exception as e:
-    logger.warning(
-        f"⚠️  Redis connection failed: {e} - Rate limiting will be in-memory"
-    )
+    logger.warning(f"⚠️  Redis connection failed: {e} - Rate limiting will be in-memory")
     redis_client = None
 
 
@@ -55,9 +49,7 @@ class NetworkDetectionMiddleware(BaseHTTPMiddleware):
     Adds network_type and is_trusted_network attributes to request state
     """
 
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Get client IP
         client_ip = request.client.host if request.client else "unknown"
 
@@ -71,10 +63,7 @@ class NetworkDetectionMiddleware(BaseHTTPMiddleware):
         request.state.client_ip = client_ip
 
         # Log network access
-        logger.debug(
-            f"Request from {network_type} network (IP: {client_ip}, "
-            f"Trusted: {is_trusted})"
-        )
+        logger.debug(f"Request from {network_type} network (IP: {client_ip}, " f"Trusted: {is_trusted})")
 
         # Process request
         response = await call_next(request)
@@ -129,9 +118,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     Add correlation ID to all requests for tracing
     """
 
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Generate or get correlation ID
         correlation_id = request.headers.get("X-Correlation-ID")
         if not correlation_id:
@@ -154,18 +141,14 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     Add security headers to all responses
     """
 
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         response = await call_next(request)
 
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
-        )
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
 
         return response
 
@@ -219,9 +202,7 @@ def get_expensive_operation_key(request: Request) -> str:
 # Standard limiter for general API requests
 limiter = Limiter(
     key_func=get_rate_limit_key,
-    storage_uri=(
-        f"redis://{REDIS_HOST}:{REDIS_PORT}" if redis_client else "memory://"
-    ),
+    storage_uri=(f"redis://{REDIS_HOST}:{REDIS_PORT}" if redis_client else "memory://"),
     default_limits=["50/hour"],  # Default limit for public (stricter)
     key_prefix="minder_rate_limit",
 )
@@ -229,16 +210,12 @@ limiter = Limiter(
 # Expensive operations limiter (chat, AI operations)
 expensive_limiter = Limiter(
     key_func=get_expensive_operation_key,
-    storage_uri=(
-        f"redis://{REDIS_HOST}:{REDIS_PORT}" if redis_client else "memory://"
-    ),
+    storage_uri=(f"redis://{REDIS_HOST}:{REDIS_PORT}" if redis_client else "memory://"),
     default_limits=["5/minute"],  # Default for expensive operations
     key_prefix="minder_expensive_ops",
 )
 
-logger.info(
-    "✅ Rate limiters initialized (Standard: 50/hour public, Expensive: 5/minute)"
-)
+logger.info("✅ Rate limiters initialized (Standard: 50/hour public, Expensive: 5/minute)")
 logger.info("   - Local network: Unlimited (standard), 30/minute (expensive)")
 logger.info("   - VPN: 200/hour (standard), 10/minute (expensive)")
 logger.info("   - Public: 50/hour (standard), 5/minute (expensive)")
@@ -288,25 +265,18 @@ def conditional_rate_limit(limit_value: str):
 # Custom rate limit exceeded handler
 
 
-async def rate_limit_exceeded_handler(
-    request: Request, exc: RateLimitExceeded
-):
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     """Custom handler for rate limit exceeded errors"""
     network_type = getattr(request.state, "network_type", "public")
     client_ip = getattr(request.state, "client_ip", "unknown")
     correlation_id = getattr(request.state, "correlation_id", "unknown")
 
     logger.warning(
-        f"⚠️  Rate limit exceeded for {network_type} network "
-        f"(IP: {client_ip}, Correlation ID: {correlation_id})"
+        f"⚠️  Rate limit exceeded for {network_type} network " f"(IP: {client_ip}, Correlation ID: {correlation_id})"
     )
 
     # Handle both RateLimitExceeded and generic exceptions
-    error_detail = (
-        getattr(exc, "detail", str(exc))
-        if hasattr(exc, "detail")
-        else str(exc)
-    )
+    error_detail = getattr(exc, "detail", str(exc)) if hasattr(exc, "detail") else str(exc)
 
     # Provide retry information based on network type
     retry_after = 60  # Default
@@ -319,11 +289,7 @@ async def rate_limit_exceeded_handler(
         status_code=429,
         detail={
             "error": "rate_limit_exceeded",
-            "message": (
-                error_detail
-                if error_detail
-                else "Too many requests. Please try again later."
-            ),
+            "message": (error_detail if error_detail else "Too many requests. Please try again later."),
             "network_type": network_type,
             "retry_after": retry_after,
             "correlation_id": correlation_id,
@@ -341,18 +307,13 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.max_size = max_size
 
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Check content length
         content_length = request.headers.get("content-length")
         if content_length:
             content_length = int(content_length)
             if content_length > self.max_size:
-                logger.warning(
-                    f"Request too large: {content_length} bytes "
-                    f"(max: {self.max_size} bytes)"
-                )
+                logger.warning(f"Request too large: {content_length} bytes " f"(max: {self.max_size} bytes)")
                 raise HTTPException(
                     status_code=413,
                     detail=f"Request too large. Maximum size: {self.max_size} bytes",
@@ -374,9 +335,7 @@ class CustomRateLimitMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.limiter = limiter_instance
 
-    async def dispatch(
-        self, request: Request, call_next: Callable
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         # Check network type (already set by NetworkDetectionMiddleware)
         network_type = getattr(request.state, "network_type", "public")
 
@@ -407,9 +366,7 @@ def setup_middleware(app, allowed_origins: list):
         allow_headers=["Content-Type", "Authorization", "X-Correlation-ID"],
         max_age=3600,  # Cache preflight for 1 hour
     )
-    logger.info(
-        f"✅ CORS configured with {len(allowed_origins)} allowed origins"
-    )
+    logger.info(f"✅ CORS configured with {len(allowed_origins)} allowed origins")
 
     # 2. Rate Limiting Configuration
     # Note: We're NOT using SlowAPIMiddleware to avoid rate limiting local/private networks
@@ -424,9 +381,7 @@ def setup_middleware(app, allowed_origins: list):
 
     # 3. Network Detection Middleware
     app.add_middleware(NetworkDetectionMiddleware)
-    logger.info(
-        f"✅ Network detection middleware enabled (Local: {LOCAL_NETWORK_CIDR}, VPN: {TAILSCALE_CIDR})"
-    )
+    logger.info(f"✅ Network detection middleware enabled (Local: {LOCAL_NETWORK_CIDR}, VPN: {TAILSCALE_CIDR})")
 
     # 4. Correlation ID Middleware
     app.add_middleware(CorrelationIdMiddleware)

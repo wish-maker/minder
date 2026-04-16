@@ -29,9 +29,7 @@ def setup_chat_routes(router, kernel, character_engine):
     ) -> ChatResponse:
         """Chat with Minder AI - Rate limited"""
         if not kernel:
-            raise HTTPException(
-                status_code=503, detail="Kernel not initialized"
-            )
+            raise HTTPException(status_code=503, detail="Kernel not initialized")
 
         try:
             # Get character
@@ -44,9 +42,7 @@ def setup_chat_routes(router, kernel, character_engine):
             plugin_results = await kernel.query_plugins(chat_request.message)
 
             # Generate AI response using Ollama
-            response = await _generate_ai_response(
-                chat_request.message, plugin_results, character
-            )
+            response = await _generate_ai_response(chat_request.message, plugin_results, character)
 
             return {
                 "response": response,
@@ -62,9 +58,7 @@ def setup_chat_routes(router, kernel, character_engine):
     return router
 
 
-async def _generate_ai_response(
-    message: str, plugin_results: list, character
-) -> str:
+async def _generate_ai_response(message: str, plugin_results: list, character) -> str:
     """Generate AI response using Ollama"""
 
     # Build context from plugins
@@ -125,8 +119,7 @@ async def _generate_ai_response(
         if plugin_results:
             plugins_used = ", ".join([r["plugin"] for r in plugin_results])
             return (
-                f"Minder olarak {plugins_used} eklentilerinden "
-                f"bilgiler topladım. Size nasıl yardımcı olabilirim?"
+                f"Minder olarak {plugins_used} eklentilerinden " f"bilgiler topladım. Size nasıl yardımcı olabilirim?"
             )
 
         return (

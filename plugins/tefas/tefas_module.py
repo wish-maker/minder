@@ -54,9 +54,7 @@ class TefasModule(BaseModule):
         # TEFAS API endpoints
         self.tefas_api_base = "https://api.tefas.org.tr"
         self.fund_list_api = f"{self.tefas_api_base}/api/v1/funds"
-        self.fund_detail_api = (
-            f"{self.tefas_api_base}/api/v1/funds/{{fund_code}}"
-        )
+        self.fund_detail_api = f"{self.tefas_api_base}/api/v1/funds/{{fund_code}}"
 
         # Veritabanı bağlantıları
         self.db_config = {
@@ -85,12 +83,8 @@ class TefasModule(BaseModule):
 
         # Ayarlar
         self.batch_size = config.get("batch_size", 100)
-        self.historical_start_date = config.get(
-            "historical_start_date", "2020-01-01"
-        )
-        self.collection_interval = config.get(
-            "collection_interval", 86400
-        )  # Günlük
+        self.historical_start_date = config.get("historical_start_date", "2020-01-01")
+        self.collection_interval = config.get("collection_interval", 86400)  # Günlük
 
     def _parse_turkish_float(self, text: str) -> float:
         """Parse Turkish format numbers (1.234,56) to float"""
@@ -137,9 +131,7 @@ class TefasModule(BaseModule):
 
         return self.metadata
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         TEFAS fon verilerini toplama
 
@@ -170,17 +162,13 @@ class TefasModule(BaseModule):
                         token=self.influxdb_config["token"],
                         org=self.influxdb_config["org"],
                     )
-                    write_api = influx_client.write_api(
-                        write_options=SYNCHRONOUS
-                    )
+                    write_api = influx_client.write_api(write_options=SYNCHRONOUS)
                     self.logger.info("InfluxDB client initialized")
                 except Exception as e:
                     self.logger.warning(f"InfluxDB initialization failed: {e}")
                     influx_client = None
             else:
-                self.logger.warning(
-                    "InfluxDB client not available, skipping time-series storage"
-                )
+                self.logger.warning("InfluxDB client not available, skipping time-series storage")
 
             # Tabloyu oluştur (yoksa)
             await self._ensure_tables(cursor)
@@ -194,16 +182,12 @@ class TefasModule(BaseModule):
             for fund in funds:
                 try:
                     # Fon detaylarını çek
-                    fund_detail = await self._fetch_fund_detail(
-                        fund["fund_code"]
-                    )
+                    fund_detail = await self._fetch_fund_detail(fund["fund_code"])
                     records_collected += 1
 
                     # Tarihsel fiyat verilerini çekME (gerçek API yok, fake
                     # data istemiyoruz)
-                    historical_data = (
-                        []
-                    )  # Boş liste - fake data oluşturmayacağız
+                    historical_data = []  # Boş liste - fake data oluşturmayacağız
 
                     # PostgreSQL'e kaydet (sadece fon metadata)
                     await self._save_fund_metadata(cursor, fund, fund_detail)
@@ -212,21 +196,15 @@ class TefasModule(BaseModule):
                     # InfluxDB'ye time-series veri yaz (opsiyonel - şu anda
                     # boş)
                     if write_api and historical_data:
-                        await self._write_to_influxdb(
-                            write_api, fund, fund_detail, historical_data
-                        )
+                        await self._write_to_influxdb(write_api, fund, fund_detail, historical_data)
 
-                    self.logger.info(
-                        f"Processed {fund['fund_code']}: metadata only (no historical data)"
-                    )
+                    self.logger.info(f"Processed {fund['fund_code']}: metadata only (no historical data)")
 
                     # Rate limiting - TEFAS API'yi yormamak için
                     await asyncio.sleep(0.5)
 
                 except Exception as e:
-                    self.logger.error(
-                        f"Error processing fund {fund.get('fund_code')}: {e}"
-                    )
+                    self.logger.error(f"Error processing fund {fund.get('fund_code')}: {e}")
                     errors += 1
 
             conn.commit()
@@ -319,11 +297,7 @@ class TefasModule(BaseModule):
 
                 # Sharpe oranı (risksiz getiri)
                 risk_free_rate = 0.05 / 252  # %5 yıllık tahvil getirisi
-                sharpe_ratio = (
-                    (avg_daily_return - risk_free_rate) / volatility
-                    if volatility > 0
-                    else 0
-                )
+                sharpe_ratio = (avg_daily_return - risk_free_rate) / volatility if volatility > 0 else 0
 
                 # Yıllık getiri
                 annual_return = avg_daily_return * 252
@@ -338,9 +312,7 @@ class TefasModule(BaseModule):
 
                 # Insight: Sharpe oranı > 1 olan fonlar
                 if sharpe_ratio > 1.0:
-                    insights.append(
-                        f"{fund_code}: Şarpe oranı {sharpe_ratio:.2f} ile mükemmel risk ayarlaması"
-                    )
+                    insights.append(f"{fund_code}: Şarpe oranı {sharpe_ratio:.2f} ile mükemmel risk ayarlaması")
 
             # En iyi performans
             best_funds = sorted(
@@ -357,9 +329,7 @@ class TefasModule(BaseModule):
                 }
             ]
 
-            self.logger.info(
-                f"Analysis complete: {len(metrics)} funds analyzed"
-            )
+            self.logger.info(f"Analysis complete: {len(metrics)} funds analyzed")
 
         except Exception as e:
             self.logger.error(f"TEKAS analysis failed: {e}")
@@ -449,22 +419,16 @@ class TefasModule(BaseModule):
                 if force:
                     try:
                         qdrant.delete_collection(collection_name)
-                        self.logger.info(
-                            f"Deleted existing collection: {collection_name}"
-                        )
+                        self.logger.info(f"Deleted existing collection: {collection_name}")
                     except BaseException:
                         pass
 
                 # Collection'ı kontrol et ve oluştur
-                collections_list = [
-                    c.name for c in qdrant.get_collections().collections
-                ]
+                collections_list = [c.name for c in qdrant.get_collections().collections]
                 if collection_name not in collections_list:
                     qdrant.create_collection(
                         collection_name=collection_name,
-                        vectors_config=VectorParams(
-                            size=384, distance=Distance.COSINE
-                        ),
+                        vectors_config=VectorParams(size=384, distance=Distance.COSINE),
                     )
                     collections += 1
                     self.logger.info(f"Created collection: {collection_name}")
@@ -473,11 +437,13 @@ class TefasModule(BaseModule):
                 conn = psycopg2.connect(**self.db_config)
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT DISTINCT fund_code, fund_name
                     FROM tefas_funds
                     LIMIT 10
-                """)
+                """
+                )
 
                 funds = cursor.fetchall()
                 conn.close()
@@ -512,18 +478,12 @@ class TefasModule(BaseModule):
 
                 # Batch upsert
                 if points:
-                    qdrant.upsert(
-                        collection_name=collection_name, points=points
-                    )
+                    qdrant.upsert(collection_name=collection_name, points=points)
 
-                self.logger.info(
-                    f"Indexed {vectors_created} vectors in {collection_name}"
-                )
+                self.logger.info(f"Indexed {vectors_created} vectors in {collection_name}")
 
             except ImportError:
-                self.logger.warning(
-                    "Qdrant client not available, skipping vector indexing"
-                )
+                self.logger.warning("Qdrant client not available, skipping vector indexing")
             except Exception as e:
                 self.logger.error(f"Qdrant indexing failed: {e}")
 
@@ -536,9 +496,7 @@ class TefasModule(BaseModule):
             "collections": collections,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         """
         Çapraz korelasyon ipuçları
 
@@ -573,9 +531,7 @@ class TefasModule(BaseModule):
 
         return correlations
 
-    async def get_anomalies(
-        self, severity: str = "high", limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "high", limit: int = 10) -> List[Dict[str, Any]]:
         """
         TEKAS fon anomalileri
 
@@ -602,7 +558,9 @@ class TefasModule(BaseModule):
                         LAG(price) OVER (PARTITION BY fund_code ORDER BY date) as prev_price,
                         CASE
                             WHEN LAG(price) OVER (PARTITION BY fund_code ORDER BY date) > 0
-                            THEN (price - LAG(price) OVER (PARTITION BY fund_code ORDER BY date)) / LAG(price) OVER (PARTITION BY fund_code ORDER BY date)
+                            THEN (
+                                price - LAG(price) OVER (PARTITION BY fund_code ORDER BY date)
+                            ) / LAG(price) OVER (PARTITION BY fund_code ORDER BY date)
                             ELSE 0
                         END as daily_return
                     FROM tefas_funds
@@ -627,17 +585,9 @@ class TefasModule(BaseModule):
                         "fund_code": row["fund_code"],
                         "date": row["date"].isoformat(),
                         "price": float(row["price"]),
-                        "prev_price": (
-                            float(row["prev_price"])
-                            if row["prev_price"]
-                            else 0
-                        ),
+                        "prev_price": (float(row["prev_price"]) if row["prev_price"] else 0),
                         "daily_return": float(row["daily_return"]),
-                        "severity": (
-                            "high"
-                            if abs(row["daily_return"]) > 0.10
-                            else "medium"
-                        ),
+                        "severity": ("high" if abs(row["daily_return"]) > 0.10 else "medium"),
                         "description": f"{row['fund_code']} fonunda {row['daily_return']*100:.1f}% günlük değişim",
                     }
                 )
@@ -651,7 +601,8 @@ class TefasModule(BaseModule):
 
     async def _ensure_tables(self, cursor):
         """Gerekli tabloları oluştur"""
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS tefas_funds (
                 id SERIAL PRIMARY KEY,
                 fund_code VARCHAR(20) NOT NULL,
@@ -663,14 +614,19 @@ class TefasModule(BaseModule):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(fund_code, date)
             )
-        """)
+        """
+        )
 
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_tefas_fund_code ON tefas_funds(fund_code)
-        """)
-        cursor.execute("""
+        """
+        )
+        cursor.execute(
+            """
             CREATE INDEX IF NOT EXISTS idx_tefas_date ON tefas_funds(date)
-        """)
+        """
+        )
 
     async def _fetch_fund_list(self) -> List[Dict]:
         """TEFAS fon listesini web scraping ile çek"""
@@ -712,9 +668,7 @@ class TefasModule(BaseModule):
 
                             for row in rows:
                                 cells = row.find_all("td")
-                                if (
-                                    len(cells) >= 2
-                                ):  # At least fund code and name
+                                if len(cells) >= 2:  # At least fund code and name
                                     fund_code = cells[0].get_text(strip=True)
                                     fund_name = cells[1].get_text(strip=True)
 
@@ -722,20 +676,12 @@ class TefasModule(BaseModule):
                                     # available
                                     price = 0.0
                                     if len(cells) >= 3:
-                                        price_text = cells[2].get_text(
-                                            strip=True
-                                        )
-                                        price = self._parse_turkish_float(
-                                            price_text
-                                        )
+                                        price_text = cells[2].get_text(strip=True)
+                                        price = self._parse_turkish_float(price_text)
 
                                     # Validate fund code (alphanumeric, 3-6
                                     # chars)
-                                    if (
-                                        fund_code
-                                        and fund_code.isalnum()
-                                        and 2 < len(fund_code) <= 6
-                                    ):
+                                    if fund_code and fund_code.isalnum() and 2 < len(fund_code) <= 6:
                                         funds.append(
                                             {
                                                 "fund_code": fund_code,
@@ -745,20 +691,14 @@ class TefasModule(BaseModule):
                                         )
 
                         if funds:
-                            self.logger.info(
-                                f"✓ Scraped {len(funds)} real funds from TEFAS"
-                            )
+                            self.logger.info(f"✓ Scraped {len(funds)} real funds from TEFAS")
                             return funds
                         else:
-                            self.logger.warning(
-                                "No funds found in HTML, checking alternative sources"
-                            )
+                            self.logger.warning("No funds found in HTML, checking alternative sources")
                             # Fallback: Try alternative TEFAS endpoints
                             return await self._fetch_tefas_alternative(session)
                     else:
-                        self.logger.warning(
-                            f"TEFAS returned status {response.status}"
-                        )
+                        self.logger.warning(f"TEFAS returned status {response.status}")
                         return await self._fetch_tefas_alternative(session)
 
             except Exception as e:
@@ -777,10 +717,7 @@ class TefasModule(BaseModule):
                 if response.status == 200:
                     data = await response.json()
                     if isinstance(data, list) and len(data) > 5:
-                        return [
-                            {"fund_code": f["code"], "fund_name": f["name"]}
-                            for f in data
-                        ]
+                        return [{"fund_code": f["code"], "fund_name": f["name"]} for f in data]
         except BaseException:
             pass
 
@@ -825,18 +762,14 @@ class TefasModule(BaseModule):
             "nav_color": "Blue",
         }
 
-    async def _fetch_historical_prices(
-        self, fund_code: str, start_date: datetime
-    ) -> List[Dict]:
+    async def _fetch_historical_prices(self, fund_code: str, start_date: datetime) -> List[Dict]:
         """
         Tarihsel fiyat verilerini çek
         NOT: Gerçek TEFAS tarihsel veri API henüz entegre edilmedi
         Fake data oluşturmak yerine boş liste döndürüyoruz
         """
         # TODO: Implement real TEFAS historical API when available
-        self.logger.warning(
-            f"Historical data not yet implemented for {fund_code} - returning empty list"
-        )
+        self.logger.warning(f"Historical data not yet implemented for {fund_code} - returning empty list")
         return []  # Return empty list instead of fake data
 
     async def _save_fund_metadata(self, cursor, fund, detail):
@@ -845,9 +778,7 @@ class TefasModule(BaseModule):
             # Only save if we have real price data
             price = fund.get("price", 0.0)
             if price == 0.0:
-                self.logger.warning(
-                    f"Skipping {fund['fund_code']} - no price data available (not saving fake data)"
-                )
+                self.logger.warning(f"Skipping {fund['fund_code']} - no price data available (not saving fake data)")
                 return
 
             cursor.execute(
@@ -869,13 +800,9 @@ class TefasModule(BaseModule):
                     fund.get("daily_return", 0.0),
                 ),
             )
-            self.logger.info(
-                f"✓ Saved REAL data for {fund['fund_code']}: price={price}"
-            )
+            self.logger.info(f"✓ Saved REAL data for {fund['fund_code']}: price={price}")
         except Exception as e:
-            self.logger.error(
-                f"Error saving metadata for {fund['fund_code']}: {e}"
-            )
+            self.logger.error(f"Error saving metadata for {fund['fund_code']}: {e}")
             raise
 
     async def _save_fund_data(self, cursor, fund, detail, historical_data):
@@ -904,14 +831,10 @@ class TefasModule(BaseModule):
                     ),
                 )
             except Exception as e:
-                self.logger.error(
-                    f"Error saving data for {fund['fund_code']}: {e}"
-                )
+                self.logger.error(f"Error saving data for {fund['fund_code']}: {e}")
                 raise
 
-    async def _write_to_influxdb(
-        self, write_api, fund, detail, historical_data
-    ):
+    async def _write_to_influxdb(self, write_api, fund, detail, historical_data):
         """InfluxDB'ye time-series veri yaz"""
         try:
             for record in historical_data:
@@ -931,12 +854,8 @@ class TefasModule(BaseModule):
                     record=point,
                 )
 
-            self.logger.debug(
-                f"Wrote {len(historical_data)} records to InfluxDB for {fund['fund_code']}"
-            )
+            self.logger.debug(f"Wrote {len(historical_data)} records to InfluxDB for {fund['fund_code']}")
 
         except Exception as e:
-            self.logger.error(
-                f"Error writing to InfluxDB for {fund['fund_code']}: {e}"
-            )
+            self.logger.error(f"Error writing to InfluxDB for {fund['fund_code']}: {e}")
             raise

@@ -55,9 +55,7 @@ class WeatherModule(BaseModule):
         logger.info("🌤️  Registering Weather Module")
         return self.metadata
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect real weather data from OpenWeatherMap API
         Store collected data to PostgreSQL database
@@ -85,9 +83,7 @@ class WeatherModule(BaseModule):
                         logger.info(f"✓ Collected weather data for {location}")
                     else:
                         errors += 1
-                        logger.warning(
-                            f"✗ Failed to collect weather data for {location}"
-                        )
+                        logger.warning(f"✗ Failed to collect weather data for {location}")
 
                 except Exception as e:
                     errors += 1
@@ -100,9 +96,7 @@ class WeatherModule(BaseModule):
             logger.error(f"Database connection error: {e}")
             errors += 1
 
-        logger.info(
-            f"✓ Weather collection complete: {records_collected} records, {errors} errors"
-        )
+        logger.info(f"✓ Weather collection complete: {records_collected} records, {errors} errors")
 
         return {
             "records_collected": records_collected,
@@ -110,9 +104,7 @@ class WeatherModule(BaseModule):
             "errors": errors,
         }
 
-    async def _fetch_weather_data(
-        self, location: str
-    ) -> Optional[Dict[str, Any]]:
+    async def _fetch_weather_data(self, location: str) -> Optional[Dict[str, Any]]:
         """
         Fetch real weather data from Open-Meteo API
         No API key required - completely free service
@@ -132,25 +124,19 @@ class WeatherModule(BaseModule):
                     "hourly": "temperature_2m,relativehumidity_2m,surface_pressure,windspeed_10m",
                 }
 
-                async with session.get(
-                    url, params=params, timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
                     if response.status == 200:
                         data = await response.json()
                         return self._parse_openmeteo_data(data, location)
                     else:
-                        logger.error(
-                            f"Open-Meteo API returned status {response.status} for {location}"
-                        )
+                        logger.error(f"Open-Meteo API returned status {response.status} for {location}")
                         return None
 
         except Exception as e:
             logger.error(f"Error fetching weather data for {location}: {e}")
             return None
 
-    def _parse_openmeteo_data(
-        self, api_data: Dict, location: str
-    ) -> Dict[str, Any]:
+    def _parse_openmeteo_data(self, api_data: Dict, location: str) -> Dict[str, Any]:
         """Parse Open-Meteo API response"""
         current = api_data.get("current_weather", {})
         hourly = api_data.get("hourly", {})
@@ -161,16 +147,10 @@ class WeatherModule(BaseModule):
         return {
             "location": location,
             "temperature_c": current.get("temperature", 0),
-            "humidity_pct": hourly.get("relativehumidity_2m", [50])[
-                current_hour_index
-            ],
-            "pressure_hpa": hourly.get("surface_pressure", [1013])[
-                current_hour_index
-            ],
+            "humidity_pct": hourly.get("relativehumidity_2m", [50])[current_hour_index],
+            "pressure_hpa": hourly.get("surface_pressure", [1013])[current_hour_index],
             "wind_speed_kmh": current.get("windspeed", 0),
-            "weather_description": self._map_weather_code(
-                current.get("weathercode", 0)
-            ),
+            "weather_description": self._map_weather_code(current.get("weathercode", 0)),
             "timestamp": datetime.now(),
         }
 
@@ -210,9 +190,7 @@ class WeatherModule(BaseModule):
             "humidity_pct": random.randint(50, 80),
             "pressure_hpa": random.randint(1005, 1020),
             "wind_speed_kmh": round(random.uniform(5, 25), 1),
-            "weather_description": random.choice(
-                ["clear sky", "few clouds", "scattered clouds", "overcast"]
-            ),
+            "weather_description": random.choice(["clear sky", "few clouds", "scattered clouds", "overcast"]),
             "timestamp": datetime.now(),
         }
 
@@ -243,7 +221,8 @@ class WeatherModule(BaseModule):
             cursor = conn.cursor()
 
             # Calculate average metrics
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     AVG(temperature_c) as avg_temp,
                     AVG(humidity_pct) as avg_humidity,
@@ -251,7 +230,8 @@ class WeatherModule(BaseModule):
                     AVG(wind_speed_kmh) as avg_wind
                 FROM weather_data
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
-            """)
+            """
+            )
 
             result = cursor.fetchone()
             conn.close()
@@ -305,10 +285,7 @@ class WeatherModule(BaseModule):
             "collections": 1,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
-
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         if other_module == "tefas":
             return [
                 {
@@ -322,9 +299,7 @@ class WeatherModule(BaseModule):
 
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

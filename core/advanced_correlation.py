@@ -79,9 +79,7 @@ class AdvancedCorrelationEngine:
                 "is_significant": min_p_value < self.significance_level,
                 "confidence": 1 - min_p_value,
                 "all_p_values": p_values,
-                "interpretation": self._interpret_granger(
-                    min_p_value, best_lag
-                ),
+                "interpretation": self._interpret_granger(min_p_value, best_lag),
             }
 
         except Exception as e:
@@ -102,18 +100,12 @@ class AdvancedCorrelationEngine:
         """
         try:
             # Normalize series
-            series1_norm = (series1 - np.mean(series1)) / (
-                np.std(series1) + 1e-8
-            )
-            series2_norm = (series2 - np.mean(series2)) / (
-                np.std(series2) + 1e-8
-            )
+            series1_norm = (series1 - np.mean(series1)) / (np.std(series1) + 1e-8)
+            series2_norm = (series2 - np.mean(series2)) / (np.std(series2) + 1e-8)
 
             # Calculate DTW distance
             if window:
-                distance = dtw.distance(
-                    series1_norm, series2_norm, window=window
-                )
+                distance = dtw.distance(series1_norm, series2_norm, window=window)
             else:
                 distance = dtw.distance(series1_norm, series2_norm)
 
@@ -135,9 +127,7 @@ class AdvancedCorrelationEngine:
             logger.error(f"DTW calculation failed: {e}")
             return {"error": str(e)}
 
-    async def cross_correlation(
-        self, series1: np.ndarray, series2: np.ndarray, max_lag: int = 30
-    ) -> Dict[str, Any]:
+    async def cross_correlation(self, series1: np.ndarray, series2: np.ndarray, max_lag: int = 30) -> Dict[str, Any]:
         """
         Calculate cross-correlation between two series
 
@@ -151,14 +141,10 @@ class AdvancedCorrelationEngine:
 
             # Calculate cross-correlation
             correlation = signal.correlate(series1, series2, mode="same")
-            lags = signal.correlation_lags(
-                len(series1), len(series2), mode="same"
-            )
+            lags = signal.correlation_lags(len(series1), len(series2), mode="same")
 
             # Normalize
-            correlation = correlation / (
-                np.std(series1) * np.std(series2) * min_len
-            )
+            correlation = correlation / (np.std(series1) * np.std(series2) * min_len)
 
             # Find maximum correlation and its lag
             max_idx = np.argmax(np.abs(correlation))
@@ -176,21 +162,15 @@ class AdvancedCorrelationEngine:
                 "best_lag": int(best_lag),
                 "is_significant": abs(max_corr) > ci,
                 "confidence_interval": float(ci),
-                "all_correlations": dict(
-                    zip(lags.tolist(), correlation.tolist())
-                ),
-                "interpretation": self._interpret_cross_correlation(
-                    max_corr, best_lag
-                ),
+                "all_correlations": dict(zip(lags.tolist(), correlation.tolist())),
+                "interpretation": self._interpret_cross_correlation(max_corr, best_lag),
             }
 
         except Exception as e:
             logger.error(f"Cross-correlation failed: {e}")
             return {"error": str(e)}
 
-    async def mutual_information(
-        self, series1: np.ndarray, series2: np.ndarray, bins: int = 50
-    ) -> Dict[str, Any]:
+    async def mutual_information(self, series1: np.ndarray, series2: np.ndarray, bins: int = 50) -> Dict[str, Any]:
         """
         Calculate mutual information between two series
 
@@ -199,9 +179,7 @@ class AdvancedCorrelationEngine:
         """
         try:
             # Discretize data
-            hist_2d, x_edges, y_edges = np.histogram2d(
-                series1, series2, bins=bins
-            )
+            hist_2d, x_edges, y_edges = np.histogram2d(series1, series2, bins=bins)
 
             # Calculate joint and marginal probabilities
             pxy = hist_2d / float(np.sum(hist_2d))
@@ -213,9 +191,7 @@ class AdvancedCorrelationEngine:
             for i in range(len(px)):
                 for j in range(len(py)):
                     if pxy[i, j] > 0:
-                        mi += pxy[i, j] * np.log(
-                            pxy[i, j] / (px[i] * py[j] + 1e-10) + 1e-10
-                        )
+                        mi += pxy[i, j] * np.log(pxy[i, j] / (px[i] * py[j] + 1e-10) + 1e-10)
 
             # Normalize MI
             # Maximum possible MI is min(entropy(X), entropy(Y))
@@ -237,9 +213,7 @@ class AdvancedCorrelationEngine:
             logger.error(f"Mutual information calculation failed: {e}")
             return {"error": str(e)}
 
-    async def cointegration_test(
-        self, series1: np.ndarray, series2: np.ndarray
-    ) -> Dict[str, Any]:
+    async def cointegration_test(self, series1: np.ndarray, series2: np.ndarray) -> Dict[str, Any]:
         """
         Test if two series are cointegrated
 
@@ -295,30 +269,20 @@ class AdvancedCorrelationEngine:
         }
 
         # 3. Cross-correlation
-        results["cross_correlation"] = await self.cross_correlation(
-            series1, series2
-        )
+        results["cross_correlation"] = await self.cross_correlation(series1, series2)
 
         # 4. Granger causality (both directions)
-        results["granger_1_to_2"] = await self.granger_causality_test(
-            series1, series2
-        )
-        results["granger_2_to_1"] = await self.granger_causality_test(
-            series2, series1
-        )
+        results["granger_1_to_2"] = await self.granger_causality_test(series1, series2)
+        results["granger_2_to_1"] = await self.granger_causality_test(series2, series1)
 
         # 5. DTW
         results["dtw"] = await self.dynamic_time_warping(series1, series2)
 
         # 6. Mutual Information
-        results["mutual_information"] = await self.mutual_information(
-            series1, series2
-        )
+        results["mutual_information"] = await self.mutual_information(series1, series2)
 
         # 7. Cointegration
-        results["cointegration"] = await self.cointegration_test(
-            series1, series2
-        )
+        results["cointegration"] = await self.cointegration_test(series1, series2)
 
         # Synthesize overall correlation strength
         overall_strength = self._calculate_overall_strength(results)
@@ -350,7 +314,7 @@ class AdvancedCorrelationEngine:
 
         # Compare all pairs
         for i, name1 in enumerate(series_names):
-            for name2 in series_names[i + 1:]:
+            for name2 in series_names[i + 1 :]:
                 series1 = data_dict[name1]
                 series2 = data_dict[name2]
 
@@ -360,9 +324,7 @@ class AdvancedCorrelationEngine:
                 series2 = series2[:min_len]
 
                 # Comprehensive analysis
-                result = await self.comprehensive_correlation_analysis(
-                    series1, series2, name1, name2
-                )
+                result = await self.comprehensive_correlation_analysis(series1, series2, name1, name2)
 
                 # Filter by strength
                 if result["overall_strength"] >= min_strength:
@@ -441,10 +403,7 @@ class AdvancedCorrelationEngine:
             scores.append(pearson_strength)
 
         # Cross-correlation max
-        if (
-            "cross_correlation" in results
-            and "max_correlation" in results["cross_correlation"]
-        ):
+        if "cross_correlation" in results and "max_correlation" in results["cross_correlation"]:
             cc_strength = abs(results["cross_correlation"]["max_correlation"])
             scores.append(cc_strength)
 
@@ -454,10 +413,7 @@ class AdvancedCorrelationEngine:
             scores.append(dtw_strength)
 
         # Mutual information (normalized)
-        if (
-            "mutual_information" in results
-            and "normalized_mi" in results["mutual_information"]
-        ):
+        if "mutual_information" in results and "normalized_mi" in results["mutual_information"]:
             mi_strength = results["mutual_information"]["normalized_mi"]
             scores.append(mi_strength)
 
@@ -470,17 +426,11 @@ class AdvancedCorrelationEngine:
         gc_1_to_2 = results.get("granger_1_to_2", {})
         gc_2_to_1 = results.get("granger_2_to_1", {})
 
-        if gc_1_to_2.get("is_significant") and not gc_2_to_1.get(
-            "is_significant"
-        ):
+        if gc_1_to_2.get("is_significant") and not gc_2_to_1.get("is_significant"):
             return "unidirectional_causality"
-        elif gc_2_to_1.get("is_significant") and not gc_1_to_2.get(
-            "is_significant"
-        ):
+        elif gc_2_to_1.get("is_significant") and not gc_1_to_2.get("is_significant"):
             return "reverse_causality"
-        elif gc_1_to_2.get("is_significant") and gc_2_to_1.get(
-            "is_significant"
-        ):
+        elif gc_1_to_2.get("is_significant") and gc_2_to_1.get("is_significant"):
             return "bidirectional_causality"
 
         # Check cointegration
@@ -496,9 +446,7 @@ class AdvancedCorrelationEngine:
         else:
             return "weak_correlation"
 
-    def _generate_summary(
-        self, results: Dict[str, Any], relationship_type: str
-    ) -> str:
+    def _generate_summary(self, results: Dict[str, Any], relationship_type: str) -> str:
         """Generate human-readable summary"""
         summary_parts = []
 
@@ -514,9 +462,7 @@ class AdvancedCorrelationEngine:
         if "granger_1_to_2" in results:
             gc = results["granger_1_to_2"]
             if gc.get("is_significant"):
-                summary_parts.append(
-                    f"Granger causality detected at lag {gc.get('best_lag')}"
-                )
+                summary_parts.append(f"Granger causality detected at lag {gc.get('best_lag')}")
 
         # Add DTW
         if "dtw" in results:

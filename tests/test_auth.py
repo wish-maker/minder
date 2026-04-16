@@ -74,9 +74,7 @@ class TestPasswordHashing:
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
         # Should return False for incorrect password
-        assert (
-            bcrypt.checkpw(wrong_password.encode(), hashed.encode()) is False
-        )
+        assert bcrypt.checkpw(wrong_password.encode(), hashed.encode()) is False
 
     def test_password_hash_uniqueness(self, test_auth_manager):
         """Test that same password generates different hashes"""
@@ -198,13 +196,10 @@ class TestTokenVerification:
             # Create expired payload
             expired_payload = {
                 "sub": "admin",
-                "exp": datetime.utcnow()
-                - timedelta(minutes=1),  # Expired 1 min ago
+                "exp": datetime.utcnow() - timedelta(minutes=1),  # Expired 1 min ago
                 "iat": datetime.utcnow() - timedelta(minutes=31),
             }
-            expired_token = jwt.encode(
-                expired_payload, TEST_SECRET_KEY, algorithm="HS256"
-            )
+            expired_token = jwt.encode(expired_payload, TEST_SECRET_KEY, algorithm="HS256")
 
             # Should return None for expired token
             async def verify():

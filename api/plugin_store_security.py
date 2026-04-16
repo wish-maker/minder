@@ -51,19 +51,13 @@ class PluginSecurityPolicy:
 
         trusted = os.getenv("PLUGIN_TRUSTED_AUTHORS", "")
         if trusted:
-            self.trusted_authors.update(
-                auth.strip() for auth in trusted.split(",")
-            )
+            self.trusted_authors.update(auth.strip() for auth in trusted.split(","))
 
         blocked = os.getenv("PLUGIN_BLOCKED_AUTHORS", "")
         if blocked:
-            self.blocked_authors.update(
-                auth.strip() for auth in blocked.split(",")
-            )
+            self.blocked_authors.update(auth.strip() for auth in blocked.split(","))
 
-        self.require_signature = (
-            os.getenv("PLUGIN_REQUIRE_SIGNATURE", "false").lower() == "true"
-        )
+        self.require_signature = os.getenv("PLUGIN_REQUIRE_SIGNATURE", "false").lower() == "true"
 
         max_size = os.getenv("PLUGIN_MAX_SIZE_MB", "10")
         try:
@@ -106,9 +100,7 @@ class MalwareScanner:
     def __init__(self, security_policy):
         self.policy = security_policy
 
-    def scan_plugin_code(
-        self, code: str, plugin_name: str
-    ) -> tuple[bool, List[str]]:
+    def scan_plugin_code(self, code: str, plugin_name: str) -> tuple[bool, List[str]]:
         """Scan plugin code for malicious patterns"""
         issues = []
 
@@ -133,9 +125,7 @@ class AuthorVerifier:
     def __init__(self, security_policy):
         self.policy = security_policy
 
-    def verify_author(
-        self, author: str, plugin_name: str
-    ) -> tuple[bool, Optional[str]]:
+    def verify_author(self, author: str, plugin_name: str) -> tuple[bool, Optional[str]]:
         """Verify if author is allowed"""
         if author.lower() in (a.lower() for a in self.policy.blocked_authors):
             return False, f"Author '{author}' is blocked"
@@ -144,9 +134,7 @@ class AuthorVerifier:
             SecurityLevel.STRICT,
             SecurityLevel.PARANOID,
         ]:
-            if author.lower() not in (
-                a.lower() for a in self.policy.trusted_authors
-            ):
+            if author.lower() not in (a.lower() for a in self.policy.trusted_authors):
                 return False, f"Author '{author}' not in trusted list"
 
         return True, None
@@ -160,22 +148,16 @@ class PluginSecurityValidator:
         self.malware_scanner = MalwareScanner(self.policy)
         self.author_verifier = AuthorVerifier(self.policy)
 
-    def validate_plugin(
-        self, plugin_path: Path, plugin_name: str, author: str
-    ) -> tuple[bool, List[str]]:
+    def validate_plugin(self, plugin_path: Path, plugin_name: str, author: str) -> tuple[bool, List[str]]:
         """Validate plugin before installation"""
         errors = []
 
-        author_allowed, author_reason = self.author_verifier.verify_author(
-            author, plugin_name
-        )
+        author_allowed, author_reason = self.author_verifier.verify_author(author, plugin_name)
         if not author_allowed:
             errors.append(author_reason)
 
         try:
-            safe, issues = self.malware_scanner.scan_plugin_files(
-                plugin_path, plugin_name
-            )
+            safe, issues = self.malware_scanner.scan_plugin_files(plugin_path, plugin_name)
             if not safe:
                 errors.extend(issues)
         except Exception as e:

@@ -57,7 +57,7 @@ class CryptoModule(BaseModule):
 
         if config_path.exists():
             try:
-                with open(config_path, 'r') as f:
+                with open(config_path, "r") as f:
                     config_data = yaml.safe_load(f)
                     logger.info(f"Loaded crypto config from {config_path}")
                     return config_data.get("crypto", {})
@@ -73,39 +73,26 @@ class CryptoModule(BaseModule):
                     "enabled": True,
                     "priority": 1,
                     "url_template": "https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
-                    "parse_method": "binance_parse"
+                    "parse_method": "binance_parse",
                 },
                 {
                     "name": "coingecko",
                     "enabled": True,
                     "priority": 2,
                     "url_template": "https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd",
-                    "parse_method": "coingecko_parse"
+                    "parse_method": "coingecko_parse",
                 },
                 {
                     "name": "kraken",
                     "enabled": True,
                     "priority": 3,
                     "url_template": "https://api.kraken.com/0/public/Ticker?pair={symbol}",
-                    "parse_method": "kraken_parse"
-                }
+                    "parse_method": "kraken_parse",
+                },
             ],
-            "cache": {
-                "ttl": 300,
-                "backend": "memory",
-                "redis_key_prefix": "crypto:price:"
-            },
-            "fallback": {
-                "use_cached": True,
-                "max_stale_age": 600
-            },
-            "symbols": {
-                "BTC": "bitcoin",
-                "ETH": "ethereum",
-                "USDT": "tether",
-                "BNB": "binancecoin",
-                "XRP": "ripple"
-            }
+            "cache": {"ttl": 300, "backend": "memory", "redis_key_prefix": "crypto:price:"},
+            "fallback": {"use_cached": True, "max_stale_age": 600},
+            "symbols": {"BTC": "bitcoin", "ETH": "ethereum", "USDT": "tether", "BNB": "binancecoin", "XRP": "ripple"},
         }
 
     def _load_sources_from_config(self) -> List[Tuple[str, Any]]:
@@ -174,9 +161,7 @@ class CryptoModule(BaseModule):
         logger.info("₿ Registering Crypto Module")
         return self.metadata
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect real crypto data from CoinGecko API
         Store collected data to PostgreSQL database
@@ -207,9 +192,7 @@ class CryptoModule(BaseModule):
                     logger.info(f"✓ Collected data for {data['symbol']}")
                 except Exception as e:
                     errors += 1
-                    logger.error(
-                        f"Error storing data for {data['symbol']}: {e}"
-                    )
+                    logger.error(f"Error storing data for {data['symbol']}: {e}")
 
             conn.commit()
             conn.close()
@@ -218,9 +201,7 @@ class CryptoModule(BaseModule):
             logger.error(f"Database connection error: {e}", exc_info=True)
             errors += 1
 
-        logger.info(
-            f"✓ Crypto collection complete: {records_collected} records, {errors} errors"
-        )
+        logger.info(f"✓ Crypto collection complete: {records_collected} records, {errors} errors")
 
         return {
             "records_collected": records_collected,
@@ -253,15 +234,11 @@ class CryptoModule(BaseModule):
                                 "price": data["price"],
                                 "market_cap": data.get("market_cap", 0),
                                 "volume_24h": data.get("volume_24h", 0),
-                                "change_24h_pct": data.get(
-                                    "change_24h_pct", 0
-                                ),
+                                "change_24h_pct": data.get("change_24h_pct", 0),
                                 "timestamp": datetime.now(timezone.utc),
                             }
                         )
-                        logger.info(
-                            f"✓ Fetched {pair} from {data.get('source', 'unknown')}"
-                        )
+                        logger.info(f"✓ Fetched {pair} from {data.get('source', 'unknown')}")
 
                 except Exception as e:
                     logger.warning(f"Failed to fetch {pair}: {e}")
@@ -309,14 +286,10 @@ class CryptoModule(BaseModule):
                 if is_valid:
                     # Cache the result
                     self.cache[cache_key] = (data, datetime.now(timezone.utc))
-                    logger.info(
-                        f"Got price from {source_name} (quality: {quality_score:.2f})"
-                    )
+                    logger.info(f"Got price from {source_name} (quality: {quality_score:.2f})")
                     return data
                 else:
-                    logger.warning(
-                        f"{source_name} returned low quality data: {quality_score:.2f}"
-                    )
+                    logger.warning(f"{source_name} returned low quality data: {quality_score:.2f}")
 
             except asyncio.TimeoutError:
                 logger.warning(f"{source_name} timed out")
@@ -363,7 +336,11 @@ class CryptoModule(BaseModule):
         }
 
         coin_id = symbol_map.get(symbol, symbol.lower().replace("usdt", ""))
-        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
+        base_url = "https://api.coingecko.com/api/v3/simple/price"
+        params = (
+            f"?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
+        )
+        url = base_url + params
 
         session = await self._get_session()
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
@@ -435,7 +412,6 @@ class CryptoModule(BaseModule):
             "timestamp": api_data.get("timestamp", datetime.now(timezone.utc)),
         }
 
-
     async def _store_crypto_data(self, cursor, crypto_data: Dict[str, Any]):
         """Store crypto data to PostgreSQL"""
         cursor.execute(
@@ -469,13 +445,15 @@ class CryptoModule(BaseModule):
             cursor = conn.cursor()
 
             # Get latest prices
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT symbol, name, price, change_24h_pct
                 FROM crypto_data
                 WHERE timestamp >= NOW() - INTERVAL '1 hour'
                 ORDER BY timestamp DESC
                 LIMIT 10
-            """)
+            """
+            )
 
             results = cursor.fetchall()
             conn.close()
@@ -527,14 +505,10 @@ class CryptoModule(BaseModule):
             "collections": 1,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

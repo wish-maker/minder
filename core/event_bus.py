@@ -85,19 +85,14 @@ class EventBus:
                 return True
 
             # Publish to all subscribers concurrently
-            tasks = [
-                self._notify_subscriber(subscriber, event)
-                for subscriber in subscribers
-            ]
+            tasks = [self._notify_subscriber(subscriber, event) for subscriber in subscribers]
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Check for failures
             failed = sum(1 for r in results if isinstance(r, Exception))
             if failed > 0:
-                logger.warning(
-                    f"{failed}/{len(results)} subscribers failed for event: {event.type.value}"
-                )
+                logger.warning(f"{failed}/{len(results)} subscribers failed for event: {event.type.value}")
 
             return failed == 0
 
@@ -106,9 +101,7 @@ class EventBus:
             await self._dead_letter(event)
             return False
 
-    async def subscribe(
-        self, event_type: EventType, handler: Callable[[Event], Any]
-    ) -> str:
+    async def subscribe(self, event_type: EventType, handler: Callable[[Event], Any]) -> str:
         """Subscribe to event type"""
         async with self._lock:
             if event_type not in self._subscribers:
@@ -126,9 +119,7 @@ class EventBus:
         async with self._lock:
             for event_type, handlers in self._subscribers.items():
                 self._subscribers[event_type] = [
-                    h
-                    for h in handlers
-                    if f"{event_type.value}_{id(h)}" != subscription_id
+                    h for h in handlers if f"{event_type.value}_{id(h)}" != subscription_id
                 ]
 
     async def _get_subscribers(self, event_type: EventType) -> List[Callable]:
@@ -136,9 +127,7 @@ class EventBus:
         async with self._lock:
             return self._subscribers.get(event_type, []).copy()
 
-    async def _notify_subscriber(
-        self, subscriber: Callable[[Event], Any], event: Event
-    ):
+    async def _notify_subscriber(self, subscriber: Callable[[Event], Any], event: Event):
         """Notify single subscriber"""
         try:
             if asyncio.iscoroutinefunction(subscriber):
@@ -156,7 +145,7 @@ class EventBus:
 
             # Trim history if needed
             if len(self._event_history) > self._max_history:
-                self._event_history = self._event_history[-self._max_history:]
+                self._event_history = self._event_history[-self._max_history :]
 
     async def _dead_letter(self, event: Event):
         """Add event to dead letter queue"""
@@ -183,14 +172,11 @@ class EventBus:
     def get_statistics(self) -> Dict[str, Any]:
         """Get event bus statistics"""
         return {
-            "total_subscribers": sum(
-                len(handlers) for handlers in self._subscribers.values()
-            ),
+            "total_subscribers": sum(len(handlers) for handlers in self._subscribers.values()),
             "event_types": len(self._subscribers),
             "events_published": len(self._event_history),
             "dead_letter_count": len(self._dead_letter_queue),
             "subscribers_by_type": {
-                event_type.value: len(handlers)
-                for event_type, handlers in self._subscribers.items()
+                event_type.value: len(handlers) for event_type, handlers in self._subscribers.items()
             },
         }

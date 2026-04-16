@@ -25,9 +25,7 @@ class NewsModule(BaseModule):
         self.db_config = {
             "host": config.get("news_db", {}).get("host", "localhost"),
             "port": config.get("news_db", {}).get("port", 5432),
-            "database": config.get("news_db", {}).get(
-                "database", "minder_news"
-            ),
+            "database": config.get("news_db", {}).get("database", "minder_news"),
             "user": config.get("news_db", {}).get("user", "postgres"),
             "password": config.get("news_db", {}).get("password", ""),
         }
@@ -54,9 +52,7 @@ class NewsModule(BaseModule):
             ],
         )
 
-        self.max_articles_per_feed = config.get("news", {}).get(
-            "max_articles", 10
-        )
+        self.max_articles_per_feed = config.get("news", {}).get("max_articles", 10)
 
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
@@ -77,9 +73,7 @@ class NewsModule(BaseModule):
         logger.info("📰 Registering News Module")
         return self.metadata
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect real news articles from RSS feeds
         Store collected articles to PostgreSQL database
@@ -107,15 +101,11 @@ class NewsModule(BaseModule):
                         except Exception as e:
                             logger.error(f"Error storing article: {e}")
 
-                    logger.info(
-                        f"✓ Collected {len(articles)} articles from {feed_config['name']}"
-                    )
+                    logger.info(f"✓ Collected {len(articles)} articles from {feed_config['name']}")
 
                 except Exception as e:
                     errors += 1
-                    logger.error(
-                        f"Error fetching from {feed_config['name']}: {e}"
-                    )
+                    logger.error(f"Error fetching from {feed_config['name']}: {e}")
 
             conn.commit()
             conn.close()
@@ -124,9 +114,7 @@ class NewsModule(BaseModule):
             logger.error(f"Database connection error: {e}")
             errors += 1
 
-        logger.info(
-            f"✓ News collection complete: {records_collected} articles, {errors} errors"
-        )
+        logger.info(f"✓ News collection complete: {records_collected} articles, {errors} errors")
 
         return {
             "records_collected": records_collected,
@@ -134,9 +122,7 @@ class NewsModule(BaseModule):
             "errors": errors,
         }
 
-    async def _fetch_rss_articles(
-        self, feed_config: Dict
-    ) -> List[Dict[str, Any]]:
+    async def _fetch_rss_articles(self, feed_config: Dict) -> List[Dict[str, Any]]:
         """
         Fetch articles from RSS feed
         Parse XML and extract article data
@@ -145,21 +131,13 @@ class NewsModule(BaseModule):
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    feed_config["url"], timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
+                async with session.get(feed_config["url"], timeout=aiohttp.ClientTimeout(total=30)) as response:
                     if response.status == 200:
                         rss_content = await response.text()
-                        articles = self._parse_rss_xml(
-                            rss_content, feed_config["source"]
-                        )
-                        logger.info(
-                            f"✓ Parsed {len(articles)} articles from {feed_config['name']}"
-                        )
+                        articles = self._parse_rss_xml(rss_content, feed_config["source"])
+                        logger.info(f"✓ Parsed {len(articles)} articles from {feed_config['name']}")
                     else:
-                        logger.warning(
-                            f"RSS feed returned status {response.status} for {feed_config['name']}"
-                        )
+                        logger.warning(f"RSS feed returned status {response.status} for {feed_config['name']}")
                         # Don't use sample data - return empty list
                         articles = []
 
@@ -170,9 +148,7 @@ class NewsModule(BaseModule):
 
         return articles
 
-    def _parse_rss_xml(
-        self, xml_content: str, source: str
-    ) -> List[Dict[str, Any]]:
+    def _parse_rss_xml(self, xml_content: str, source: str) -> List[Dict[str, Any]]:
         """Parse RSS XML content and extract articles"""
         articles = []
 
@@ -196,9 +172,7 @@ class NewsModule(BaseModule):
             # If no items in channel, try at root level (Atom format)
             if not items:
                 for namespace in ["", "{http://www.w3.org/2005/Atom}"]:
-                    items = root.findall(f"{namespace}item") or root.findall(
-                        f"{namespace}entry"
-                    )
+                    items = root.findall(f"{namespace}item") or root.findall(f"{namespace}entry")
                     if items:
                         break
 
@@ -212,9 +186,9 @@ class NewsModule(BaseModule):
             if len(items) > 0:
                 first_item = items[0]
                 title_elem = first_item.find("title")
-                logger.info(
-                    f"First item title element: tag={title_elem.tag}, text={repr(title_elem.text)}, has_children={len(list(title_elem)) > 0}"
-                )
+                tag_info = f"tag={title_elem.tag}, text={repr(title_elem.text)}"
+                children_info = f"has_children={len(list(title_elem)) > 0}"
+                logger.info(f"First item title element: {tag_info}, {children_info}")
 
             for idx, item in enumerate(items):
                 try:
@@ -233,9 +207,7 @@ class NewsModule(BaseModule):
 
                     # Method 3: Try with namespace
                     if not title or len(title.strip()) < 10:
-                        title_elem = item.find(
-                            "{http://purl.org/rss/1.0/}title"
-                        )
+                        title_elem = item.find("{http://purl.org/rss/1.0/}title")
                         if title_elem is not None:
                             if title_elem.text:
                                 title = unescape(title_elem.text)
@@ -244,9 +216,7 @@ class NewsModule(BaseModule):
 
                     # Method 4: Try Atom format
                     if not title or len(title.strip()) < 10:
-                        title_elem = item.find(
-                            "{http://www.w3.org/2005/Atom}title"
-                        )
+                        title_elem = item.find("{http://www.w3.org/2005/Atom}title")
                         if title_elem is not None:
                             if title_elem.text:
                                 title = unescape(title_elem.text)
@@ -255,8 +225,10 @@ class NewsModule(BaseModule):
 
                     # Skip if still no title or too short
                     if not title or len(title.strip()) < 10:
+                        title_preview = title[:50] if title else "(empty)"
                         logger.warning(
-                            f"Item {idx}: Skipping article with no/short title from {source}. Title: '{title[:50] if title else '(empty)'}', length={len(title)}"
+                            f"Item {idx}: Skipping article with no/short title from {source}. "
+                            f"Title: '{title_preview}', length={len(title)}"
                         )
                         continue
 
@@ -287,25 +259,15 @@ class NewsModule(BaseModule):
                         url = link_elem.get("href", "")
 
                     # Extract description
-                    desc_elem = item.find("description") or item.find(
-                        "{http://purl.org/rss/1.0/}description"
-                    )
+                    desc_elem = item.find("description") or item.find("{http://purl.org/rss/1.0/}description")
                     summary = ""
                     if desc_elem is not None:
-                        summary = (
-                            unescape(desc_elem.text) if desc_elem.text else ""
-                        )
+                        summary = unescape(desc_elem.text) if desc_elem.text else ""
 
                     # Extract pub date
-                    date_elem = item.find("pubDate") or item.find(
-                        "{http://purl.org/rss/1.0/}pubDate"
-                    )
+                    date_elem = item.find("pubDate") or item.find("{http://purl.org/rss/1.0/}pubDate")
                     published_date = None
-                    pub_date_str = (
-                        date_elem.text
-                        if date_elem is not None and date_elem.text
-                        else ""
-                    )
+                    pub_date_str = date_elem.text if date_elem is not None and date_elem.text else ""
 
                     # Parse date with multiple formats
                     if pub_date_str:
@@ -314,9 +276,7 @@ class NewsModule(BaseModule):
                             "%Y-%m-%dT%H:%M:%S%z",
                         ]:
                             try:
-                                published_date = datetime.strptime(
-                                    pub_date_str.split("+")[0].strip(), fmt
-                                )
+                                published_date = datetime.strptime(pub_date_str.split("+")[0].strip(), fmt)
                                 break
                             except BaseException:
                                 pass
@@ -370,14 +330,16 @@ class NewsModule(BaseModule):
             cursor = conn.cursor()
 
             # Get recent articles
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT COUNT(*) as total,
                        AVG(sentiment_score) as avg_sentiment,
                        SUM(CASE WHEN sentiment_score > 0.2 THEN 1 ELSE 0 END) as positive,
                        SUM(CASE WHEN sentiment_score < -0.2 THEN 1 ELSE 0 END) as negative
                 FROM news_articles
                 WHERE timestamp >= NOW() - INTERVAL '24 hours'
-            """)
+            """
+            )
 
             result = cursor.fetchone()
             conn.close()
@@ -387,16 +349,8 @@ class NewsModule(BaseModule):
                     "metrics": {
                         "total_articles": result[0],
                         "avg_sentiment": float(result[1]) if result[1] else 0,
-                        "positive_pct": (
-                            int((result[2] / result[0]) * 100)
-                            if result[0] > 0
-                            else 0
-                        ),
-                        "negative_pct": (
-                            int((result[3] / result[0]) * 100)
-                            if result[0] > 0
-                            else 0
-                        ),
+                        "positive_pct": (int((result[2] / result[0]) * 100) if result[0] > 0 else 0),
+                        "negative_pct": (int((result[3] / result[0]) * 100) if result[0] > 0 else 0),
                     },
                     "patterns": [
                         {
@@ -444,14 +398,10 @@ class NewsModule(BaseModule):
             "collections": 5,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

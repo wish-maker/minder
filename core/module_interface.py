@@ -75,9 +75,7 @@ class BaseModule(ABC):
         pass
 
     @abstractmethod
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect data from sources
 
@@ -130,9 +128,7 @@ class BaseModule(ABC):
         pass
 
     @abstractmethod
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         """
         Provide correlation hints with another module
 
@@ -149,9 +145,7 @@ class BaseModule(ABC):
         pass
 
     @abstractmethod
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         """
         Return detected anomalies
 
@@ -172,11 +166,7 @@ class BaseModule(ABC):
         return {
             "name": self.metadata.name if self.metadata else "unknown",
             "status": self.status.value,
-            "uptime_seconds": (
-                (datetime.now() - self.metadata.registered_at).total_seconds()
-                if self.metadata
-                else 0
-            ),
+            "uptime_seconds": ((datetime.now() - self.metadata.registered_at).total_seconds() if self.metadata else 0),
             "state": self.state,
         }
 

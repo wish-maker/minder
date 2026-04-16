@@ -77,9 +77,7 @@ class PluginInstallRequest(BaseModel):
     def validate_branch(cls, v):
         """Validate branch name"""
         if v:
-            is_valid, error_msg = InputSanitizer.validate_input(
-                v, check_sql=False, check_xss=False
-            )
+            is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
             if not is_valid:
                 raise ValueError(error_msg)
             return InputSanitizer.sanitize_string(v, max_length=100)
@@ -90,9 +88,7 @@ class PluginInstallRequest(BaseModel):
     def validate_author(cls, v):
         """Validate author name"""
         if v:
-            is_valid, error_msg = InputSanitizer.validate_input(
-                v, check_sql=False, check_xss=False
-            )
+            is_valid, error_msg = InputSanitizer.validate_input(v, check_sql=False, check_xss=False)
             if not is_valid:
                 raise ValueError(error_msg)
             return InputSanitizer.sanitize_string(v, max_length=100)
@@ -106,16 +102,12 @@ class PluginSearchResponse(BaseModel):
 
 
 @router.get("/search")
-async def search_plugins(
-    q: str = "", current_user: dict = Depends(get_current_user_optional)
-) -> PluginSearchResponse:
+async def search_plugins(q: str = "", current_user: dict = Depends(get_current_user_optional)) -> PluginSearchResponse:
     """Plugin ara"""
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
     results = await store.search_plugins(q)
@@ -131,9 +123,7 @@ async def list_installed_plugins(
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
     plugins = await store.list_installed_plugins()
@@ -142,24 +132,18 @@ async def list_installed_plugins(
 
 
 @router.get("/installed/{plugin_name}")
-async def get_plugin_details(
-    plugin_name: str, current_user: dict = Depends(get_current_user_optional)
-):
+async def get_plugin_details(plugin_name: str, current_user: dict = Depends(get_current_user_optional)):
     """Plugin detayını al"""
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
     details = await store.get_plugin_info(plugin_name)
 
     if not details:
-        raise HTTPException(
-            status_code=404, detail=f"Plugin not found: {plugin_name}"
-        )
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
 
     return details
 
@@ -179,9 +163,7 @@ async def install_plugin(
     try:
         # Download plugin from GitHub
         installer = GitHubPluginInstaller()
-        download_result = await installer.install_plugin(
-            request.repo_url, request.branch
-        )
+        download_result = await installer.install_plugin(request.repo_url, request.branch)
 
         plugin_name = download_result["plugin_name"]
         plugin_path = Path(download_result["path"])
@@ -217,9 +199,7 @@ async def install_plugin(
             # Get kernel reference
             kernel = get_kernel()
             if not kernel:
-                logger.warning(
-                    f"⚠️  Kernel not available, plugin downloaded but not loaded: {plugin_name}"
-                )
+                logger.warning(f"⚠️  Kernel not available, plugin downloaded but not loaded: {plugin_name}")
             else:
                 # Create plugin loader
                 loader = PluginLoader(
@@ -235,25 +215,15 @@ async def install_plugin(
                 if plugin_instance:
                     # Register plugin in kernel if it has a registry
                     if hasattr(kernel, "registry"):
-                        kernel.registry.register_plugin(
-                            plugin_name, plugin_instance
-                        )
-                        logger.info(
-                            f"✅ Plugin loaded into kernel registry: {plugin_name}"
-                        )
+                        kernel.registry.register_plugin(plugin_name, plugin_instance)
+                        logger.info(f"✅ Plugin loaded into kernel registry: {plugin_name}")
                     else:
-                        logger.info(
-                            f"✅ Plugin loaded but kernel has no registry: {plugin_name}"
-                        )
+                        logger.info(f"✅ Plugin loaded but kernel has no registry: {plugin_name}")
                 else:
-                    logger.warning(
-                        f"⚠️  Plugin download successful but loading failed: {plugin_name}"
-                    )
+                    logger.warning(f"⚠️  Plugin download successful but loading failed: {plugin_name}")
 
         except Exception as e:
-            logger.error(
-                f"❌ Error loading plugin {plugin_name} into kernel: {e}"
-            )
+            logger.error(f"❌ Error loading plugin {plugin_name} into kernel: {e}")
             # Don't fail installation if loading fails - plugin is downloaded
 
         return {
@@ -271,16 +241,12 @@ async def install_plugin(
 
 
 @router.post("/uninstall/{plugin_name}")
-async def uninstall_plugin(
-    plugin_name: str, current_user: dict = Depends(get_current_user_optional)
-):
+async def uninstall_plugin(plugin_name: str, current_user: dict = Depends(get_current_user_optional)):
     """Plugin'i kaldır"""
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
 
@@ -288,9 +254,7 @@ async def uninstall_plugin(
         success = await store.uninstall_plugin(plugin_name)
 
         if not success:
-            raise HTTPException(
-                status_code=500, detail="Failed to uninstall plugin"
-            )
+            raise HTTPException(status_code=500, detail="Failed to uninstall plugin")
 
         return {"plugin": plugin_name, "status": "uninstalled"}
 
@@ -301,16 +265,12 @@ async def uninstall_plugin(
 
 
 @router.post("/update/{plugin_name}")
-async def update_plugin(
-    plugin_name: str, current_user: dict = Depends(get_current_user_optional)
-):
+async def update_plugin(plugin_name: str, current_user: dict = Depends(get_current_user_optional)):
     """Plugin'i güncelle"""
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
 
@@ -336,9 +296,7 @@ async def check_plugin_updates(
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
     updates = await store.check_updates()
@@ -354,9 +312,7 @@ async def get_plugin_index(
     kernel = get_kernel()
 
     if not kernel or not hasattr(kernel, "plugin_store"):
-        raise HTTPException(
-            status_code=503, detail="Plugin store not initialized"
-        )
+        raise HTTPException(status_code=503, detail="Plugin store not initialized")
 
     store = kernel.plugin_store
     index = store.plugin_index

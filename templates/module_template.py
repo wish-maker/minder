@@ -21,9 +21,7 @@ class ModuleTemplate(BaseModule):
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.logger = logging.getLogger(
-            f"minder.module.{self.__class__.__name__}"
-        )
+        self.logger = logging.getLogger(f"minder.module.{self.__class__.__name__}")
 
         # TODO: Modüle özgü yapılandırma
         self.api_endpoint = config.get("api_endpoint", "")
@@ -45,9 +43,7 @@ class ModuleTemplate(BaseModule):
             databases=["postgresql", "influxdb"],  # TODO: Kullanılacak DB'ler
         )
 
-    async def collect_data(
-        self, since: Optional[datetime] = None
-    ) -> Dict[str, int]:
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Veri toplama
 
@@ -178,9 +174,7 @@ class ModuleTemplate(BaseModule):
         # TODO: Vektör embedding oluşturma
         return {"vectors_created": 0, "vectors_updated": 0, "collections": 0}
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         """
         Çapraz modül korelasyon ipuçları
 
@@ -198,9 +192,7 @@ class ModuleTemplate(BaseModule):
         # TODO: Korelasyon logic
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 10) -> List[Dict[str, Any]]:
         """
         Anomali tespiti
 

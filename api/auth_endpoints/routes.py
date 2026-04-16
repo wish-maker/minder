@@ -28,18 +28,12 @@ async def login(request: Request, login_request):
     # Authenticate user
     user = await auth_mgr.authenticate(request.username, request.password)
     if not user:
-        raise HTTPException(
-            status_code=401, detail="Invalid username or password"
-        )
+        raise HTTPException(status_code=401, detail="Invalid username or password")
 
     # Generate access token
-    access_token = auth_mgr.create_access_token(
-        {"sub": user["username"], "role": user["role"]}
-    )
+    access_token = auth_mgr.create_access_token({"sub": user["username"], "role": user["role"]})
 
-    logger.info(
-        f"✅ User logged in: {user['username']} (role: {user['role']})"
-    )
+    logger.info(f"✅ User logged in: {user['username']} (role: {user['role']})")
 
     return LoginResponse(
         access_token=access_token,

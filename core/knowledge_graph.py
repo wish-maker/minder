@@ -147,10 +147,7 @@ class KnowledgeGraph:
             if relation_type and relation.relation_type != relation_type:
                 continue
 
-            if (
-                direction in ["out", "both"]
-                and relation.source.id == entity_id
-            ):
+            if direction in ["out", "both"] and relation.source.id == entity_id:
                 relations.append(relation)
 
             if direction in ["in", "both"] and relation.target.id == entity_id:
@@ -158,9 +155,7 @@ class KnowledgeGraph:
 
         return relations
 
-    async def find_path(
-        self, source_id: str, target_id: str, max_depth: int = 5
-    ) -> Optional[List[Relation]]:
+    async def find_path(self, source_id: str, target_id: str, max_depth: int = 5) -> Optional[List[Relation]]:
         """Find shortest path between entities using BFS"""
         if source_id not in self.entities or target_id not in self.entities:
             return None
@@ -234,8 +229,7 @@ class KnowledgeGraph:
             "total_entities": len(self.entities),
             "total_relations": len(self.relations),
             "entities_by_type": {
-                entity_type.value: len(entity_ids)
-                for entity_type, entity_ids in self.entity_index.items()
+                entity_type.value: len(entity_ids) for entity_type, entity_ids in self.entity_index.items()
             },
             "relations_by_type": self._count_relations_by_type(),
             "avg_degree": len(self.relations) / max(len(self.entities), 1),

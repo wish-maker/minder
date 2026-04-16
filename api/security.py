@@ -64,9 +64,7 @@ class InputSanitizer:
     ]
 
     @classmethod
-    def sanitize_string(
-        cls, input_string: str, max_length: int = 10000
-    ) -> str:
+    def sanitize_string(cls, input_string: str, max_length: int = 10000) -> str:
         """
         Comprehensive string sanitization
 
@@ -86,9 +84,7 @@ class InputSanitizer:
 
         # Truncate if too long
         if len(input_string) > max_length:
-            logger.warning(
-                f"Input truncated from {len(input_string)} to {max_length} characters"
-            )
+            logger.warning(f"Input truncated from {len(input_string)} to {max_length} characters")
             input_string = input_string[:max_length]
 
         # Remove null bytes
@@ -117,9 +113,7 @@ class InputSanitizer:
 
         for pattern in cls.SQL_INJECTION_PATTERNS:
             if re.search(pattern, input_upper, re.IGNORECASE | re.MULTILINE):
-                logger.warning(
-                    f"SQL injection detected: {input_string[:100]}..."
-                )
+                logger.warning(f"SQL injection detected: {input_string[:100]}...")
                 return True
 
         return False
@@ -161,9 +155,7 @@ class InputSanitizer:
 
         for pattern in cls.PATH_TRAVERSAL_PATTERNS:
             if re.search(pattern, input_string, re.IGNORECASE):
-                logger.warning(
-                    f"Path traversal detected: {input_string[:100]}..."
-                )
+                logger.warning(f"Path traversal detected: {input_string[:100]}...")
                 return True
 
         return False
@@ -184,17 +176,13 @@ class InputSanitizer:
 
         for pattern in cls.COMMAND_INJECTION_PATTERNS:
             if re.search(pattern, input_string):
-                logger.warning(
-                    f"Command injection detected: {input_string[:100]}..."
-                )
+                logger.warning(f"Command injection detected: {input_string[:100]}...")
                 return True
 
         return False
 
     @classmethod
-    def validate_file_path(
-        cls, file_path: str, allowed_dirs: Optional[List[str]] = None
-    ) -> bool:
+    def validate_file_path(cls, file_path: str, allowed_dirs: Optional[List[str]] = None) -> bool:
         """
         Validate file path is safe and within allowed directories
 
@@ -249,12 +237,7 @@ class InputSanitizer:
                 sanitized[key] = cls.sanitize_dict(value, max_length)
             elif isinstance(value, list):
                 sanitized[key] = [
-                    (
-                        cls.sanitize_string(item, max_length)
-                        if isinstance(item, str)
-                        else item
-                    )
-                    for item in value
+                    (cls.sanitize_string(item, max_length) if isinstance(item, str) else item) for item in value
                 ]
             else:
                 sanitized[key] = value
@@ -358,9 +341,7 @@ def sanitize_form_input(data: dict) -> dict:
     return InputSanitizer.sanitize_dict(data)
 
 
-def validate_json_input(
-    data: dict, required_fields: Optional[List[str]] = None
-) -> tuple[bool, Optional[str]]:
+def validate_json_input(data: dict, required_fields: Optional[List[str]] = None) -> tuple[bool, Optional[str]]:
     """
     Validate JSON input data
 
@@ -376,9 +357,7 @@ def validate_json_input(
 
     # Check required fields
     if required_fields:
-        missing_fields = [
-            field for field in required_fields if field not in data
-        ]
+        missing_fields = [field for field in required_fields if field not in data]
         if missing_fields:
             return (
                 False,

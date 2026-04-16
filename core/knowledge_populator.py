@@ -35,9 +35,7 @@ class KnowledgeGraphPopulator:
         self.config = config
         self.batch_size = config.get("batch_size", 100)
 
-    async def populate_from_fund_module(
-        self, fund_data: pd.DataFrame, fund_analysis: Dict[str, Any]
-    ) -> Dict[str, int]:
+    async def populate_from_fund_module(self, fund_data: pd.DataFrame, fund_analysis: Dict[str, Any]) -> Dict[str, int]:
         """Extract and populate fund entities and relationships"""
         entities_added = 0
         relations_added = 0
@@ -81,9 +79,7 @@ class KnowledgeGraphPopulator:
 
                 # Link fund to performance
                 perf_relation = Relation(
-                    source=await self.kg.get_entity(
-                        f"fund:{row['fund_code']}"
-                    ),
+                    source=await self.kg.get_entity(f"fund:{row['fund_code']}"),
                     target=perf_entity,
                     relation_type=RelationType.RELATED_TO,
                     weight=0.8,
@@ -93,9 +89,7 @@ class KnowledgeGraphPopulator:
                 await self.kg.add_relation(perf_relation)
                 relations_added += 1
 
-            logger.info(
-                f"✅ Added {entities_added} fund entities, {relations_added} relations"
-            )
+            logger.info(f"✅ Added {entities_added} fund entities, {relations_added} relations")
 
             return {
                 "entities_added": entities_added,
@@ -106,18 +100,14 @@ class KnowledgeGraphPopulator:
             logger.error(f"Failed to populate fund entities: {e}")
             return {"entities_added": 0, "relations_added": 0}
 
-    async def populate_from_network_module(
-        self, network_metrics: Dict[str, Any]
-    ) -> Dict[str, int]:
+    async def populate_from_network_module(self, network_metrics: Dict[str, Any]) -> Dict[str, int]:
         """Extract and populate network entities and relationships"""
         entities_added = 0
         relations_added = 0
 
         try:
             # Create network entities
-            for metric_name, value in network_metrics.get(
-                "metrics", {}
-            ).items():
+            for metric_name, value in network_metrics.get("metrics", {}).items():
                 network_entity = Entity(
                     id=f"network_metric:{metric_name}",
                     type=EntityType.NETWORK,
@@ -135,12 +125,8 @@ class KnowledgeGraphPopulator:
             # Add network relationships
             if entities_added > 1:
                 # Connect latency to throughput
-                latency_entity = await self.kg.get_entity(
-                    "network_metric:avg_latency_ms"
-                )
-                throughput_entity = await self.kg.get_entity(
-                    "network_metric:throughput_mbps"
-                )
+                latency_entity = await self.kg.get_entity("network_metric:avg_latency_ms")
+                throughput_entity = await self.kg.get_entity("network_metric:throughput_mbps")
 
                 if latency_entity and throughput_entity:
                     relation = Relation(
@@ -154,9 +140,7 @@ class KnowledgeGraphPopulator:
                     await self.kg.add_relation(relation)
                     relations_added += 1
 
-            logger.info(
-                f"✅ Added {entities_added} network entities, {relations_added} relations"
-            )
+            logger.info(f"✅ Added {entities_added} network entities, {relations_added} relations")
 
             return {
                 "entities_added": entities_added,
@@ -167,9 +151,7 @@ class KnowledgeGraphPopulator:
             logger.error(f"Failed to populate network entities: {e}")
             return {"entities_added": 0, "relations_added": 0}
 
-    async def populate_cross_module_relationships(
-        self, correlations: Dict[str, List[Dict]]
-    ) -> Dict[str, int]:
+    async def populate_cross_module_relationships(self, correlations: Dict[str, List[Dict]]) -> Dict[str, int]:
         """Populate relationships discovered between modules"""
         relations_added = 0
 
@@ -179,12 +161,8 @@ class KnowledgeGraphPopulator:
 
                 for corr in correlation_list:
                     # Create entities if they don't exist
-                    entity_a_id = (
-                        f"{module_a}:{corr['field_a'].replace('.', '_')}"
-                    )
-                    entity_b_id = (
-                        f"{module_b}:{corr['field_b'].replace('.', '_')}"
-                    )
+                    entity_a_id = f"{module_a}:{corr['field_a'].replace('.', '_')}"
+                    entity_b_id = f"{module_b}:{corr['field_b'].replace('.', '_')}"
 
                     entity_a = Entity(
                         id=entity_a_id,
@@ -209,15 +187,11 @@ class KnowledgeGraphPopulator:
                     relation = Relation(
                         source=entity_a,
                         target=entity_b,
-                        relation_type=self._map_correlation_type(
-                            corr["correlation_type"]
-                        ),
+                        relation_type=self._map_correlation_type(corr["correlation_type"]),
                         weight=corr["strength"],
                         attributes={
                             "description": corr["description"],
-                            "discovered_at": corr.get(
-                                "discovered_at", datetime.now()
-                            ).isoformat(),
+                            "discovered_at": corr.get("discovered_at", datetime.now()).isoformat(),
                         },
                     )
 
@@ -232,9 +206,7 @@ class KnowledgeGraphPopulator:
             logger.error(f"Failed to populate cross-module relationships: {e}")
             return {"relations_added": 0}
 
-    async def populate_from_anomalies(
-        self, anomalies: List[Dict[str, Any]]
-    ) -> Dict[str, int]:
+    async def populate_from_anomalies(self, anomalies: List[Dict[str, Any]]) -> Dict[str, int]:
         """Populate anomaly entities and their relationships"""
         entities_added = 0
         relations_added = 0
@@ -251,13 +223,9 @@ class KnowledgeGraphPopulator:
                         "severity": anomaly.get("severity"),
                         "description": anomaly.get("description"),
                         "score": anomaly.get("score"),
-                        "timestamp": anomaly.get(
-                            "detected_at",
-                            datetime.now()).isoformat(),
+                        "timestamp": anomaly.get("detected_at", datetime.now()).isoformat(),
                     },
-                    module=anomaly.get(
-                        "module",
-                        "unknown"),
+                    module=anomaly.get("module", "unknown"),
                 )
 
                 await self.kg.add_entity(anomaly_entity)
@@ -273,17 +241,13 @@ class KnowledgeGraphPopulator:
                             target=anomaly_entity,
                             relation_type=RelationType.CONTAINS,
                             weight=0.9,
-                            attributes={
-                                "detected_at": anomaly.get("detected_at")
-                            },
+                            attributes={"detected_at": anomaly.get("detected_at")},
                         )
 
                         await self.kg.add_relation(relation)
                         relations_added += 1
 
-            logger.info(
-                f"✅ Added {entities_added} anomaly entities, {relations_added} relations"
-            )
+            logger.info(f"✅ Added {entities_added} anomaly entities, {relations_added} relations")
 
             return {
                 "entities_added": entities_added,
@@ -307,7 +271,7 @@ class KnowledgeGraphPopulator:
             series_names = list(time_series_data.keys())
 
             for i, name1 in enumerate(series_names):
-                for name2 in series_names[i + 1:]:
+                for name2 in series_names[i + 1 :]:
                     df1 = time_series_data[name1]
                     df2 = time_series_data[name2]
 
@@ -318,11 +282,7 @@ class KnowledgeGraphPopulator:
                     # Find temporal proximity
                     for event1 in events1:
                         for event2 in events2:
-                            time_diff = abs(
-                                (
-                                    event1["timestamp"] - event2["timestamp"]
-                                ).total_seconds()
-                            )
+                            time_diff = abs((event1["timestamp"] - event2["timestamp"]).total_seconds())
 
                             if time_diff <= window.total_seconds():
                                 # Create temporal relationship
@@ -334,9 +294,7 @@ class KnowledgeGraphPopulator:
                                     type=EntityType.EVENT,
                                     name=f"{event1['type']} in {name1}",
                                     attributes={
-                                        "timestamp": event1[
-                                            "timestamp"
-                                        ].isoformat(),
+                                        "timestamp": event1["timestamp"].isoformat(),
                                         "value": float(event1["value"]),
                                     },
                                     module=name1,
@@ -347,9 +305,7 @@ class KnowledgeGraphPopulator:
                                     type=EntityType.EVENT,
                                     name=f"{event2['type']} in {name2}",
                                     attributes={
-                                        "timestamp": event2[
-                                            "timestamp"
-                                        ].isoformat(),
+                                        "timestamp": event2["timestamp"].isoformat(),
                                         "value": float(event2["value"]),
                                     },
                                     module=name2,
@@ -364,8 +320,7 @@ class KnowledgeGraphPopulator:
                                     target=entity2,
                                     relation_type=(
                                         RelationType.PRECEDES
-                                        if event1["timestamp"]
-                                        < event2["timestamp"]
+                                        if event1["timestamp"] < event2["timestamp"]
                                         else RelationType.PRECEDES
                                     ),
                                     weight=max(
@@ -405,12 +360,11 @@ class KnowledgeGraphPopulator:
 
             # Prepare batches
             for i in range(0, len(all_entities), self.batch_size):
-                batch = all_entities[i: i + self.batch_size]
+                batch = all_entities[i : i + self.batch_size]
 
                 # Create embeddings
                 texts = [
-                    f"{ent.name} {ent.type.value} "
-                    + " ".join([f"{k}={v}" for k, v in ent.attributes.items()])
+                    f"{ent.name} {ent.type.value} " + " ".join([f"{k}={v}" for k, v in ent.attributes.items()])
                     for ent in batch
                 ]
 
@@ -433,15 +387,11 @@ class KnowledgeGraphPopulator:
                 ]
 
                 # Upsert to Qdrant
-                await qdrant_client.upsert(
-                    collection_name=collection_name, points=points
-                )
+                await qdrant_client.upsert(collection_name=collection_name, points=points)
 
                 entities_enriched += len(batch)
 
-            logger.info(
-                f"✅ Enriched {entities_enriched} entities with embeddings"
-            )
+            logger.info(f"✅ Enriched {entities_enriched} entities with embeddings")
 
             return {"entities_enriched": entities_enriched}
 
@@ -488,9 +438,7 @@ class KnowledgeGraphPopulator:
             logger.error(f"Semantic query failed: {e}")
             return []
 
-    def _find_temporal_events(
-        self, df: pd.DataFrame, window: int = 5, threshold: float = 2.0
-    ) -> List[Dict[str, Any]]:
+    def _find_temporal_events(self, df: pd.DataFrame, window: int = 5, threshold: float = 2.0) -> List[Dict[str, Any]]:
         """Find significant events in time series"""
         events = []
 
@@ -544,9 +492,7 @@ class KnowledgeGraphPopulator:
         }
         return type_map.get(corr_type, RelationType.RELATED_TO)
 
-    async def _generate_embeddings(
-        self, texts: List[str]
-    ) -> List[List[float]]:
+    async def _generate_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings using Ollama"""
         try:
             import httpx

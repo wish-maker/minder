@@ -60,10 +60,7 @@ def test_api_endpoints() -> Dict[str, bool]:
         if response.status_code == 200:
             data = response.json()
             print(f"✅ GET /health - Status: {data['status']}")
-            print(
-                f"   Plugins: {data['system']['plugins']['ready']}/"
-                f"{data['system']['plugins']['total']} ready"
-            )
+            print(f"   Plugins: {data['system']['plugins']['ready']}/" f"{data['system']['plugins']['total']} ready")
             results["health"] = True
         else:
             print(f"❌ GET /health - Status: {response.status_code}")
@@ -77,10 +74,7 @@ def test_api_endpoints() -> Dict[str, bool]:
         response = requests.get(f"{BASE_URL}/plugins")
         if response.status_code == 200:
             data = response.json()
-            print(
-                f"✅ GET /plugins - {data['total']} plugins "
-                f"({data['enabled']} enabled)"
-            )
+            print(f"✅ GET /plugins - {data['total']} plugins " f"({data['enabled']} enabled)")
             results["plugins"] = True
         else:
             print(f"❌ GET /plugins - Status: {response.status_code}")
@@ -106,10 +100,7 @@ def test_plugin_management() -> Dict[str, bool]:
             print("✅ POST /plugins/weather/disable")
             results["disable"] = True
         else:
-            print(
-                f"❌ POST /plugins/weather/disable - "
-                f"Status: {response.status_code}"
-            )
+            print(f"❌ POST /plugins/weather/disable - " f"Status: {response.status_code}")
             results["disable"] = False
     except Exception as e:
         print(f"❌ POST /plugins/weather/disable - Error: {e}")
@@ -122,10 +113,7 @@ def test_plugin_management() -> Dict[str, bool]:
             print("✅ POST /plugins/weather/enable")
             results["enable"] = True
         else:
-            print(
-                f"❌ POST /plugins/weather/enable - "
-                f"Status: {response.status_code}"
-            )
+            print(f"❌ POST /plugins/weather/enable - " f"Status: {response.status_code}")
             results["enable"] = False
     except Exception as e:
         print(f"❌ POST /plugins/weather/enable - Error: {e}")
@@ -223,10 +211,7 @@ def test_plugin_status() -> Dict[str, bool]:
 
         for plugin in plugins:
             status_icon = "✅" if plugin["status"] == "ready" else "❌"
-            print(
-                f"  {status_icon} {plugin['name']:12} - "
-                f"{plugin['metadata']['description']}"
-            )
+            print(f"  {status_icon} {plugin['name']:12} - " f"{plugin['metadata']['description']}")
 
         return {
             "plugin_status": ready_count == total_count,

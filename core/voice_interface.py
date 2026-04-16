@@ -25,9 +25,7 @@ class VoiceInterface:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.stt_model = config.get("stt_model", "whisper-medium")
-        self.tts_model = config.get(
-            "tts_model", "tts_models/multilingual/multi-dataset/xtts_v2"
-        )
+        self.tts_model = config.get("tts_model", "tts_models/multilingual/multi-dataset/xtts_v2")
         self.supported_languages = {
             "tr": "Turkish",
             "en": "English",
@@ -37,9 +35,7 @@ class VoiceInterface:
             "it": "Italian",
         }
 
-    async def transcribe(
-        self, audio_data: bytes, language: str = "auto"
-    ) -> Dict[str, Any]:
+    async def transcribe(self, audio_data: bytes, language: str = "auto") -> Dict[str, Any]:
         """
         Transcribe audio to text using Whisper
 
@@ -60,9 +56,7 @@ class VoiceInterface:
             "confidence": 0.95,
         }
 
-    async def synthesize(
-        self, text: str, voice_profile: Optional[Dict[str, Any]] = None
-    ) -> bytes:
+    async def synthesize(self, text: str, voice_profile: Optional[Dict[str, Any]] = None) -> bytes:
         """
         Synthesize speech from text using Coqui TTS
 
@@ -82,16 +76,12 @@ class VoiceInterface:
 
         return b"mock_audio_data"
 
-    async def process_voice_input(
-        self, audio_data: bytes, language: str = "auto"
-    ) -> str:
+    async def process_voice_input(self, audio_data: bytes, language: str = "auto") -> str:
         """Process voice input and return transcribed text"""
         result = await self.transcribe(audio_data, language)
         return result["text"]
 
-    async def generate_voice_response(
-        self, text: str, character: Optional[Any] = None
-    ) -> bytes:
+    async def generate_voice_response(self, text: str, character: Optional[Any] = None) -> bytes:
         """Generate voice response with character voice profile"""
 
         voice_profile = None
