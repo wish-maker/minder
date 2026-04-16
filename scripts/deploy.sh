@@ -1,65 +1,37 @@
 #!/bin/bash
-
-# Minder Deployment Script
-# Deploys Minder platform using Docker Compose
-
+# scripts/deploy.sh
 set -e
 
-echo "🚀 Deploying Minder Platform..."
+echo "🚀 Deploying Minder..."
 
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
-    echo "❌ Docker is not installed. Please install Docker first."
-    exit 1
+# Load environment variables
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+else
+    echo "⚠️  Warning: .env file not found"
 fi
 
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ Docker Compose is not installed. Please install Docker Compose first."
-    exit 1
-fi
+# Build images
+echo "📦 Building Docker images..."
+docker compose build
 
-# Create necessary directories
-echo "📁 Creating directories..."
-mkdir -p logs data
+# Stop existing containers
+echo "⏹️  Stopping existing containers..."
+docker compose down
 
-# Copy environment file if it doesn't exist
-if [ ! -f .env ]; then
-    echo "📝 Creating .env file from .env.example..."
-    cp .env.example .env
-    echo "⚠️  Please edit .env file with your configuration!"
-fi
-
-# Build and start containers
-echo "🐳 Building Docker images..."
-docker-compose build
-
-echo "🚀 Starting containers..."
-docker-compose up -d
+# Start new containers
+echo "▶️  Starting new containers..."
+docker compose up -d
 
 # Wait for services to be ready
-echo "⏳ Waiting for services to be ready..."
+echo "⏳ Waiting for services to start..."
 sleep 10
 
-# Check health
-echo "🔍 Checking service health..."
-if curl -f http://localhost:8000/health &> /dev/null; then
-    echo "✅ Minder API is healthy!"
-else
-    echo "⚠️  Minder API is not responding yet. Wait a moment and check logs."
-fi
+# Health check
+echo "🏥 Running health checks..."
+./scripts/health-check.sh
 
-echo ""
-echo "✅ Minder deployment complete!"
-echo ""
-echo "📍 Access points:"
-echo "  - Minder API:      http://localhost:8000"
-echo "  - OpenWebUI:       http://localhost:3000"
-echo "  - Grafana:         http://localhost:3002 (admin/minder123)"
-echo "  - API Docs:        http://localhost:8000/docs"
-echo ""
-echo "📊 To view logs:"
-echo "  docker-compose logs -f minder-api"
-echo ""
-echo "🛑 To stop:"
-echo "  docker-compose down"
+echo "✅ Deployment complete!"
+echo "🌐 API available at: http://localhost:8000"
+echo "📊 Grafana available at: http://localhost:3002"
+echo "📚 API docs at: http://localhost:8000/docs"
