@@ -29,6 +29,15 @@ def crypto_config():
 
 
 @pytest.fixture
+async def crypto_module(crypto_config):
+    """Create crypto module and ensure cleanup"""
+    module = CryptoModule(crypto_config)
+    yield module
+    # Clean up resources
+    await module.close()
+
+
+@pytest.fixture
 def validator():
     """Create data validator instance"""
     return PluginDataValidator()

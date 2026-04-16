@@ -8,6 +8,8 @@ import logging
 import aiohttp
 import psycopg2
 import asyncio
+import yaml
+from pathlib import Path
 
 from core.module_interface import BaseModule, ModuleMetadata
 from .crypto_validator import PluginDataValidator
@@ -33,22 +35,125 @@ class CryptoModule(BaseModule):
         # Data validator
         self.validator = PluginDataValidator()
 
+        # Load configuration from YAML file if available
+        self.crypto_config = self._load_crypto_config()
+
         # Cache configuration
-        self.cache_ttl = config.get("crypto", {}).get("cache", {}).get("ttl", 300)
+        self.cache_ttl = self.crypto_config.get("cache", {}).get("ttl", 300)
         self.cache = {}  # Simple in-memory cache
 
-        # API sources with fallback priority
-        self.sources = [
-            ("binance", self._binance_get_price),
-            ("coingecko", self._coingecko_get_price),
-            ("kraken", self._kraken_get_price),
-        ]
+        # API sources with fallback priority (loaded from config)
+        self.sources = self._load_sources_from_config()
 
         # Symbol mappings
-        self.symbols = config.get("crypto", {}).get(
-            "symbols",
-            ["bitcoin", "ethereum", "tether", "binancecoin", "ripple"],
-        )
+        self.symbols = self.crypto_config.get("symbols", {})
+
+        # Create single aiohttp session for reuse
+        self._session = None
+
+    def _load_crypto_config(self) -> Dict[str, Any]:
+        """Load crypto configuration from YAML file"""
+        config_path = Path("/root/minder/config/crypto_config.yml")
+
+        if config_path.exists():
+            try:
+                with open(config_path, 'r') as f:
+                    config_data = yaml.safe_load(f)
+                    logger.info(f"Loaded crypto config from {config_path}")
+                    return config_data.get("crypto", {})
+            except Exception as e:
+                logger.warning(f"Failed to load crypto config from {config_path}: {e}")
+
+        # Fallback to default configuration
+        logger.info("Using default crypto configuration")
+        return {
+            "sources": [
+                {
+                    "name": "binance",
+                    "enabled": True,
+                    "priority": 1,
+                    "url_template": "https://api.binance.com/api/v3/ticker/price?symbol={symbol}",
+                    "parse_method": "binance_parse"
+                },
+                {
+                    "name": "coingecko",
+                    "enabled": True,
+                    "priority": 2,
+                    "url_template": "https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd",
+                    "parse_method": "coingecko_parse"
+                },
+                {
+                    "name": "kraken",
+                    "enabled": True,
+                    "priority": 3,
+                    "url_template": "https://api.kraken.com/0/public/Ticker?pair={symbol}",
+                    "parse_method": "kraken_parse"
+                }
+            ],
+            "cache": {
+                "ttl": 300,
+                "backend": "memory",
+                "redis_key_prefix": "crypto:price:"
+            },
+            "fallback": {
+                "use_cached": True,
+                "max_stale_age": 600
+            },
+            "symbols": {
+                "BTC": "bitcoin",
+                "ETH": "ethereum",
+                "USDT": "tether",
+                "BNB": "binancecoin",
+                "XRP": "ripple"
+            }
+        }
+
+    def _load_sources_from_config(self) -> List[Tuple[str, Any]]:
+        """Load API sources from configuration"""
+        sources_config = self.crypto_config.get("sources", [])
+        sources = []
+
+        # Sort by priority
+        sorted_sources = sorted(sources_config, key=lambda x: x.get("priority", 999))
+
+        for source in sorted_sources:
+            if not source.get("enabled", True):
+                continue
+
+            name = source["name"]
+            # Map config name to actual method
+            method_map = {
+                "binance": self._binance_get_price,
+                "coingecko": self._coingecko_get_price,
+                "kraken": self._kraken_get_price,
+            }
+
+            if name in method_map:
+                sources.append((name, method_map[name]))
+            else:
+                logger.warning(f"Unknown source in config: {name}")
+
+        # Fallback to defaults if no sources loaded
+        if not sources:
+            logger.warning("No sources loaded from config, using defaults")
+            sources = [
+                ("binance", self._binance_get_price),
+                ("coingecko", self._coingecko_get_price),
+                ("kraken", self._kraken_get_price),
+            ]
+
+        return sources
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get or create aiohttp session"""
+        if self._session is None or self._session.closed:
+            self._session = aiohttp.ClientSession()
+        return self._session
+
+    async def close(self):
+        """Clean up resources"""
+        if self._session and not self._session.closed:
+            await self._session.close()
 
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
@@ -75,6 +180,10 @@ class CryptoModule(BaseModule):
         """
         Collect real crypto data from CoinGecko API
         Store collected data to PostgreSQL database
+
+        Note: Database operations use synchronous psycopg2 calls.
+        For production use with high concurrency, consider using asyncpg
+        or wrapping calls with asyncio.to_thread() to avoid blocking.
         """
         logger.info("📥 Collecting crypto data...")
 
@@ -106,7 +215,7 @@ class CryptoModule(BaseModule):
             conn.close()
 
         except Exception as e:
-            logger.error(f"Database connection error: {e}")
+            logger.error(f"Database connection error: {e}", exc_info=True)
             errors += 1
 
         logger.info(
@@ -164,7 +273,7 @@ class CryptoModule(BaseModule):
                 return []
 
         except Exception as e:
-            logger.error(f"Error in _fetch_crypto_market_data: {e}")
+            logger.error(f"Error in _fetch_crypto_market_data: {e}", exc_info=True)
             return []
 
         return crypto_data_list
@@ -213,8 +322,8 @@ class CryptoModule(BaseModule):
                 logger.warning(f"{source_name} timed out")
                 last_error = f"{source_name} timeout"
             except Exception as e:
-                logger.warning(f"{source_name} failed: {e}")
-                last_error = str(e)
+                logger.warning(f"{source_name} failed: {e}", exc_info=True)
+                last_error = f"{source_name}: {str(e)}"
 
         # If we get here, all sources failed
         # Try to return stale cached data if available
@@ -232,16 +341,16 @@ class CryptoModule(BaseModule):
         """Get price from Binance API"""
         url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                response.raise_for_status()
-                data = await response.json()
+        session = await self._get_session()
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+            response.raise_for_status()
+            data = await response.json()
 
-                return {
-                    "price": float(data["price"]),
-                    "source": "binance",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
+            return {
+                "price": float(data["price"]),
+                "source": "binance",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
     async def _coingecko_get_price(self, symbol: str) -> Dict[str, Any]:
         """Get price from CoinGecko API"""
@@ -256,22 +365,22 @@ class CryptoModule(BaseModule):
         coin_id = symbol_map.get(symbol, symbol.lower().replace("usdt", ""))
         url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                response.raise_for_status()
-                data = await response.json()
+        session = await self._get_session()
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+            response.raise_for_status()
+            data = await response.json()
 
-                if coin_id not in data:
-                    raise ValueError(f"CoinGecko: {coin_id} not found")
+            if coin_id not in data:
+                raise ValueError(f"CoinGecko: {coin_id} not found")
 
-                return {
-                    "price": float(data[coin_id]["usd"]),
-                    "market_cap": data[coin_id].get("usd_market_cap", 0),
-                    "volume_24h": data[coin_id].get("usd_24h_vol", 0),
-                    "change_24h_pct": data[coin_id].get("usd_24h_change", 0),
-                    "source": "coingecko",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
+            return {
+                "price": float(data[coin_id]["usd"]),
+                "market_cap": data[coin_id].get("usd_market_cap", 0),
+                "volume_24h": data[coin_id].get("usd_24h_vol", 0),
+                "change_24h_pct": data[coin_id].get("usd_24h_change", 0),
+                "source": "coingecko",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
     async def _kraken_get_price(self, symbol: str) -> Dict[str, Any]:
         """Get price from Kraken API"""
@@ -286,23 +395,23 @@ class CryptoModule(BaseModule):
         kraken_symbol = symbol_map.get(symbol, symbol)
         url = f"https://api.kraken.com/0/public/Ticker?pair={kraken_symbol}"
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-                response.raise_for_status()
-                data = await response.json()
+        session = await self._get_session()
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+            response.raise_for_status()
+            data = await response.json()
 
-                if data.get("error"):
-                    raise ValueError(f"Kraken error: {data['error']}")
+            if data.get("error"):
+                raise ValueError(f"Kraken error: {data['error']}")
 
-                # Kraken returns nested structure
-                result = list(data["result"].values())[0]
-                price = float(result["c"][0])  # Last trade closed price
+            # Kraken returns nested structure
+            result = list(data["result"].values())[0]
+            price = float(result["c"][0])  # Last trade closed price
 
-                return {
-                    "price": price,
-                    "source": "kraken",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
+            return {
+                "price": price,
+                "source": "kraken",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
 
     def _get_coin_name(self, symbol: str) -> str:
         """Get full coin name from symbol"""
@@ -348,7 +457,13 @@ class CryptoModule(BaseModule):
         )
 
     async def analyze(self) -> Dict[str, Any]:
-        """Analyze collected crypto data"""
+        """
+        Analyze collected crypto data
+
+        Note: Database operations use synchronous psycopg2 calls.
+        For production use with high concurrency, consider using asyncpg
+        or wrapping calls with asyncio.to_thread() to avoid blocking.
+        """
         try:
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor()
@@ -390,7 +505,7 @@ class CryptoModule(BaseModule):
                 }
 
         except Exception as e:
-            logger.error(f"Error analyzing crypto data: {e}")
+            logger.error(f"Error analyzing crypto data: {e}", exc_info=True)
             return {
                 "metrics": {},
                 "patterns": [],
