@@ -4,6 +4,9 @@ Main REST API for Minder platform
 """
 
 from fastapi import FastAPI
+from fastapi.openapi.utils import get_openapi
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
 import logging
 import os
 
@@ -27,59 +30,139 @@ kernel = None
 character_engine = None
 voice_interface = None
 
-# FastAPI app
+
+# ============================================================================
+# Response Models for OpenAPI Documentation
+# ============================================================================
+
+
+class HealthResponse(BaseModel):
+    """Health check response"""
+    status: str
+    system: Dict[str, Any]
+    authentication: str
+    network_detection: str
+
+
+class PluginInfo(BaseModel):
+    """Plugin information"""
+    name: str
+    version: Optional[str] = None
+    status: str
+    enabled: bool
+    description: Optional[str] = None
+
+
+class PluginsListResponse(BaseModel):
+    """Plugins list response"""
+    plugins: List[PluginInfo]
+    total: int
+    enabled: int
+    disabled: int
+    authenticated: bool
+    network_type: str
+
+
+class ChatResponse(BaseModel):
+    """AI chat response"""
+    response: str
+    character: str
+    plugins_used: List[str]
+    model: str
+
+
+class CharacterInfo(BaseModel):
+    """Character information"""
+    name: str
+    description: Optional[str] = None
+
+
+class CharactersListResponse(BaseModel):
+    """Characters list response"""
+    characters: List[CharacterInfo]
+
+
+class CharacterCreateResponse(BaseModel):
+    """Character creation response"""
+    character: str
+    status: str
+
+
+class SystemStatusResponse(BaseModel):
+    """System status response"""
+    status: str
+    version: str
+    plugins: Dict[str, Any]
+    uptime_seconds: float
+
+
+class RootResponse(BaseModel):
+    """Root endpoint response"""
+    name: str
+    version: str
+    status: str
+    authentication: str
+    network_access: str
+
+# ============================================================================
+# FastAPI Application with Enhanced OpenAPI Documentation
+# ============================================================================
+
 app = FastAPI(
     title="Minder API",
     description="""
-# 🧠 Minder - Modular RAG Platform
+## 🧠 Modular RAG Platform
 
-AI-powered knowledge management platform with hot-swappable plugins for intelligent data analysis and retrieval.
+Minder is a comprehensive, modular AI platform that enables cross-database
+correlation and AI-powered insights across diverse data sources.
 
-## 🚀 Key Features
+### 🚀 Key Features
 
-### Plugin System
-- **Hot-swappable plugins**: Load/unload plugins without restart
+#### Plugin System
+- **Hot-swappable plugins**: Add/remove plugins without kernel restart
 - **Dynamic discovery**: Automatic plugin detection and registration
 - **Multi-source support**: News, crypto, weather, network monitoring, financial analysis
 - **GitHub integration**: Install plugins directly from GitHub repositories
 
-### AI Capabilities
+#### AI Capabilities
 - **Ollama Integration**: Local LLM support for privacy and speed
 - **RAG Pipeline**: Retrieval-augmented generation with vector embeddings
 - **Knowledge Graph**: Entity resolution and relationship inference
 - **Event Bus**: Real-time updates and cross-plugin correlations
 
-### Security & Performance
+#### Security & Performance
 - **JWT Authentication**: Token-based auth with configurable expiration
 - **Rate Limiting**: Network-aware rate limiting (Local/VPN/Public)
 - **Input Validation**: SQL injection, XSS, and command injection prevention
 - **Network Detection**: Automatic network type detection and policy enforcement
 
-## 🔐 Authentication
+### 🔐 Authentication
 
-Most endpoints require JWT authentication. Include your token in the Authorization header:
+All endpoints require JWT authentication except `/auth/login`, `/health`, and `/`.
+
+Include your token in the Authorization header:
 
 ```bash
 curl -H "Authorization: Bearer YOUR_TOKEN" http://localhost:8000/plugins
 ```
 
-### Get Your Token
+#### Get Your Token
 1. **Default credentials**: `admin` / `admin123`
 2. **Login endpoint**: `POST /auth/login`
 3. **Token expiration**: 30 minutes (configurable)
 
-### Network-Based Rate Limits
+#### Network-Based Rate Limits
 - **Local Network** (192.168.68.x): Unlimited access
 - **VPN/Tailscale** (100.x.x.x): 200 requests/hour
 - **Public Network**: 50 requests/hour
 
-## 📚 API Documentation
+### 📚 API Documentation
 
 - **Swagger UI**: [`/docs`](/docs) - Interactive API documentation
 - **ReDoc**: [`/redoc`](/redoc) - Alternative documentation viewer
 - **OpenAPI JSON**: [`/openapi.json`](/openapi.json) - Machine-readable spec
 
-## 🔧 Quick Start
+### 🔧 Quick Start
 
 ```python
 import requests
@@ -104,7 +187,7 @@ chat = requests.post('http://localhost:8000/chat',
 ).json()
 ```
 
-## 🧩 Plugin Development
+### 🧩 Plugin Development
 
 Create your own plugins by extending `BaseModule`:
 
@@ -125,50 +208,105 @@ class MyPlugin(BaseModule):
 ```
 
 For detailed plugin development guide, see the [`/plugins/docs`](/plugins/docs) endpoint.
-    """,  # noqa: E501
-    version="1.0.0",
+    """,
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     contact={
-        "name": "Minder AI Team",
-        "url": "https://github.com/minder-project",
-        "email": "info@minder.ai",
+        "name": "wish-maker",
+        "url": "https://github.com/wish-maker/minder",
     },
     license_info={
-        "name": "MIT License",
-        "url": "https://opensource.org/licenses/MIT",
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT"
     },
     openapi_tags=[
         {
-            "name": "Authentication",
-            "description": "JWT authentication and user management endpoints",
+            "name": "authentication",
+            "description": "JWT token management and user authentication",
         },
         {
-            "name": "Plugins",
-            "description": "Plugin discovery, loading, and management endpoints",
+            "name": "plugins",
+            "description": "Plugin discovery, loading, and management",
         },
         {
-            "name": "AI Chat",
-            "description": "AI-powered chat interface with Ollama LLM integration",
+            "name": "chat",
+            "description": "AI chat interface with character support",
         },
         {
-            "name": "System",
-            "description": "System health, monitoring, and configuration endpoints",
+            "name": "system",
+            "description": "System health, monitoring, and configuration",
         },
         {
-            "name": "Plugin Store",
+            "name": "plugin-store",
             "description": "GitHub plugin installation and management",
         },
         {
-            "name": "Knowledge Graph",
-            "description": "Entity relationships and knowledge graph operations",
+            "name": "correlations",
+            "description": "Cross-plugin data correlation and knowledge graph",
         },
         {
-            "name": "Characters",
+            "name": "characters",
             "description": "AI character system management",
         },
     ],
 )
+
+
+def custom_openapi():
+    """
+    Custom OpenAPI schema with enhanced metadata
+
+    Extends the default FastAPI OpenAPI schema with:
+    - Logo configuration
+    - Enhanced tags metadata
+    - Additional documentation links
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+    # Add logo
+    openapi_schema["info"]["x-logo"] = {
+        "url": "https://raw.githubusercontent.com/wish-maker/minder/main/docs/logo.png"
+    }
+
+    # Add servers information
+    openapi_schema["servers"] = [
+        {
+            "url": "http://localhost:8000",
+            "description": "Local development server"
+        },
+        {
+            "url": "http://192.168.68.10:8000",
+            "description": "Local network access"
+        }
+    ]
+
+    # Add external documentation
+    openapi_schema["externalDocs"] = {
+        "description": "Minder Documentation",
+        "url": "https://github.com/wish-maker/minder#readme"
+    }
+
+    # Add contact information
+    openapi_schema["info"]["contact"] = {
+        "name": "wish-maker",
+        "url": "https://github.com/wish-maker/minder",
+        "email": "noreply@github.com"
+    }
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
 
 # Get allowed origins from environment
 ALLOWED_ORIGINS = os.getenv(
@@ -343,12 +481,16 @@ def _setup_routes(kernel, character_engine):
 
 
 # Root endpoint
-@app.get("/")
+@app.get("/", response_model=RootResponse, tags=["system"])
 async def root():
-    """Root endpoint"""
+    """
+    Root endpoint
+
+    Returns basic API information and status.
+    """
     return {
         "name": "Minder API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "status": "running",
         "authentication": "enabled",
         "network_access": "dual (local + VPN)",
