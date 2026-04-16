@@ -16,7 +16,7 @@ from psycopg2.extras import RealDictCursor
 
 # Optional InfluxDB support
 try:
-    from influxdb_client import InfluxDBClient, Point, WritePrecision
+    from influxdb_client import InfluxDBClient, Point
     from influxdb_client.client.write_api import SYNCHRONOUS
 
     INFLUXDB_AVAILABLE = True

@@ -5,7 +5,7 @@ Comprehensive system test to verify all components
 """
 
 import requests
-from typing import Dict, List, Any
+from typing import Dict
 
 BASE_URL = "http://localhost:8000"
 

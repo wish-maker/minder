@@ -3,7 +3,7 @@ Knowledge Graph Population System
 Automatically extracts and stores entities and relationships from module data
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd

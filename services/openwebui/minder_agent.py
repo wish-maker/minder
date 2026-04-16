@@ -3,7 +3,7 @@ Complete OpenWebUI Agent Integration
 Connects Minder with OpenWebUI for function calling and character-based interactions
 """
 
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 import logging
 from datetime import datetime
 
