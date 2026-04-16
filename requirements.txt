@@ -44,3 +44,5 @@ aiofiles==23.2.1
 # Note: Web scraping and ML libraries are now plugin-specific
 # - beautifulsoup4: news plugin only
 # - sentence-transformers: moved to optional/ml-requirements.txt
+pytest-mock>=3.12.0
+pytest-asyncio>=0.21.0

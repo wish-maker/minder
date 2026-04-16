@@ -1,0 +1,35 @@
+crypto:
+  sources:
+    - name: binance
+      enabled: true
+      priority: 1
+      url_template: "https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+      parse_method: "binance_parse"
+
+    - name: coingecko
+      enabled: true
+      priority: 2
+      url_template: "https://api.coingecko.com/api/v3/simple/price?ids={symbol}&vs_currencies=usd"
+      parse_method: "coingecko_parse"
+
+    - name: kraken
+      enabled: true
+      priority: 3
+      url_template: "https://api.kraken.com/0/public/Ticker?pair={symbol}"
+      parse_method: "kraken_parse"
+
+  cache:
+    ttl: 300  # 5 minutes in seconds
+    backend: memory  # Using in-memory cache for now
+    redis_key_prefix: "crypto:price:"
+
+  fallback:
+    use_cached: true
+    max_stale_age: 600  # 10 minutes in seconds
+
+  symbols:
+    BTC: "bitcoin"
+    ETH: "ethereum"
+    USDT: "tether"
+    BNB: "binancecoin"
+    XRP: "ripple"

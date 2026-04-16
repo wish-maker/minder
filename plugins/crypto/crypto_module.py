@@ -2,13 +2,15 @@
 Minder Crypto Analysis Module
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime
+from typing import Dict, List, Any, Optional, Tuple
+from datetime import datetime, timezone
 import logging
 import aiohttp
 import psycopg2
+import asyncio
 
 from core.module_interface import BaseModule, ModuleMetadata
+from .crypto_validator import PluginDataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,21 @@ class CryptoModule(BaseModule):
             "password": config.get("database", {}).get("password", ""),
         }
 
-        # CoinGecko API configuration (free API, no key required)
-        self.api_base = "https://api.coingecko.com/api/v3"
+        # Data validator
+        self.validator = PluginDataValidator()
+
+        # Cache configuration
+        self.cache_ttl = config.get("crypto", {}).get("cache", {}).get("ttl", 300)
+        self.cache = {}  # Simple in-memory cache
+
+        # API sources with fallback priority
+        self.sources = [
+            ("binance", self._binance_get_price),
+            ("coingecko", self._coingecko_get_price),
+            ("kraken", self._kraken_get_price),
+        ]
+
+        # Symbol mappings
         self.symbols = config.get("crypto", {}).get(
             "symbols",
             ["bitcoin", "ethereum", "tether", "binancecoin", "ripple"],
@@ -106,67 +121,209 @@ class CryptoModule(BaseModule):
 
     async def _fetch_crypto_market_data(self) -> List[Dict[str, Any]]:
         """
-        Fetch crypto market data from CoinGecko API
-        CoinGecko free API doesn't require authentication
+        Fetch crypto market data from multiple API sources with fallback
+        Tries Binance first, then CoinGecko, then Kraken
         """
         crypto_data_list = []
 
         try:
-            async with aiohttp.ClientSession() as session:
-                # Fetch market data for top cryptocurrencies
-                url = f"{self.api_base}/coins/markets"
-                params = {
-                    "vs_currency": "usd",
-                    "order": "market_cap_desc",
-                    "per_page": len(self.symbols),
-                    "page": 1,
-                    "sparkline": "false",
-                }
+            # Map symbols to trading pairs
+            trading_pairs = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT"]
 
-                async with session.get(
-                    url, params=params, timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
+            for pair in trading_pairs:
+                try:
+                    # Try to get price from multiple sources with fallback
+                    data = await self._get_price_with_fallback(pair)
 
-                        for coin in data:
-                            if (
-                                coin["id"] in self.symbols
-                                or coin["symbol"] in self.symbols
-                            ):
-                                crypto_data_list.append(
-                                    self._parse_crypto_data(coin)
-                                )
-
+                    if data:
+                        # Convert to standard format
+                        crypto_data_list.append(
+                            {
+                                "symbol": pair.replace("USDT", ""),
+                                "name": self._get_coin_name(pair),
+                                "price_usd": data["price_usd"],
+                                "market_cap_usd": data.get("market_cap_usd", 0),
+                                "volume_24h_usd": data.get("volume_24h_usd", 0),
+                                "price_change_24h_pct": data.get(
+                                    "price_change_24h_pct", 0
+                                ),
+                                "timestamp": datetime.now(timezone.utc),
+                            }
+                        )
                         logger.info(
-                            f"✓ Fetched data for {len(crypto_data_list)} cryptocurrencies from CoinGecko"
+                            f"✓ Fetched {pair} from {data.get('source', 'unknown')}"
                         )
-                    else:
-                        logger.warning(
-                            f"CoinGecko API returned status {response.status}"
-                        )
-                        # Fall back to sample data if API fails
-                        crypto_data_list = self._generate_sample_crypto_data()
+
+                except Exception as e:
+                    logger.warning(f"Failed to fetch {pair}: {e}")
+                    continue
+
+            # If we got no data, fall back to sample data
+            if not crypto_data_list:
+                logger.warning("All API sources failed, using sample data")
+                crypto_data_list = self._generate_sample_crypto_data()
 
         except Exception as e:
-            logger.error(f"Error fetching crypto data: {e}")
-            # Fall back to sample data
+            logger.error(f"Error in _fetch_crypto_market_data: {e}")
             crypto_data_list = self._generate_sample_crypto_data()
 
         return crypto_data_list
 
+    async def _get_price_with_fallback(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Get crypto price from multiple sources with fallback pattern
+
+        Args:
+            symbol: Trading pair symbol (e.g., "BTCUSDT")
+
+        Returns:
+            dict with price data or None if all sources fail
+        """
+        # Check cache first
+        cache_key = f"crypto:{symbol}"
+        if cache_key in self.cache:
+            cached_data, cached_time = self.cache[cache_key]
+            age = (datetime.now(timezone.utc) - cached_time).total_seconds()
+            if age < self.cache_ttl:
+                logger.info(f"Using cached price for {symbol}")
+                return cached_data
+
+        # Try each source in order
+        last_error = None
+        for source_name, source_func in self.sources:
+            try:
+                logger.info(f"Trying {source_name} for {symbol}")
+                data = await asyncio.wait_for(source_func(symbol), timeout=5.0)
+
+                # Validate data quality
+                is_valid, quality_score = self.validator.validate_crypto_data(data)
+                if is_valid:
+                    # Cache the result
+                    self.cache[cache_key] = (data, datetime.now(timezone.utc))
+                    logger.info(
+                        f"Got price from {source_name} (quality: {quality_score:.2f})"
+                    )
+                    return data
+                else:
+                    logger.warning(
+                        f"{source_name} returned low quality data: {quality_score:.2f}"
+                    )
+
+            except asyncio.TimeoutError:
+                logger.warning(f"{source_name} timed out")
+                last_error = f"{source_name} timeout"
+            except Exception as e:
+                logger.warning(f"{source_name} failed: {e}")
+                last_error = str(e)
+
+        # If we get here, all sources failed
+        # Try to return stale cached data if available
+        if cache_key in self.cache:
+            cached_data, cached_time = self.cache[cache_key]
+            age = (datetime.now(timezone.utc) - cached_time).total_seconds()
+            if age < 600:  # 10 minutes max stale age
+                logger.warning(f"Using stale cached data for {symbol} ({age}s old)")
+                return cached_data
+
+        logger.error(f"All crypto API sources failed for {symbol}. Last error: {last_error}")
+        return None
+
+    async def _binance_get_price(self, symbol: str) -> Dict[str, Any]:
+        """Get price from Binance API"""
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                return {
+                    "price_usd": float(data["price"]),
+                    "source": "binance",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
+    async def _coingecko_get_price(self, symbol: str) -> Dict[str, Any]:
+        """Get price from CoinGecko API"""
+        # Map trading pairs to CoinGecko IDs
+        symbol_map = {
+            "BTCUSDT": "bitcoin",
+            "ETHUSDT": "ethereum",
+            "BNBUSDT": "binancecoin",
+            "XRPUSDT": "ripple",
+        }
+
+        coin_id = symbol_map.get(symbol, symbol.lower().replace("usdt", ""))
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                if coin_id not in data:
+                    raise ValueError(f"CoinGecko: {coin_id} not found")
+
+                return {
+                    "price_usd": float(data[coin_id]["usd"]),
+                    "market_cap_usd": data[coin_id].get("usd_market_cap", 0),
+                    "volume_24h_usd": data[coin_id].get("usd_24h_vol", 0),
+                    "price_change_24h_pct": data[coin_id].get("usd_24h_change", 0),
+                    "source": "coingecko",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
+    async def _kraken_get_price(self, symbol: str) -> Dict[str, Any]:
+        """Get price from Kraken API"""
+        # Map symbols to Kraken pairs
+        symbol_map = {
+            "BTCUSDT": "XBTUSDT",
+            "ETHUSDT": "ETHUSDT",
+            "BNBUSDT": "BNBUSDT",
+            "XRPUSDT": "XRPUSDT",
+        }
+
+        kraken_symbol = symbol_map.get(symbol, symbol)
+        url = f"https://api.kraken.com/0/public/Ticker?pair={kraken_symbol}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
+                response.raise_for_status()
+                data = await response.json()
+
+                if data.get("error"):
+                    raise ValueError(f"Kraken error: {data['error']}")
+
+                # Kraken returns nested structure
+                result = list(data["result"].values())[0]
+                price = float(result["c"][0])  # Last trade closed price
+
+                return {
+                    "price_usd": price,
+                    "source": "kraken",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+
+    def _get_coin_name(self, symbol: str) -> str:
+        """Get full coin name from symbol"""
+        names = {
+            "BTCUSDT": "Bitcoin",
+            "ETHUSDT": "Ethereum",
+            "BNBUSDT": "BNB",
+            "XRPUSDT": "XRP",
+        }
+        return names.get(symbol, symbol)
+
     def _parse_crypto_data(self, api_data: Dict) -> Dict[str, Any]:
-        """Parse CoinGecko API response"""
+        """Parse API response (kept for compatibility)"""
         return {
-            "symbol": api_data["symbol"].upper(),
+            "symbol": api_data["symbol"],
             "name": api_data["name"],
-            "price_usd": api_data["current_price"],
-            "market_cap_usd": api_data.get("market_cap", 0),
-            "volume_24h_usd": api_data.get("total_volume", 0),
-            "price_change_24h_pct": api_data.get(
-                "price_change_percentage_24h", 0
-            ),
-            "timestamp": datetime.now(),
+            "price_usd": api_data["price_usd"],
+            "market_cap_usd": api_data.get("market_cap_usd", 0),
+            "volume_24h_usd": api_data.get("volume_24h_usd", 0),
+            "price_change_24h_pct": api_data.get("price_change_24h_pct", 0),
+            "timestamp": api_data.get("timestamp", datetime.now(timezone.utc)),
         }
 
     def _generate_sample_crypto_data(self) -> List[Dict[str, Any]]:
