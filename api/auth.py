@@ -6,7 +6,7 @@ JWT-based authentication with role-based access control
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 import jwt
 from datetime import datetime, timedelta, timezone
 import bcrypt
@@ -269,8 +269,9 @@ class LoginRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
     password: str = Field(..., min_length=6, max_length=100)
 
-    @validator("username")
-    def validate_username(cls, v):
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
         """Validate username format and sanitize"""
         # Check for security issues
         is_valid, error_msg = InputSanitizer.validate_input(
@@ -291,8 +292,9 @@ class LoginRequest(BaseModel):
 
         return v
 
-    @validator("password")
-    def validate_password(cls, v):
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
         """Validate password and sanitize (only check for security issues)"""
         # Check for security issues (but don't modify password)
         is_valid, error_msg = InputSanitizer.validate_input(
@@ -325,8 +327,9 @@ class UserCreateRequest(BaseModel):
     password: str = Field(..., min_length=6, max_length=100)
     role: str = Field("user", pattern="^(admin|user|readonly)$")
 
-    @validator("username")
-    def validate_username(cls, v):
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
         """Validate username format and sanitize"""
         # Check for security issues
         is_valid, error_msg = InputSanitizer.validate_input(
@@ -347,8 +350,9 @@ class UserCreateRequest(BaseModel):
 
         return v
 
-    @validator("password")
-    def validate_password(cls, v):
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, v: str) -> str:
         """Validate password"""
         # Check for security issues (but don't modify password)
         is_valid, error_msg = InputSanitizer.validate_input(
