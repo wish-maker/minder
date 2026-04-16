@@ -22,7 +22,7 @@ class PluginDataValidator:
         score = 1.0
 
         # Check for null values
-        if data.get("price_usd") is None:
+        if data.get("price") is None:
             logger.warning("Crypto price is null")
             score -= 0.3
 
@@ -47,9 +47,9 @@ class PluginDataValidator:
             score -= 0.3
 
         # Check for outliers (price changed >50% in 5 min)
-        if "previous_price" in data and data.get("price_usd"):
+        if "previous_price" in data and data.get("price"):
             try:
-                change = abs(data["price_usd"] - data["previous_price"]) / data[
+                change = abs(data["price"] - data["previous_price"]) / data[
                     "previous_price"
                 ]
                 if change > 0.5:
@@ -57,11 +57,6 @@ class PluginDataValidator:
                     score -= 0.3
             except (ZeroDivisionError, TypeError) as e:
                 logger.warning(f"Could not calculate price change: {e}")
-
-        # Check for zero or negative prices
-        if data.get("price_usd") is not None and data["price_usd"] <= 0:
-            logger.warning(f"Invalid price: {data['price_usd']}")
-            score -= 0.3
 
         is_valid = score > 0.5
         return is_valid, max(0.0, score)

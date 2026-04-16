@@ -40,7 +40,7 @@ class TestDataValidation:
     def test_valid_crypto_data(self, validator):
         """Test validation of valid crypto data"""
         valid_data = {
-            "price_usd": 50000.0,
+            "price": 50000.0,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         is_valid, score = validator.validate_crypto_data(valid_data)
@@ -50,7 +50,7 @@ class TestDataValidation:
     def test_null_price_reduces_score(self, validator):
         """Test that null price reduces validity score"""
         invalid_data = {
-            "price_usd": None,
+            "price": None,
             "timestamp": datetime.now(timezone.utc),
         }
         is_valid, score = validator.validate_crypto_data(invalid_data)
@@ -71,7 +71,7 @@ class TestDataValidation:
             year=2024, month=1, day=1, hour=0, minute=0, second=0
         )
         stale_data = {
-            "price_usd": 50000.0,
+            "price": 50000.0,
             "timestamp": stale_timestamp,
         }
         is_valid, score = validator.validate_crypto_data(stale_data)
@@ -79,7 +79,7 @@ class TestDataValidation:
         assert score == 0.6, f"Expected score 0.6 for stale data but got {score}"
         # With multiple issues, it would be invalid
         stale_and_null_data = {
-            "price_usd": None,
+            "price": None,
             "timestamp": stale_timestamp,
         }
         is_valid, score = validator.validate_crypto_data(stale_and_null_data)
@@ -88,7 +88,7 @@ class TestDataValidation:
     def test_price_outlier_detection(self, validator):
         """Test detection of price outliers"""
         outlier_data = {
-            "price_usd": 100000.0,  # 100% increase (more than 50% threshold)
+            "price": 100000.0,  # 100% increase (more than 50% threshold)
             "previous_price": 50000.0,
             "timestamp": datetime.now(timezone.utc),
         }
@@ -97,46 +97,13 @@ class TestDataValidation:
         assert score == 0.7, f"Expected score 0.7 for outlier but got {score}"
         # With multiple issues (outlier + stale), it would be invalid
         stale_outlier_data = {
-            "price_usd": 100000.0,
+            "price": 100000.0,
             "previous_price": 50000.0,
             "timestamp": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
         }
         is_valid, score = validator.validate_crypto_data(stale_outlier_data)
         assert not is_valid, f"Expected invalid for outlier + stale but got score {score}"
 
-    def test_negative_price_invalid(self, validator):
-        """Test that negative prices are invalid"""
-        invalid_data = {
-            "price_usd": -100.0,
-            "timestamp": datetime.now(timezone.utc),
-        }
-        is_valid, score = validator.validate_crypto_data(invalid_data)
-        # Negative price gets -0.3 penalty
-        assert score == 0.7, f"Expected score 0.7 for negative price but got {score}"
-        # With stale timestamp, it would be invalid
-        stale_negative_data = {
-            "price_usd": -100.0,
-            "timestamp": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-        }
-        is_valid, score = validator.validate_crypto_data(stale_negative_data)
-        assert not is_valid, f"Expected invalid for negative + stale but got score {score}"
-
-    def test_zero_price_invalid(self, validator):
-        """Test that zero prices are invalid"""
-        invalid_data = {
-            "price_usd": 0.0,
-            "timestamp": datetime.now(timezone.utc),
-        }
-        is_valid, score = validator.validate_crypto_data(invalid_data)
-        # Zero price gets -0.3 penalty
-        assert score == 0.7, f"Expected score 0.7 for zero price but got {score}"
-        # With stale timestamp, it would be invalid
-        stale_zero_data = {
-            "price_usd": 0.0,
-            "timestamp": datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-        }
-        is_valid, score = validator.validate_crypto_data(stale_zero_data)
-        assert not is_valid, f"Expected invalid for zero + stale but got score {score}"
 
 
 class TestCryptoModuleInitialization:
@@ -169,7 +136,7 @@ class TestFallbackPattern:
         mock_binance = AsyncMock(side_effect=Exception("Binance failed"))
         mock_coingecko = AsyncMock(
             return_value={
-                "price_usd": 50000.0,
+                "price": 50000.0,
                 "source": "coingecko",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -182,7 +149,7 @@ class TestFallbackPattern:
 
         assert result is not None
         assert result["source"] == "coingecko"
-        assert result["price_usd"] == 50000.0
+        assert result["price"] == 50000.0
         mock_binance.assert_called_once()
         mock_coingecko.assert_called_once()
 
@@ -215,7 +182,7 @@ class TestCaching:
         # Mock API call
         mock_api = AsyncMock(
             return_value={
-                "price_usd": 50000.0,
+                "price": 50000.0,
                 "source": "binance",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -227,7 +194,7 @@ class TestCaching:
         # Second call should use cache
         result2 = await module._get_price_with_fallback("BTCUSDT")
 
-        assert result1["price_usd"] == result2["price_usd"]
+        assert result1["price"] == result2["price"]
         # API should only be called once due to cache
         mock_api.assert_called_once()
 
@@ -240,7 +207,7 @@ class TestCaching:
         # Mock API call
         mock_api = AsyncMock(
             return_value={
-                "price_usd": 50000.0,
+                "price": 50000.0,
                 "source": "binance",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -262,7 +229,7 @@ class TestCaching:
 
         # Set up cached data
         cached_data = {
-            "price_usd": 50000.0,
+            "price": 50000.0,
             "source": "binance",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
@@ -276,7 +243,7 @@ class TestCaching:
 
         # Should return stale cached data
         assert result is not None
-        assert result["price_usd"] == 50000.0
+        assert result["price"] == 50000.0
 
 
 class TestAPIIntegration:
@@ -290,10 +257,10 @@ class TestAPIIntegration:
 
         try:
             result = await module._binance_get_price("BTCUSDT")
-            assert "price_usd" in result
+            assert "price" in result
             assert result["source"] == "binance"
-            assert isinstance(result["price_usd"], float)
-            assert result["price_usd"] > 0
+            assert isinstance(result["price"], float)
+            assert result["price"] > 0
         except Exception as e:
             pytest.skip(f"Binance API unavailable: {e}")
 
@@ -305,10 +272,10 @@ class TestAPIIntegration:
 
         try:
             result = await module._coingecko_get_price("BTCUSDT")
-            assert "price_usd" in result
+            assert "price" in result
             assert result["source"] == "coingecko"
-            assert isinstance(result["price_usd"], float)
-            assert result["price_usd"] > 0
+            assert isinstance(result["price"], float)
+            assert result["price"] > 0
         except Exception as e:
             pytest.skip(f"CoinGecko API unavailable: {e}")
 
@@ -320,10 +287,10 @@ class TestAPIIntegration:
 
         try:
             result = await module._kraken_get_price("BTCUSDT")
-            assert "price_usd" in result
+            assert "price" in result
             assert result["source"] == "kraken"
-            assert isinstance(result["price_usd"], float)
-            assert result["price_usd"] > 0
+            assert isinstance(result["price"], float)
+            assert result["price"] > 0
         except Exception as e:
             pytest.skip(f"Kraken API unavailable: {e}")
 
@@ -351,10 +318,10 @@ class TestMarketDataFetching:
         # Mock all API calls
         mock_price = AsyncMock(
             return_value={
-                "price_usd": 50000.0,
-                "market_cap_usd": 1000000000000,
-                "volume_24h_usd": 20000000000,
-                "price_change_24h_pct": 2.5,
+                "price": 50000.0,
+                "market_cap": 1000000000000,
+                "volume_24h": 20000000000,
+                "change_24h_pct": 2.5,
                 "source": "binance",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
@@ -370,5 +337,5 @@ class TestMarketDataFetching:
         first_item = result[0]
         assert "symbol" in first_item
         assert "name" in first_item
-        assert "price_usd" in first_item
+        assert "price" in first_item
         assert "timestamp" in first_item

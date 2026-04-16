@@ -141,11 +141,11 @@ class CryptoModule(BaseModule):
                             {
                                 "symbol": pair.replace("USDT", ""),
                                 "name": self._get_coin_name(pair),
-                                "price_usd": data["price_usd"],
-                                "market_cap_usd": data.get("market_cap_usd", 0),
-                                "volume_24h_usd": data.get("volume_24h_usd", 0),
-                                "price_change_24h_pct": data.get(
-                                    "price_change_24h_pct", 0
+                                "price": data["price"],
+                                "market_cap": data.get("market_cap", 0),
+                                "volume_24h": data.get("volume_24h", 0),
+                                "change_24h_pct": data.get(
+                                    "change_24h_pct", 0
                                 ),
                                 "timestamp": datetime.now(timezone.utc),
                             }
@@ -158,14 +158,14 @@ class CryptoModule(BaseModule):
                     logger.warning(f"Failed to fetch {pair}: {e}")
                     continue
 
-            # If we got no data, fall back to sample data
+            # If we got no data, return empty list
             if not crypto_data_list:
-                logger.warning("All API sources failed, using sample data")
-                crypto_data_list = self._generate_sample_crypto_data()
+                logger.error("All API sources failed, no data available")
+                return []
 
         except Exception as e:
             logger.error(f"Error in _fetch_crypto_market_data: {e}")
-            crypto_data_list = self._generate_sample_crypto_data()
+            return []
 
         return crypto_data_list
 
@@ -238,7 +238,7 @@ class CryptoModule(BaseModule):
                 data = await response.json()
 
                 return {
-                    "price_usd": float(data["price"]),
+                    "price": float(data["price"]),
                     "source": "binance",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
@@ -265,10 +265,10 @@ class CryptoModule(BaseModule):
                     raise ValueError(f"CoinGecko: {coin_id} not found")
 
                 return {
-                    "price_usd": float(data[coin_id]["usd"]),
-                    "market_cap_usd": data[coin_id].get("usd_market_cap", 0),
-                    "volume_24h_usd": data[coin_id].get("usd_24h_vol", 0),
-                    "price_change_24h_pct": data[coin_id].get("usd_24h_change", 0),
+                    "price": float(data[coin_id]["usd"]),
+                    "market_cap": data[coin_id].get("usd_market_cap", 0),
+                    "volume_24h": data[coin_id].get("usd_24h_vol", 0),
+                    "change_24h_pct": data[coin_id].get("usd_24h_change", 0),
                     "source": "coingecko",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
@@ -299,7 +299,7 @@ class CryptoModule(BaseModule):
                 price = float(result["c"][0])  # Last trade closed price
 
                 return {
-                    "price_usd": price,
+                    "price": price,
                     "source": "kraken",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
@@ -319,83 +319,30 @@ class CryptoModule(BaseModule):
         return {
             "symbol": api_data["symbol"],
             "name": api_data["name"],
-            "price_usd": api_data["price_usd"],
-            "market_cap_usd": api_data.get("market_cap_usd", 0),
-            "volume_24h_usd": api_data.get("volume_24h_usd", 0),
-            "price_change_24h_pct": api_data.get("price_change_24h_pct", 0),
+            "price": api_data["price"],
+            "market_cap": api_data.get("market_cap", 0),
+            "volume_24h": api_data.get("volume_24h", 0),
+            "change_24h_pct": api_data.get("change_24h_pct", 0),
             "timestamp": api_data.get("timestamp", datetime.now(timezone.utc)),
         }
 
-    def _generate_sample_crypto_data(self) -> List[Dict[str, Any]]:
-        """Generate realistic sample crypto data when API fails"""
-        import random
-
-        sample_data = [
-            {
-                "symbol": "BTC",
-                "name": "Bitcoin",
-                "price_usd": round(67000 + random.uniform(-500, 500), 2),
-                "market_cap_usd": 1300000000000,
-                "volume_24h_usd": 25000000000,
-                "price_change_24h_pct": round(random.uniform(-3, 3), 2),
-                "timestamp": datetime.now(),
-            },
-            {
-                "symbol": "ETH",
-                "name": "Ethereum",
-                "price_usd": round(3500 + random.uniform(-100, 100), 2),
-                "market_cap_usd": 420000000000,
-                "volume_24h_usd": 15000000000,
-                "price_change_24h_pct": round(random.uniform(-4, 4), 2),
-                "timestamp": datetime.now(),
-            },
-            {
-                "symbol": "USDT",
-                "name": "Tether",
-                "price_usd": 1.00,
-                "market_cap_usd": 110000000000,
-                "volume_24h_usd": 50000000000,
-                "price_change_24h_pct": 0.01,
-                "timestamp": datetime.now(),
-            },
-            {
-                "symbol": "BNB",
-                "name": "BNB",
-                "price_usd": round(600 + random.uniform(-20, 20), 2),
-                "market_cap_usd": 90000000000,
-                "volume_24h_usd": 1500000000,
-                "price_change_24h_pct": round(random.uniform(-2, 2), 2),
-                "timestamp": datetime.now(),
-            },
-            {
-                "symbol": "XRP",
-                "name": "XRP",
-                "price_usd": round(0.60 + random.uniform(-0.05, 0.05), 4),
-                "market_cap_usd": 33000000000,
-                "volume_24h_usd": 1500000000,
-                "price_change_24h_pct": round(random.uniform(-3, 3), 2),
-                "timestamp": datetime.now(),
-            },
-        ]
-
-        return sample_data
 
     async def _store_crypto_data(self, cursor, crypto_data: Dict[str, Any]):
         """Store crypto data to PostgreSQL"""
         cursor.execute(
             """
             INSERT INTO crypto_data (
-                symbol, name, price_usd, market_cap_usd,
-                volume_24h_usd, price_change_24h_pct, timestamp
+                symbol, name, price, market_cap,
+                volume_24h, change_24h_pct, timestamp
             ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
             (
                 crypto_data["symbol"],
                 crypto_data["name"],
-                crypto_data["price_usd"],
-                crypto_data["market_cap_usd"],
-                crypto_data["volume_24h_usd"],
-                crypto_data["price_change_24h_pct"],
+                crypto_data["price"],
+                crypto_data["market_cap"],
+                crypto_data["volume_24h"],
+                crypto_data["change_24h_pct"],
                 crypto_data["timestamp"],
             ),
         )
@@ -408,7 +355,7 @@ class CryptoModule(BaseModule):
 
             # Get latest prices
             cursor.execute("""
-                SELECT symbol, name, price_usd, price_change_24h_pct
+                SELECT symbol, name, price, change_24h_pct
                 FROM crypto_data
                 WHERE timestamp >= NOW() - INTERVAL '1 hour'
                 ORDER BY timestamp DESC
@@ -423,7 +370,7 @@ class CryptoModule(BaseModule):
                 for row in results:
                     metrics[row[0]] = {
                         "name": row[1],
-                        "price_usd": float(row[2]),
+                        "price": float(row[2]),
                         "change_24h_pct": float(row[3]),
                     }
 
