@@ -53,13 +53,13 @@ jobs:
           pip install flake8 black isort mypy pylint
 
       - name: Run Flake8
-        run: flake8 api/ core/ --max-line-length=120 --exclude=*.pyc,__pycache__
+        run: flake8 api/ core/ plugins/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run Black
-        run: black --check api/ core/
+        run: black --check api/ core/ plugins/
 
       - name: Run isort
-        run: isort --check-only api/ core/
+        run: isort --check-only api/ core/ plugins/
 
       - name: Run MyPy
         run: mypy api/ --ignore-missing-imports || true

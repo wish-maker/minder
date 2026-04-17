@@ -10,13 +10,11 @@ Türkiye yatırım fonları analizi ve takibi - tefas-crawler entegrasyonlu
 - KAP entegrasyonu ile ek veri kaynakları
 """
 
-import asyncio
 import logging
+import psycopg2
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import pandas as pd
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import aiohttp
 from bs4 import BeautifulSoup
 
@@ -29,8 +27,7 @@ except ImportError:
     TEFAS_AVAILABLE = False
     logging.warning("tefas-crawler not installed. Install with: pip install tefas-crawler")
 
-from core.module_interface import BaseModule, ModuleMetadata, ModuleStatus
-from core.event_bus import EventType, Event
+from core.module_interface import BaseModule, ModuleMetadata
 
 logger = logging.getLogger("minder.module.tefas")
 
@@ -373,7 +370,10 @@ class TefasModule(BaseModule):
                         ]
                     },
                     "patterns": [{"type": "price_trend", "description": "Fund price analysis based on 30-day data"}],
-                    "insights": [f"Analyzed {len(results)} top performing funds", f"Data from tefas-crawler package"],
+                    "insights": [
+                        f"Analyzed {len(results)} top performing funds",
+                        "Data from tefas-crawler package v0.5.0",
+                    ],
                 }
             else:
                 return {"metrics": {}, "patterns": [], "insights": ["No fund data available for analysis"]}
