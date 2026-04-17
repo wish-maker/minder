@@ -5,16 +5,17 @@ Minder Microkernel
 Core engine that manages modules and orchestrates operations
 """
 
-from typing import Dict, List, Any, Optional
 import logging
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from .registry import PluginRegistry
+from plugins.store import PluginStore
+
 from .correlation_engine import CorrelationEngine
-from .event_bus import EventBus, EventType, Event
+from .event_bus import Event, EventBus, EventType
 from .knowledge_graph import KnowledgeGraph
 from .plugin_loader import PluginLoader
-from plugins.store import PluginStore
+from .registry import PluginRegistry
 
 logger = logging.getLogger(__name__)
 

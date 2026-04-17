@@ -3,9 +3,10 @@ System endpoints
 Handles health checks and system status
 """
 
-from fastapi import APIRouter, HTTPException, Response
-from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
 import logging
+
+from fastapi import APIRouter, HTTPException, Response
+from prometheus_client import REGISTRY, Counter, Histogram, generate_latest
 
 from ..models import HealthResponse, SystemStatusResponse
 
@@ -29,7 +30,9 @@ def get_metrics():
         _request_duration = Histogram("minder_request_duration_seconds", "Request duration", ["endpoint"])
         _plugin_health = Counter("minder_plugin_health_checks", "Plugin health checks", ["plugin", "status"])
         _data_collection = Counter(
-            "minder_data_collection_total", "Data collection operations", ["plugin", "operation"]
+            "minder_data_collection_total",
+            "Data collection operations",
+            ["plugin", "operation"],
         )
 
     return _request_count, _request_duration, _plugin_health, _data_collection

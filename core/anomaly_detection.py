@@ -3,14 +3,15 @@ Real-Time Anomaly Detection System
 Implements Isolation Forest, LSTM Autoencoders, and statistical methods
 """
 
-from typing import Dict, List, Any, Optional
+import logging
+from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any, Dict, List, Optional
+
 import numpy as np
 import pandas as pd
-import logging
-from dataclasses import dataclass
-from enum import Enum
-from collections import deque
 
 logger = logging.getLogger(__name__)
 

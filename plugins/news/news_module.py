@@ -2,13 +2,14 @@
 Minder News Analysis Module
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime
 import logging
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from html import unescape
+from typing import Any, Dict, List, Optional
+
 import aiohttp
 import psycopg2
-import xml.etree.ElementTree as ET
-from html import unescape
 
 from core.module_interface import BaseModule, ModuleMetadata
 

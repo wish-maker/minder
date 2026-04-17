@@ -3,8 +3,9 @@ Correlation endpoints
 Handles knowledge graph correlations
 """
 
-from fastapi import APIRouter, HTTPException
 import logging
+
+from fastapi import APIRouter, HTTPException
 
 logger = logging.getLogger(__name__)
 

@@ -15,8 +15,8 @@ Each collector is responsible for:
 5. Error handling and retry logic
 """
 
-from .risk_metrics_collector import RiskMetricsCollector
 from .allocation_collector import AllocationCollector
+from .risk_metrics_collector import RiskMetricsCollector
 from .tax_collector import TaxCollector
 
 __all__ = [

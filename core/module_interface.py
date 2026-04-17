@@ -4,9 +4,9 @@ All modules must implement this interface for compatibility
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
 from datetime import datetime
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class ModuleStatus(Enum):

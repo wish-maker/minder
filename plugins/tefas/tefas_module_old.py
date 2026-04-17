@@ -6,9 +6,10 @@ Türkiye yatırım fonları analizi ve takibi
 TEFAS API entegrasyonu ile 2020'den beri veri
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import aiohttp
 import pandas as pd
 import psycopg2
@@ -24,8 +25,8 @@ except ImportError:
     INFLUXDB_AVAILABLE = False
 
 
+from core.event_bus import Event, EventType
 from core.module_interface import BaseModule, ModuleMetadata, ModuleStatus
-from core.event_bus import EventType, Event
 
 
 class TefasModule(BaseModule):
@@ -465,11 +466,7 @@ class TefasModule(BaseModule):
             # Optional: Qdrant integration
             try:
                 from qdrant_client import QdrantClient
-                from qdrant_client.models import (
-                    Distance,
-                    VectorParams,
-                    PointStruct,
-                )
+                from qdrant_client.models import Distance, PointStruct, VectorParams
 
                 # Qdrant client
                 qdrant = QdrantClient(

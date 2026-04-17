@@ -3,10 +3,11 @@ Authentication endpoints
 Handles JWT authentication and user management
 """
 
-from fastapi import APIRouter, HTTPException, Request
 import logging
 
-from ..auth import get_auth_manager, LoginResponse
+from fastapi import APIRouter, HTTPException, Request
+
+from ..auth import LoginResponse, get_auth_manager
 from ..middleware import limiter
 
 logger = logging.getLogger(__name__)

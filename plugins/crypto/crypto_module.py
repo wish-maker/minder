@@ -2,16 +2,18 @@
 Minder Crypto Analysis Module
 """
 
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime, timezone
+import asyncio
 import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
 import aiohttp
 import psycopg2
-import asyncio
 import yaml
-from pathlib import Path
 
 from core.module_interface import BaseModule, ModuleMetadata
+
 from .crypto_validator import PluginDataValidator
 
 logger = logging.getLogger(__name__)
@@ -90,9 +92,19 @@ class CryptoModule(BaseModule):
                     "parse_method": "kraken_parse",
                 },
             ],
-            "cache": {"ttl": 300, "backend": "memory", "redis_key_prefix": "crypto:price:"},
+            "cache": {
+                "ttl": 300,
+                "backend": "memory",
+                "redis_key_prefix": "crypto:price:",
+            },
             "fallback": {"use_cached": True, "max_stale_age": 600},
-            "symbols": {"BTC": "bitcoin", "ETH": "ethereum", "USDT": "tether", "BNB": "binancecoin", "XRP": "ripple"},
+            "symbols": {
+                "BTC": "bitcoin",
+                "ETH": "ethereum",
+                "USDT": "tether",
+                "BNB": "binancecoin",
+                "XRP": "ripple",
+            },
         }
 
     def _load_sources_from_config(self) -> List[Tuple[str, Any]]:
@@ -338,7 +350,8 @@ class CryptoModule(BaseModule):
         coin_id = symbol_map.get(symbol, symbol.lower().replace("usdt", ""))
         base_url = "https://api.coingecko.com/api/v3/simple/price"
         params = (
-            f"?ids={coin_id}&vs_currencies=usd&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
+            f"?ids={coin_id}&vs_currencies=usd&include_market_cap=true"
+            f"&include_24hr_vol=true&include_24hr_change=true"
         )
         url = base_url + params
 

@@ -2,12 +2,13 @@
 Minder Network Analysis Module
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime
 import logging
-import psycopg2
-import psutil
 import platform
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import psutil
+import psycopg2
 
 from core.module_interface import BaseModule, ModuleMetadata
 

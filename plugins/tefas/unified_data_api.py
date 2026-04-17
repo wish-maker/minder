@@ -7,8 +7,9 @@ with automatic fallback, caching, and error handling.
 """
 
 import logging
-from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 
 # Try to import borsapy
@@ -115,7 +116,7 @@ class BorsapyWrapper:
                 "title": fon.info.get("longName") or fon.info.get("title", ""),
                 "category": fon.info.get("category"),
                 "isin": fon.isin if hasattr(fon, "isin") else None,
-                "management_fee": fon.management_fee if hasattr(fon, "management_fee") else None,
+                "management_fee": (fon.management_fee if hasattr(fon, "management_fee") else None),
                 "inception_date": fon.info.get("inceptionDate"),
                 "fund_type": self._detect_fund_type(fund_code),
             }
@@ -584,7 +585,10 @@ class UnifiedDataAPI:
         try:
             today = datetime.now().strftime("%Y-%m-%d")
             data = self.tefas_crawler.get_fund_history(
-                fund_code=fund_code, start=today, end=today, fund_type=None  # Auto-detect
+                fund_code=fund_code,
+                start=today,
+                end=today,
+                fund_type=None,  # Auto-detect
             )
 
             if data is not None and not data.empty:
@@ -592,10 +596,10 @@ class UnifiedDataAPI:
                 return {
                     "code": row.get("code"),
                     "title": row.get("title"),
-                    "price": float(row.get("price", 0)) if pd.notna(row.get("price")) else None,
+                    "price": (float(row.get("price", 0)) if pd.notna(row.get("price")) else None),
                     "date": row.get("date"),
-                    "market_cap": float(row.get("market_cap", 0)) if pd.notna(row.get("market_cap")) else None,
-                    "volume": int(row.get("volume", 0)) if pd.notna(row.get("volume")) else None,
+                    "market_cap": (float(row.get("market_cap", 0)) if pd.notna(row.get("market_cap")) else None),
+                    "volume": (int(row.get("volume", 0)) if pd.notna(row.get("volume")) else None),
                 }
 
         except Exception as e:
@@ -668,7 +672,9 @@ class UnifiedDataAPI:
             start_date = end_date - timedelta(days=30)
 
             return self.tefas_crawler.get_fund_history(
-                fund_code=fund_code, start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d")
+                fund_code=fund_code,
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
             )
 
         return None
@@ -710,7 +716,10 @@ class UnifiedDataAPI:
                 "initialized": self.borsapy is not None,
                 "cache_stats": self.borsapy.get_cache_stats() if self.borsapy else None,
             },
-            "tefas_crawler": {"available": TEFAS_CRAWLER_AVAILABLE, "initialized": self.tefas_crawler is not None},
+            "tefas_crawler": {
+                "available": TEFAS_CRAWLER_AVAILABLE,
+                "initialized": self.tefas_crawler is not None,
+            },
         }
 
         # Determine overall health

@@ -3,13 +3,14 @@ Advanced Correlation Algorithms
 Implements Granger Causality, DTW, Cross-Correlation, and Mutual Information
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime
-import numpy as np
 import logging
-from scipy import signal
-from scipy.stats import pearsonr, spearmanr, entropy
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 from dtaidistance import dtw
+from scipy import signal
+from scipy.stats import entropy, pearsonr, spearmanr
 
 logger = logging.getLogger(__name__)
 

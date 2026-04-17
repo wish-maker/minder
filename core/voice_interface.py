@@ -5,8 +5,8 @@ Minder Voice Interface
 Handles STT/TTS for natural voice interaction
 """
 
-from typing import Dict, Optional, Any
 import logging
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

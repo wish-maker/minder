@@ -5,11 +5,11 @@ Minder Knowledge Graph
 Stores and queries entity relationships across modules
 """
 
-from typing import Dict, List, Set, Any, Optional
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-import logging
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 

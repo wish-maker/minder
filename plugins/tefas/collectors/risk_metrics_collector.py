@@ -14,8 +14,9 @@ multiple time periods (1y, 3y, 5y).
 """
 
 import logging
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -54,7 +55,10 @@ class RiskMetricsCollector:
         }
 
     def collect(
-        self, api, fund_codes: Optional[List[str]] = None, periods: Optional[List[str]] = None
+        self,
+        api,
+        fund_codes: Optional[List[str]] = None,
+        periods: Optional[List[str]] = None,
     ) -> Dict[str, int]:
         """
         Collect risk metrics for specified funds and periods

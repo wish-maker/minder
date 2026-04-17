@@ -3,18 +3,19 @@ Minder FastAPI Application
 Main REST API for Minder platform
 """
 
+import logging
+import os
+from typing import Any, Dict, List, Optional
+
 from fastapi import FastAPI, HTTPException
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
-import logging
-import os
 
-from core.kernel import MinderKernel
 from core.character_system import CharacterEngine
+from core.kernel import MinderKernel
 from core.voice_interface import VoiceInterface
-from . import plugin_store
-from . import auth
+
+from . import auth, plugin_store
 from .auth import AuthManager
 from .middleware import setup_middleware
 
@@ -425,7 +426,11 @@ def _validate_secrets():
     critical_secrets = {
         "JWT_SECRET_KEY": {
             "min_length": 32,
-            "forbidden_values": ["change-this-in-production", "secret", "minder-secret"],
+            "forbidden_values": [
+                "change-this-in-production",
+                "secret",
+                "minder-secret",
+            ],
             "display": "JWT_SECRET_KEY",
         },
         "POSTGRES_PASSWORD": {
@@ -443,7 +448,11 @@ def _validate_secrets():
     # Optional but recommended secrets
     optional_secrets = {
         "GITHUB_TOKEN": {"min_length": 20, "display": "GITHUB_TOKEN"},
-        "REDIS_PASSWORD": {"min_length": 16, "forbidden_values": ["redis", "password"], "display": "REDIS_PASSWORD"},
+        "REDIS_PASSWORD": {
+            "min_length": 16,
+            "forbidden_values": ["redis", "password"],
+            "display": "REDIS_PASSWORD",
+        },
     }
 
     missing = []
@@ -523,11 +532,11 @@ def _validate_secrets():
 def _setup_routes(kernel, character_engine):
     """Setup modular routes"""
     from .auth_endpoints import routes as auth_routes
-    from .plugins import endpoints as plugins_endpoints
-    from .chat import endpoints as chat_endpoints
     from .characters import endpoints as characters_endpoints
-    from .system import endpoints as system_endpoints
+    from .chat import endpoints as chat_endpoints
     from .correlations import endpoints as correlations_endpoints
+    from .plugins import endpoints as plugins_endpoints
+    from .system import endpoints as system_endpoints
 
     # Include routers
     app.include_router(auth_routes.router)

@@ -3,13 +3,14 @@ Plugin management endpoints
 Handles plugin discovery, loading, and management
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Request
-from typing import Optional, Dict, Any
 import logging
+from typing import Any, Dict, Optional
 
-from ..models import PipelineRequest, PluginsListResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+
 from ..auth import get_current_user_optional
 from ..middleware import limiter
+from ..models import PipelineRequest, PluginsListResponse
 
 logger = logging.getLogger(__name__)
 

@@ -5,11 +5,11 @@ Minder Event Bus
 Pub/Sub messaging for inter-module communication
 """
 
-from typing import Dict, List, Callable, Any, Optional
-from datetime import datetime
-from dataclasses import dataclass, field
-from enum import Enum
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

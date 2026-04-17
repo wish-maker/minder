@@ -3,10 +3,10 @@ Minder Character System
 Customizable AI personalities for voice interactions
 """
 
-from typing import Dict, Optional, Any
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-import logging
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 

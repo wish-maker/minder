@@ -3,17 +3,18 @@ Authentication & Authorization Module
 JWT-based authentication with role-based access control
 """
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator
-import jwt
-from datetime import datetime, timedelta, timezone
-import bcrypt
+import logging
 import os
 import re
 from contextvars import ContextVar
-import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
+
+import bcrypt
+import jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, Field, field_validator
 
 from .security import InputSanitizer
 

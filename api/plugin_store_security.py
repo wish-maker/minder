@@ -3,12 +3,12 @@ Plugin Store Security Module
 Malware scanning, author verification, and security policies
 """
 
-import re
 import logging
 import os
-from typing import List, Optional, Set
-from pathlib import Path
+import re
 from enum import Enum
+from pathlib import Path
+from typing import List, Optional, Set
 
 logger = logging.getLogger(__name__)
 

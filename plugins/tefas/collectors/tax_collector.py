@@ -12,8 +12,9 @@ for tracking tax rate changes over time.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -52,7 +53,10 @@ class TaxCollector:
         }
 
     def collect(
-        self, api, fund_codes: Optional[List[str]] = None, effective_date: Optional[str] = None
+        self,
+        api,
+        fund_codes: Optional[List[str]] = None,
+        effective_date: Optional[str] = None,
     ) -> Dict[str, int]:
         """
         Collect tax rates for specified funds
@@ -204,7 +208,14 @@ class TaxCollector:
                         fund_code, tax_category, effective_date, rate, created_at, updated_at
                     ) VALUES (%s, %s, %s, %s, %s, %s)
                     """,
-                    (fund_code, tax_category, effective_date, rate, datetime.now(), datetime.now()),
+                    (
+                        fund_code,
+                        tax_category,
+                        effective_date,
+                        rate,
+                        datetime.now(),
+                        datetime.now(),
+                    ),
                 )
                 self.stats["records_collected"] += 1
 
@@ -265,7 +276,10 @@ class TaxCollector:
             results = cursor.fetchall()
             conn.close()
 
-            return {"summary": [dict(row) for row in results], "categories": len(results)}
+            return {
+                "summary": [dict(row) for row in results],
+                "categories": len(results),
+            }
 
         except Exception as e:
             self.logger.error(f"Error fetching tax summary: {e}")

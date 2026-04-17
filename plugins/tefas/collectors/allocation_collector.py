@@ -11,8 +11,9 @@ Data is stored in tefas_allocation table with time-series support.
 """
 
 import logging
-from typing import Dict, Any, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -208,7 +209,16 @@ class AllocationCollector:
                         fund_code, date, asset_type, asset_name, weight, value_usd, count, created_at
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (fund_code, date, asset_type, asset_name, weight, value_usd, count, datetime.now()),
+                    (
+                        fund_code,
+                        date,
+                        asset_type,
+                        asset_name,
+                        weight,
+                        value_usd,
+                        count,
+                        datetime.now(),
+                    ),
                 )
                 self.stats["records_collected"] += 1
 

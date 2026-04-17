@@ -6,19 +6,13 @@ Microkernel architecture for modular RAG platform
 __version__ = "1.0.0"
 __author__ = "FundMind AI"
 
-from .module_interface import BaseModule, ModuleMetadata, ModuleStatus
-from .registry import PluginRegistry
-from .kernel import MinderKernel
-from .event_bus import EventBus, EventType, Event
-from .knowledge_graph import (
-    KnowledgeGraph,
-    Entity,
-    Relation,
-    EntityType,
-    RelationType,
-)
-from .plugin_loader import PluginLoader
 from .correlation_engine import CorrelationEngine
+from .event_bus import Event, EventBus, EventType
+from .kernel import MinderKernel
+from .knowledge_graph import Entity, EntityType, KnowledgeGraph, Relation, RelationType
+from .module_interface import BaseModule, ModuleMetadata, ModuleStatus
+from .plugin_loader import PluginLoader
+from .registry import PluginRegistry
 
 __all__ = [
     "BaseModule",

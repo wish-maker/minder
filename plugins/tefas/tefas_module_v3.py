@@ -4,12 +4,13 @@ Preserves all v2.0 functionality, adds advanced analytics
 """
 
 import logging
-from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-import pandas as pd
-import yaml
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
 import psycopg2
+import yaml
 
 try:
     from tefas import Crawler
@@ -20,6 +21,7 @@ except ImportError:
     logging.warning("tefas-crawler not installed")
 
 from core.module_interface import BaseModule, ModuleMetadata
+
 from .unified_data_api import UnifiedDataAPI
 
 logger = logging.getLogger("minder.module.tefas_v3")
@@ -128,7 +130,13 @@ class TefasModuleV3(BaseModule):
             version="3.0.0",
             description="Türkiye yatırım fonları analizi (borsapy entegrasyonlu)",
             author="FundMind AI",
-            dependencies=["borsapy>=1.0.0", "tefas-crawler", "psycopg2", "yaml", "pandas"],
+            dependencies=[
+                "borsapy>=1.0.0",
+                "tefas-crawler",
+                "psycopg2",
+                "yaml",
+                "pandas",
+            ],
             capabilities=[
                 "fund_data_collection",  # Mevcut v2.0
                 "historical_analysis",  # Mevcut v2.0
@@ -146,11 +154,13 @@ class TefasModuleV3(BaseModule):
 
         capabilities_list = [
             "✅ Fund discovery (2407+ fon)",
-            "✅ Risk metrikleri (Sharpe, Sortino, max drawdown)"
-            if self.features.get("risk_metrics")
-            else "⏸️ Risk metrikleri (disabled)",
-            "✅ Varlık dağılımı takibi" if self.features.get("allocation") else "⏸️ Varlık dağılımı (disabled)",
-            "✅ Stopaj oranları" if self.features.get("tax_info") else "⏸️ Stopaj oranları (disabled)",
+            (
+                "✅ Risk metrikleri (Sharpe, Sortino, max drawdown)"
+                if self.features.get("risk_metrics")
+                else "⏸️ Risk metrikleri (disabled)"
+            ),
+            ("✅ Varlık dağılımı takibi" if self.features.get("allocation") else "⏸️ Varlık dağılımı (disabled)"),
+            ("✅ Stopaj oranları" if self.features.get("tax_info") else "⏸️ Stopaj oranları (disabled)"),
         ]
 
         self.logger.info("📊 Registering TEFAS Module v3.0")
@@ -220,7 +230,11 @@ class TefasModuleV3(BaseModule):
 
         self.logger.info(f"✅ Collection complete: {total_collected} records, {total_errors} errors")
 
-        return {"records_collected": total_collected, "records_updated": total_updated, "errors": total_errors}
+        return {
+            "records_collected": total_collected,
+            "records_updated": total_updated,
+            "errors": total_errors,
+        }
 
     async def _collect_basic_data(self) -> Dict[str, int]:
         """Mevcut v2.0 basic collection - CORUNMA"""
@@ -237,7 +251,9 @@ class TefasModuleV3(BaseModule):
             start_date = end_date - timedelta(days=7)  # Last 7 days
 
             data = self.tefas.fetch(
-                start=start_date.strftime("%Y-%m-%d"), end=end_date.strftime("%Y-%m-%d"), kind="YAT"
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
+                kind="YAT",
             )
 
             if data is not None and not data.empty:
@@ -247,7 +263,11 @@ class TefasModuleV3(BaseModule):
             self.logger.error(f"Basic collection error: {e}")
             errors = 1
 
-        return {"records_collected": records_collected, "records_updated": records_updated, "errors": errors}
+        return {
+            "records_collected": records_collected,
+            "records_updated": records_updated,
+            "errors": errors,
+        }
 
     async def analyze(self) -> Dict[str, Any]:
         """Enhanced analysis with risk metrics and insights"""
@@ -279,8 +299,14 @@ class TefasModuleV3(BaseModule):
             return {
                 "metrics": basic_metrics,
                 "patterns": [
-                    {"type": "risk_return", "description": "Risk-adjusted returns analysis"},
-                    {"type": "allocation_drift", "description": "Asset allocation changes"},
+                    {
+                        "type": "risk_return",
+                        "description": "Risk-adjusted returns analysis",
+                    },
+                    {
+                        "type": "allocation_drift",
+                        "description": "Asset allocation changes",
+                    },
                 ],
                 "insights": risk_insights + allocation_insights,
             }
@@ -356,7 +382,12 @@ class TefasModuleV3(BaseModule):
             tax_rate = self.tax_collector.get_fund_tax_rate(fund_code, date)
             tax_category = self.api.get_tax_category(fund_code)
 
-            return {"fund_code": fund_code, "tax_rate": tax_rate, "tax_category": tax_category, "date": date}
+            return {
+                "fund_code": fund_code,
+                "tax_rate": tax_rate,
+                "tax_category": tax_category,
+                "date": date,
+            }
 
         return {"error": "Tax collector not initialized"}
 

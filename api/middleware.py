@@ -3,24 +3,25 @@ Middleware Module
 Security middleware including network detection, rate limiting, caching, and CORS
 """
 
-from fastapi import Request, Response, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.cors import CORSMiddleware
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+import hashlib
 import ipaddress
+import json
 import logging
 import os
-import redis
-import uuid
 import time
-import json
-import hashlib
+import uuid
 from typing import Callable, Optional
+
+import redis
+from fastapi import HTTPException, Request, Response
 
 # Prometheus metrics
 from prometheus_client import Counter, Histogram
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.cors import CORSMiddleware
 
 request_count = Counter("minder_requests_total", "Total requests", ["method", "endpoint", "status"])
 request_duration = Histogram("minder_request_duration_seconds", "Request duration", ["endpoint"])
@@ -416,7 +417,9 @@ class CacheMiddleware(BaseHTTPMiddleware):
             try:
                 response_body = response.body.decode("utf-8")
                 self.redis_client.setex(
-                    cache_key, ttl, json.dumps({"body": response_body, "status": response.status_code})
+                    cache_key,
+                    ttl,
+                    json.dumps({"body": response_body, "status": response.status_code}),
                 )
                 logger.debug(f"Cached response for {path} (TTL: {ttl}s)")
             except Exception as e:

@@ -3,19 +3,14 @@ Knowledge Graph Population System
 Automatically extracts and stores entities and relationships from module data
 """
 
-from typing import Dict, List, Any
+import logging
 from datetime import datetime, timedelta
+from typing import Any, Dict, List
+
 import numpy as np
 import pandas as pd
-import logging
 
-from .knowledge_graph import (
-    KnowledgeGraph,
-    Entity,
-    Relation,
-    EntityType,
-    RelationType,
-)
+from .knowledge_graph import Entity, EntityType, KnowledgeGraph, Relation, RelationType
 
 logger = logging.getLogger(__name__)
 

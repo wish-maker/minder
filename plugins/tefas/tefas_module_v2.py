@@ -11,11 +11,12 @@ Türkiye yatırım fonları analizi ve takibi - tefas-crawler entegrasyonlu
 """
 
 import logging
-import psycopg2
-from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
-import pandas as pd
+from typing import Any, Dict, List, Optional
+
 import aiohttp
+import pandas as pd
+import psycopg2
 from bs4 import BeautifulSoup
 
 # TEFAS crawler
@@ -312,15 +313,26 @@ class TefasModule(BaseModule):
                         # Parse fund listings
                         # (Implementation depends on actual KAP page structure)
                         funds_found = len(
-                            soup.find_all(["tr", "div"], class_=lambda x: x and "fon" in x.lower() if x else False)
+                            soup.find_all(
+                                ["tr", "div"],
+                                class_=lambda x: (x and "fon" in x.lower() if x else False),
+                            )
                         )
 
                         self.logger.info(f"✅ KAP data: {funds_found} fund entries")
 
-                        return {"source": "KAP", "entries_found": funds_found, "status": "success"}
+                        return {
+                            "source": "KAP",
+                            "entries_found": funds_found,
+                            "status": "success",
+                        }
                     else:
                         self.logger.warning(f"KAP returned status {response.status}")
-                        return {"source": "KAP", "error": f"HTTP {response.status}", "status": "failed"}
+                        return {
+                            "source": "KAP",
+                            "error": f"HTTP {response.status}",
+                            "status": "failed",
+                        }
 
         except Exception as e:
             self.logger.error(f"Error fetching KAP data: {e}")
@@ -369,14 +381,23 @@ class TefasModule(BaseModule):
                             for row in results
                         ]
                     },
-                    "patterns": [{"type": "price_trend", "description": "Fund price analysis based on 30-day data"}],
+                    "patterns": [
+                        {
+                            "type": "price_trend",
+                            "description": "Fund price analysis based on 30-day data",
+                        }
+                    ],
                     "insights": [
                         f"Analyzed {len(results)} top performing funds",
                         "Data from tefas-crawler package v0.5.0",
                     ],
                 }
             else:
-                return {"metrics": {}, "patterns": [], "insights": ["No fund data available for analysis"]}
+                return {
+                    "metrics": {},
+                    "patterns": [],
+                    "insights": ["No fund data available for analysis"],
+                }
 
         except Exception as e:
             self.logger.error(f"Error analyzing fund data: {e}")

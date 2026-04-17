@@ -3,14 +3,15 @@ Chat endpoints
 Handles AI chat interface with Ollama integration
 """
 
-from fastapi import APIRouter, HTTPException, Request, Depends
-import logging
-import httpx
 import json
+import logging
 
-from ..models import ChatRequest, ChatResponse
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
+
 from ..auth import get_current_user_optional
 from ..middleware import expensive_limiter
+from ..models import ChatRequest, ChatResponse
 
 logger = logging.getLogger(__name__)
 

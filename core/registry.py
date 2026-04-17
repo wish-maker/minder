@@ -5,9 +5,9 @@ Minder Plugin Registry
 Discovers, registers, and manages all plugins
 """
 
-from typing import Dict, List, Optional, Any
 import logging
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from .module_interface import BaseModule, ModuleMetadata, ModuleStatus
 

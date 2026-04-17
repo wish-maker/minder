@@ -1,7 +1,8 @@
 """Data quality validation for crypto API responses"""
+
+import logging
 from datetime import datetime, timezone
 from typing import Tuple
-import logging
 
 logger = logging.getLogger(__name__)
 

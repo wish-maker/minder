@@ -3,12 +3,12 @@ Minder Plugin Loader
 Dynamic plugin discovery and loading
 """
 
-from typing import Dict, List, Optional, Any
-from pathlib import Path
 import importlib.util
 import inspect
 import logging
 import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from .module_interface import BaseModule
 

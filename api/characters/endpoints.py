@@ -3,10 +3,11 @@ Character management endpoints
 Handles AI character system management
 """
 
-from fastapi import APIRouter, HTTPException
 import logging
 
-from ..models import CharacterCreateRequest, CharactersListResponse, CharacterCreateResponse
+from fastapi import APIRouter, HTTPException
+
+from ..models import CharacterCreateRequest, CharacterCreateResponse, CharactersListResponse
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,9 @@ def setup_character_routes(router, character_engine):
         return {"characters": character_engine.list_characters()}
 
     @router.post("", response_model=CharacterCreateResponse, tags=["characters"])
-    async def create_character(request: CharacterCreateRequest) -> CharacterCreateResponse:
+    async def create_character(
+        request: CharacterCreateRequest,
+    ) -> CharacterCreateResponse:
         """Create custom character"""
         if not character_engine:
             raise HTTPException(status_code=503, detail="Character engine not initialized")
