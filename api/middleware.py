@@ -1,6 +1,6 @@
 """
 Middleware Module
-Security middleware including network detection, rate limiting, and CORS
+Security middleware including network detection, rate limiting, caching, and CORS
 """
 
 from fastapi import Request, Response, HTTPException
@@ -14,7 +14,18 @@ import logging
 import os
 import redis
 import uuid
-from typing import Callable
+import time
+import json
+import hashlib
+from typing import Callable, Optional
+
+# Prometheus metrics
+from prometheus_client import Counter, Histogram
+
+request_count = Counter("minder_requests_total", "Total requests", ["method", "endpoint", "status"])
+request_duration = Histogram("minder_request_duration_seconds", "Request duration", ["endpoint"])
+cache_hits = Counter("minder_cache_hits_total", "Cache hits", ["endpoint"])
+cache_misses = Counter("minder_cache_misses_total", "Cache misses", ["endpoint"])
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +61,9 @@ class NetworkDetectionMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Start timer for metrics
+        start_time = time.time()
+
         # Get client IP
         client_ip = request.client.host if request.client else "unknown"
 
@@ -66,7 +80,21 @@ class NetworkDetectionMiddleware(BaseHTTPMiddleware):
         logger.debug(f"Request from {network_type} network (IP: {client_ip}, " f"Trusted: {is_trusted})")
 
         # Process request
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+        except Exception as e:
+            status_code = 500
+            raise e
+        finally:
+            # Record metrics
+            duration = time.time() - start_time
+            endpoint = request.url.path or "unknown"
+            method = request.method
+
+            request_count.labels(method=method, endpoint=endpoint, status=status_code).inc()
+
+            request_duration.labels(endpoint=endpoint).observe(duration)
 
         # Add network headers to response
         response.headers["X-Network-Type"] = network_type
@@ -322,6 +350,101 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+class CacheMiddleware(BaseHTTPMiddleware):
+    """
+    Response caching middleware for GET requests
+
+    Caches GET requests in Redis with configurable TTL.
+    Cache key includes: method, path, query params, and auth token hash.
+    """
+
+    def __init__(self, app, redis_client: Optional[redis.Redis] = None, default_ttl: int = 300):
+        super().__init__(app)
+        self.redis_client = redis_client
+        self.default_ttl = default_ttl
+
+        # Endpoints to cache (whitelist approach for security)
+        self.cacheable_endpoints = {
+            "/plugins": 60,  # Cache plugin list for 1 minute
+            "/system/status": 30,  # Cache system status for 30 seconds
+            "/health": 10,  # Cache health check for 10 seconds
+        }
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Only cache GET requests
+        if request.method != "GET":
+            return await call_next(request)
+
+        # Check if endpoint is cacheable
+        path = request.url.path
+        if path not in self.cacheable_endpoints:
+            return await call_next(request)
+
+        # Get TTL for this endpoint
+        ttl = self.cacheable_endpoints[path]
+
+        # Generate cache key
+        cache_key = self._generate_cache_key(request)
+
+        # Try to get from cache
+        if self.redis_client:
+            try:
+                cached_data = self.redis_client.get(cache_key)
+                if cached_data:
+                    # Cache hit - return cached response
+                    logger.debug(f"Cache hit for {path}")
+                    cache_hits.labels(endpoint=path).inc()
+
+                    response_data = json.loads(cached_data)
+                    return Response(
+                        content=json.dumps(response_data),
+                        status_code=200,
+                        headers={"Content-Type": "application/json", "X-Cache": "HIT"},
+                    )
+            except Exception as e:
+                logger.warning(f"Cache retrieval error: {e}")
+
+        # Cache miss - proceed with request
+        logger.debug(f"Cache miss for {path}")
+        cache_misses.labels(endpoint=path).inc()
+
+        # Process request
+        response = await call_next(request)
+
+        # Cache successful responses
+        if self.redis_client and response.status_code == 200:
+            try:
+                response_body = response.body.decode("utf-8")
+                self.redis_client.setex(
+                    cache_key, ttl, json.dumps({"body": response_body, "status": response.status_code})
+                )
+                logger.debug(f"Cached response for {path} (TTL: {ttl}s)")
+            except Exception as e:
+                logger.warning(f"Cache storage error: {e}")
+
+        # Add cache header to response
+        response.headers["X-Cache"] = "MISS"
+
+        return response
+
+    def _generate_cache_key(self, request: Request) -> str:
+        """Generate cache key from request attributes"""
+        # Get auth token (if present) for user-specific caching
+        auth_token = request.headers.get("authorization", "")
+        token_hash = hashlib.md5(auth_token.encode()).hexdigest()[:8]
+
+        # Build cache key
+        key_parts = [
+            "minder_cache",
+            request.method.lower(),
+            request.url.path,
+            str(sorted(request.query_params.items())),
+            token_hash,
+        ]
+
+        return ":".join(key_parts)
+
+
 class CustomRateLimitMiddleware(BaseHTTPMiddleware):
     """
     Custom rate limiting middleware that exempts local/private networks
@@ -391,7 +514,15 @@ def setup_middleware(app, allowed_origins: list):
     app.add_middleware(SecurityHeadersMiddleware)
     logger.info("✅ Security headers middleware enabled")
 
-    # 6. Request Size Limit Middleware
+    # 6. Response Cache Middleware
+    if redis_client:
+        app.add_middleware(CacheMiddleware, redis_client=redis_client, default_ttl=300)
+        logger.info("✅ Response cache middleware enabled (Redis-backed)")
+        logger.info("   - Cached endpoints: /plugins (60s), /system/status (30s), /health (10s)")
+    else:
+        logger.warning("⚠️  Redis not available - caching disabled")
+
+    # 7. Request Size Limit Middleware
     app.add_middleware(RequestSizeLimitMiddleware, max_size=10 * 1024 * 1024)
     logger.info("✅ Request size limit middleware enabled (10MB max)")
 

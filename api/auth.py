@@ -17,6 +17,45 @@ import logging
 
 from .security import InputSanitizer
 
+# Password strength validation
+PASSWORD_MIN_LENGTH = 12
+PASSWORD_REQUIRE_UPPERCASE = True
+PASSWORD_REQUIRE_LOWERCASE = True
+PASSWORD_REQUIRE_DIGIT = True
+PASSWORD_REQUIRE_SPECIAL = True
+SPECIAL_CHARS = '!@#$%^&*(),.?":{}|<>'
+
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """
+    Validate password meets production security requirements
+
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if len(password) < PASSWORD_MIN_LENGTH:
+        return False, f"Password must be at least {PASSWORD_MIN_LENGTH} characters"
+
+    if PASSWORD_REQUIRE_UPPERCASE and not re.search(r"[A-Z]", password):
+        return False, "Password must contain uppercase letters"
+
+    if PASSWORD_REQUIRE_LOWERCASE and not re.search(r"[a-z]", password):
+        return False, "Password must contain lowercase letters"
+
+    if PASSWORD_REQUIRE_DIGIT and not re.search(r"\d", password):
+        return False, "Password must contain numbers"
+
+    if PASSWORD_REQUIRE_SPECIAL and not re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        return False, "Password must contain special characters"
+
+    # Check for common passwords
+    common_passwords = ["password", "123456", "qwerty", "admin", "letmein"]
+    if password.lower() in common_passwords:
+        return False, "Password is too common"
+
+    return True, "Password meets requirements"
+
+
 logger = logging.getLogger(__name__)
 
 # Configuration
@@ -268,6 +307,16 @@ class LoginRequest(BaseModel):
         # Just check length
         if len(v) > 100:
             raise ValueError("Password too long (max 100 characters)")
+
+        # Validate password strength for production
+        is_strong, strength_error = validate_password_strength(v)
+        if not is_strong:
+            # For production, enforce strong passwords
+            if os.getenv("ENVIRONMENT", "development") == "production":
+                raise ValueError(strength_error)
+            else:
+                # In development, just warn
+                logger.warning(f"Weak password detected: {strength_error}")
 
         return v
 

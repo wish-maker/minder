@@ -3,7 +3,7 @@ Minder FastAPI Application
 Main REST API for Minder platform
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -357,6 +357,9 @@ async def startup():
     kernel = MinderKernel(config)
     await kernel.start()
 
+    # Validate plugin health on startup
+    await _validate_plugin_health(kernel)
+
     # Set kernel reference for plugin store router
     plugin_store.set_kernel(kernel)
 
@@ -377,59 +380,138 @@ async def shutdown():
     logger.info("✅ Minder API stopped")
 
 
+async def _validate_plugin_health(kernel: MinderKernel):
+    """
+    Validate plugin health on startup
+
+    Args:
+        kernel: MinderKernel instance
+    """
+    logger.info("🔍 Validating plugin health...")
+
+    try:
+        status = await kernel.get_system_status()
+        plugin_details = status.get("plugins", {}).get("details", [])
+
+        if not plugin_details:
+            logger.warning("⚠️ No plugin details available")
+            return
+
+        unhealthy_plugins = [p for p in plugin_details if p.get("status") != "ready"]
+
+        if unhealthy_plugins:
+            logger.warning(f"⚠️ {len(unhealthy_plugins)} plugins not ready:")
+            for plugin in unhealthy_plugins:
+                logger.warning(f"  - {plugin['name']}: {plugin['status']}")
+        else:
+            logger.info(f"✅ All {len(plugin_details)} plugins healthy")
+
+        # Log plugin activation status
+        enabled_count = sum(1 for p in plugin_details if p.get("enabled", False))
+        total_count = len(plugin_details)
+        logger.info(f"📊 Plugin activation: {enabled_count}/{total_count} enabled")
+
+    except Exception as e:
+        logger.error(f"❌ Error validating plugin health: {e}")
+
+
 def _validate_secrets():
-    """Validate required secrets are present and production-ready"""
-    required_secrets = {
-        "JWT_SECRET_KEY": "JWT_SECRET_KEY",
-        "POSTGRES_PASSWORD": "POSTGRES_PASSWORD",
-        "INFLUXDB_PASSWORD": "INFLUXDB_PASSWORD",
+    """
+    Validate required secrets are present and production-ready
+
+    Enhanced secret validation for production security
+    """
+    # Critical secrets that must be set and strong
+    critical_secrets = {
+        "JWT_SECRET_KEY": {
+            "min_length": 32,
+            "forbidden_values": ["change-this-in-production", "secret", "minder-secret"],
+            "display": "JWT_SECRET_KEY",
+        },
+        "POSTGRES_PASSWORD": {
+            "min_length": 16,
+            "forbidden_values": ["postgres", "password", "minder123", "123456"],
+            "display": "POSTGRES_PASSWORD",
+        },
+        "INFLUXDB_PASSWORD": {
+            "min_length": 16,
+            "forbidden_values": ["minder123", "password", "influxdb"],
+            "display": "INFLUXDB_PASSWORD",
+        },
+    }
+
+    # Optional but recommended secrets
+    optional_secrets = {
+        "GITHUB_TOKEN": {"min_length": 20, "display": "GITHUB_TOKEN"},
+        "REDIS_PASSWORD": {"min_length": 16, "forbidden_values": ["redis", "password"], "display": "REDIS_PASSWORD"},
     }
 
     missing = []
     using_defaults = []
-    weak_secrets = []
+    too_short = []
 
-    for env_var, display_name in required_secrets.items():
+    # Validate critical secrets
+    for env_var, config in critical_secrets.items():
         value = os.getenv(env_var)
+
         if not value:
-            # Check if value is set but empty
-            missing.append(display_name)
-        elif env_var == "JWT_SECRET_KEY" and value == "change-this-in-production":
-            using_defaults.append(display_name)
-        elif env_var == "INFLUXDB_PASSWORD" and value == "minder123":
-            weak_secrets.append(display_name)
+            missing.append(config["display"])
+            continue
+
+        # Check length
+        if len(value) < config["min_length"]:
+            too_short.append(f"{config['display']} (min {config['min_length']} chars)")
+            continue
+
+        # Check forbidden values
+        if value.lower() in [v.lower() for v in config["forbidden_values"]]:
+            using_defaults.append(config["display"])
+
+    # Validate optional secrets (warn only)
+    for env_var, config in optional_secrets.items():
+        value = os.getenv(env_var)
+        if value and len(value) < config["min_length"]:
+            logger.warning(f"⚠️  {config['display']} is shorter than recommended {config['min_length']} characters")
 
     # Check if running in production mode
-    production_mode = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
+    production_mode = os.getenv("ENVIRONMENT", "development") == "production"
 
+    # Report findings
     if missing:
         raise RuntimeError(
             f"❌ Missing required environment variables: {', '.join(missing)}. "
             f"Please set them in .env file before starting."
         )
 
+    if too_short:
+        if production_mode:
+            raise RuntimeError(
+                f"❌ Secrets too short: {', '.join(too_short)}. "
+                f"Please use at least 32 characters for production security."
+            )
+        else:
+            logger.warning(
+                f"⚠️  Secrets shorter than recommended: {', '.join(too_short)}. " "This is not safe for production!"
+            )
+
     if using_defaults:
         if production_mode:
             raise RuntimeError(
-                f"❌ Using default values for: {', '.join(using_defaults)}. "
-                "This is not safe for production! Please set strong secrets in .env file."
+                f"❌ Using default/forbidden values for: {', '.join(using_defaults)}. "
+                "This is not safe for production! Please generate strong secrets:"
+                "\n   openssl rand -hex 32  # For JWT_SECRET_KEY"
+                "\n   openssl rand -base64 24  # For database passwords"
             )
         else:
             logger.warning(
-                f"⚠️  Using default values for: {', '.join(using_defaults)}. " "This is not safe for production!"
+                f"⚠️  Using default/forbidden values for: {', '.join(using_defaults)}. "
+                "This is not safe for production!"
             )
 
-    if weak_secrets:
-        if production_mode:
-            raise RuntimeError(
-                f"❌ Weak secrets detected for: {', '.join(weak_secrets)}. "
-                "Please generate strong secrets using: openssl rand -base64 32"
-            )
-        else:
-            logger.warning(
-                f"⚠️  Weak secrets detected for: {', '.join(weak_secrets)}. "
-                "Please generate strong secrets before production deployment!"
-            )
+    if production_mode and (missing or too_short or using_defaults):
+        raise RuntimeError("❌ Security validation failed. Fix the issues above to proceed.")
+
+    logger.info("✅ Security validation passed")
 
     # Log secret validation status
     if production_mode:
@@ -470,4 +552,25 @@ async def root():
         "status": "running",
         "authentication": "enabled",
         "network_access": "dual (local + VPN)",
+    }
+
+
+# Health check endpoint for Docker container healthchecks
+@app.get("/health", response_model=HealthResponse, tags=["system"])
+async def health_check():
+    """
+    Root-level health check for Docker container healthchecks
+
+    This endpoint is specifically for container orchestration health checks.
+    For detailed system status, use /system/status
+    """
+    if not kernel:
+        raise HTTPException(status_code=503, detail="Kernel not initialized")
+
+    status = await kernel.get_system_status()
+    return {
+        "status": ("healthy" if status["status"] == "running" else "unhealthy"),
+        "system": status,
+        "authentication": "enabled",
+        "network_detection": "enabled",
     }

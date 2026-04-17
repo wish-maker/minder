@@ -110,3 +110,24 @@ site/
 *.swp
 *.swo
 *~.nib
+
+# Memory and cache directories (Claude Code)
+.memory/
+.remember/
+.claude/
+
+# Additional backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre
+.pyre/
+.pytype/

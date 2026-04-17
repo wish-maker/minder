@@ -23,6 +23,7 @@ numpy==1.26.2
 
 # System Monitoring
 psutil==5.9.6  # For NetworkModule system monitoring
+prometheus-client==0.20.0  # For Prometheus metrics export
 
 # AI/ML
 ollama==0.1.6

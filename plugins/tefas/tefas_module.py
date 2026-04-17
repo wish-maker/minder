@@ -131,14 +131,61 @@ class TefasModule(BaseModule):
 
         return self.metadata
 
+    async def _test_api_connectivity(self) -> bool:
+        """
+        Test TEFAS API connectivity with detailed diagnostics
+
+        Returns:
+            bool: True if API is reachable, False otherwise
+        """
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as session:
+                # Test main TEFAS website
+                async with session.get(
+                    "https://www.tefas.org.tr",
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                ) as response:
+                    if response.status == 200:
+                        self.logger.info("✅ TEFAS website connectivity confirmed")
+
+                        # Test API endpoint
+                        async with session.get(
+                            "https://www.tefas.org.tr/FonAnaliz.aspx",
+                            headers={
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                            },
+                        ) as api_response:
+                            if api_response.status == 200:
+                                self.logger.info("✅ TEFAS API endpoint accessible")
+                                return True
+                            else:
+                                self.logger.warning(f"⚠️ TEFAS API returned status {api_response.status}")
+                                return False
+                    else:
+                        self.logger.warning(f"⚠️ TEFAS website returned status {response.status}")
+                        return False
+
+        except aiohttp.ClientConnectorError as e:
+            self.logger.error(f"❌ TEFAS API connection failed: {e}")
+            self.logger.error("   Possible causes: DNS resolution failure, network restriction, or firewall blocking")
+            return False
+        except aiohttp.ClientError as e:
+            self.logger.error(f"❌ TEFAS API client error: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"❌ Unexpected error testing TEFAS API: {e}")
+            return False
+
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         TEFAS fon verilerini toplama
 
-        1. Fon listesini çek
-        2. Her fon için detaylı veriyi çek
-        3. Tarihsel fiyat verilerini çek
-        4. PostgreSQL'e kaydet
+        1. API bağlantısını test et
+        2. Fon listesini çek
+        3. Her fon için detaylı veriyi çek
+        4. Tarihsel fiyat verilerini çek
+        5. PostgreSQL'e kaydet
         """
         self.status = ModuleStatus.COLLECTING
         self.logger.info(f"Starting TEKAS data collection since {since}")
@@ -146,6 +193,23 @@ class TefasModule(BaseModule):
         records_collected = 0
         records_updated = 0
         errors = 0
+
+        # Test connectivity first
+        self.logger.info("🔍 Testing TEFAS API connectivity...")
+        if not await self._test_api_connectivity():
+            self.logger.error("❌ Cannot collect data: TEFAS API not reachable")
+            self.logger.error("   Please check:")
+            self.logger.error("   1. Network connection from container")
+            self.logger.error("   2. DNS resolution of www.tefas.org.tr")
+            self.logger.error("   3. Firewall rules allowing HTTPS outbound")
+            return {
+                "records_collected": 0,
+                "records_updated": 0,
+                "errors": 1,
+                "error_details": "TEFAS API not reachable - connectivity test failed",
+            }
+
+        self.logger.info("✅ TEFAS API connectivity verified, proceeding with data collection")
 
         try:
             # PostgreSQL bağlantısı

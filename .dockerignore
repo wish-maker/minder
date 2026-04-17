@@ -64,6 +64,38 @@ tests/
 test_*.py
 *_test.py
 
+# Memory and cache (Claude Code)
+.memory/
+.remember/
+.claude/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Development configs
+*.env.local
+*.env.development
+*.env.test
+
+# MyPy cache
+.mypy_cache/
+.dmypy.json
+
+# Pyre cache
+.pyre/
+.pytype/
+
 # Memory and cache
 .memory/
 .remember/

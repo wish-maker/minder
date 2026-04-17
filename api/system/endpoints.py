@@ -3,7 +3,8 @@ System endpoints
 Handles health checks and system status
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
+from prometheus_client import Counter, Histogram, generate_latest
 import logging
 
 from ..models import HealthResponse, SystemStatusResponse
@@ -11,6 +12,12 @@ from ..models import HealthResponse, SystemStatusResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/system", tags=["System"])
+
+# Prometheus metrics
+request_count = Counter("minder_requests_total", "Total requests", ["method", "endpoint", "status"])
+request_duration = Histogram("minder_request_duration_seconds", "Request duration", ["endpoint"])
+plugin_health = Counter("minder_plugin_health_checks", "Plugin health checks", ["plugin", "status"])
+data_collection = Counter("minder_data_collection_total", "Data collection operations", ["plugin", "operation"])
 
 
 def setup_system_routes(router, kernel):
@@ -37,5 +44,10 @@ def setup_system_routes(router, kernel):
             "authentication": "enabled",
             "network_detection": "enabled",
         }
+
+    @router.get("/metrics", tags=["system"])
+    async def metrics():
+        """Prometheus metrics endpoint for monitoring"""
+        return Response(content=generate_latest(), media_type="text/plain")
 
     return router

@@ -30,11 +30,32 @@ def crypto_config():
 
 @pytest.fixture
 async def crypto_module(crypto_config):
-    """Create crypto module and ensure cleanup"""
+    """Create crypto module and ensure cleanup for async tests"""
     module = CryptoModule(crypto_config)
     yield module
     # Clean up resources
     await module.close()
+
+
+@pytest.fixture
+def crypto_module_sync(crypto_config):
+    """Create crypto module for sync tests with manual cleanup"""
+    module = CryptoModule(crypto_config)
+    yield module
+    # Clean up resources (sync cleanup)
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is running, schedule cleanup
+            asyncio.create_task(module.close())
+        else:
+            # If loop is not running, run directly
+            loop.run_until_complete(module.close())
+    except Exception:
+        # Silently fail cleanup in test environment
+        pass
 
 
 @pytest.fixture
@@ -115,18 +136,16 @@ class TestDataValidation:
 class TestCryptoModuleInitialization:
     """Test crypto module initialization and configuration"""
 
-    def test_module_initialization(self, crypto_config):
+    def test_module_initialization(self, crypto_module_sync):
         """Test module initializes correctly"""
-        module = CryptoModule(crypto_config)
-        assert module.validator is not None
-        assert module.cache == {}
-        assert len(module.sources) == 3
-        assert module.cache_ttl == 300
+        assert crypto_module_sync.validator is not None
+        assert crypto_module_sync.cache == {}
+        assert len(crypto_module_sync.sources) == 3
+        assert crypto_module_sync.cache_ttl == 300
 
-    def test_source_priority_order(self, crypto_config):
+    def test_source_priority_order(self, crypto_module_sync):
         """Test that sources are in correct priority order"""
-        module = CryptoModule(crypto_config)
-        source_names = [name for name, _ in module.sources]
+        source_names = [name for name, _ in crypto_module_sync.sources]
         assert source_names == ["binance", "coingecko", "kraken"]
 
 
@@ -134,10 +153,8 @@ class TestFallbackPattern:
     """Test fallback pattern between API sources"""
 
     @pytest.mark.asyncio
-    async def test_fallback_to_second_source(self, crypto_config):
+    async def test_fallback_to_second_source(self, crypto_module):
         """Test fallback when primary source fails"""
-        module = CryptoModule(crypto_config)
-
         # Mock binance to fail, coingecko to succeed
         mock_binance = AsyncMock(side_effect=Exception("Binance failed"))
         mock_coingecko = AsyncMock(
@@ -148,10 +165,10 @@ class TestFallbackPattern:
             }
         )
 
-        module.sources[0] = ("binance", mock_binance)
-        module.sources[1] = ("coingecko", mock_coingecko)
+        crypto_module.sources[0] = ("binance", mock_binance)
+        crypto_module.sources[1] = ("coingecko", mock_coingecko)
 
-        result = await module._get_price_with_fallback("BTCUSDT")
+        result = await crypto_module._get_price_with_fallback("BTCUSDT")
 
         assert result is not None
         assert result["source"] == "coingecko"
@@ -160,19 +177,17 @@ class TestFallbackPattern:
         mock_coingecko.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_all_sources_fail(self, crypto_config):
+    async def test_all_sources_fail(self, crypto_module):
         """Test behavior when all sources fail"""
-        module = CryptoModule(crypto_config)
-
         # Mock all sources to fail
         mock_fail = AsyncMock(side_effect=Exception("API failed"))
-        module.sources = [
+        crypto_module.sources = [
             ("binance", mock_fail),
             ("coingecko", mock_fail),
             ("kraken", mock_fail),
         ]
 
-        result = await module._get_price_with_fallback("BTCUSDT")
+        result = await crypto_module._get_price_with_fallback("BTCUSDT")
 
         assert result is None
 
@@ -181,10 +196,8 @@ class TestCaching:
     """Test caching behavior"""
 
     @pytest.mark.asyncio
-    async def test_cache_hit(self, crypto_config):
+    async def test_cache_hit(self, crypto_module):
         """Test that cache is used on second call"""
-        module = CryptoModule(crypto_config)
-
         # Mock API call
         mock_api = AsyncMock(
             return_value={
@@ -193,22 +206,21 @@ class TestCaching:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
-        module.sources[0] = ("binance", mock_api)
+        crypto_module.sources[0] = ("binance", mock_api)
 
         # First call
-        result1 = await module._get_price_with_fallback("BTCUSDT")
+        result1 = await crypto_module._get_price_with_fallback("BTCUSDT")
         # Second call should use cache
-        result2 = await module._get_price_with_fallback("BTCUSDT")
+        result2 = await crypto_module._get_price_with_fallback("BTCUSDT")
 
         assert result1["price"] == result2["price"]
         # API should only be called once due to cache
         mock_api.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_cache_expiration(self, crypto_config):
+    async def test_cache_expiration(self, crypto_module):
         """Test that cache expires after TTL"""
-        module = CryptoModule(crypto_config)
-        module.cache_ttl = 0  # Force immediate expiration
+        crypto_module.cache_ttl = 0  # Force immediate expiration
 
         # Mock API call
         mock_api = AsyncMock(
@@ -218,34 +230,32 @@ class TestCaching:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
-        module.sources[0] = ("binance", mock_api)
+        crypto_module.sources[0] = ("binance", mock_api)
 
         # First call
-        await module._get_price_with_fallback("BTCUSDT")
+        await crypto_module._get_price_with_fallback("BTCUSDT")
         # Second call should bypass expired cache
-        await module._get_price_with_fallback("BTCUSDT")
+        await crypto_module._get_price_with_fallback("BTCUSDT")
 
         # API should be called twice since cache expired
         assert mock_api.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_stale_cache_fallback(self, crypto_config):
+    async def test_stale_cache_fallback(self, crypto_module):
         """Test using stale cache when all sources fail"""
-        module = CryptoModule(crypto_config)
-
         # Set up cached data
         cached_data = {
             "price": 50000.0,
             "source": "binance",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        module.cache["crypto:BTCUSDT"] = (cached_data, datetime.now(timezone.utc))
+        crypto_module.cache["crypto:BTCUSDT"] = (cached_data, datetime.now(timezone.utc))
 
         # Mock all sources to fail
         mock_fail = AsyncMock(side_effect=Exception("API failed"))
-        module.sources = [("binance", mock_fail), ("coingecko", mock_fail)]
+        crypto_module.sources = [("binance", mock_fail), ("coingecko", mock_fail)]
 
-        result = await module._get_price_with_fallback("BTCUSDT")
+        result = await crypto_module._get_price_with_fallback("BTCUSDT")
 
         # Should return stale cached data
         assert result is not None
@@ -257,12 +267,10 @@ class TestAPIIntegration:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_binance_api_real(self, crypto_config):
+    async def test_binance_api_real(self, crypto_module):
         """Integration test: Real Binance API call"""
-        module = CryptoModule(crypto_config)
-
         try:
-            result = await module._binance_get_price("BTCUSDT")
+            result = await crypto_module._binance_get_price("BTCUSDT")
             assert "price" in result
             assert result["source"] == "binance"
             assert isinstance(result["price"], float)
@@ -272,12 +280,10 @@ class TestAPIIntegration:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_coingecko_api_real(self, crypto_config):
+    async def test_coingecko_api_real(self, crypto_module):
         """Integration test: Real CoinGecko API call"""
-        module = CryptoModule(crypto_config)
-
         try:
-            result = await module._coingecko_get_price("BTCUSDT")
+            result = await crypto_module._coingecko_get_price("BTCUSDT")
             assert "price" in result
             assert result["source"] == "coingecko"
             assert isinstance(result["price"], float)
@@ -287,12 +293,10 @@ class TestAPIIntegration:
 
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_kraken_api_real(self, crypto_config):
+    async def test_kraken_api_real(self, crypto_module):
         """Integration test: Real Kraken API call"""
-        module = CryptoModule(crypto_config)
-
         try:
-            result = await module._kraken_get_price("BTCUSDT")
+            result = await crypto_module._kraken_get_price("BTCUSDT")
             assert "price" in result
             assert result["source"] == "kraken"
             assert isinstance(result["price"], float)
@@ -304,23 +308,20 @@ class TestAPIIntegration:
 class TestSymbolMapping:
     """Test symbol mapping and name resolution"""
 
-    def test_get_coin_name(self, crypto_config):
+    def test_get_coin_name(self, crypto_module_sync):
         """Test coin name resolution"""
-        module = CryptoModule(crypto_config)
-        assert module._get_coin_name("BTCUSDT") == "Bitcoin"
-        assert module._get_coin_name("ETHUSDT") == "Ethereum"
-        assert module._get_coin_name("BNBUSDT") == "BNB"
-        assert module._get_coin_name("XRPUSDT") == "XRP"
+        assert crypto_module_sync._get_coin_name("BTCUSDT") == "Bitcoin"
+        assert crypto_module_sync._get_coin_name("ETHUSDT") == "Ethereum"
+        assert crypto_module_sync._get_coin_name("BNBUSDT") == "BNB"
+        assert crypto_module_sync._get_coin_name("XRPUSDT") == "XRP"
 
 
 class TestMarketDataFetching:
     """Test market data fetching with multiple symbols"""
 
     @pytest.mark.asyncio
-    async def test_fetch_market_data_structure(self, crypto_config):
+    async def test_fetch_market_data_structure(self, crypto_module):
         """Test that market data fetching returns correct structure"""
-        module = CryptoModule(crypto_config)
-
         # Mock all API calls
         mock_price = AsyncMock(
             return_value={
@@ -332,9 +333,9 @@ class TestMarketDataFetching:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
-        module.sources[0] = ("binance", mock_price)
+        crypto_module.sources[0] = ("binance", mock_price)
 
-        result = await module._fetch_crypto_market_data()
+        result = await crypto_module._fetch_crypto_market_data()
 
         assert isinstance(result, list)
         assert len(result) > 0

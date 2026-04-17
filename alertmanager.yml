@@ -1,0 +1,53 @@
+# Alertmanager configuration for Minder
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'localhost:587'
+  smtp_from: 'alertmanager@minder.local'
+  smtp_auth_username: 'alertmanager@minder.local'
+  smtp_auth_password: 'change-me'
+
+# Route configuration
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+
+  routes:
+    # Critical alerts go to pager
+    - match:
+        severity: critical
+      receiver: 'pager'
+      continue: false
+
+    # Warning alerts go to email
+    - match:
+        severity: warning
+      receiver: 'email'
+
+# Inhibition rules
+inhibit_rules:
+  # Inhibit warning if critical is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'cluster', 'service']
+
+# Receivers
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://grafana:3002/api/alerts'
+
+  - name: 'pager'
+    webhook_configs:
+      - url: 'http://pagerduty-webhook-url'
+    # Add PagerDuty, Slack, etc. here
+
+  - name: 'email'
+    email_configs:
+      - to: 'ops-team@minder.local'
+      headers:
+        Subject: '[Minder Alert] {{ .GroupLabels.alertname }}'

@@ -64,12 +64,20 @@ databases:
 plugins:
   network:
     enabled: true
+    priority: "high"
+    health_check_interval: 300
+    failure_threshold: 3
+    auto_restart: true
     influxdb:
       host: influxdb
       port: 8086
 
   weather:
     enabled: true
+    priority: "medium"
+    health_check_interval: 300
+    failure_threshold: 3
+    auto_restart: true
     api_source: "open-meteo"
     locations:
       - Istanbul
@@ -78,6 +86,10 @@ plugins:
 
   crypto:
     enabled: true
+    priority: "medium"
+    health_check_interval: 300
+    failure_threshold: 3
+    auto_restart: true
     symbols:
       - BTC
       - ETH
@@ -85,6 +97,10 @@ plugins:
 
   news:
     enabled: true
+    priority: "high"
+    health_check_interval: 300
+    failure_threshold: 3
+    auto_restart: true
     sources:
       - reuters
       - bloomberg
@@ -92,6 +108,10 @@ plugins:
 
   tefas:
     enabled: true
+    priority: "low"
+    health_check_interval: 300
+    failure_threshold: 3
+    auto_restart: true
     database:
       host: postgres
       port: 5432
@@ -110,6 +130,15 @@ plugins:
     batch_size: 100
     historical_start_date: '2020-01-01'
     collection_interval: 86400
+
+  # Plugin activation policy
+  activation_policy:
+    strategy: "gradual"  # gradual, immediate, manual
+    health_check_interval: 300  # 5 minutes
+    failure_threshold: 3  # Disable after 3 consecutive failures
+    auto_restart: true
+    graceful_shutdown: true
+    startup_timeout: 60  # seconds
 
 # Voice interface
 voice:
