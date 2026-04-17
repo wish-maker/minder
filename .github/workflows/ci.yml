@@ -140,43 +140,18 @@ jobs:
             coverage.xml
             htmlcov/
 
-  # Integration Tests
-  integration-test:
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        run: docker compose build
-
-      - name: Start services
-        run: docker compose up -d
-
-      - name: Wait for services to be ready
-        run: |
-          sleep 30
-          curl --retry 10 --retry-delay 5 --retry-connrefused http://localhost:8000/health
-
-      - name: Run integration tests
-        run: |
-          pip install pytest requests
-          pytest tests/integration/ -v || true
-
-      - name: Check container logs
-        if: always()
-        run: |
-          docker logs minder-api
-          docker logs postgres
+  # Integration Tests (Manual Only)
+  # Note: Integration tests require external API access and are run manually
+  # See tests/manual/README.md for details
+  #
+  # To run manually:
+  #   pytest tests/manual/ -v
+  #   python tests/manual/test_tefas_crawler.py
 
   # Build and Push Docker Image
   build:
     runs-on: ubuntu-latest
-    needs: [integration-test]
+    needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
