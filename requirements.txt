@@ -41,6 +41,9 @@ python-dotenv==1.0.0
 pyyaml==6.0.1
 aiofiles==23.2.1
 
+# External Data Sources
+tefas-crawler>=1.0.0  # TEFAS fund data crawler
+
 # Configuration
 # Note: Web scraping and ML libraries are now plugin-specific
 # - beautifulsoup4: news plugin only
