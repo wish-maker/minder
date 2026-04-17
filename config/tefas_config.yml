@@ -1,0 +1,105 @@
+# TEFAS Module Configuration v3.0
+# Borsapy integration with feature flags for gradual rollout
+
+# Data source priority and fallback
+data_sources:
+  primary: "borsapy"              # Primary data source: borsapy or tefas-crawler
+  fallback: "tefas-crawler"       # Fallback if primary fails
+  auto_switch: true              # Automatic fallback on failure
+
+# Feature flags for gradual rollout (Phase 1-5)
+# Set to true to enable features one at a time
+features:
+  # Phase 2: Risk metrics (Week 2)
+  risk_metrics: false             # Sharpe, Sortino, max drawdown, volatility
+
+  # Phase 3: Asset allocation & tax (Week 3)
+  allocation: false               # Fund asset allocation tracking
+  tax_info: false                 # Withholding tax rates by category
+
+  # Phase 4: Advanced features (Week 4)
+  technical_analysis: false       # RSI, MACD, Bollinger Bands
+  fund_screening: false          # Fund screening by criteria
+  fund_comparison: false          # Multi-fund comparison
+
+  # Phase 5: Backtesting (Future)
+  backtesting: false              # Strategy backtesting framework
+
+# Cache configuration
+cache:
+  enabled: true                   # Enable caching
+  ttl: 3600                       # Time-to-live: 1 hour (in seconds)
+  backend: "memory"               # Cache backend: memory or redis
+
+# Data collection settings
+collection:
+  batch_size: 100                 # Process funds in batches (100 funds per batch)
+  rate_limit: 10                  # API rate limit: 10 requests per second
+  timeout: 30                      # Request timeout: 30 seconds
+  retry_attempts: 3               # Number of retry attempts on failure
+  stale_data_max_age: 86400        # Max stale data age: 24 hours (in seconds)
+
+# Fund filtering criteria
+fund_filters:
+  fund_types:                      # Fund types to collect
+    - "YAT"                       # Yatırım fonları
+    - "EMK"                       # Emeklilik fonları
+    - "BYF"                       # Bireysel emeklilik fonları
+  min_market_cap: 1000000          # Minimum market cap: 1M TL
+  exclude_closed: true             # Exclude closed funds from collection
+
+# Risk metrics configuration
+risk_metrics:
+  periods:                          # Calculation periods
+    - "1y"                       # 1 year
+    - "3y"                       # 3 years
+  update_frequency: "daily"        # Update frequency: daily or weekly
+  min_data_points: 20             # Minimum data points required for calculation
+
+# Asset allocation configuration
+allocation:
+  history_days: 100                # Days of allocation history to collect
+  update_frequency: "weekly"       # Update frequency: daily or weekly
+
+# Tax configuration
+tax:
+  update_frequency: "monthly"       # Tax rate update frequency
+  default_categories:              # Default tax categories
+    - "degisken_karma_doviz"
+    - "pay_senedi_yogun"
+
+# Technical analysis configuration (Phase 4)
+technical_analysis:
+  indicators:
+    rsi:
+      period: 14                   # RSI calculation period
+    macd:
+      fast: 12                    # MACD fast period
+      slow: 26                    # MACD slow period
+      signal: 9                   # MACD signal period
+    bollinger:
+      period: 20                  # Bollinger Bands period
+      std: 2                      # Standard deviations
+
+# Fund screening configuration (Phase 4)
+screening:
+  max_results: 100                 # Maximum results to return
+  default_criteria:               # Default screening criteria
+    min_return_1y: 20             # Minimum 1-year return: 20%
+
+# Monitoring and alerting
+monitoring:
+  log_level: "INFO"                # Logging level: DEBUG, INFO, WARNING, ERROR
+  performance_tracking: true      # Track collection performance
+  error_alerting: true            # Enable error alerts
+
+# Development/Testing flags
+development:
+  test_mode: false                # Set to true for testing with limited data
+  test_fund_limit: 10             # In test mode, only process this many funds
+  mock_data: false                # Use mock data instead of real API calls
+
+# Legacy support
+legacy:
+  keep_v2_compatibility: true     # Maintain v2.0 functionality alongside v3
+  enable_kap_integration: true    # Keep KAP integration from v2
