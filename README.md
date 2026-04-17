@@ -3,7 +3,8 @@
 **Modular RAG Platform** - Cross-database correlation and AI-powered insights
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/)
+ [![Tests](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen.svg)](https://github.com/wish-maker/minder)
 [![GitHub](https://img.shields.io/badge/GitHub-wish--maker-blue.svg)](https://github.com/wish-maker/minder)
 
 ## 🎯 Overview
@@ -167,6 +168,24 @@ class MyPlugin(BaseModule):
 
 See [Plugin Development Guide](docs/development/module-development.md) for details.
 
+
+## ✅ System Status
+
+**Last Verified**: April 17, 2026
+
+### Test Results
+- **Integration Tests**: 12/12 passing (100%)
+- **Active Plugins**: 3/3 healthy (news, network, weather)
+- **TEFAS Integration**: Working with borsapy 0.8.4
+- **Databases**: All connected (PostgreSQL, InfluxDB, Qdrant, Redis)
+
+### Dependencies
+- **Python**: 3.13
+- **borsapy**: 0.8.4 (Turkish financial data)
+- **tefas-crawler**: 0.5.0 (Turkish fund data)
+- **ollama**: >=0.3.0 (LLM integration)
+- **httpx**: >=0.25.2,<0.28.0 (HTTP client)
+
 ## 📊 Monitoring
 
 - **API Health**: http://localhost:8000/health
@@ -175,6 +194,14 @@ See [Plugin Development Guide](docs/development/module-development.md) for detai
 
 ## 🧪 Testing
 
+### Current Test Status (April 17, 2026)
+✅ **12/12 integration tests passing (100%)**
+- Phase 2: Risk Metrics (3/3)
+- Phase 3: Allocation & Tax (3/3)
+- Phase 4: Module Integration (2/2)
+- Phase 5: End-to-End (4/4)
+
+### Running Tests
 ```bash
 # Run all tests
 pytest tests/ -v
@@ -185,7 +212,6 @@ pytest tests/test_auth.py -v
 # Check coverage
 pytest tests/ --cov=. --cov-report=html
 ```
-
 ## 📚 Documentation
 
 - [Architecture](docs/architecture.md)

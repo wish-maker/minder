@@ -4,7 +4,7 @@ Handles health checks and system status
 """
 
 from fastapi import APIRouter, HTTPException, Response
-from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_client import Counter, Histogram, generate_latest, REGISTRY
 import logging
 
 from ..models import HealthResponse, SystemStatusResponse
@@ -13,14 +13,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/system", tags=["System"])
 
-# Prometheus metrics
-request_count = Counter("minder_requests_total", "Total requests", ["method", "endpoint", "status"])
-request_duration = Histogram("minder_request_duration_seconds", "Request duration", ["endpoint"])
-plugin_health = Counter("minder_plugin_health_checks", "Plugin health checks", ["plugin", "status"])
-data_collection = Counter("minder_data_collection_total", "Data collection operations", ["plugin", "operation"])
+# Prometheus metrics - lazy initialization to avoid duplicates
+_request_count = None
+_request_duration = None
+_plugin_health = None
+_data_collection = None
 
 
-def setup_system_routes(router, kernel):
+def get_metrics():
+    """Get or create metrics (singleton pattern)"""
+    global _request_count, _request_duration, _plugin_health, _data_collection
+
+    if _request_count is None:
+        _request_count = Counter("minder_requests_total", "Total requests", ["method", "endpoint", "status"])
+        _request_duration = Histogram("minder_request_duration_seconds", "Request duration", ["endpoint"])
+        _plugin_health = Counter("minder_plugin_health_checks", "Plugin health checks", ["plugin", "status"])
+        _data_collection = Counter(
+            "minder_data_collection_total", "Data collection operations", ["plugin", "operation"]
+        )
+
+    return _request_count, _request_duration, _plugin_health, _data_collection
+
+
+def setup_system_routes(router_param, kernel):
     """Setup system routes with kernel reference"""
 
     @router.get("/status", response_model=SystemStatusResponse, tags=["system"])
@@ -48,6 +63,5 @@ def setup_system_routes(router, kernel):
     @router.get("/metrics", tags=["system"])
     async def metrics():
         """Prometheus metrics endpoint for monitoring"""
-        return Response(content=generate_latest(), media_type="text/plain")
-
-    return router
+        request_count, request_duration, plugin_health, data_collection = get_metrics()
+        return Response(content=generate_latest(REGISTRY), media_type="text/plain")

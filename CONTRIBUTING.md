@@ -1,146 +1,118 @@
 # Contributing to Minder
 
-Thank you for your interest in contributing to Minder! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Minder! This document provides guidelines and instructions for contributing to the project.
 
-## Code of Conduct
-
-- Be respectful and inclusive
-- Provide constructive feedback
-- Focus on what is best for the community
-- Show empathy towards other community members
-
-## How to Contribute
+## 🤝 How to Contribute
 
 ### Reporting Bugs
 
 Before creating bug reports, please check existing issues to avoid duplicates. When creating a bug report, include:
 
-- **Title**: Clear and descriptive
-- **Description**: Detailed explanation of the problem
-- **Reproduction Steps**: Steps to reproduce the issue
-- **Expected Behavior**: What you expected to happen
-- **Actual Behavior**: What actually happened
-- **Environment**: OS, Python version, dependencies
-- **Logs**: Relevant error messages or logs
+- **Clear title and description**: Summarize the issue
+- **Steps to reproduce**: Detailed steps to reproduce the behavior
+- **Expected behavior**: What you expected to happen
+- **Actual behavior**: What actually happened
+- **Environment**: 
+  - OS and version
+  - Python version
+  - Docker version (if applicable)
+  - Relevant logs or error messages
 
 ### Suggesting Enhancements
 
-Enhancement suggestions are tracked as GitHub issues. When suggesting an enhancement:
+Enhancement suggestions are welcome! Please provide:
 
-- Use a clear and descriptive title
-- Provide a detailed description of the suggested enhancement
-- Explain why this enhancement would be useful
-- List some examples of how this feature would be used
+- **Clear use case**: What problem would this solve?
+- **Proposed solution**: How should it work?
+- **Alternatives considered**: What other approaches did you consider?
+- **Impact**: Who would benefit and how?
 
-### Pull Requests
+## 🛠️ Development Setup
 
-1. **Fork the repository** and create your branch from `main`
-2. **Make your changes** with clear commit messages
-3. **Write tests** for new functionality
-4. **Ensure all tests pass**: `pytest tests/`
-5. **Update documentation** as needed
-6. **Submit a pull request** with a clear description
+### Prerequisites
 
-#### Development Setup
+- Docker and Docker Compose
+- Python 3.13+
+- Git
+- Make (optional, for using Makefile commands)
+
+### Setup Steps
+
+1. **Fork and clone the repository**:
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/minder.git
+   cd minder
+   ```
+
+2. **Create a virtual environment**:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   pip install -r requirements-dev.txt  # For development tools
+   ```
+
+4. **Set up environment variables**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+5. **Start the development environment**:
+   ```bash
+   docker-compose up -d
+   ```
+
+6. **Run tests**:
+   ```bash
+   pytest tests/ -v
+   ```
+
+## 📝 Code Style
+
+We follow PEP 8 guidelines with some modifications:
+
+- **Line length**: Max 100 characters (soft limit)
+- **Imports**: Group imports (stdlib, third-party, local)
+- **Docstrings**: Google style docstrings
+- **Type hints**: Required for all public functions
+
+### Formatting
 
 ```bash
-# Clone your fork
-git clone https://github.com/yourusername/minder.git
-cd minder
+# Format code with Black
+black .
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Sort imports with isort
+isort .
 
-# Install dependencies
-pip install -r requirements.txt
+# Lint with Flake8
+flake8 .
 
-# Run tests
-pytest tests/ -v
-
-# Start development server
-docker-compose up -d
+# Type check with mypy (optional)
+mypy .
 ```
 
-#### Coding Standards
+## 🧪 Testing
 
-- Follow PEP 8 style guidelines
-- Write docstrings for functions and classes
-- Keep functions focused and modular
-- Add type hints where appropriate
-- Write tests for new features (aim for >80% coverage)
-
-#### Commit Message Format
+### Test Structure
 
 ```
-type(scope): subject
-
-body
-
-footer
+tests/
+├── integration/     # Integration tests
+├── unit/            # Unit tests
+└── conftest.py      # pytest configuration
 ```
 
-Types:
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks
+### Writing Tests
 
-Example:
-```
-feat(auth): add OAuth2 authentication
-
-Implement OAuth2 authentication flow with support for
-Google and GitHub providers.
-
-Closes #123
-```
-
-### Plugin Development
-
-Minder's plugin system allows developers to extend functionality:
-
-1. **Create Plugin Structure**:
-```bash
-mkdir plugins/my-plugin
-cd plugins/my-plugin
-```
-
-2. **Implement BaseModule**:
-```python
-from core.module_interface import BaseModule, ModuleMetadata
-
-class MyPlugin(BaseModule):
-    async def register(self) -> ModuleMetadata:
-        return ModuleMetadata(
-            name="my-plugin",
-            version="1.0.0",
-            description="My custom plugin",
-            author="Your Name"
-        )
-    
-    async def collect_data(self, since=None):
-        # Implementation
-        pass
-```
-
-3. **Test Your Plugin**:
-```bash
-pytest tests/test_my_plugin.py -v
-```
-
-4. **Submit for Review**:
-- Fork the repository
-- Create a feature branch
-- Make your changes
-- Submit a pull request
-
-See [PLUGIN_DEVELOPMENT.md](docs/PLUGIN_DEVELOPMENT.md) for detailed plugin development guide.
-
-## Testing
+- **Unit tests**: Test individual functions/classes in isolation
+- **Integration tests**: Test component interactions
+- **Fixtures**: Use `conftest.py` for shared fixtures
 
 ### Running Tests
 
@@ -153,47 +125,140 @@ pytest tests/test_auth.py -v
 
 # Run with coverage
 pytest tests/ --cov=. --cov-report=html
+
+# Run specific test
+pytest tests/test_auth.py::test_login -v
 ```
 
-### Test Structure
+### Test Coverage
 
-- `tests/test_auth.py`: Authentication tests
-- `tests/test_security.py`: Security middleware tests
-- `tests/test_plugin_store.py`: Plugin system tests
-- `tests/test_*_simple.py`: Simplified test versions
+We aim for >80% code coverage. Check coverage reports in `htmlcov/index.html` after running tests with coverage.
 
-## Documentation
+## 📦 Plugin Development
 
-### Improving Documentation
+### Plugin Structure
 
-Documentation is crucial for project success. When improving docs:
+```
+my_plugin/
+├── plugin.yml           # Plugin metadata
+├── __init__.py          # Plugin initialization
+├── module.py            # Main plugin implementation
+└── tests/               # Plugin-specific tests
+    └── test_module.py
+```
 
-- Keep language clear and concise
-- Include code examples
-- Update diagrams if needed
-- Follow existing documentation style
+### Plugin Template
 
-### Documentation Files
+```python
+from core.module_interface import BaseModule, ModuleMetadata
 
-- `README.md`: Project overview and quick start
-- `docs/ARCHITECTURE.md`: System architecture
-- `docs/PLUGIN_DEVELOPMENT.md`: Plugin development guide
-- `docs/MODULE_MANAGEMENT.md`: Module management
+class MyPlugin(BaseModule):
+    """Description of my plugin"""
+    
+    async def register(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name="my-plugin",
+            version="1.0.0",
+            description="My custom plugin",
+            author="Your Name"
+        )
+    
+    async def collect_data(self, since=None):
+        """Collect data from external sources"""
+        # Implementation here
+        return {'records_collected': 0}
+    
+    async def analyze(self, data):
+        """Analyze collected data"""
+        # Implementation here
+        return {}
+```
 
-## Getting Help
+For detailed plugin development guide, see [docs/development/module-development.md](docs/development/module-development.md).
 
-- **GitHub Issues**: For bugs and feature requests
-- **GitHub Discussions**: For questions and ideas
-- **Documentation**: Check docs/ folder first
+## 🚀 Pull Request Process
 
-## License
+### Before Submitting
 
-By contributing to Minder, you agree that your contributions will be licensed under the MIT License.
+1. **Update documentation**: Include relevant docstrings and README updates
+2. **Add tests**: Ensure new code is tested
+3. **Run tests**: All tests must pass
+4. **Format code**: Run Black and isort
+5. **Check linting**: No Flake8 errors
 
-## Recognition
+### Submitting a PR
 
-Contributors will be recognized in the CONTRIBUTORS.md file. Thank you for your contributions!
+1. **Create a feature branch**:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
 
----
+2. **Commit your changes**:
+   ```bash
+   git commit -m "feat: add your feature description"
+   ```
 
-**Happy Contributing! 🚀**
+   **Commit message format**:
+   - `feat:` New feature
+   - `fix:` Bug fix
+   - `docs:` Documentation changes
+   - `style:` Code style changes (formatting)
+   - `refactor:` Code refactoring
+   - `test:` Adding or updating tests
+   - `chore:` Maintenance tasks
+
+3. **Push to your fork**:
+   ```bash
+   git push origin feature/your-feature-name
+   ```
+
+4. **Create a Pull Request**:
+   - Clear title describing the change
+   - Detailed description of what you did and why
+   - Reference related issues
+   - Include screenshots if applicable
+
+### PR Review Process
+
+- **Automated checks**: CI/CD pipeline runs tests
+- **Code review**: Maintainers review your code
+- **Feedback**: Address review comments
+- **Approval**: Once approved, your PR will be merged
+
+## 🎯 Development Priorities
+
+Current areas where we're looking for contributions:
+
+- **High Priority**:
+  - Additional plugin implementations
+  - Test coverage improvements
+  - Documentation enhancements
+
+- **Medium Priority**:
+  - Performance optimizations
+  - UI/UX improvements
+  - Integration examples
+
+- **Low Priority**:
+  - Code refactoring
+  - Dependency updates
+  - Feature requests
+
+## 📜 License
+
+By contributing to Minder, you agree that your contributions will be licensed under the [MIT License](LICENSE).
+
+## 🙋 Getting Help
+
+- **GitHub Issues**: For bug reports and feature requests
+- **Discussions**: For questions and ideas
+- **Documentation**: Check [docs/](docs/) first
+
+## 🌟 Recognition
+
+Contributors will be recognized in:
+- CONTRIBUTORS.md file
+- Release notes
+- Project documentation
+
+Thank you for contributing to Minder! 🎉

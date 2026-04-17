@@ -534,7 +534,7 @@ def _setup_routes(kernel, character_engine):
     app.include_router(plugins_endpoints.setup_plugin_routes(plugins_endpoints.router, kernel))
     app.include_router(chat_endpoints.setup_chat_routes(chat_endpoints.router, kernel, character_engine))
     app.include_router(characters_endpoints.setup_character_routes(characters_endpoints.router, character_engine))
-    app.include_router(system_endpoints.setup_system_routes(system_endpoints.router, kernel))
+    app.include_router(system_endpoints.router)
     app.include_router(correlations_endpoints.setup_correlation_routes(correlations_endpoints.router, kernel))
 
 

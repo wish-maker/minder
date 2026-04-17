@@ -14,7 +14,7 @@ qdrant-client==1.9.0
 
 # HTTP Clients
 aiohttp>=3.9.0,<4.0.0
-httpx>=0.25.2,<0.27.0
+httpx>=0.25.2,<0.28.0
 requests==2.31.0
 
 # Data Processing (minimal)
@@ -26,7 +26,7 @@ psutil==5.9.6  # For NetworkModule system monitoring
 prometheus-client==0.20.0  # For Prometheus metrics export
 
 # AI/ML
-ollama==0.1.6
+ollama>=0.3.0  # Updated for httpx 0.27+ compatibility
 
 # Security
 pyjwt==2.8.0
@@ -42,12 +42,14 @@ pyyaml==6.0.1
 aiofiles==23.2.1
 
 # External Data Sources
-tefas-crawler>=1.0.0  # TEFAS fund data crawler
-borsapy>=1.0.0  # Turkish financial markets data library (yfinance-like API for BIST)
+tefas-crawler>=0.5.0  # TEFAS fund data crawler (latest on PyPI: 0.5.0)
+borsapy==0.8.4  # Turkish financial markets data library (yfinance-like API for BIST)
 
 # Configuration
 # Note: Web scraping and ML libraries are now plugin-specific
 # - beautifulsoup4: news plugin only
-# - sentence-transformers: moved to optional/ml-requirements.txt
+# - sentence-transformers: moved to optional/requirements-ml.txt
+
+# Testing
 pytest-mock>=3.12.0
 pytest-asyncio>=0.21.0
