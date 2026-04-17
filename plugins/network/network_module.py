@@ -321,16 +321,14 @@ class NetworkModule(BaseModule):
             cursor = conn.cursor()
 
             # Calculate average metrics
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT
                     AVG(CASE WHEN metric_name = 'cpu_usage_percent' THEN metric_value END) as avg_cpu,
                     AVG(CASE WHEN metric_name = 'memory_usage_percent' THEN metric_value END) as avg_memory,
                     AVG(CASE WHEN metric_name = 'load_average_1min' THEN metric_value END) as avg_load
                 FROM network_metrics
                 WHERE timestamp >= NOW() - INTERVAL '1 hour'
-            """
-            )
+            """)
 
             result = cursor.fetchone()
             conn.close()

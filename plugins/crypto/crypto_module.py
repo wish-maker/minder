@@ -458,15 +458,13 @@ class CryptoModule(BaseModule):
             cursor = conn.cursor()
 
             # Get latest prices
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT symbol, name, price, change_24h_pct
                 FROM crypto_data
                 WHERE timestamp >= NOW() - INTERVAL '1 hour'
                 ORDER BY timestamp DESC
                 LIMIT 10
-            """
-            )
+            """)
 
             results = cursor.fetchall()
             conn.close()

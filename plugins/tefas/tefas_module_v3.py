@@ -318,15 +318,13 @@ class TefasModuleV3(BaseModule):
     async def _get_basic_metrics(self, cursor) -> Dict[str, Any]:
         """Get basic metrics from existing data"""
         try:
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT
                     COUNT(DISTINCT code) as total_funds,
                     COUNT(*) as total_records,
                     MAX(date) as latest_date
                 FROM tefas_funds
-                """
-            )
+                """)
 
             row = cursor.fetchone()
             return {

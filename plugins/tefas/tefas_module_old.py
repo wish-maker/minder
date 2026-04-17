@@ -498,13 +498,11 @@ class TefasModule(BaseModule):
                 conn = psycopg2.connect(**self.db_config)
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
 
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT DISTINCT fund_code, fund_name
                     FROM tefas_funds
                     LIMIT 10
-                """
-                )
+                """)
 
                 funds = cursor.fetchall()
                 conn.close()
@@ -662,8 +660,7 @@ class TefasModule(BaseModule):
 
     async def _ensure_tables(self, cursor):
         """Gerekli tabloları oluştur"""
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS tefas_funds (
                 id SERIAL PRIMARY KEY,
                 fund_code VARCHAR(20) NOT NULL,
@@ -675,19 +672,14 @@ class TefasModule(BaseModule):
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(fund_code, date)
             )
-        """
-        )
+        """)
 
-        cursor.execute(
-            """
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_tefas_fund_code ON tefas_funds(fund_code)
-        """
-        )
-        cursor.execute(
-            """
+        """)
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_tefas_date ON tefas_funds(date)
-        """
-        )
+        """)
 
     async def _fetch_fund_list(self) -> List[Dict]:
         """TEFAS fon listesini web scraping ile çek"""

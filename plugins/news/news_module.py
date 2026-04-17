@@ -331,16 +331,14 @@ class NewsModule(BaseModule):
             cursor = conn.cursor()
 
             # Get recent articles
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT COUNT(*) as total,
                        AVG(sentiment_score) as avg_sentiment,
                        SUM(CASE WHEN sentiment_score > 0.2 THEN 1 ELSE 0 END) as positive,
                        SUM(CASE WHEN sentiment_score < -0.2 THEN 1 ELSE 0 END) as negative
                 FROM news_articles
                 WHERE timestamp >= NOW() - INTERVAL '24 hours'
-            """
-            )
+            """)
 
             result = cursor.fetchone()
             conn.close()

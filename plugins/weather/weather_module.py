@@ -222,8 +222,7 @@ class WeatherModule(BaseModule):
             cursor = conn.cursor()
 
             # Calculate average metrics
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT
                     AVG(temperature_c) as avg_temp,
                     AVG(humidity_pct) as avg_humidity,
@@ -231,8 +230,7 @@ class WeatherModule(BaseModule):
                     AVG(wind_speed_kmh) as avg_wind
                 FROM weather_data
                 WHERE timestamp >= NOW() - INTERVAL '7 days'
-            """
-            )
+            """)
 
             result = cursor.fetchone()
             conn.close()

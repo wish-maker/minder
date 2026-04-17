@@ -259,8 +259,7 @@ class TaxCollector:
                     (effective_date,),
                 )
             else:
-                cursor.execute(
-                    """
+                cursor.execute("""
                     SELECT
                         tax_category,
                         AVG(rate) as avg_rate,
@@ -270,8 +269,7 @@ class TaxCollector:
                     FROM tefas_tax_rates
                     GROUP BY tax_category
                     ORDER BY tax_category
-                    """
-                )
+                    """)
 
             results = cursor.fetchall()
             conn.close()
@@ -331,13 +329,11 @@ class TaxCollector:
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor()
 
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT DISTINCT tax_category
                 FROM tefas_tax_rates
                 ORDER BY tax_category
-                """
-            )
+                """)
 
             results = cursor.fetchall()
             conn.close()

@@ -345,8 +345,7 @@ class TefasModule(BaseModule):
             cursor = conn.cursor()
 
             # Get top performing funds
-            cursor.execute(
-                """
+            cursor.execute("""
                 SELECT
                     code,
                     title,
@@ -360,8 +359,7 @@ class TefasModule(BaseModule):
                 HAVING COUNT(*) >= 20  -- At least 20 data points
                 ORDER BY avg_price DESC
                 LIMIT 10
-                """
-            )
+                """)
 
             results = cursor.fetchall()
             conn.close()
