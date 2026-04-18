@@ -14,6 +14,16 @@ from pydantic import BaseModel, Field, field_validator
 from .github_installer import GitHubPluginInstaller
 from .plugin_store_security import get_default_security_validator
 
+# Import manifest validator
+try:
+    from ..core.plugin_manifest import validate_plugin_for_installation
+except ImportError:
+    # Fallback for different import paths
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from core.plugin_manifest import validate_plugin_for_installation
+
 try:
     from .security import InputSanitizer
 except ImportError:
@@ -34,6 +44,57 @@ except ImportError:
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from core.plugin_loader import PluginLoader
+
+# Import sandbox and security features
+try:
+    from ..core.plugin_sandbox import SandboxedPluginLoader, SubprocessSandbox
+    from ..core.plugin_permissions import SandboxedPlugin, PermissionEnforcer
+    from ..core.plugin_hot_reload import PluginReloader
+    from ..core.plugin_observability import PluginMetrics, PluginHealthMonitor
+except ImportError:
+    # Fallback for different import paths
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    # Only import if modules actually exist
+    try:
+        from core.plugin_sandbox import SandboxedPluginLoader, SubprocessSandbox
+
+        SANDBOX_AVAILABLE = True
+    except ImportError:
+        SANDBOX_AVAILABLE = False
+        SandboxedPluginLoader = None
+        SubprocessSandbox = None
+        logger.warning("Plugin sandbox not available - using regular loader")
+
+    try:
+        from core.plugin_permissions import SandboxedPlugin, PermissionEnforcer
+
+        PERMISSIONS_AVAILABLE = True
+    except ImportError:
+        PERMISSIONS_AVAILABLE = False
+        SandboxedPlugin = None
+        PermissionEnforcer = None
+        logger.warning("Plugin permissions not available")
+
+    try:
+        from core.plugin_hot_reload import PluginReloader
+
+        HOT_RELOAD_AVAILABLE = True
+    except ImportError:
+        HOT_RELOAD_AVAILABLE = False
+        PluginReloader = None
+        logger.warning("Plugin hot reload not available")
+
+    try:
+        from core.plugin_observability import PluginMetrics, PluginHealthMonitor
+
+        OBSERVABILITY_AVAILABLE = True
+    except ImportError:
+        OBSERVABILITY_AVAILABLE = False
+        PluginMetrics = None
+        PluginHealthMonitor = None
+        logger.warning("Plugin observability not available")
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +121,6 @@ class PluginInstallRequest(BaseModel):
     branch: str = "main"
     version: str = "latest"
     author: Optional[str] = None
-    bypass_security: bool = False
 
     @field_validator("repo_url")
     @classmethod
@@ -167,63 +227,75 @@ async def install_plugin(
         plugin_name = download_result["plugin_name"]
         plugin_path = Path(download_result["path"])
 
-        # Security validation (unless bypassed)
-        if not request.bypass_security:
-            validator = get_default_security_validator()
+        # Step 1: MANDATORY manifest validation
+        from .plugin_store_security import validate_plugin_for_installation
 
-            author = request.author or "unknown"
+        manifest_valid, manifest, manifest_errors = validate_plugin_for_installation(plugin_path)
 
-            # Validate plugin
-            is_valid, errors = validator.validate_plugin(
-                plugin_path=plugin_path, plugin_name=plugin_name, author=author
+        if not manifest_valid:
+            # Remove plugin if manifest validation failed
+            shutil.rmtree(plugin_path, ignore_errors=True)
+
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "manifest_validation_failed",
+                    "plugin": plugin_name,
+                    "issues": manifest_errors,
+                },
             )
 
-            if not is_valid:
-                # Remove plugin if validation failed
-                shutil.rmtree(plugin_path, ignore_errors=True)
+        logger.info(f"✅ Plugin manifest validation passed: {plugin_name}")
 
-                raise HTTPException(
-                    status_code=403,
-                    detail={
-                        "error": "security_validation_failed",
-                        "plugin": plugin_name,
-                        "issues": errors,
-                    },
-                )
+        # Step 2: MANDATORY security validation (NO BYPASS POSSIBLE)
+        validator = get_default_security_validator()
 
-            logger.info(f"✅ Plugin security validation passed: {plugin_name}")
+        author = request.author or "unknown"
 
-        # Load plugin into kernel
+        # Validate plugin security
+        is_valid, errors = validator.validate_plugin(plugin_path=plugin_path, plugin_name=plugin_name, author=author)
+
+        if not is_valid:
+            # Remove plugin if validation failed
+            shutil.rmtree(plugin_path, ignore_errors=True)
+
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "security_validation_failed",
+                    "plugin": plugin_name,
+                    "issues": errors,
+                },
+            )
+
+        logger.info(f"✅ Plugin security validation passed: {plugin_name}")
+
+        # Step 3: Load plugin with SANDBOX and PERMISSION ENFORCEMENT
         try:
             # Get kernel reference
             kernel = get_kernel()
             if not kernel:
                 logger.warning(f"⚠️  Kernel not available, plugin downloaded but not loaded: {plugin_name}")
             else:
-                # Create plugin loader
-                loader = PluginLoader(
-                    {
-                        "plugins_path": Path("/app/plugins"),
-                        "plugins": {plugin_name: {"enabled": True}},
-                    }
+                # Use SANDBOXED plugin loader (not regular loader)
+                sandboxed_loader = SandboxedPluginLoader()
+
+                # Load plugin with sandbox (untrusted = use subprocess)
+                # In production, you'd check if plugin is trusted
+                sandbox = await sandboxed_loader.load_plugin(
+                    plugin_path, trusted=False  # ← Untrusted plugins use subprocess isolation
                 )
 
-                # Load the plugin
-                plugin_instance = await loader.load_plugin(plugin_name)
+                logger.info(f"✅ Plugin loaded in sandbox: {plugin_name}")
 
-                if plugin_instance:
-                    # Register plugin in kernel if it has a registry
-                    if hasattr(kernel, "registry"):
-                        kernel.registry.register_plugin(plugin_name, plugin_instance)
-                        logger.info(f"✅ Plugin loaded into kernel registry: {plugin_name}")
-                    else:
-                        logger.info(f"✅ Plugin loaded but kernel has no registry: {plugin_name}")
-                else:
-                    logger.warning(f"⚠️  Plugin download successful but loading failed: {plugin_name}")
+                # Store sandbox reference for later use
+                if not hasattr(kernel, "plugin_sandboxes"):
+                    kernel.plugin_sandboxes = {}
+                kernel.plugin_sandboxes[plugin_name] = sandbox
 
         except Exception as e:
-            logger.error(f"❌ Error loading plugin {plugin_name} into kernel: {e}")
-            # Don't fail installation if loading fails - plugin is downloaded
+            logger.error(f"❌ Error loading plugin {plugin_name} into sandbox: {e}")
+            # Don't fail installation if loading fails - plugin is downloaded and validated
 
         return {
             "plugin": plugin_name,
@@ -317,3 +389,125 @@ async def get_plugin_index(
     index = store.plugin_index
 
     return {"plugins": index, "total": len(index)}
+
+
+# ============================================================================
+# NEW: Observability & Monitoring Endpoints
+# ============================================================================
+
+
+@router.get("/health/{plugin_name}")
+async def get_plugin_health(plugin_name: str, current_user: dict = Depends(get_current_user_optional)):
+    """Get plugin health status"""
+    kernel = get_kernel()
+
+    if not kernel:
+        raise HTTPException(status_code=503, detail="Kernel not initialized")
+
+    try:
+        plugin = await kernel.registry.get_plugin(plugin_name)
+        if not plugin:
+            raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
+
+        # Get plugin metadata
+        metadata = kernel.registry.metadata.get(plugin_name)
+        if not metadata:
+            raise HTTPException(status_code=404, detail=f"Plugin metadata not found: {plugin_name}")
+
+        return {
+            "plugin": plugin_name,
+            "status": plugin.status.value,
+            "healthy": plugin.status.value == "ready",
+            "version": metadata.version,
+            "description": metadata.description,
+            "capabilities": metadata.capabilities,
+            "author": metadata.author,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Health check failed for {plugin_name}: {e}")
+        return {"plugin": plugin_name, "status": "unhealthy", "healthy": False, "error": str(e)}
+
+
+@router.get("/health")
+async def get_all_plugin_health(current_user: dict = Depends(get_current_user_optional)):
+    """Get health status of all plugins"""
+    kernel = get_kernel()
+
+    if not kernel:
+        return {"plugins": {}, "total": 0, "error": "Kernel not initialized"}
+
+    try:
+        plugins = await kernel.registry.list_plugins()
+        return {"plugins": {p["name"]: p for p in plugins}, "total": len(plugins)}
+    except Exception as e:
+        logger.error(f"Error getting plugin health: {e}", exc_info=True)
+        return {"plugins": {}, "total": 0, "error": str(e)}
+
+
+@router.post("/reload/{plugin_name}")
+async def reload_plugin(
+    plugin_name: str,
+    strategy: str = "hot-swap",
+    preserve_state: bool = True,
+    current_user: dict = Depends(get_current_user_optional),
+):
+    """Reload plugin without restart"""
+    kernel = get_kernel()
+
+    if not kernel or not hasattr(kernel, "plugin_sandboxes"):
+        raise HTTPException(status_code=503, detail="Plugin sandboxes not initialized")
+
+    # Create reloader
+    reloader = PluginReloader(kernel.plugin_sandboxes.get(plugin_name))
+
+    try:
+        result = await reloader.reload_plugin(plugin_name, strategy=strategy, preserve_state=preserve_state)
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Failed to reload {plugin_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/metrics/{plugin_name}")
+async def get_plugin_metrics(plugin_name: str, current_user: dict = Depends(get_current_user_optional)):
+    """Get plugin performance metrics"""
+    kernel = get_kernel()
+
+    if not kernel or not hasattr(kernel, "plugin_sandboxes"):
+        raise HTTPException(status_code=503, detail="Plugin sandboxes not initialized")
+
+    sandbox = kernel.plugin_sandboxes.get(plugin_name)
+
+    if not sandbox:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_name}")
+
+    # Get metrics from sandbox
+    # (This would require implementing metrics collection in sandbox)
+    return {"plugin": plugin_name, "message": "Metrics collection not yet implemented", "status": "TODO"}
+
+
+# ============================================================================
+# Helper function to initialize observability in main.py
+# ============================================================================
+
+
+async def initialize_plugin_observability(kernel):
+    """Initialize plugin observability system"""
+    try:
+        # Create metrics and health monitor
+        metrics = PluginMetrics()
+        health_monitor = PluginHealthMonitor(metrics)
+
+        # Store in kernel for later use
+        kernel.plugin_metrics = metrics
+        kernel.plugin_health_monitor = health_monitor
+
+        logger.info("✅ Plugin observability initialized")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize observability: {e}")

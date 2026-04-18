@@ -1,77 +1,74 @@
 # Minder Configuration
+# Version: 1.0.0
+# Single source of truth for all Minder settings
 
-# Kernel settings
-kernel:
-  name: "minder"
-  version: "1.0.0"
-  environment: "production"
+# Kernel Settings
+name: "minder"
+version: "1.0.0"
+environment: "production"
 
-# Database connections
-databases:
-  postgres:
-    host: localhost
-    port: 5432
+# ============================================================================
+# Database Configuration
+# ============================================================================
+database:
+  host: postgres
+  port: 5432
+  user: postgres
+  password: postgrespassword  # Explicit password for Docker environment
 
-  # Plugin-specific databases
-  news_db:
-    host: postgres
-    port: 5432
-    database: minder_news
-    user: postgres
-    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+  # Database names
+  fundmind_db: fundmind
+  news_db: minder_news
+  weather_db: minder_weather
+  crypto_db: minder_crypto
+  network_db: minder_network
 
-  tefas_db:
-    host: postgres
-    port: 5432
-    database: minder_tefas
-    user: postgres
-    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+# InfluxDB (time-series data)
+influxdb:
+  host: influxdb
+  port: 8086
+  database: minder
+  username: minder
+  password: minder123
 
-  weather_db:
-    host: postgres
-    port: 5432
-    database: minder_weather
-    user: postgres
-    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+# Qdrant (vector database)
+qdrant:
+  host: qdrant
+  port: 6333
+  collection_prefix: "minder"
 
-  crypto_db:
-    host: postgres
-    port: 5432
-    database: minder_crypto
-    user: postgres
-    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
+# Redis (caching & rate limiting)
+redis:
+  host: localhost
+  port: 6379
+  db: 0
 
-  network_db:
-    host: postgres
-    port: 5432
-    database: minder_network
-    user: postgres
-    password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
-
-  influxdb:
-    host: influxdb
-    port: 8086
-    database: minder
-    username: minder
-    password: minder123
-
-  qdrant:
-    host: qdrant
-    port: 6333
-    collection_prefix: "minder"
-
-# Plugin configurations
+# ============================================================================
+# Plugin Configuration
+# ============================================================================
 plugins:
+  # TEFAS - Turkish Fund Analysis
+  tefas:
+    enabled: true
+    priority: "high"
+    health_check_interval: 300
+    failure_threshold: 3
+    auto_restart: true
+    historical_start_date: "2020-01-01"
+    batch_days: 30
+    fund_types: ["YAT", "EMK", "BYF"]
+
+  # Network - System Monitoring
   network:
     enabled: true
     priority: "high"
     health_check_interval: 300
     failure_threshold: 3
     auto_restart: true
-    influxdb:
-      host: influxdb
-      port: 8086
+    interfaces: ["eth0", "wlan0"]
+    collection_interval: 60
 
+  # Weather - Weather Data
   weather:
     enabled: true
     priority: "medium"
@@ -79,119 +76,106 @@ plugins:
     failure_threshold: 3
     auto_restart: true
     api_source: "open-meteo"
-    locations:
-      - Istanbul
-      - Ankara
-      - Izmir
+    locations: ["Istanbul", "Ankara", "Izmir"]
 
+  # Crypto - Cryptocurrency Tracking
   crypto:
     enabled: true
     priority: "medium"
     health_check_interval: 300
     failure_threshold: 3
     auto_restart: true
-    symbols:
-      - BTC
-      - ETH
-      - USDT
+    symbols: ["BTC", "ETH", "USDT", "BNB", "XRP"]
+    cache_ttl: 300  # 5 minutes
 
+  # News - News Aggregation
   news:
     enabled: true
     priority: "high"
     health_check_interval: 300
     failure_threshold: 3
     auto_restart: true
-    sources:
-      - reuters
-      - bloomberg
-      - anadolu
+    sources: ["bbc", "guardian", "npr"]
+    max_articles: 10
 
-  tefas:
-    enabled: true
-    priority: "low"
-    health_check_interval: 300
-    failure_threshold: 3
-    auto_restart: true
-    database:
-      host: postgres
-      port: 5432
-      database: fundmind
-      user: postgres
-      password: id8O+LtRz2OONDKYT9ev+tzOwF/f5lcEcv7eUbIJGI4=
-    influxdb:
-      host: influxdb
-      port: 8086
-      token: minder123
-      org: minder
-      bucket: metrics
-    qdrant:
-      host: qdrant
-      port: 6333
-    batch_size: 100
-    historical_start_date: '2020-01-01'
-    collection_interval: 86400
+  # Plugin Activation Policy
+  activation_strategy: "gradual"  # gradual, immediate, manual
+  startup_timeout: 60  # seconds
 
-  # Plugin activation policy
-  activation_policy:
-    strategy: "gradual"  # gradual, immediate, manual
-    health_check_interval: 300  # 5 minutes
-    failure_threshold: 3  # Disable after 3 consecutive failures
-    auto_restart: true
-    graceful_shutdown: true
-    startup_timeout: 60  # seconds
+# ============================================================================
+# Security Configuration
+# ============================================================================
+security:
+  # JWT Authentication
+  jwt_secret_key: ""  # Load from JWT_SECRET_KEY environment variable (min 32 chars)
+  jwt_expire_minutes: 30
 
-# Voice interface
+  # Rate Limiting (requests per hour)
+  rate_limit_enabled: true
+  rate_limit_local: "unlimited"
+  rate_limit_vpn: 200
+  rate_limit_public: 50
+
+  # Network Detection
+  local_network_cidr: "192.168.68.0/24"
+  tailscale_cidr: "100.64.0.0/10"
+  trust_local_network: true
+  trust_vpn_network: true
+
+  # CORS
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://192.168.68.*"
+    - "http://100.*.*.*"
+
+# ============================================================================
+# Plugin Store Configuration
+# ============================================================================
+plugin_store:
+  enabled: true
+  store_path: "/var/lib/minder/plugins"
+  index_url: "https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json"
+  github_token: ""  # Optional, for private repos
+
+  # Security
+  require_signature: false
+  allow_unsigned: true
+  scan_for_malware: false
+
+  # Auto-update
+  auto_update: false
+  update_interval: 86400  # 24 hours
+
+# ============================================================================
+# Feature Configuration
+# ============================================================================
 voice:
   enabled: true
   stt_model: "whisper-medium"
   tts_model: "tts_models/multilingual/multi-dataset/xtts_v2"
   default_language: "tr"
-  supported_languages:
-    - tr
-    - en
-    - de
-    - fr
-    - es
-    - it
+  supported_languages: ["tr", "en", "de", "fr", "es", "it"]
 
-# Character system
 character:
   default: "finbot"
   custom_characters_path: "/var/lib/minder/characters"
 
-# OpenWebUI integration
 openwebui:
   enabled: true
-  api_url: http://openwebui:8080
-  agent_endpoint: /api/agents/minder
+  api_url: "http://openwebui:8080"
+  agent_endpoint: "/api/agents/minder"
 
-# Logging
+# ============================================================================
+# System Configuration
+# ============================================================================
 logging:
-  level: INFO
-  file: /var/log/minder/minder.log
-  rotation: daily
-  retention: 30
+  level: "INFO"
+  file: "/var/log/minder/minder.log"
+  rotation: "daily"
+  retention: 30  # days
 
-# Performance
 performance:
   max_workers: 4
   batch_size: 100
-  cache_ttl: 3600
+  cache_ttl: 3600  # 1 hour
   max_event_history: 10000
-
-# Plugin Store (GitHub reposundan plugin yükleme)
-plugin_store:
-  enabled: true
-  store_path: /var/lib/minder/plugins
-  index_url: https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json
-  github_token: ""  # Opsiyonel: GitHub token for private repos
-
-  # Güvenlik ayarları
-  security:
-    require_signature: false
-    allow_unsigned: true
-    scan_for_malware: false
-
-  # Otomatik güncelleme
-  auto_update: false
-  update_interval: 86400  # Günlük

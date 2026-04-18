@@ -43,7 +43,7 @@ aiofiles==23.2.1
 
 # External Data Sources
 tefas-crawler>=0.5.0  # TEFAS fund data crawler (latest on PyPI: 0.5.0)
-borsapy==0.8.4  # Turkish financial markets data library (yfinance-like API for BIST)
+borsapy==0.8.7  # Turkish financial markets data library (yfinance-like API for BIST) - Latest version with advanced features
 
 # Configuration
 # Note: Web scraping and ML libraries are now plugin-specific

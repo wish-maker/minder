@@ -737,3 +737,34 @@ class UnifiedDataAPI:
         if self.borsapy:
             self.borsapy.clear_cache()
         logger.info("UnifiedDataAPI: All caches cleared")
+
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get status of all data sources
+
+        Returns:
+            Dict with status of borsapy and tefas-crawler
+        """
+        status = {
+            "primary_source": self.primary_source,
+            "fallback_enabled": self.fallback_enabled,
+            "borsapy": {
+                "available": BORSAPY_AVAILABLE,
+                "initialized": self.borsapy is not None,
+                "cache_stats": (self.borsapy.get_cache_stats() if self.borsapy else None),
+            },
+            "tefas_crawler": {
+                "available": TEFAS_CRAWLER_AVAILABLE,
+                "initialized": self.tefas_crawler is not None,
+            },
+        }
+
+        # Determine overall health
+        if status["borsapy"]["initialized"]:
+            status["health"] = "healthy"
+        elif status["tefas_crawler"]["initialized"]:
+            status["health"] = "degraded"  # Fallback only
+        else:
+            status["health"] = "unhealthy"
+
+        return status

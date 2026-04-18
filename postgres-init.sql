@@ -32,6 +32,25 @@ CREATE TABLE IF NOT EXISTS news_articles (
 
 -- TEFAS database schema
 \c minder_tefas
+
+-- Main TEFAS fund data table (used by tefas_module.py)
+CREATE TABLE IF NOT EXISTS tefas_fund_data (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(20) NOT NULL,
+    title TEXT NOT NULL,  -- Changed from VARCHAR(10) to TEXT for long fund names
+    date DATE NOT NULL,
+    price DECIMAL(12, 4),
+    market_cap BIGINT,
+    number_of_shares BIGINT,
+    number_of_investors BIGINT,
+    bank_bills DECIMAL(8, 4),
+    government_bond DECIMAL(8, 4),
+    stock DECIMAL(8, 4),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(code, date)
+);
+
+-- Legacy TEFAS funds table (kept for compatibility)
 CREATE TABLE IF NOT EXISTS tefas_funds (
     id SERIAL PRIMARY KEY,
     fund_code VARCHAR(20) NOT NULL,

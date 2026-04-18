@@ -37,7 +37,7 @@ class NetworkModule(BaseModule):
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
             name="network",
-            version="1.0.0",
+            version="1.0.0",  # Stable - production ready
             description="Network performance monitoring and security analysis",
             author="FundMind AI",
             dependencies=[],

@@ -40,7 +40,7 @@ class WeatherModule(BaseModule):
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
             name="weather",
-            version="1.0.0",
+            version="1.0.0",  # Stable - production ready
             description="Weather data collection and correlation analysis",
             author="FundMind AI",
             dependencies=[],

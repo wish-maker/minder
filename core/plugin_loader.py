@@ -32,6 +32,13 @@ class PluginLoader:
         self.loaded_plugins: Dict[str, BaseModule] = {}
         self.failed_plugins: Dict[str, str] = {}
 
+        # Add minder parent directory to sys.path so plugins can import from minder package
+        # For plugins to use "from minder.core.module_interface import ...", we need the parent dir in path
+        minder_parent = Path(__file__).parent.parent.parent
+        if str(minder_parent) not in sys.path:
+            sys.path.insert(0, str(minder_parent))
+            logger.debug(f"Added {minder_parent} to sys.path for plugin imports")
+
     async def discover_plugins(self) -> List[str]:
         """Discover all available plugins"""
         discovered = []

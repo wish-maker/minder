@@ -116,7 +116,7 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
         run: |
-          pytest tests/ \
+          pytest tests/ --ignore=tests/manual \
             --cov=api \
             --cov=core \
             --cov=plugins \

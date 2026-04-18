@@ -5,9 +5,9 @@ Handles JWT authentication and user management
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 
-from ..auth import LoginResponse, get_auth_manager
+from ..auth import LoginRequest, LoginResponse, get_auth_manager
 from ..middleware import limiter
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.post("/login")
 @limiter.limit("10/minute")  # Brute force protection
-async def login(request: Request, login_request):
+async def login(request: Request, login_request: LoginRequest = Body(...)):
     """
     Login endpoint - returns JWT access token
 
@@ -27,7 +27,7 @@ async def login(request: Request, login_request):
     auth_mgr = get_auth_manager()
 
     # Authenticate user
-    user = await auth_mgr.authenticate(request.username, request.password)
+    user = await auth_mgr.authenticate(login_request.username, login_request.password)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 

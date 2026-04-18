@@ -14,7 +14,14 @@ import yaml
 
 from core.module_interface import BaseModule, ModuleMetadata
 
-from .crypto_validator import PluginDataValidator
+# Import validator from same directory using absolute path
+import sys
+from pathlib import Path
+crypto_plugin_dir = Path(__file__).parent
+if str(crypto_plugin_dir) not in sys.path:
+    sys.path.insert(0, str(crypto_plugin_dir))
+
+from crypto_validator import PluginDataValidator
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +164,7 @@ class CryptoModule(BaseModule):
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
             name="crypto",
-            version="1.0.0",
+            version="1.0.0",  # Stable - production ready
             description="Cryptocurrency market analysis",
             author="FundMind AI",
             dependencies=[],

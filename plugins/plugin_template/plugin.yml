@@ -1,0 +1,196 @@
+# Minder Plugin Manifest
+# Version: 1.0.0
+#
+# All plugins MUST have this file in their root directory
+# This file is validated before plugin installation
+
+# ============================================================================
+# Plugin Metadata
+# ============================================================================
+name: "example_plugin"           # Unique plugin identifier (snake_case)
+version: "1.0.0"                  # Semantic versioning
+description: "Brief description of what this plugin does"
+author: "Your Name or Organization"
+license: "MIT"                     # MIT, Apache-2.0, GPL-3.0, etc.
+email: "contact@example.com"      # Optional contact email
+repository: "https://github.com/username/minder-example-plugin"
+
+# ============================================================================
+# Minder Compatibility
+# ============================================================================
+minder:
+  min_version: "1.0.0"            # Minimum Minder version required
+  max_version: "1.999.0"          # Maximum compatible version (optional)
+
+# Python requirements
+python:
+  min_version: "3.11"              # Minimum Python version
+  max_version: "3.13"              # Maximum tested Python version
+
+# ============================================================================
+# Dependencies
+# ============================================================================
+dependencies:
+  # Python packages (PyPI)
+  python:
+    - "requests>=2.31.0"
+    - "pandas>=2.1.0"
+
+  # System packages (apt, yum, etc.)
+  system:
+    - "curl"
+    - "jq"
+
+  # Other Minder plugins this plugin depends on
+  plugins:
+    - "network:1.0.0"             # plugin_name:min_version
+
+# ============================================================================
+# Plugin Configuration
+# ============================================================================
+configuration:
+  # Config schema (will be validated)
+  schema:
+    type: "object"
+    properties:
+      api_key:
+        type: "string"
+        description: "API key for external service"
+      update_interval:
+        type: "integer"
+        minimum: 60
+        default: 300
+        description: "Data collection interval in seconds"
+
+  # Default configuration values
+  defaults:
+    update_interval: 300
+    batch_size: 100
+
+# ============================================================================
+# Permissions Required
+# ============================================================================
+# These permissions MUST be granted for plugin to work
+permissions:
+  # File system access
+  filesystem:
+    read:
+      - "/var/lib/minder/plugins/example_plugin/data"
+    write:
+      - "/var/lib/minder/plugins/example_plugin/cache"
+    execute: []  # No execute permissions by default
+
+  # Network access
+  network:
+    allowed_hosts:
+      - "api.example.com"
+      - "*.github.com"
+    allowed_ports: [443, 80]
+    max_requests_per_minute: 60
+
+  # Database access
+  database:
+    databases: []                  # Which databases to access
+    tables: []                      # Which tables to access
+    operations: ["read"]            # Allowed operations: read, write
+
+  # System resources
+  resources:
+    max_memory_mb: 512              # Maximum memory usage
+    max_cpu_percent: 50             # Maximum CPU usage
+    max_execution_time: 300         # Maximum execution time (seconds)
+    max_disk_space_mb: 1024         # Maximum disk space usage
+
+# ============================================================================
+# Capabilities
+# ============================================================================
+# What this plugin can do
+capabilities:
+  - "data_collection"              # Can collect data from external sources
+  - "analysis"                     # Can analyze collected data
+  - "visualization"                # Can create visualizations
+  - "notifications"                # Can send notifications
+
+# ============================================================================
+# Data Sources
+# ============================================================================
+# Where this plugin gets its data
+data_sources:
+  - name: "Example API"
+    type: "http"
+    url: "https://api.example.com"
+    auth_required: true
+    rate_limit: 100  # requests per hour
+
+# ============================================================================
+# Health Check
+# ============================================================================
+health_check:
+  endpoint: "/health"              # Relative path for health check
+  interval: 60                     # Check interval in seconds
+  timeout: 10                      # Check timeout in seconds
+
+# ============================================================================
+# Security
+# ============================================================================
+security:
+  # Code signing
+  signature:
+    required: false                # Require digital signature
+    public_key: ""                 # Public key for verification
+
+  # Security scanning
+  scan_on_install: true            # Scan for malware patterns
+
+  # Sandbox requirements
+  sandbox:
+    required: true                 # Must run in sandbox
+    type: "subprocess"              # subprocess, docker, etc.
+
+# ============================================================================
+# Lifecycle Hooks
+# ============================================================================
+hooks:
+  # Run before plugin loads
+  pre_install:
+    - "scripts/validate_environment.sh"
+
+  # Run after plugin installs
+  post_install:
+    - "scripts/setup.sh"
+
+  # Run before plugin uninstalls
+  pre_uninstall:
+    - "scripts/cleanup.sh"
+
+  # Run after plugin uninstalls
+  post_uninstall: []
+
+# ============================================================================
+# Testing
+# ============================================================================
+testing:
+  # Test commands
+  commands:
+    - "pytest tests/"
+    - "python -m plugin.tests.test_health"
+
+  # Test data
+  test_data_path: "tests/fixtures"
+
+# ============================================================================
+# Documentation
+# ============================================================================
+documentation:
+  readme: "README.md"
+  api_docs: "docs/api.md"
+  examples: "examples/"
+
+# ============================================================================
+# Metadata (Internal)
+# ============================================================================
+metadata:
+  created_at: "2026-04-18"
+  updated_at: "2026-04-18"
+  categories: ["data-collection", "analysis"]
+  tags: ["example", "template"]

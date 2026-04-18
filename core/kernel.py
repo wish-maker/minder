@@ -40,6 +40,7 @@ class MinderKernel:
         self.knowledge_graph = KnowledgeGraph(config)
         self.plugin_loader = PluginLoader(config)
         self.plugin_store = None  # Will be initialized later
+        self.plugin_sandboxes = {}  # Plugin sandbox instances for isolation
         self.running = False
         self.startup_time: Optional[datetime] = None
 
@@ -91,12 +92,43 @@ class MinderKernel:
         for name, plugin in plugins.items():
             await self.registry.register_plugin(plugin)
 
+        # Initialize sandboxes for loaded plugins
+        logger.info("🔒 Initializing plugin sandboxes...")
+        await self._initialize_plugin_sandboxes()
+
         init_results = await self.registry.initialize_all()
 
         success_count = sum(1 for v in init_results.values() if v)
         total_count = len(init_results)
 
         logger.info(f"✅ Enhanced kernel started: {success_count}/{total_count} plugins ready")
+
+    async def _initialize_plugin_sandboxes(self):
+        """Initialize sandboxes for all loaded plugins"""
+        from .plugin_manifest import PluginManifest, validate_plugin_for_installation
+        from .plugin_sandbox import ThreadSandbox
+
+        for plugin_name in self.registry.plugins.keys():
+            try:
+                # Get plugin manifest
+                plugin_path = self.plugin_loader.plugins_path / plugin_name
+                manifest_valid, manifest, _ = validate_plugin_for_installation(plugin_path)
+
+                if not manifest_valid:
+                    logger.warning(f"⚠️ No manifest found for {plugin_name}, using defaults")
+                    # Create default manifest with all required fields
+                    manifest = PluginManifest(
+                        name=plugin_name, version="1.0.0", description=f"{plugin_name} plugin", author="FundMind AI"
+                    )
+
+                # Create sandbox (thread-based for local plugins)
+                sandbox = ThreadSandbox(manifest)
+                self.plugin_sandboxes[plugin_name] = sandbox
+                logger.info(f"✓ Sandbox initialized for {plugin_name}")
+
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize sandbox for {plugin_name}: {e}")
+                # Continue with other plugins
 
     async def stop(self):
         """Stop the Minder kernel"""

@@ -58,7 +58,7 @@ class NewsModule(BaseModule):
     async def register(self) -> ModuleMetadata:
         self.metadata = ModuleMetadata(
             name="news",
-            version="1.0.0",
+            version="1.0.0",  # Stable - production ready
             description="News aggregation and sentiment analysis",
             author="FundMind AI",
             dependencies=[],

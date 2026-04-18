@@ -28,6 +28,27 @@ except ImportError:
     TEFAS_AVAILABLE = False
     logging.warning("tefas-crawler not installed. Install with: pip install tefas-crawler")
 
+# borsapy for advanced features
+try:
+    import borsapy as bp
+
+    BORSAPY_AVAILABLE = True
+    logging.info("✅ borsapy 0.8.7 available - Advanced features enabled")
+except ImportError:
+    BORSAPY_AVAILABLE = False
+    logging.warning("borsapy not installed. Advanced features disabled")
+
+# Unified Data API
+try:
+    from plugins.tefas.unified_data_api import (
+        UnifiedDataAPI,
+        BORSAPY_AVAILABLE,
+        TEFAS_CRAWLER_AVAILABLE,
+    )
+except ImportError:
+    BORSAPY_AVAILABLE = False
+    TEFAS_CRAWLER_AVAILABLE = TEFAS_AVAILABLE
+
 from core.module_interface import BaseModule, ModuleMetadata
 
 logger = logging.getLogger("minder.module.tefas")
@@ -50,21 +71,47 @@ class TefasModule(BaseModule):
         self.logger = logging.getLogger("minder.module.tefas")
 
         # Database config
+        # Support both Docker and local environments
+        import os
+
+        # Check if running in Docker (Docker env var indicates this)
+        is_docker = os.path.exists("/.dockerenv")
+
+        if is_docker:
+            # Docker environment: use IP address directly (DNS resolution fails)
+            # PostgreSQL container IP on default Docker network
+            default_host = "172.19.0.7"  # Fixed IP for postgres container
+            default_password = "postgrespassword"
+        else:
+            # Local development: use localhost
+            default_host = "localhost"
+            default_password = ""  # Local dev might not need password
+
         self.db_config = {
-            "host": config.get("database", {}).get("host", "localhost"),
+            "host": config.get("database", {}).get("host", default_host),
             "port": config.get("database", {}).get("port", 5432),
             "database": config.get("database", {}).get("database", "fundmind"),
             "user": config.get("database", {}).get("user", "postgres"),
-            "password": config.get("database", {}).get("password", ""),
+            "password": config.get("database", {}).get("password", default_password),
         }
 
-        # TEFAS crawler
-        if TEFAS_AVAILABLE:
+        # Unified Data API (supports both borsapy and tefas-crawler)
+        self.unified_api = None
+        self.tefas = None
+
+        if BORSAPY_AVAILABLE:
+            try:
+                self.unified_api = UnifiedDataAPI(config)
+                self.logger.info("✅ UnifiedDataAPI initialized with borsapy support")
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize UnifiedDataAPI: {e}")
+
+        # Fallback to tefas-crawler if borsapy not available
+        if self.unified_api is None and TEFAS_AVAILABLE:
             self.tefas = Crawler()
-            self.logger.info("✅ tefas-crawler initialized")
-        else:
-            self.tefas = None
-            self.logger.warning("⚠️  tefas-crawler not available")
+            self.logger.info("✅ tefas-crawler initialized (fallback mode)")
+        elif self.unified_api is None and not TEFAS_AVAILABLE:
+            self.logger.error("❌ Neither borsapy nor tefas-crawler is available!")
 
         # Collection settings
         self.historical_start_date = config.get("tefas", {}).get("historical_start_date", "2020-01-01")
@@ -87,20 +134,29 @@ class TefasModule(BaseModule):
         """Register module metadata"""
         self.metadata = ModuleMetadata(
             name="tefas",
-            version="2.0.0",
-            description="Türkiye yatırım fonları analizi (tefas-crawler entegrasyonlu)",
+            version="1.0.0",
+            description="Türkiye yatırım fonları analizi (borsapy 0.8.7 + tefas-crawler integrated)",
             author="FundMind AI",
-            dependencies=["tefas-crawler"],
+            dependencies=[],  # tefas-crawler and borsapy are pip packages, not Minder plugins
             capabilities=[
                 "fund_data_collection",
                 "historical_analysis",
                 "fund_discovery",
                 "kap_integration",
+                "risk_metrics",  # borsapy advanced
+                "tax_rates",  # borsapy advanced
+                "fund_comparison",  # borsapy advanced
+                "technical_analysis",  # borsapy advanced
+                "fund_screening",  # borsapy advanced
             ],
-            data_sources=["TEFAS (via tefas-crawler)", "KAP"],
+            data_sources=[
+                "TEFAS (via tefas-crawler)",
+                "TEFAS (via borsapy 0.8.7)",
+                "KAP",
+            ],
             databases=["postgresql"],
         )
-        self.logger.info("📊 Registering TEFAS Module v2.0")
+        self.logger.info("📊 Registering TEFAS Module v1.0.0 (borsapy 0.8.7 + tefas-crawler)")
         return self.metadata
 
     async def discover_funds(self) -> Dict[str, Any]:
@@ -108,9 +164,9 @@ class TefasModule(BaseModule):
         Discover all available funds dynamically
         Updates known_funds state and returns new/closed funds
         """
-        if not self.tefas:
-            self.logger.error("tefas-crawler not available")
-            return {"error": "tefas-crawler not installed"}
+        if not self.unified_api and not self.tefas:
+            self.logger.error("No data source available (neither borsapy nor tefas-crawler)")
+            return {"error": "No data source available"}
 
         self.logger.info("🔍 Discovering funds...")
 
@@ -123,7 +179,16 @@ class TefasModule(BaseModule):
 
             for fund_type in self.fund_types:
                 try:
-                    data = self.tefas.fetch(start=today, kind=fund_type)
+                    # Get the appropriate crawler
+                    if self.unified_api and self.unified_api.tefas_crawler:
+                        crawler = self.unified_api.tefas_crawler.crawler
+                    elif self.tefas:
+                        crawler = self.tefas
+                    else:
+                        self.logger.error("No crawler available")
+                        continue
+
+                    data = crawler.fetch(start=today, kind=fund_type)
 
                     if not data.empty:
                         # Extract fund codes
@@ -177,8 +242,8 @@ class TefasModule(BaseModule):
         2. Collect recent data (last 30 days)
         3. Backfill from 2020 if gaps exist
         """
-        if not self.tefas:
-            self.logger.error("tefas-crawler not available")
+        if not self.unified_api and not self.tefas:
+            self.logger.error("No data source available (neither borsapy nor tefas-crawler)")
             return {"records_collected": 0, "errors": 1}
 
         self.logger.info("📥 Collecting TEFAS data...")
@@ -207,10 +272,18 @@ class TefasModule(BaseModule):
                 current_end = min(current_start + timedelta(days=batch_size_days), end_date)
 
                 try:
-                    batch_data = self.tefas.fetch(
+                    # Get the appropriate crawler
+                    if self.unified_api and self.unified_api.tefas_crawler:
+                        crawler = self.unified_api.tefas_crawler.crawler
+                    elif self.tefas:
+                        crawler = self.tefas
+                    else:
+                        raise Exception("No crawler available")
+
+                    batch_data = crawler.fetch(
                         start=current_start.strftime("%Y-%m-%d"),
                         end=current_end.strftime("%Y-%m-%d"),
-                        kind="YAT",  # Collect YAT funds (most common)
+                        kind="YAT",
                     )
 
                     if not batch_data.empty:
@@ -339,13 +412,14 @@ class TefasModule(BaseModule):
             return {"source": "KAP", "error": str(e), "status": "failed"}
 
     async def analyze(self) -> Dict[str, Any]:
-        """Analyze collected fund data"""
+        """Analyze collected fund data with borsapy advanced features"""
         try:
             conn = psycopg2.connect(**self.db_config)
             cursor = conn.cursor()
 
             # Get top performing funds
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT
                     code,
                     title,
@@ -359,35 +433,79 @@ class TefasModule(BaseModule):
                 HAVING COUNT(*) >= 20  -- At least 20 data points
                 ORDER BY avg_price DESC
                 LIMIT 10
-                """)
+                """
+            )
 
             results = cursor.fetchall()
             conn.close()
 
             if results:
+                # Enhance with borsapy advanced features
+                enhanced_funds = []
+                for row in results:
+                    fund_code = row[0]
+                    fund_data = {
+                        "code": fund_code,
+                        "title": row[1],
+                        "avg_price": float(row[2]),
+                        "max_price": float(row[3]),
+                        "min_price": float(row[4]),
+                        "data_points": row[5],
+                    }
+
+                    # Try to get risk metrics from borsapy
+                    if self.unified_api and BORSAPY_AVAILABLE:
+                        try:
+                            risk_metrics = self.unified_api.get_risk_metrics(fund_code, period="1y")
+                            if risk_metrics:
+                                fund_data["risk_metrics"] = risk_metrics
+                        except Exception as e:
+                            self.logger.debug(f"Could not get risk metrics for {fund_code}: {e}")
+
+                        # Try to get tax category
+                        try:
+                            tax_category = self.unified_api.get_tax_category(fund_code)
+                            if tax_category:
+                                fund_data["tax_category"] = tax_category
+                        except Exception as e:
+                            self.logger.debug(f"Could not get tax category for {fund_code}: {e}")
+
+                    enhanced_funds.append(fund_data)
+
                 return {
                     "metrics": {
-                        "top_funds": [
-                            {
-                                "code": row[0],
-                                "title": row[1],
-                                "avg_price": float(row[2]),
-                                "max_price": float(row[3]),
-                                "min_price": float(row[4]),
-                                "data_points": row[5],
-                            }
-                            for row in results
-                        ]
+                        "top_funds": enhanced_funds,
+                        "analysis_source": "borsapy" if BORSAPY_AVAILABLE else "tefas-crawler",
+                        "features": {
+                            "risk_metrics": BORSAPY_AVAILABLE,
+                            "tax_categories": BORSAPY_AVAILABLE,
+                            "fund_comparison": BORSAPY_AVAILABLE,
+                        },
                     },
                     "patterns": [
                         {
                             "type": "price_trend",
                             "description": "Fund price analysis based on 30-day data",
+                        },
+                        {
+                            "type": "risk_analysis",
+                            "description": "Sharpe ratio, Sortino ratio, max drawdown (borsapy)",
                         }
+                        if BORSAPY_AVAILABLE
+                        else None,
+                        {
+                            "type": "tax_optimization",
+                            "description": "Withholding tax rates by category (borsapy)",
+                        }
+                        if BORSAPY_AVAILABLE
+                        else None,
                     ],
                     "insights": [
                         f"Analyzed {len(results)} top performing funds",
-                        "Data from tefas-crawler package",
+                        "Data from borsapy 0.8.7 + tefas-crawler"
+                        if BORSAPY_AVAILABLE
+                        else "Data from tefas-crawler package",
+                        "Advanced features enabled" if BORSAPY_AVAILABLE else "Basic features only",
                     ],
                 }
             else:
@@ -419,4 +537,96 @@ class TefasModule(BaseModule):
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:
-        return {"query": query, "results": []}
+        """Query TEFAS data with borsapy advanced features"""
+        self.logger.info(f"Querying TEFAS data: {query}")
+
+        results = []
+
+        # Try to use borsapy search if available
+        if self.unified_api and BORSAPY_AVAILABLE:
+            try:
+                # Search for funds matching query
+                import borsapy as bp
+
+                search_results = bp.search_funds(query)
+
+                if search_results is not None and not search_results.empty:
+                    results = search_results.head(10).to_dict("records")
+                    self.logger.info(f"Found {len(results)} funds via borsapy search")
+            except Exception as e:
+                self.logger.warning(f"Borsapy search failed: {e}")
+
+        # Fallback to database query
+        if not results:
+            try:
+                conn = psycopg2.connect(**self.db_config)
+                cursor = conn.cursor()
+
+                cursor.execute(
+                    """
+                    SELECT DISTINCT code, title
+                    FROM tefas_fund_data
+                    WHERE title ILIKE %s OR code ILIKE %s
+                    LIMIT 10
+                """,
+                    (f"%{query}%", f"%{query}%"),
+                )
+
+                rows = cursor.fetchall()
+                results = [{"code": row[0], "title": row[1]} for row in rows]
+                conn.close()
+            except Exception as e:
+                self.logger.error(f"Database query failed: {e}")
+
+        return {
+            "query": query,
+            "results": results,
+            "source": "borsapy" if BORSAPY_AVAILABLE else "database",
+            "total_results": len(results),
+        }
+
+    async def compare_funds(self, fund_codes: List[str]) -> Dict[str, Any]:
+        """
+        Compare multiple funds using borsapy
+
+        Args:
+            fund_codes: List of fund codes to compare (max 10)
+
+        Returns:
+            Comparison results with rankings and metrics
+        """
+        if not self.unified_api or not BORSAPY_AVAILABLE:
+            return {
+                "error": "borsapy not available. Fund comparison requires borsapy 0.8.7+",
+                "fund_codes": fund_codes,
+            }
+
+        if len(fund_codes) > 10:
+            return {
+                "error": "Maximum 10 funds can be compared at once",
+                "fund_codes": fund_codes,
+            }
+
+        try:
+            comparison = self.unified_api.compare_funds(fund_codes)
+
+            if comparison:
+                return {
+                    "fund_count": len(fund_codes),
+                    "funds": comparison.get("funds", []),
+                    "rankings": comparison.get("rankings", {}),
+                    "summary": comparison.get("summary", {}),
+                    "source": "borsapy 0.8.7",
+                }
+            else:
+                return {
+                    "error": "Fund comparison failed",
+                    "fund_codes": fund_codes,
+                }
+
+        except Exception as e:
+            self.logger.error(f"Fund comparison error: {e}")
+            return {
+                "error": str(e),
+                "fund_codes": fund_codes,
+            }

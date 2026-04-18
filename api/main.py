@@ -220,7 +220,7 @@ class MyPlugin(BaseModule):
 
 For detailed plugin development guide, see the [`/plugins/docs`](/plugins/docs) endpoint.
     """,
-    version="2.0.0",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     contact={
@@ -345,7 +345,7 @@ async def startup():
         "plugins": {"network": {}, "weather": {}, "crypto": {}, "news": {}},
         "plugin_store": {
             "enabled": True,
-            "store_path": "/var/lib/minder/plugins",
+            "store_path": "/app/plugins",  # Use actual plugins directory
             "index_url": "https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json",
             "github_token": "",
         },
@@ -557,7 +557,7 @@ async def root():
     """
     return {
         "name": "Minder API",
-        "version": "2.0.0",
+        "version": "1.0.0",
         "status": "running",
         "authentication": "enabled",
         "network_access": "dual (local + VPN)",
