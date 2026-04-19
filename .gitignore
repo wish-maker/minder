@@ -1,8 +1,12 @@
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -16,150 +20,110 @@ parts/
 sdist/
 var/
 wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# Virtual Environment
-venv/
-ENV/
-env/
-.venv/
+# PyInstaller
+*.manifest
+*.spec
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-*.sublime-*
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
-# Logs
-logs/
-*.log
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Data
-data/*.csv
-data/*.json
-data/*.parquet
-!data/.gitkeep
-
-# Docker
-*.pid
-docker-compose.override.yml
-
-# OS
-.DS_Store
-Thumbs.db
-*.bak
-*.backup
-
-# Testing
-.pytest_cache/
-.coverage
+# Unit test / coverage reports
 htmlcov/
 .tox/
 .nox/
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# ML Models
-models/
-*.pkl
-*.joblib
-*.h5
-
-# Temporary Files
-*.tmp
-*.temp
-*.cache
-
-# Plugin Store
-plugins/store/*.pyc
-plugins/store/__pycache__/
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre
-.pyre/
-.pytype/
-
-# cython extensions
-*.pyx
-
-# Documentation builds
-docs/_build/
-site/
-
-# Backup files
-*.swp
-*.swo
-*~.nib
-
-# Memory and cache directories (Claude Code)
-.memory/
-.remember/
-.claude/
-
-# Additional backup files
-*.bak
-*.backup
-*.old
-*.orig
-*.rej
-
-# MyPy
-.mypy_cache/
-.dmypy.json
-dmypy.json
-
-# Pyre
-.pyre/
-.pytype/
-
-# Python cache
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
 .pytest_cache/
-*.so
 
-# IDE
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# celery beat schedule file
+celerybeat-schedule
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# IDEs
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Logs
-*.log
+# Minder specific
 logs/
+data/
+*.db
+*.sqlite
+config.local.*
 
-# Data volumes
-data/*
-!data/.gitkeep
-logs/*
-!logs/.gitkeep
-
-# Manual tests
+# Manual tests (keep for reference but don't track in git)
 tests/manual/
-
-# Build artifacts
-.build/
-dist/
-*.egg-info/
