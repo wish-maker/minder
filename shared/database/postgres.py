@@ -26,6 +26,9 @@ class PostgresHelper:
 
     async def execute(self, query: str, *args, fetch: str = "all") -> Any:
         """Execute SQL query"""
+        if not self.pool:
+            raise RuntimeError("PostgreSQL not connected. Call connect() first.")
+
         async with self.pool.acquire() as conn:
             statement = await conn.prepare(query)
             if fetch == "one":
@@ -37,6 +40,10 @@ class PostgresHelper:
 
     async def init_schema(self):
         """Initialize service schema"""
+        # Validate schema name to prevent SQL injection
+        if not self.schema.replace("_", "").replace("-", "").isalnum():
+            raise ValueError(f"Invalid schema name: {self.schema}")
+
         async with self.pool.acquire() as conn:
             await conn.execute(f"CREATE SCHEMA IF NOT EXISTS {self.schema}")
             logger.info(f"Schema {self.schema} initialized")

@@ -2,6 +2,9 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 import yaml
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BaseConfig:
@@ -15,8 +18,14 @@ class BaseConfig:
 
     def _load_config(self):
         """Load YAML configuration"""
-        with open(self.config_path) as f:
-            self.config_data = yaml.safe_load(f) or {}
+        try:
+            with open(self.config_path) as f:
+                self.config_data = yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            logger.warning(f"Config file not found: {self.config_path}")
+            self.config_data = {}
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML in config file {self.config_path}: {e}")
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get config value with env override"""

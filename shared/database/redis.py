@@ -27,6 +27,9 @@ class RedisHelper:
 
     async def get(self, key: str) -> Optional[Any]:
         """Get value from cache"""
+        if not self.client:
+            raise RuntimeError("Redis not connected. Call connect() first.")
+
         value = await self.client.get(key)
         if value:
             try:
@@ -37,16 +40,25 @@ class RedisHelper:
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = 3600):
         """Set value in cache with TTL"""
+        if not self.client:
+            raise RuntimeError("Redis not connected. Call connect() first.")
+
         if isinstance(value, (dict, list)):
             value = json.dumps(value)
         await self.client.setex(key, ttl, value)
 
     async def publish(self, channel: str, message: Dict[str, Any]):
         """Publish message to channel"""
+        if not self.client:
+            raise RuntimeError("Redis not connected. Call connect() first.")
+
         await self.client.publish(channel, json.dumps(message))
 
     async def subscribe(self, channel: str):
         """Subscribe to channel"""
+        if not self.client:
+            raise RuntimeError("Redis not connected. Call connect() first.")
+
         pubsub = self.client.pubsub()
         await pubsub.subscribe(channel)
         return pubsub
