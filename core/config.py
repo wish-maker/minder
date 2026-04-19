@@ -252,13 +252,13 @@ class MinderConfig(BaseSettings):
         Load configuration from YAML file
 
         Args:
-            yaml_path: Path to config.yaml (default: /root/minder/config.yaml)
+            yaml_path: Path to config.yaml (default: /root/minder/config/root/config.yaml)
 
         Returns:
             MinderConfig instance
         """
         if yaml_path is None:
-            yaml_path = Path("/root/minder/config.yaml")
+            yaml_path = Path("/root/minder/config/root/config.yaml")
 
         if not yaml_path.exists():
             # Return default config if file doesn't exist

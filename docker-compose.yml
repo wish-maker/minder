@@ -141,7 +141,7 @@ services:
     volumes:
       - ./logs:/var/log/minder
       - ./data:/var/lib/minder
-      - ./config.yaml:/app/config.yaml
+      - ./config/root/config.yaml:/app/config.yaml
       - ./config:/app/config  # Mount config directory for plugin configs
     ports:
       - "8000:8000"
@@ -187,7 +187,7 @@ services:
     container_name: prometheus
     restart: unless-stopped
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/root/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -205,7 +205,7 @@ services:
     container_name: alertmanager
     restart: unless-stopped
     volumes:
-      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - ./config/root/alertmanager.yml:/etc/alertmanager/alertmanager.yml
       - alertmanager_data:/alertmanager
     ports:
       - "9093:9093"
