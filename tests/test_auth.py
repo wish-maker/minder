@@ -3,14 +3,15 @@ Unit Tests for Authentication System
 Tests JWT authentication, token validation, and user management
 """
 
-import pytest
 import asyncio
+import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import sys
-import os
-import jwt
+
 import bcrypt
+import jwt
+import pytest
 
 # Import after sys.path modification
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -31,6 +32,7 @@ def test_auth_manager():
 
     # Re-import auth module to pick up new secret
     import importlib
+
     import api.auth as auth_module
 
     importlib.reload(auth_module)

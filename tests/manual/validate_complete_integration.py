@@ -6,8 +6,8 @@ Validates all phases (1-5) of the borsapy integration plan
 before committing to ensure production-ready code.
 """
 
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 # Add minder to path
@@ -63,9 +63,9 @@ print("  ✅ TEFAS Module v3.0 present")
 print("\n[4/7] Testing imports...")
 try:
     from plugins.tefas.unified_data_api import (  # noqa: F401
-        UnifiedDataAPI,
         BORSAPY_AVAILABLE,
         TEFAS_CRAWLER_AVAILABLE,
+        UnifiedDataAPI,
     )
 
     print("  ✅ UnifiedDataAPI import successful")

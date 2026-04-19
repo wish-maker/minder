@@ -4,8 +4,9 @@ Example test suite for plugin validation
 """
 
 import pytest
-from plugins.tefas.tefas_module import TefasModule
+
 from plugins.network.network_module import NetworkModule
+from plugins.tefas.tefas_module import TefasModule
 
 
 class TestTefasPlugin:

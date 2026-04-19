@@ -191,7 +191,7 @@ Language: Turkish (primary), English (secondary)
         return character
 
     def inject_personality(self, base_prompt: str, character: Character) -> str:
-        personality_guide = f"""
+        personality_guide = """
 
 Personality Guidelines for {character.name}:
 - Friendliness: {character.personality.friendliness*100}/100

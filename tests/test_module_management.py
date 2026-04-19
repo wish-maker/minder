@@ -4,8 +4,8 @@ Test Module Enable/Disable System
 Integration tests - require API server running on localhost:8000
 """
 
-import requests
 import pytest
+import requests
 
 BASE_URL = "http://localhost:8000"
 

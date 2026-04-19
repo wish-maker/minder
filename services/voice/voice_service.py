@@ -2,10 +2,11 @@
 Voice Service - Complete Whisper STT and Coqui TTS Integration
 """
 
-from typing import Dict, List, Any, Optional
 import logging
-import numpy as np
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -128,8 +129,8 @@ class VoiceService:
         Useful for real-time audio streaming
         """
         try:
-            import tempfile
             import os
+            import tempfile
 
             # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:

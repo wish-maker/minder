@@ -9,9 +9,9 @@ from html import unescape
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-import psycopg2
+import asyncpg
 
-from core.module_interface import BaseModule, ModuleMetadata
+from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,9 @@ class NewsModule(BaseModule):
             "user": config.get("news_db", {}).get("user", "postgres"),
             "password": config.get("news_db", {}).get("password", ""),
         }
+
+        # Connection pool (initialized in register())
+        self.pool: asyncpg.Pool = None
 
         # RSS feed configuration - all verified working (HTTP 200)
         self.feeds = config.get("news", {}).get(
@@ -72,6 +75,24 @@ class NewsModule(BaseModule):
         )
 
         logger.info("📰 Registering News Module")
+
+        # Initialize connection pool
+        try:
+            self.pool = await asyncpg.create_pool(
+                host=self.db_config["host"],
+                port=self.db_config["port"],
+                database=self.db_config["database"],
+                user=self.db_config["user"],
+                password=self.db_config["password"],
+                min_size=2,
+                max_size=10,
+                command_timeout=60,
+            )
+            logger.info("✅ News module database pool initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize database pool: {e}")
+            raise
+
         return self.metadata
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
@@ -86,30 +107,25 @@ class NewsModule(BaseModule):
         errors = 0
 
         try:
-            # Connect to PostgreSQL
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            # Use connection pool
+            async with self.pool.acquire() as conn:
+                # Fetch articles from each RSS feed
+                for feed_config in self.feeds:
+                    try:
+                        articles = await self._fetch_rss_articles(feed_config)
 
-            # Fetch articles from each RSS feed
-            for feed_config in self.feeds:
-                try:
-                    articles = await self._fetch_rss_articles(feed_config)
+                        for article in articles[: self.max_articles_per_feed]:
+                            try:
+                                await self._store_article(conn, article)
+                                records_collected += 1
+                            except Exception as e:
+                                logger.error(f"Error storing article: {e}")
 
-                    for article in articles[: self.max_articles_per_feed]:
-                        try:
-                            await self._store_article(cursor, article)
-                            records_collected += 1
-                        except Exception as e:
-                            logger.error(f"Error storing article: {e}")
+                        logger.info(f"✓ Collected {len(articles)} articles from {feed_config['name']}")
 
-                    logger.info(f"✓ Collected {len(articles)} articles from {feed_config['name']}")
-
-                except Exception as e:
-                    errors += 1
-                    logger.error(f"Error fetching from {feed_config['name']}: {e}")
-
-            conn.commit()
-            conn.close()
+                    except Exception as e:
+                        errors += 1
+                        logger.error(f"Error fetching from {feed_config['name']}: {e}")
 
         except Exception as e:
             logger.error(f"Database connection error: {e}")
@@ -257,7 +273,7 @@ class NewsModule(BaseModule):
 
                     # Method 4: Try href attribute
                     if not url and link_elem is not None:
-                        url = link_elem.get("href", "")
+                        url = link_elem.get("hre", "")
 
                     # Extract description
                     desc_elem = item.find("description") or item.find("{http://purl.org/rss/1.0/}description")
@@ -304,75 +320,74 @@ class NewsModule(BaseModule):
         logger.info(f"Parsed {len(articles)} valid articles from {source}")
         return articles
 
-    async def _store_article(self, cursor, article: Dict[str, Any]):
-        """Store article to PostgreSQL"""
-        cursor.execute(
+    async def _store_article(self, conn, article: Dict[str, Any]):
+        """Store article to PostgreSQL using asyncpg"""
+        await conn.execute(
             """
             INSERT INTO news_articles (
                 title, source, url, summary, sentiment_score,
                 published_date, timestamp
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         """,
-            (
-                article["title"],
-                article["source"],
-                article["url"],
-                article["summary"],
-                article["sentiment_score"],
-                article["published_date"],
-                article["timestamp"],
-            ),
+            article["title"],
+            article["source"],
+            article["url"],
+            article["summary"],
+            article["sentiment_score"],
+            article["published_date"],
+            article["timestamp"],
         )
 
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected news data"""
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                # Get recent articles
+                result = await conn.fetchrow(
+                    """
+                    SELECT COUNT(*) as total,
+                           AVG(sentiment_score) as avg_sentiment,
+                           SUM(CASE WHEN sentiment_score > 0.2 THEN 1 ELSE 0 END) as positive,
+                           SUM(CASE WHEN sentiment_score < -0.2 THEN 1 ELSE 0 END) as negative
+                    FROM news_articles
+                    WHERE timestamp >= NOW() - INTERVAL '24 hours'
+                """
+                )
 
-            # Get recent articles
-            cursor.execute("""
-                SELECT COUNT(*) as total,
-                       AVG(sentiment_score) as avg_sentiment,
-                       SUM(CASE WHEN sentiment_score > 0.2 THEN 1 ELSE 0 END) as positive,
-                       SUM(CASE WHEN sentiment_score < -0.2 THEN 1 ELSE 0 END) as negative
-                FROM news_articles
-                WHERE timestamp >= NOW() - INTERVAL '24 hours'
-            """)
-
-            result = cursor.fetchone()
-            conn.close()
-
-            if result and result[0]:
-                return {
-                    "metrics": {
-                        "total_articles": result[0],
-                        "avg_sentiment": float(result[1]) if result[1] else 0,
-                        "positive_pct": (int((result[2] / result[0]) * 100) if result[0] > 0 else 0),
-                        "negative_pct": (int((result[3] / result[0]) * 100) if result[0] > 0 else 0),
-                    },
-                    "patterns": [
-                        {
-                            "type": "trend",
-                            "description": "News aggregation active",
-                        }
-                    ],
-                    "insights": [
-                        f"Collected {result[0]} articles in last 24 hours",
-                        "News data stored in PostgreSQL",
-                    ],
-                }
-            else:
-                return {
-                    "metrics": {
-                        "total_articles": 0,
-                        "avg_sentiment": 0,
-                        "positive_pct": 0,
-                        "negative_pct": 0,
-                    },
-                    "patterns": [],
-                    "insights": ["No recent news data available"],
-                }
+                if result and result["total"]:
+                    return {
+                        "metrics": {
+                            "total_articles": result["total"],
+                            "avg_sentiment": (float(result["avg_sentiment"]) if result["avg_sentiment"] else 0),
+                            "positive_pct": (
+                                int((result["positive"] / result["total"]) * 100) if result["total"] > 0 else 0
+                            ),
+                            "negative_pct": (
+                                int((result["negative"] / result["total"]) * 100) if result["total"] > 0 else 0
+                            ),
+                        },
+                        "patterns": [
+                            {
+                                "type": "trend",
+                                "description": "News aggregation active",
+                            }
+                        ],
+                        "insights": [
+                            f"Collected {result['total']} articles in last 24 hours",
+                            "News data stored in PostgreSQL",
+                        ],
+                    }
+                else:
+                    return {
+                        "metrics": {
+                            "total_articles": 0,
+                            "avg_sentiment": 0,
+                            "positive_pct": 0,
+                            "negative_pct": 0,
+                        },
+                        "patterns": [],
+                        "insights": ["No recent news data available"],
+                    }
 
         except Exception as e:
             logger.error(f"Error analyzing news data: {e}")

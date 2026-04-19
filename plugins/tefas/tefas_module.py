@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import aiohttp
+import asyncpg
 import pandas as pd
-import psycopg2
 from bs4 import BeautifulSoup
 
 # TEFAS crawler
@@ -35,21 +35,22 @@ try:
     BORSAPY_AVAILABLE = True
     logging.info("✅ borsapy 0.8.7 available - Advanced features enabled")
 except ImportError:
+    bp = None
     BORSAPY_AVAILABLE = False
     logging.warning("borsapy not installed. Advanced features disabled")
 
 # Unified Data API
 try:
     from plugins.tefas.unified_data_api import (
-        UnifiedDataAPI,
         BORSAPY_AVAILABLE,
         TEFAS_CRAWLER_AVAILABLE,
+        UnifiedDataAPI,
     )
 except ImportError:
     BORSAPY_AVAILABLE = False
     TEFAS_CRAWLER_AVAILABLE = TEFAS_AVAILABLE
 
-from core.module_interface import BaseModule, ModuleMetadata
+from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 logger = logging.getLogger("minder.module.tefas")
 
@@ -94,6 +95,9 @@ class TefasModule(BaseModule):
             "user": config.get("database", {}).get("user", "postgres"),
             "password": config.get("database", {}).get("password", default_password),
         }
+
+        # Connection pool (initialized in register())
+        self.pool: asyncpg.Pool = None
 
         # Unified Data API (supports both borsapy and tefas-crawler)
         self.unified_api = None
@@ -157,6 +161,24 @@ class TefasModule(BaseModule):
             databases=["postgresql"],
         )
         self.logger.info("📊 Registering TEFAS Module v1.0.0 (borsapy 0.8.7 + tefas-crawler)")
+
+        # Initialize connection pool
+        try:
+            self.pool = await asyncpg.create_pool(
+                host=self.db_config["host"],
+                port=self.db_config["port"],
+                database=self.db_config["database"],
+                user=self.db_config["user"],
+                password=self.db_config["password"],
+                min_size=5,  # TEFAS needs more connections for concurrent operations
+                max_size=20,
+                command_timeout=60,
+            )
+            self.logger.info("✅ TEFAS module database pool initialized")
+        except Exception as e:
+            self.logger.error(f"❌ Failed to initialize database pool: {e}")
+            raise
+
         return self.metadata
 
     async def discover_funds(self) -> Dict[str, Any]:
@@ -233,6 +255,67 @@ class TefasModule(BaseModule):
             self.logger.error(f"Error in fund discovery: {e}")
             return {"error": str(e)}
 
+    async def _discover_and_validate_funds(self) -> None:
+        """Discover funds and validate data source availability"""
+        if not self.unified_api and not self.tefas:
+            self.logger.error("No data source available (neither borsapy nor tefas-crawler)")
+            raise ValueError("No data source available")
+
+        # Step 1: Discover funds
+        discovery = await self.discover_funds()
+        if "error" in discovery:
+            raise Exception(discovery["error"])
+
+    def _get_crawler(self):
+        """Get the appropriate crawler instance"""
+        if self.unified_api and self.unified_api.tefas_crawler:
+            return self.unified_api.tefas_crawler.crawler
+        elif self.tefas:
+            return self.tefas
+        else:
+            raise Exception("No crawler available")
+
+    async def _collect_recent_data(self, start_date: datetime, end_date: datetime) -> tuple[int, int]:
+        """
+        Collect fund data in batches to avoid API limits
+
+        Returns:
+            (records_collected, errors)
+        """
+        self.logger.info(f"📅 Collecting from {start_date.date()} to {end_date.date()}")
+
+        records_collected = 0
+        errors = 0
+
+        # Collect in smaller batches to avoid API limits
+        current_start = start_date
+        batch_size_days = 7  # 7 days per batch
+        crawler = self._get_crawler()
+
+        while current_start < end_date:
+            current_end = min(current_start + timedelta(days=batch_size_days), end_date)
+
+            try:
+                batch_data = crawler.fetch(
+                    start=current_start.strftime("%Y-%m-%d"),
+                    end=current_end.strftime("%Y-%m-%d"),
+                    kind="YAT",
+                )
+
+                if not batch_data.empty:
+                    # Store to database
+                    stored = await self._store_batch_to_db(batch_data)
+                    records_collected += stored
+                    self.logger.info(f"   ✓ {current_start.date()} - {current_end.date()}: {stored} records")
+
+            except Exception as e:
+                self.logger.error(f"Error collecting {current_start.date()} - {current_end.date()}: {e}")
+                errors += 1
+
+            current_start = current_end + timedelta(days=1)
+
+        return records_collected, errors
+
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect fund data with historical backfill
@@ -242,61 +325,17 @@ class TefasModule(BaseModule):
         2. Collect recent data (last 30 days)
         3. Backfill from 2020 if gaps exist
         """
-        if not self.unified_api and not self.tefas:
-            self.logger.error("No data source available (neither borsapy nor tefas-crawler)")
-            return {"records_collected": 0, "errors": 1}
-
         self.logger.info("📥 Collecting TEFAS data...")
 
-        records_collected = 0
-        records_updated = 0
-        errors = 0
-
         try:
-            # Step 1: Discover funds
-            discovery = await self.discover_funds()
-            if "error" in discovery:
-                raise Exception(discovery["error"])
+            # Step 1: Discover funds and validate
+            await self._discover_and_validate_funds()
 
             # Step 2: Collect recent data (last 30 days)
             end_date = datetime.now()
             start_date = end_date - timedelta(days=self.collection_batch_days)
 
-            self.logger.info(f"📅 Collecting from {start_date.date()} to {end_date.date()}")
-
-            # Collect in smaller batches to avoid API limits
-            current_start = start_date
-            batch_size_days = 7  # 7 days per batch
-
-            while current_start < end_date:
-                current_end = min(current_start + timedelta(days=batch_size_days), end_date)
-
-                try:
-                    # Get the appropriate crawler
-                    if self.unified_api and self.unified_api.tefas_crawler:
-                        crawler = self.unified_api.tefas_crawler.crawler
-                    elif self.tefas:
-                        crawler = self.tefas
-                    else:
-                        raise Exception("No crawler available")
-
-                    batch_data = crawler.fetch(
-                        start=current_start.strftime("%Y-%m-%d"),
-                        end=current_end.strftime("%Y-%m-%d"),
-                        kind="YAT",
-                    )
-
-                    if not batch_data.empty:
-                        # Store to database
-                        stored = await self._store_batch_to_db(batch_data)
-                        records_collected += stored
-                        self.logger.info(f"   ✓ {current_start.date()} - {current_end.date()}: {stored} records")
-
-                except Exception as e:
-                    self.logger.error(f"Error collecting {current_start.date()} - {current_end.date()}: {e}")
-                    errors += 1
-
-                current_start = current_end + timedelta(days=1)
+            records_collected, errors = await self._collect_recent_data(start_date, end_date)
 
             # Step 3: Update state
             self.state["last_collection_date"] = datetime.now()
@@ -305,42 +344,39 @@ class TefasModule(BaseModule):
 
             return {
                 "records_collected": records_collected,
-                "records_updated": records_updated,
+                "records_updated": 0,
                 "errors": errors,
             }
 
         except Exception as e:
             self.logger.error(f"Error in data collection: {e}")
             return {
-                "records_collected": records_collected,
-                "records_updated": records_updated,
-                "errors": errors + 1,
+                "records_collected": 0,
+                "records_updated": 0,
+                "errors": 1,
             }
 
     async def _store_batch_to_db(self, batch_data: pd.DataFrame) -> int:
-        """Store batch of fund data to PostgreSQL"""
+        """Store batch of fund data to PostgreSQL using asyncpg"""
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                stored = 0
 
-            stored = 0
-
-            for _, row in batch_data.iterrows():
-                try:
-                    cursor.execute(
-                        """
-                        INSERT INTO tefas_fund_data (
-                            code, title, date, price, market_cap,
-                            number_of_shares, number_of_investors,
-                            bank_bills, government_bond, stock,
-                            timestamp
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                        ON CONFLICT (code, date) DO UPDATE SET
-                            price = EXCLUDED.price,
-                            market_cap = EXCLUDED.market_cap,
-                            timestamp = EXCLUDED.timestamp
-                        """,
-                        (
+                for _, row in batch_data.iterrows():
+                    try:
+                        await conn.execute(
+                            """
+                            INSERT INTO tefas_fund_data (
+                                code, title, date, price, market_cap,
+                                number_of_shares, number_of_investors,
+                                bank_bills, government_bond, stock,
+                                timestamp
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                            ON CONFLICT (code, date) DO UPDATE SET
+                                price = EXCLUDED.price,
+                                market_cap = EXCLUDED.market_cap,
+                                timestamp = EXCLUDED.timestamp
+                            """,
                             row.get("code"),
                             row.get("title"),
                             row.get("date"),
@@ -352,18 +388,14 @@ class TefasModule(BaseModule):
                             float(row.get("government_bond", 0)),
                             float(row.get("stock", 0)),
                             datetime.now(),
-                        ),
-                    )
-                    stored += 1
+                        )
+                        stored += 1
 
-                except Exception as e:
-                    self.logger.error(f"Error storing row: {e}")
-                    continue
+                    except Exception as e:
+                        self.logger.error(f"Error storing row: {e}")
+                        continue
 
-            conn.commit()
-            conn.close()
-
-            return stored
+                return stored
 
         except Exception as e:
             self.logger.error(f"Database error: {e}")
@@ -414,106 +446,107 @@ class TefasModule(BaseModule):
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected fund data with borsapy advanced features"""
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                # Get top performing funds
+                results = await conn.fetch(
+                    """
+                    SELECT
+                        code,
+                        title,
+                        AVG(price) as avg_price,
+                        MAX(price) as max_price,
+                        MIN(price) as min_price,
+                        COUNT(*) as data_points
+                    FROM tefas_fund_data
+                    WHERE date >= NOW() - INTERVAL '30 days'
+                    GROUP BY code, title
+                    HAVING COUNT(*) >= 20  -- At least 20 data points
+                    ORDER BY avg_price DESC
+                    LIMIT 10
+                    """
+                )
 
-            # Get top performing funds
-            cursor.execute(
-                """
-                SELECT
-                    code,
-                    title,
-                    AVG(price) as avg_price,
-                    MAX(price) as max_price,
-                    MIN(price) as min_price,
-                    COUNT(*) as data_points
-                FROM tefas_fund_data
-                WHERE date >= NOW() - INTERVAL '30 days'
-                GROUP BY code, title
-                HAVING COUNT(*) >= 20  -- At least 20 data points
-                ORDER BY avg_price DESC
-                LIMIT 10
-                """
-            )
+                if results:
+                    # Enhance with borsapy advanced features
+                    enhanced_funds = []
+                    for row in results:
+                        fund_code = row["code"]
+                        fund_data = {
+                            "code": fund_code,
+                            "title": row["title"],
+                            "avg_price": float(row["avg_price"]),
+                            "max_price": float(row["max_price"]),
+                            "min_price": float(row["min_price"]),
+                            "data_points": row["data_points"],
+                        }
 
-            results = cursor.fetchall()
-            conn.close()
+                        # Try to get risk metrics from borsapy
+                        if self.unified_api and BORSAPY_AVAILABLE:
+                            try:
+                                risk_metrics = self.unified_api.get_risk_metrics(fund_code, period="1y")
+                                if risk_metrics:
+                                    fund_data["risk_metrics"] = risk_metrics
+                            except Exception as e:
+                                self.logger.debug(f"Could not get risk metrics for {fund_code}: {e}")
 
-            if results:
-                # Enhance with borsapy advanced features
-                enhanced_funds = []
-                for row in results:
-                    fund_code = row[0]
-                    fund_data = {
-                        "code": fund_code,
-                        "title": row[1],
-                        "avg_price": float(row[2]),
-                        "max_price": float(row[3]),
-                        "min_price": float(row[4]),
-                        "data_points": row[5],
+                            # Try to get tax category
+                            try:
+                                tax_category = self.unified_api.get_tax_category(fund_code)
+                                if tax_category:
+                                    fund_data["tax_category"] = tax_category
+                            except Exception as e:
+                                self.logger.debug(f"Could not get tax category for {fund_code}: {e}")
+
+                        enhanced_funds.append(fund_data)
+
+                    return {
+                        "metrics": {
+                            "top_funds": enhanced_funds,
+                            "analysis_source": "borsapy" if BORSAPY_AVAILABLE else "tefas-crawler",
+                            "features": {
+                                "risk_metrics": BORSAPY_AVAILABLE,
+                                "tax_categories": BORSAPY_AVAILABLE,
+                                "fund_comparison": BORSAPY_AVAILABLE,
+                            },
+                        },
+                        "patterns": [
+                            {
+                                "type": "price_trend",
+                                "description": "Fund price analysis based on 30-day data",
+                            },
+                            (
+                                {
+                                    "type": "risk_analysis",
+                                    "description": "Sharpe ratio, Sortino ratio, max drawdown (borsapy)",
+                                }
+                                if BORSAPY_AVAILABLE
+                                else None
+                            ),
+                            (
+                                {
+                                    "type": "tax_optimization",
+                                    "description": "Withholding tax rates by category (borsapy)",
+                                }
+                                if BORSAPY_AVAILABLE
+                                else None
+                            ),
+                        ],
+                        "insights": [
+                            f"Analyzed {len(results)} top performing funds",
+                            (
+                                "Data from borsapy 0.8.7 + tefas-crawler"
+                                if BORSAPY_AVAILABLE
+                                else "Data from tefas-crawler package"
+                            ),
+                            ("Advanced features enabled" if BORSAPY_AVAILABLE else "Basic features only"),
+                        ],
                     }
-
-                    # Try to get risk metrics from borsapy
-                    if self.unified_api and BORSAPY_AVAILABLE:
-                        try:
-                            risk_metrics = self.unified_api.get_risk_metrics(fund_code, period="1y")
-                            if risk_metrics:
-                                fund_data["risk_metrics"] = risk_metrics
-                        except Exception as e:
-                            self.logger.debug(f"Could not get risk metrics for {fund_code}: {e}")
-
-                        # Try to get tax category
-                        try:
-                            tax_category = self.unified_api.get_tax_category(fund_code)
-                            if tax_category:
-                                fund_data["tax_category"] = tax_category
-                        except Exception as e:
-                            self.logger.debug(f"Could not get tax category for {fund_code}: {e}")
-
-                    enhanced_funds.append(fund_data)
-
-                return {
-                    "metrics": {
-                        "top_funds": enhanced_funds,
-                        "analysis_source": "borsapy" if BORSAPY_AVAILABLE else "tefas-crawler",
-                        "features": {
-                            "risk_metrics": BORSAPY_AVAILABLE,
-                            "tax_categories": BORSAPY_AVAILABLE,
-                            "fund_comparison": BORSAPY_AVAILABLE,
-                        },
-                    },
-                    "patterns": [
-                        {
-                            "type": "price_trend",
-                            "description": "Fund price analysis based on 30-day data",
-                        },
-                        {
-                            "type": "risk_analysis",
-                            "description": "Sharpe ratio, Sortino ratio, max drawdown (borsapy)",
-                        }
-                        if BORSAPY_AVAILABLE
-                        else None,
-                        {
-                            "type": "tax_optimization",
-                            "description": "Withholding tax rates by category (borsapy)",
-                        }
-                        if BORSAPY_AVAILABLE
-                        else None,
-                    ],
-                    "insights": [
-                        f"Analyzed {len(results)} top performing funds",
-                        "Data from borsapy 0.8.7 + tefas-crawler"
-                        if BORSAPY_AVAILABLE
-                        else "Data from tefas-crawler package",
-                        "Advanced features enabled" if BORSAPY_AVAILABLE else "Basic features only",
-                    ],
-                }
-            else:
-                return {
-                    "metrics": {},
-                    "patterns": [],
-                    "insights": ["No fund data available for analysis"],
-                }
+                else:
+                    return {
+                        "metrics": {},
+                        "patterns": [],
+                        "insights": ["No fund data available for analysis"],
+                    }
 
         except Exception as e:
             self.logger.error(f"Error analyzing fund data: {e}")
@@ -546,7 +579,6 @@ class TefasModule(BaseModule):
         if self.unified_api and BORSAPY_AVAILABLE:
             try:
                 # Search for funds matching query
-                import borsapy as bp
 
                 search_results = bp.search_funds(query)
 
@@ -559,22 +591,19 @@ class TefasModule(BaseModule):
         # Fallback to database query
         if not results:
             try:
-                conn = psycopg2.connect(**self.db_config)
-                cursor = conn.cursor()
+                async with self.pool.acquire() as conn:
+                    rows = await conn.fetch(
+                        """
+                        SELECT DISTINCT code, title
+                        FROM tefas_fund_data
+                        WHERE title ILIKE $1 OR code ILIKE $2
+                        LIMIT 10
+                        """,
+                        f"%{query}%",
+                        f"%{query}%",
+                    )
 
-                cursor.execute(
-                    """
-                    SELECT DISTINCT code, title
-                    FROM tefas_fund_data
-                    WHERE title ILIKE %s OR code ILIKE %s
-                    LIMIT 10
-                """,
-                    (f"%{query}%", f"%{query}%"),
-                )
-
-                rows = cursor.fetchall()
-                results = [{"code": row[0], "title": row[1]} for row in rows]
-                conn.close()
+                    results = [{"code": row["code"], "title": row["title"]} for row in rows]
             except Exception as e:
                 self.logger.error(f"Database query failed: {e}")
 

@@ -7,10 +7,10 @@ import platform
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import asyncpg
 import psutil
-import psycopg2
 
-from core.module_interface import BaseModule, ModuleMetadata
+from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,9 @@ class NetworkModule(BaseModule):
             "user": config.get("database", {}).get("user", "postgres"),
             "password": config.get("database", {}).get("password", ""),
         }
+
+        # Connection pool (initialized in register())
+        self.pool: asyncpg.Pool = None
 
         # Network monitoring configuration
         self.interfaces = config.get("network", {}).get("interfaces", ["eth0", "wlan0"])
@@ -53,6 +56,24 @@ class NetworkModule(BaseModule):
         )
 
         logger.info("🌐 Registering Network Module")
+
+        # Initialize connection pool
+        try:
+            self.pool = await asyncpg.create_pool(
+                host=self.db_config["host"],
+                port=self.db_config["port"],
+                database=self.db_config["database"],
+                user=self.db_config["user"],
+                password=self.db_config["password"],
+                min_size=2,
+                max_size=10,
+                command_timeout=60,
+            )
+            logger.info("✅ Network module database pool initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize database pool: {e}")
+            raise
+
         return self.metadata
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
@@ -67,24 +88,19 @@ class NetworkModule(BaseModule):
         errors = 0
 
         try:
-            # Connect to PostgreSQL
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            # Use connection pool
+            async with self.pool.acquire() as conn:
+                # Collect system metrics
+                metrics = await self._collect_system_metrics()
 
-            # Collect system metrics
-            metrics = await self._collect_system_metrics()
-
-            # Store each metric
-            for metric in metrics:
-                try:
-                    await self._store_metric(cursor, metric)
-                    records_collected += 1
-                except Exception as e:
-                    errors += 1
-                    logger.error(f"Error storing metric: {e}")
-
-            conn.commit()
-            conn.close()
+                # Store each metric
+                for metric in metrics:
+                    try:
+                        await self._store_metric(conn, metric)
+                        records_collected += 1
+                    except Exception as e:
+                        errors += 1
+                        logger.error(f"Error storing metric: {e}")
 
         except Exception as e:
             logger.error(f"Database connection error: {e}")
@@ -297,67 +313,64 @@ class NetworkModule(BaseModule):
 
         return metrics
 
-    async def _store_metric(self, cursor, metric: Dict[str, Any]):
-        """Store metric to PostgreSQL"""
-        cursor.execute(
+    async def _store_metric(self, conn, metric: Dict[str, Any]):
+        """Store metric to PostgreSQL using asyncpg"""
+        await conn.execute(
             """
             INSERT INTO network_metrics (
                 metric_name, metric_value, hostname, interface, timestamp
-            ) VALUES (%s, %s, %s, %s, %s)
+            ) VALUES ($1, $2, $3, $4, $5)
         """,
-            (
-                metric["metric_name"],
-                metric["metric_value"],
-                metric["hostname"],
-                metric["interface"],
-                metric["timestamp"],
-            ),
+            metric["metric_name"],
+            metric["metric_value"],
+            metric["hostname"],
+            metric["interface"],
+            metric["timestamp"],
         )
 
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected network metrics"""
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                # Calculate average metrics
+                result = await conn.fetchrow(
+                    """
+                    SELECT
+                        AVG(CASE WHEN metric_name = 'cpu_usage_percent' THEN metric_value END) as avg_cpu,
+                        AVG(CASE WHEN metric_name = 'memory_usage_percent' THEN metric_value END) as avg_memory,
+                        AVG(CASE WHEN metric_name = 'load_average_1min' THEN metric_value END) as avg_load
+                    FROM network_metrics
+                    WHERE timestamp >= NOW() - INTERVAL '1 hour'
+                """
+                )
 
-            # Calculate average metrics
-            cursor.execute("""
-                SELECT
-                    AVG(CASE WHEN metric_name = 'cpu_usage_percent' THEN metric_value END) as avg_cpu,
-                    AVG(CASE WHEN metric_name = 'memory_usage_percent' THEN metric_value END) as avg_memory,
-                    AVG(CASE WHEN metric_name = 'load_average_1min' THEN metric_value END) as avg_load
-                FROM network_metrics
-                WHERE timestamp >= NOW() - INTERVAL '1 hour'
-            """)
-
-            result = cursor.fetchone()
-            conn.close()
-
-            if result and result[0]:
-                return {
-                    "metrics": {
-                        "avg_cpu_usage_pct": (round(float(result[0]), 1) if result[0] else 0),
-                        "avg_memory_usage_pct": (round(float(result[1]), 1) if result[1] else 0),
-                        "avg_load_avg": (round(float(result[2]), 2) if result[2] else 0),
-                        "packet_loss_pct": 0.01,
-                    },
-                    "patterns": [
-                        {
-                            "type": "peak_usage",
-                            "description": "Network peaks between 9-11 AM",
-                        }
-                    ],
-                    "insights": [
-                        "Real system metrics collected",
-                        "Data stored in PostgreSQL",
-                    ],
-                }
-            else:
-                return {
-                    "metrics": {},
-                    "patterns": [],
-                    "insights": ["No recent network data available"],
-                }
+                if result and result["avg_cpu"]:
+                    return {
+                        "metrics": {
+                            "avg_cpu_usage_pct": (round(float(result["avg_cpu"]), 1) if result["avg_cpu"] else 0),
+                            "avg_memory_usage_pct": (
+                                round(float(result["avg_memory"]), 1) if result["avg_memory"] else 0
+                            ),
+                            "avg_load_avg": (round(float(result["avg_load"]), 2) if result["avg_load"] else 0),
+                            "packet_loss_pct": 0.01,
+                        },
+                        "patterns": [
+                            {
+                                "type": "peak_usage",
+                                "description": "Network peaks between 9-11 AM",
+                            }
+                        ],
+                        "insights": [
+                            "Real system metrics collected",
+                            "Data stored in PostgreSQL",
+                        ],
+                    }
+                else:
+                    return {
+                        "metrics": {},
+                        "patterns": [],
+                        "insights": ["No recent network data available"],
+                    }
 
         except Exception as e:
             logger.error(f"Error analyzing network data: {e}")

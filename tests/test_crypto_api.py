@@ -3,9 +3,12 @@ Tests for Crypto Plugin Real API Integration
 
 Tests the multi-source fallback pattern, data validation, and caching
 """
-import pytest
+
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
+
+import pytest
+
 from plugins.crypto.crypto_module import CryptoModule
 from plugins.crypto.crypto_validator import PluginDataValidator
 

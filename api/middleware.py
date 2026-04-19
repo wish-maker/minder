@@ -371,39 +371,74 @@ class CacheMiddleware(BaseHTTPMiddleware):
             "/health": 10,  # Cache health check for 10 seconds
         }
 
-    async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        # Only cache GET requests
+    def _is_cacheable_request(self, request: Request) -> tuple[bool, str | None, int | None]:
+        """Check if request is cacheable (GET + whitelisted endpoint)"""
         if request.method != "GET":
-            return await call_next(request)
+            return False, None, None
 
-        # Check if endpoint is cacheable
         path = request.url.path
-        if path not in self.cacheable_endpoints:
-            return await call_next(request)
+        if path in self.cacheable_endpoints:
+            return True, path, self.cacheable_endpoints[path]
 
-        # Get TTL for this endpoint
-        ttl = self.cacheable_endpoints[path]
+        return False, None, None
+
+    def _try_get_cached(self, cache_key: str, path: str) -> Response | None:
+        """Try to get response from cache, returns None if cache miss"""
+        if not self.redis_client:
+            return None
+
+        try:
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data:
+                logger.debug(f"Cache hit for {path}")
+                cache_hits.labels(endpoint=path).inc()
+
+                response_data = json.loads(cached_data)
+                return Response(
+                    content=json.dumps(response_data),
+                    status_code=200,
+                    headers={"Content-Type": "application/json", "X-Cache": "HIT"},
+                )
+        except Exception as e:
+            logger.warning(f"Cache retrieval error: {e}")
+
+        return None
+
+    def _store_cached_response(self, cache_key: str, ttl: int, response: Response, path: str):
+        """Store response in cache if cacheable"""
+        if not self.redis_client or response.status_code != 200:
+            return
+
+        # Don't cache streaming responses (they don't have a body attribute)
+        if not (hasattr(response, "body") and response.body):
+            logger.debug(f"Skipping cache for {path} - streaming response or no body")
+            return
+
+        try:
+            response_body = response.body.decode("utf-8")
+            self.redis_client.setex(
+                cache_key,
+                ttl,
+                json.dumps({"body": response_body, "status": response.status_code}),
+            )
+            logger.debug(f"Cached response for {path} (TTL: {ttl}s)")
+        except Exception as e:
+            logger.warning(f"Cache storage error: {e}")
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        """Handle request with caching logic"""
+        # Check if cacheable
+        is_cacheable, path, ttl = self._is_cacheable_request(request)
+        if not is_cacheable:
+            return await call_next(request)
 
         # Generate cache key
         cache_key = self._generate_cache_key(request)
 
         # Try to get from cache
-        if self.redis_client:
-            try:
-                cached_data = self.redis_client.get(cache_key)
-                if cached_data:
-                    # Cache hit - return cached response
-                    logger.debug(f"Cache hit for {path}")
-                    cache_hits.labels(endpoint=path).inc()
-
-                    response_data = json.loads(cached_data)
-                    return Response(
-                        content=json.dumps(response_data),
-                        status_code=200,
-                        headers={"Content-Type": "application/json", "X-Cache": "HIT"},
-                    )
-            except Exception as e:
-                logger.warning(f"Cache retrieval error: {e}")
+        cached_response = self._try_get_cached(cache_key, path)
+        if cached_response:
+            return cached_response
 
         # Cache miss - proceed with request
         logger.debug(f"Cache miss for {path}")
@@ -412,18 +447,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
         # Process request
         response = await call_next(request)
 
-        # Cache successful responses
-        if self.redis_client and response.status_code == 200:
-            try:
-                response_body = response.body.decode("utf-8")
-                self.redis_client.setex(
-                    cache_key,
-                    ttl,
-                    json.dumps({"body": response_body, "status": response.status_code}),
-                )
-                logger.debug(f"Cached response for {path} (TTL: {ttl}s)")
-            except Exception as e:
-                logger.warning(f"Cache storage error: {e}")
+        # Store in cache if appropriate
+        self._store_cached_response(cache_key, ttl, response, path)
 
         # Add cache header to response
         response.headers["X-Cache"] = "MISS"

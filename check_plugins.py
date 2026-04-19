@@ -2,12 +2,13 @@
 """
 Check which plugins are loaded in the kernel
 """
-import sys
+
 import asyncio
 import os
-from pathlib import Path
+import sys
 
 sys.path.insert(0, "/root/minder")
+
 
 async def check_plugins():
     """Check plugin status"""
@@ -16,7 +17,6 @@ async def check_plugins():
     print("=" * 60)
 
     from core.kernel import MinderKernel
-    from core.config import MinderConfig
 
     # Create config
     config = {
@@ -65,6 +65,7 @@ async def check_plugins():
     await kernel.stop()
 
     return plugins
+
 
 if __name__ == "__main__":
     plugins = asyncio.run(check_plugins())

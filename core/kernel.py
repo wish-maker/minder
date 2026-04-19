@@ -118,7 +118,10 @@ class MinderKernel:
                     logger.warning(f"⚠️ No manifest found for {plugin_name}, using defaults")
                     # Create default manifest with all required fields
                     manifest = PluginManifest(
-                        name=plugin_name, version="1.0.0", description=f"{plugin_name} plugin", author="FundMind AI"
+                        name=plugin_name,
+                        version="1.0.0",
+                        description=f"{plugin_name} plugin",
+                        author="FundMind AI",
                     )
 
                 # Create sandbox (thread-based for local plugins)

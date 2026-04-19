@@ -3,19 +3,20 @@ Updated Unit Tests for Plugin Store System
 Tests plugin installation, loading, and management with correct BaseModule interface
 """
 
-import pytest
 import asyncio
-from datetime import datetime
-from pathlib import Path
+import shutil
 import sys
 import tempfile
-import shutil
-from typing import Dict, Any, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from core.module_interface_v2 import BaseModule, ModuleMetadata  # noqa: E402
 from core.plugin_loader import PluginLoader  # noqa: E402
-from core.module_interface import BaseModule, ModuleMetadata  # noqa: E402
 
 
 class MockPlugin(BaseModule):
@@ -55,13 +56,13 @@ class MockPlugin(BaseModule):
         """Index knowledge"""
         return {"documents_indexed": 0}
 
-    async def get_correlations(self, correlation_type: str = "all", limit: int = 10) -> Dict[str, Any]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> list:
         """Get correlations"""
-        return {"correlations": []}
+        return []
 
-    async def get_anomalies(self, limit: int = 10) -> Dict[str, Any]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> list:
         """Get anomalies"""
-        return {"anomalies": []}
+        return []
 
     async def health_check(self) -> Dict[str, Any]:
         """Health check"""
@@ -119,8 +120,8 @@ class TestPluginLoading:
         plugin_file = plugin_dir / "test_plugin_plugin.py"
         plugin_file.write_text(
             """
-from core.module_interface import BaseModule, ModuleMetadata
-from typing import Dict, Any, Optional
+from core.module_interface_v2 import BaseModule, ModuleMetadata
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 class TestPlugin(BaseModule):
@@ -139,7 +140,7 @@ class TestPlugin(BaseModule):
         return self.metadata
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
-        return {"count": 0}
+        return {"records_collected": 0}
 
     async def analyze(self) -> Dict[str, Any]:
         return {}
@@ -150,11 +151,11 @@ class TestPlugin(BaseModule):
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
         return {}
 
-    async def get_correlations(self, correlation_type: str = "all", limit: int = 10) -> Dict[str, Any]:
-        return {}
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List:
+        return []
 
-    async def get_anomalies(self, limit: int = 10) -> Dict[str, Any]:
-        return {}
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List:
+        return []
 
     async def health_check(self) -> Dict[str, Any]:
         return {"status": "healthy"}
@@ -168,6 +169,59 @@ class TestPlugin(BaseModule):
 
     def test_load_plugin_success(self, mock_plugin_dir):
         """Test successful plugin loading"""
+        # Create a proper BaseModule plugin
+        from core.module_interface import BaseModule, ModuleMetadata  # noqa: F401
+        from typing import Dict, Any, Optional  # noqa: F401
+        from datetime import datetime  # noqa: F401
+
+        # Write to correct path: mock_plugin_dir / "test_plugin" / "test_plugin_plugin.py"
+        plugin_file = mock_plugin_dir / "test_plugin" / "test_plugin_plugin.py"
+        plugin_file.write_text(
+            """
+from core.module_interface_v2 import BaseModule, ModuleMetadata
+from typing import Dict, Any, Optional, List
+from datetime import datetime
+
+class TestPlugin(BaseModule):
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.name = "test_plugin"
+        self.version = "1.0.0"
+
+    async def register(self) -> ModuleMetadata:
+        return ModuleMetadata(
+            name=self.name,
+            version=self.version,
+            description="Test plugin for loading",
+            author="Test"
+        )
+
+    async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
+        return {"records_collected": 0}
+
+    async def analyze(self) -> Dict[str, Any]:
+        return {}
+
+    async def train_ai(self, model_type: str = "default") -> Dict[str, Any]:
+        return {}
+
+    async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
+        return {}
+
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List:
+        return []
+
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List:
+        return []
+
+    async def health_check(self) -> Dict[str, Any]:
+        return {"status": "healthy"}
+
+    async def shutdown(self):
+        pass
+"""
+        )
+
         loader = PluginLoader({"plugins_path": mock_plugin_dir})
 
         async def run_loading():
@@ -205,8 +259,8 @@ class TestPluginDiscovery:
         plugin_file = test_plugin / "test_plugin_plugin.py"
         plugin_file.write_text(
             """
-from core.module_interface import BaseModule, ModuleMetadata
-from typing import Dict, Any, Optional
+from core.module_interface_v2 import BaseModule, ModuleMetadata
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 class TestPlugin(BaseModule):
@@ -222,7 +276,7 @@ class TestPlugin(BaseModule):
         )
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
-        return {}
+        return {"records_collected": 0}
 
     async def analyze(self) -> Dict[str, Any]:
         return {}
@@ -233,11 +287,11 @@ class TestPlugin(BaseModule):
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
         return {}
 
-    async def get_correlations(self, correlation_type: str = "all", limit: int = 10) -> Dict[str, Any]:
-        return {}
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List:
+        return []
 
-    async def get_anomalies(self, limit: int = 10) -> Dict[str, Any]:
-        return {}
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List:
+        return []
 
     async def health_check(self) -> Dict[str, Any]:
         return {}
@@ -275,8 +329,8 @@ class TestPluginLifecycle:
         plugin_file = plugin_dir / "lifecycle_plugin_plugin.py"
         plugin_file.write_text(
             """
-from core.module_interface import BaseModule, ModuleMetadata
-from typing import Dict, Any, Optional
+from core.module_interface_v2 import BaseModule, ModuleMetadata
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 class LifecyclePlugin(BaseModule):
@@ -295,7 +349,7 @@ class LifecyclePlugin(BaseModule):
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         self.lifecycle.append('collect_data')
-        return {}
+        return {"records_collected": 0}
 
     async def analyze(self) -> Dict[str, Any]:
         self.lifecycle.append('analyze')
@@ -307,11 +361,11 @@ class LifecyclePlugin(BaseModule):
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
         return {}
 
-    async def get_correlations(self, correlation_type: str = "all", limit: int = 10) -> Dict[str, Any]:
-        return {}
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List:
+        return []
 
-    async def get_anomalies(self, limit: int = 10) -> Dict[str, Any]:
-        return {}
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List:
+        return []
 
     async def health_check(self) -> Dict[str, Any]:
         return {"status": "healthy", "lifecycle": self.lifecycle}

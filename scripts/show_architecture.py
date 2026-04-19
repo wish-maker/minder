@@ -3,10 +3,12 @@
 Generate Minder Architecture Diagram as ASCII art
 """
 
+
 def print_architecture_diagram():
     """Print comprehensive architecture diagram"""
 
-    print("""
+    print(
+        """
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                         MINDER PLATFORM ARCHITECTURE                           ║
 ║                    (Real Data Integration - No Mock Data)                        ║
@@ -93,12 +95,15 @@ def print_architecture_diagram():
     ║                                                                        ║
     ║  ❌ NO MOCK DATA - ALL DATA SOURCES ARE REAL AND LIVE                 ║
     ╚════════════════════════════════════════════════════════════════════════════╝
-    """)
+    """
+    )
+
 
 def print_data_flow_diagram():
     """Print detailed data flow diagram"""
 
-    print("""
+    print(
+        """
     ╔════════════════════════════════════════════════════════════════════════════╗
     ║                    DETAILED DATA FLOW ARCHITECTURE                         ║
     ╚════════════════════════════════════════════════════════════════════════════╝
@@ -192,12 +197,15 @@ def print_data_flow_diagram():
     • All data stored is from actual external sources
     • All analysis is performed on genuine collected data
     • All correlations are based on real relationships
-    """)
+    """
+    )
+
 
 def print_security_architecture():
     """Print security architecture diagram"""
 
-    print("""
+    print(
+        """
     ╔════════════════════════════════════════════════════════════════════════════╗
     ║                   SECURITY ARCHITECTURE                                     ║
     ╚════════════════════════════════════════════════════════════════════════════╝
@@ -260,11 +268,13 @@ def print_security_architecture():
     └──────────────────────────────────────────────────────────────────────┘
 
     ╔════════════════════════════════════════════════════════════════════════════╝
-    """)
+    """
+    )
+
 
 if __name__ == "__main__":
     print_architecture_diagram()
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print_data_flow_diagram()
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print_security_architecture()

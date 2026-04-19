@@ -14,9 +14,8 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import asyncpg
 import pandas as pd
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger("minder.tefas.collectors.allocation")
 
@@ -32,14 +31,14 @@ class AllocationCollector:
     4. Track collection statistics
     """
 
-    def __init__(self, db_config: Dict[str, Any]):
+    def __init__(self, pool: asyncpg.Pool):
         """
         Initialize allocation collector
 
         Args:
-            db_config: Database connection config
+            pool: asyncpg connection pool
         """
-        self.db_config = db_config
+        self.pool = pool
         self.logger = logger
 
         # Collection statistics
@@ -52,7 +51,7 @@ class AllocationCollector:
             "end_time": None,
         }
 
-    def collect(self, api, fund_codes: Optional[List[str]] = None, history_days: int = 100) -> Dict[str, int]:
+    async def collect(self, api, fund_codes: Optional[List[str]] = None, history_days: int = 100) -> Dict[str, int]:
         """
         Collect allocation data for specified funds
 
@@ -78,7 +77,7 @@ class AllocationCollector:
         # Collect for each fund
         for fund_code in fund_codes:
             try:
-                self._collect_fund_allocation(api, fund_code, history_days)
+                await self._collect_fund_allocation(api, fund_code, history_days)
                 self.stats["funds_processed"] += 1
 
             except Exception as e:
@@ -102,7 +101,7 @@ class AllocationCollector:
             "errors": self.stats["errors"],
         }
 
-    def _collect_fund_allocation(self, api, fund_code: str, history_days: int) -> bool:
+    async def _collect_fund_allocation(self, api, fund_code: str, history_days: int) -> bool:
         """
         Collect allocation data for a single fund
 
@@ -125,7 +124,7 @@ class AllocationCollector:
         success_count = 0
         for _, row in allocation_data.iterrows():
             if self._validate_allocation_row(row):
-                if self._store_allocation(fund_code, row):
+                if await self._store_allocation(fund_code, row):
                     success_count += 1
 
         return success_count > 0
@@ -156,7 +155,7 @@ class AllocationCollector:
 
         return True
 
-    def _store_allocation(self, fund_code: str, row: pd.Series) -> bool:
+    async def _store_allocation(self, fund_code: str, row: pd.Series) -> bool:
         """
         Store allocation record to database
 
@@ -168,48 +167,49 @@ class AllocationCollector:
             True if successful, False otherwise
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                # Extract data
+                date = row.get("date", datetime.now().date())
+                asset_type = row.get("asset_type", "")
+                asset_name = row.get("asset_name", "")
+                weight = float(row.get("weight", 0))
+                value_usd = row.get("value_usd")
+                count = row.get("count")
 
-            # Extract data
-            date = row.get("date", datetime.now().date())
-            asset_type = row.get("asset_type", "")
-            asset_name = row.get("asset_name", "")
-            weight = float(row.get("weight", 0))
-            value_usd = row.get("value_usd")
-            count = row.get("count")
-
-            # Check if exists
-            cursor.execute(
-                """
-                SELECT id FROM tefas_allocation
-                WHERE fund_code = %s AND date = %s AND asset_type = %s AND asset_name = %s
-                """,
-                (fund_code, date, asset_type, asset_name),
-            )
-
-            existing = cursor.fetchone()
-
-            if existing:
-                # Update
-                cursor.execute(
+                # Check if exists
+                existing = await conn.fetchrow(
                     """
-                    UPDATE tefas_allocation
-                    SET weight = %s, value_usd = %s, count = %s
-                    WHERE id = %s
+                    SELECT id FROM tefas_allocation
+                    WHERE fund_code = $1 AND date = $2 AND asset_type = $3 AND asset_name = $4
                     """,
-                    (weight, value_usd, count, existing[0]),
+                    fund_code,
+                    date,
+                    asset_type,
+                    asset_name,
                 )
-                self.stats["records_updated"] += 1
-            else:
-                # Insert
-                cursor.execute(
-                    """
-                    INSERT INTO tefas_allocation (
-                        fund_code, date, asset_type, asset_name, weight, value_usd, count, created_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
+
+                if existing:
+                    # Update
+                    await conn.execute(
+                        """
+                        UPDATE tefas_allocation
+                        SET weight = $1, value_usd = $2, count = $3
+                        WHERE id = $4
+                        """,
+                        weight,
+                        value_usd,
+                        count,
+                        existing["id"],
+                    )
+                    self.stats["records_updated"] += 1
+                else:
+                    # Insert
+                    await conn.execute(
+                        """
+                        INSERT INTO tefas_allocation (
+                            fund_code, date, asset_type, asset_name, weight, value_usd, count, created_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        """,
                         fund_code,
                         date,
                         asset_type,
@@ -218,12 +218,8 @@ class AllocationCollector:
                         value_usd,
                         count,
                         datetime.now(),
-                    ),
-                )
-                self.stats["records_collected"] += 1
-
-            conn.commit()
-            conn.close()
+                    )
+                    self.stats["records_collected"] += 1
 
             return True
 
@@ -231,7 +227,7 @@ class AllocationCollector:
             self.logger.error(f"Database error storing allocation: {e}")
             return False
 
-    def get_fund_allocation_summary(self, fund_code: str) -> Optional[Dict[str, Any]]:
+    async def get_fund_allocation_summary(self, fund_code: str) -> Optional[Dict[str, Any]]:
         """
         Get allocation summary for a fund
 
@@ -242,41 +238,36 @@ class AllocationCollector:
             Dict with allocation summary or None
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            async with self.pool.acquire() as conn:
+                results = await conn.fetch(
+                    """
+                    SELECT
+                        asset_type,
+                        SUM(weight) as total_weight,
+                        COUNT(DISTINCT date) as data_points,
+                        MAX(date) as latest_date
+                    FROM tefas_allocation
+                    WHERE fund_code = $1
+                    GROUP BY asset_type
+                    ORDER BY total_weight DESC
+                    """,
+                    fund_code,
+                )
 
-            cursor.execute(
-                """
-                SELECT
-                    asset_type,
-                    SUM(weight) as total_weight,
-                    COUNT(DISTINCT date) as data_points,
-                    MAX(date) as latest_date
-                FROM tefas_allocation
-                WHERE fund_code = %s
-                GROUP BY asset_type
-                ORDER BY total_weight DESC
-                """,
-                (fund_code,),
-            )
+                if not results:
+                    return None
 
-            results = cursor.fetchall()
-            conn.close()
-
-            if not results:
-                return None
-
-            return {
-                "fund_code": fund_code,
-                "allocation": [dict(row) for row in results],
-                "total_allocation": sum(row["total_weight"] for row in results),
-            }
+                return {
+                    "fund_code": fund_code,
+                    "allocation": [dict(row) for row in results],
+                    "total_allocation": sum(row["total_weight"] for row in results),
+                }
 
         except Exception as e:
             self.logger.error(f"Error fetching allocation summary for {fund_code}: {e}")
             return None
 
-    def get_top_holdings(self, asset_type: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_top_holdings(self, asset_type: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
         """
         Get top holdings across all funds
 
@@ -288,45 +279,41 @@ class AllocationCollector:
             List of holding dicts
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-
-            if asset_type:
-                cursor.execute(
-                    """
-                    SELECT
-                        asset_name,
+            async with self.pool.acquire() as conn:
+                if asset_type:
+                    results = await conn.fetch(
+                        """
+                        SELECT
+                            asset_name,
+                            asset_type,
+                            SUM(weight) as total_weight,
+                            COUNT(DISTINCT fund_code) as fund_count
+                        FROM tefas_allocation
+                        WHERE asset_type = $1
+                        GROUP BY asset_name, asset_type
+                        ORDER BY total_weight DESC
+                        LIMIT $2
+                        """,
                         asset_type,
-                        SUM(weight) as total_weight,
-                        COUNT(DISTINCT fund_code) as fund_count
-                    FROM tefas_allocation
-                    WHERE asset_type = %s
-                    GROUP BY asset_name, asset_type
-                    ORDER BY total_weight DESC
-                    LIMIT %s
-                    """,
-                    (asset_type, limit),
-                )
-            else:
-                cursor.execute(
-                    """
-                    SELECT
-                        asset_name,
-                        asset_type,
-                        SUM(weight) as total_weight,
-                        COUNT(DISTINCT fund_code) as fund_count
-                    FROM tefas_allocation
-                    GROUP BY asset_name, asset_type
-                    ORDER BY total_weight DESC
-                    LIMIT %s
-                    """,
-                    (limit,),
-                )
+                        limit,
+                    )
+                else:
+                    results = await conn.fetch(
+                        """
+                        SELECT
+                            asset_name,
+                            asset_type,
+                            SUM(weight) as total_weight,
+                            COUNT(DISTINCT fund_code) as fund_count
+                        FROM tefas_allocation
+                        GROUP BY asset_name, asset_type
+                        ORDER BY total_weight DESC
+                        LIMIT $1
+                        """,
+                        limit,
+                    )
 
-            results = cursor.fetchall()
-            conn.close()
-
-            return [dict(row) for row in results]
+                return [dict(row) for row in results]
 
         except Exception as e:
             self.logger.error(f"Error fetching top holdings: {e}")

@@ -4,11 +4,10 @@ Installs plugins from GitHub repositories with security validation
 """
 
 import logging
-import subprocess
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,11 @@ class GitHubPluginInstaller:
             parts = repo_url.split("/")
 
         if len(parts) >= 2:
-            return {"owner": parts[0], "repo": parts[1], "url": f"https://github.com/{parts[0]}/{parts[1]}.git"}
+            return {
+                "owner": parts[0],
+                "repo": parts[1],
+                "url": f"https://github.com/{parts[0]}/{parts[1]}.git",
+            }
 
         raise ValueError(f"Invalid GitHub URL: {repo_url}")
 
@@ -47,13 +50,16 @@ class GitHubPluginInstaller:
 
         # Use subprocess.run for security (no shell)
         result = subprocess.run(
-            ["git", "clone", "--depth", "1", github_url, str(plugin_path)], capture_output=True, text=True, check=False
+            ["git", "clone", "--depth", "1", github_url, str(plugin_path)],
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
         if result.returncode != 0:
             raise Exception(f"Git clone failed: {result.stderr}")
 
-        logger.info(f"Repository cloned successfully")
+        logger.info("Repository cloned successfully")
         return plugin_path
 
     def _validate_manifest(self, plugin_path: Path) -> tuple[bool, Optional[Dict], list]:
@@ -155,7 +161,11 @@ class GitHubPluginInstaller:
 
             shutil.rmtree(plugin_path, ignore_errors=True)
 
-            return {"status": "success", "plugin_name": plugin_name, "message": f"Plugin '{plugin_name}' removed"}
+            return {
+                "status": "success",
+                "plugin_name": plugin_name,
+                "message": f"Plugin '{plugin_name}' removed",
+            }
 
         except Exception as e:
             return {"status": "error", "error": str(e)}

@@ -10,7 +10,12 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .module_interface import BaseModule
+# Import v2 interface for flexible plugin loading
+try:
+    from .module_interface_v2 import BaseModule
+except ImportError:
+    # Fallback to v1 if v2 not available
+    from .module_interface import BaseModule
 
 logger = logging.getLogger(__name__)
 

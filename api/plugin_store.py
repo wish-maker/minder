@@ -11,18 +11,21 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from .auth import get_current_user_optional
 from .github_installer import GitHubPluginInstaller
 from .plugin_store_security import get_default_security_validator
 
+# Initialize logger at module level
+logger = logging.getLogger(__name__)
+
 # Import manifest validator
 try:
-    from ..core.plugin_manifest import validate_plugin_for_installation
+    from ..core.plugin_manifest import validate_plugin_for_installation  # noqa: F401
 except ImportError:
     # Fallback for different import paths
     import sys
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from core.plugin_manifest import validate_plugin_for_installation
 
 try:
     from .security import InputSanitizer
@@ -33,24 +36,22 @@ except ImportError:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from api.security import InputSanitizer
 
-from .auth import get_current_user_optional
-
 # Import plugin loader for dynamic loading
 try:
-    from ..core.plugin_loader import PluginLoader
+    from ..core.plugin_loader import PluginLoader  # noqa: F401
 except ImportError:
     # Fallback for different import paths
     import sys
 
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    from core.plugin_loader import PluginLoader
+    from core.plugin_loader import PluginLoader  # noqa: F401
 
 # Import sandbox and security features
 try:
-    from ..core.plugin_sandbox import SandboxedPluginLoader, SubprocessSandbox
-    from ..core.plugin_permissions import SandboxedPlugin, PermissionEnforcer
     from ..core.plugin_hot_reload import PluginReloader
-    from ..core.plugin_observability import PluginMetrics, PluginHealthMonitor
+    from ..core.plugin_observability import PluginHealthMonitor, PluginMetrics
+    from ..core.plugin_permissions import PermissionEnforcer, SandboxedPlugin
+    from ..core.plugin_sandbox import SandboxedPluginLoader, SubprocessSandbox
 except ImportError:
     # Fallback for different import paths
     import sys
@@ -68,7 +69,7 @@ except ImportError:
         logger.warning("Plugin sandbox not available - using regular loader")
 
     try:
-        from core.plugin_permissions import SandboxedPlugin, PermissionEnforcer
+        from core.plugin_permissions import PermissionEnforcer, SandboxedPlugin
 
         PERMISSIONS_AVAILABLE = True
     except ImportError:
@@ -87,7 +88,7 @@ except ImportError:
         logger.warning("Plugin hot reload not available")
 
     try:
-        from core.plugin_observability import PluginMetrics, PluginHealthMonitor
+        from core.plugin_observability import PluginHealthMonitor, PluginMetrics
 
         OBSERVABILITY_AVAILABLE = True
     except ImportError:
@@ -95,8 +96,6 @@ except ImportError:
         PluginMetrics = None
         PluginHealthMonitor = None
         logger.warning("Plugin observability not available")
-
-logger = logging.getLogger(__name__)
 
 # Create router - kernel dependency will be set from main.py
 router = APIRouter(prefix="/plugins/store", tags=["Plugin Store"])
@@ -228,9 +227,9 @@ async def install_plugin(
         plugin_path = Path(download_result["path"])
 
         # Step 1: MANDATORY manifest validation
-        from .plugin_store_security import validate_plugin_for_installation
+        from .plugin_store_security import validate_plugin_for_installation as validate_security
 
-        manifest_valid, manifest, manifest_errors = validate_plugin_for_installation(plugin_path)
+        manifest_valid, manifest, manifest_errors = validate_security(plugin_path)
 
         if not manifest_valid:
             # Remove plugin if manifest validation failed
@@ -488,7 +487,11 @@ async def get_plugin_metrics(plugin_name: str, current_user: dict = Depends(get_
 
     # Get metrics from sandbox
     # (This would require implementing metrics collection in sandbox)
-    return {"plugin": plugin_name, "message": "Metrics collection not yet implemented", "status": "TODO"}
+    return {
+        "plugin": plugin_name,
+        "message": "Metrics collection not yet implemented",
+        "status": "TODO",
+    }
 
 
 # ============================================================================

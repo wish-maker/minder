@@ -4,24 +4,24 @@ Minder Crypto Analysis Module
 
 import asyncio
 import logging
+
+# Import validator from same directory using absolute path
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
-import psycopg2
+import asyncpg
 import yaml
 
-from core.module_interface import BaseModule, ModuleMetadata
+from core.module_interface_v2 import BaseModule, ModuleMetadata
 
-# Import validator from same directory using absolute path
-import sys
-from pathlib import Path
 crypto_plugin_dir = Path(__file__).parent
 if str(crypto_plugin_dir) not in sys.path:
     sys.path.insert(0, str(crypto_plugin_dir))
 
-from crypto_validator import PluginDataValidator
+from crypto_validator import PluginDataValidator  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,9 @@ class CryptoModule(BaseModule):
             "user": config.get("database", {}).get("user", "postgres"),
             "password": config.get("database", {}).get("password", ""),
         }
+
+        # Connection pool (initialized in register())
+        self.pool: asyncpg.Pool = None
 
         # Data validator
         self.validator = PluginDataValidator()
@@ -62,16 +65,21 @@ class CryptoModule(BaseModule):
 
     def _load_crypto_config(self) -> Dict[str, Any]:
         """Load crypto configuration from YAML file"""
-        config_path = Path("/root/minder/config/crypto_config.yml")
+        # Try multiple possible paths for config file
+        config_paths = [
+            Path("/app/config/crypto_config.yml"),  # Docker container path
+            Path("/root/minder/config/crypto_config.yml"),  # Local development path
+        ]
 
-        if config_path.exists():
-            try:
-                with open(config_path, "r") as f:
-                    config_data = yaml.safe_load(f)
-                    logger.info(f"Loaded crypto config from {config_path}")
-                    return config_data.get("crypto", {})
-            except Exception as e:
-                logger.warning(f"Failed to load crypto config from {config_path}: {e}")
+        for config_path in config_paths:
+            if config_path.exists():
+                try:
+                    with open(config_path, "r") as f:
+                        config_data = yaml.safe_load(f)
+                        logger.info(f"Loaded crypto config from {config_path}")
+                        return config_data.get("crypto", {})
+                except Exception as e:
+                    logger.warning(f"Failed to load crypto config from {config_path}: {e}")
 
         # Fallback to default configuration
         logger.info("Using default crypto configuration")
@@ -178,16 +186,30 @@ class CryptoModule(BaseModule):
         )
 
         logger.info("₿ Registering Crypto Module")
+
+        # Initialize connection pool
+        try:
+            self.pool = await asyncpg.create_pool(
+                host=self.db_config["host"],
+                port=self.db_config["port"],
+                database=self.db_config["database"],
+                user=self.db_config["user"],
+                password=self.db_config["password"],
+                min_size=2,
+                max_size=10,
+                command_timeout=60,
+            )
+            logger.info("✅ Crypto module database pool initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize database pool: {e}")
+            raise
+
         return self.metadata
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
         """
         Collect real crypto data from CoinGecko API
         Store collected data to PostgreSQL database
-
-        Note: Database operations use synchronous psycopg2 calls.
-        For production use with high concurrency, consider using asyncpg
-        or wrapping calls with asyncio.to_thread() to avoid blocking.
         """
         logger.info("📥 Collecting crypto data...")
 
@@ -196,25 +218,20 @@ class CryptoModule(BaseModule):
         errors = 0
 
         try:
-            # Connect to PostgreSQL
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            # Use connection pool
+            async with self.pool.acquire() as conn:
+                # Fetch market data for all configured symbols
+                crypto_data = await self._fetch_crypto_market_data()
 
-            # Fetch market data for all configured symbols
-            crypto_data = await self._fetch_crypto_market_data()
-
-            # Store each crypto data point
-            for data in crypto_data:
-                try:
-                    await self._store_crypto_data(cursor, data)
-                    records_collected += 1
-                    logger.info(f"✓ Collected data for {data['symbol']}")
-                except Exception as e:
-                    errors += 1
-                    logger.error(f"Error storing data for {data['symbol']}: {e}")
-
-            conn.commit()
-            conn.close()
+                # Store each crypto data point
+                for data in crypto_data:
+                    try:
+                        await self._store_crypto_data(conn, data)
+                        records_collected += 1
+                        logger.info(f"✓ Collected data for {data['symbol']}")
+                    except Exception as e:
+                        errors += 1
+                        logger.error(f"Error storing data for {data['symbol']}: {e}")
 
         except Exception as e:
             logger.error(f"Database connection error: {e}", exc_info=True)
@@ -432,24 +449,22 @@ class CryptoModule(BaseModule):
             "timestamp": api_data.get("timestamp", datetime.now(timezone.utc)),
         }
 
-    async def _store_crypto_data(self, cursor, crypto_data: Dict[str, Any]):
-        """Store crypto data to PostgreSQL"""
-        cursor.execute(
+    async def _store_crypto_data(self, conn, crypto_data: Dict[str, Any]):
+        """Store crypto data to PostgreSQL using asyncpg"""
+        await conn.execute(
             """
             INSERT INTO crypto_data (
                 symbol, name, price, market_cap,
                 volume_24h, change_24h_pct, timestamp
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         """,
-            (
-                crypto_data["symbol"],
-                crypto_data["name"],
-                crypto_data["price"],
-                crypto_data["market_cap"],
-                crypto_data["volume_24h"],
-                crypto_data["change_24h_pct"],
-                crypto_data["timestamp"],
-            ),
+            crypto_data["symbol"],
+            crypto_data["name"],
+            crypto_data["price"],
+            crypto_data["market_cap"],
+            crypto_data["volume_24h"],
+            crypto_data["change_24h_pct"],
+            crypto_data["timestamp"],
         )
 
     async def analyze(self) -> Dict[str, Any]:
@@ -461,44 +476,41 @@ class CryptoModule(BaseModule):
         or wrapping calls with asyncio.to_thread() to avoid blocking.
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                # Get latest prices
+                results = await conn.fetch(
+                    """
+                    SELECT symbol, name, price, change_24h_pct
+                    FROM crypto_data
+                    WHERE timestamp >= NOW() - INTERVAL '1 hour'
+                    ORDER BY timestamp DESC
+                    LIMIT 10
+                    """
+                )
 
-            # Get latest prices
-            cursor.execute("""
-                SELECT symbol, name, price, change_24h_pct
-                FROM crypto_data
-                WHERE timestamp >= NOW() - INTERVAL '1 hour'
-                ORDER BY timestamp DESC
-                LIMIT 10
-            """)
+                if results:
+                    metrics = {}
+                    for row in results:
+                        metrics[row["symbol"]] = {
+                            "name": row["name"],
+                            "price": float(row["price"]),
+                            "change_24h_pct": float(row["change_24h_pct"]),
+                        }
 
-            results = cursor.fetchall()
-            conn.close()
-
-            if results:
-                metrics = {}
-                for row in results:
-                    metrics[row[0]] = {
-                        "name": row[1],
-                        "price": float(row[2]),
-                        "change_24h_pct": float(row[3]),
+                    return {
+                        "metrics": metrics,
+                        "patterns": [],
+                        "insights": [
+                            f"Tracked {len(results)} cryptocurrencies",
+                            "Data collected from CoinGecko API",
+                        ],
                     }
-
-                return {
-                    "metrics": metrics,
-                    "patterns": [],
-                    "insights": [
-                        f"Tracked {len(results)} cryptocurrencies",
-                        "Data collected from CoinGecko API",
-                    ],
-                }
-            else:
-                return {
-                    "metrics": {},
-                    "patterns": [],
-                    "insights": ["No recent crypto data available"],
-                }
+                else:
+                    return {
+                        "metrics": {},
+                        "patterns": [],
+                        "insights": ["No recent crypto data available"],
+                    }
 
         except Exception as e:
             logger.error(f"Error analyzing crypto data: {e}", exc_info=True)

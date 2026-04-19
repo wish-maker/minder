@@ -6,9 +6,10 @@ Aggregates metrics from various sources and exports to monitoring systems
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import aiofiles
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ class MetricsCollector:
             export_file = self.export_path / f"metrics_{timestamp}.json"
 
             # Write metrics to file
-            async with aiofiles.open(export_file, 'w') as f:
+            async with aiofiles.open(export_file, "w") as f:
                 await f.write(json.dumps(self.metrics_buffer, indent=2))
 
             logger.info(f"✓ Exported {len(self.metrics_buffer)} metrics to {export_file}")
@@ -152,7 +153,7 @@ class MetricsCollector:
             try:
                 dt = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
                 return dt.isoformat()
-            except:
+            except Exception:
                 return latest_file.name
 
         except Exception as e:
@@ -169,7 +170,7 @@ class MetricsCollector:
             metrics_files = sorted(
                 self.export_path.glob("metrics_*.json"),
                 key=lambda f: f.stat().st_mtime,
-                reverse=True
+                reverse=True,
             )[:limit]
 
             return [

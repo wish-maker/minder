@@ -4,8 +4,8 @@ Phase 1 Validation Script - Borsapy Integration
 Tests all components created in Phase 1 before commit
 """
 
-import sys
 import subprocess
+import sys
 import traceback
 from pathlib import Path
 
@@ -87,7 +87,12 @@ try:
         sql_content = f.read()
 
     # Check for key tables
-    required_tables = ["tefas_fund_metadata", "tefas_risk_metrics", "tefas_allocation", "tefas_tax_rates"]
+    required_tables = [
+        "tefas_fund_metadata",
+        "tefas_risk_metrics",
+        "tefas_allocation",
+        "tefas_tax_rates",
+    ]
 
     for table in required_tables:
         # Case-insensitive search for table creation
@@ -111,9 +116,9 @@ except Exception as e:
 print("\n[5/6] Testing UnifiedDataAPI import...")
 try:
     from plugins.tefas.unified_data_api import (
-        UnifiedDataAPI,
         BORSAPY_AVAILABLE,
         TEFAS_CRAWLER_AVAILABLE,
+        UnifiedDataAPI,
     )
 
     print("  ✅ UnifiedDataAPI imported successfully")

@@ -8,7 +8,7 @@ Description: Verifies data collection, database integrity, and plugin health
 import asyncio
 import logging
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta  # noqa: F401
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 class VerificationResult(BaseModel):
     """Verification result for a component"""
+
     name: str
     status: str  # "pass", "warn", "fail"
     message: str
@@ -94,10 +95,7 @@ class DataVerifier:
 
         for db_name, description in databases.items():
             try:
-                conn = psycopg2.connect(
-                    dbname=db_name,
-                    **self.db_config
-                )
+                conn = psycopg2.connect(dbname=db_name, **self.db_config)
                 cursor = conn.cursor()
                 cursor.execute("SELECT 1")
                 cursor.close()
@@ -107,7 +105,7 @@ class DataVerifier:
                     name=f"Database: {db_name}",
                     status="pass",
                     message=f"{description} database accessible",
-                    details={"database": db_name}
+                    details={"database": db_name},
                 )
 
             except Exception as e:
@@ -115,7 +113,7 @@ class DataVerifier:
                     name=f"Database: {db_name}",
                     status="fail",
                     message=f"Cannot connect: {str(e)}",
-                    details={"database": db_name, "error": str(e)}
+                    details={"database": db_name, "error": str(e)},
                 )
 
     async def _verify_table_structure(self):
@@ -135,12 +133,14 @@ class DataVerifier:
                 conn = psycopg2.connect(dbname=db_name, **self.db_config)
                 cursor = conn.cursor()
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT table_name
                     FROM information_schema.tables
                     WHERE table_schema = 'public'
                     AND table_type = 'BASE TABLE'
-                """)
+                """
+                )
                 existing_tables = {row[0] for row in cursor.fetchall()}
 
                 conn.close()
@@ -152,14 +152,14 @@ class DataVerifier:
                         name=f"Tables: {db_name}",
                         status="fail",
                         message=f"Missing tables: {', '.join(missing_tables)}",
-                        details={"database": db_name, "missing": list(missing_tables)}
+                        details={"database": db_name, "missing": list(missing_tables)},
                     )
                 else:
                     self.add_result(
                         name=f"Tables: {db_name}",
                         status="pass",
                         message=f"All {len(expected_tables)} tables exist",
-                        details={"database": db_name, "tables": list(existing_tables)}
+                        details={"database": db_name, "tables": list(existing_tables)},
                     )
 
             except Exception as e:
@@ -167,7 +167,7 @@ class DataVerifier:
                     name=f"Tables: {db_name}",
                     status="fail",
                     message=f"Error checking tables: {str(e)}",
-                    details={"database": db_name, "error": str(e)}
+                    details={"database": db_name, "error": str(e)},
                 )
 
     async def _verify_data_freshness(self):
@@ -178,27 +178,23 @@ class DataVerifier:
             "fundmind": {
                 "table": "tefas_fund_data",
                 "name": "TEFAS funds",
-                "max_age_hours": 48  # TEFAS data may be older
+                "max_age_hours": 48,  # TEFAS data may be older
             },
-            "minder_news": {
-                "table": "news_articles",
-                "name": "News articles",
-                "max_age_hours": 24
-            },
+            "minder_news": {"table": "news_articles", "name": "News articles", "max_age_hours": 24},
             "minder_weather": {
                 "table": "weather_data",
                 "name": "Weather data",
-                "max_age_hours": 2  # Weather should be very recent
+                "max_age_hours": 2,  # Weather should be very recent
             },
             "minder_crypto": {
                 "table": "crypto_data",
                 "name": "Crypto prices",
-                "max_age_hours": 1  # Crypto should be very recent
+                "max_age_hours": 1,  # Crypto should be very recent
             },
             "minder_network": {
                 "table": "network_metrics",
                 "name": "Network metrics",
-                "max_age_hours": 1  # Network metrics should be recent
+                "max_age_hours": 1,  # Network metrics should be recent
             },
         }
 
@@ -208,12 +204,14 @@ class DataVerifier:
                 cursor = conn.cursor()
 
                 # Get latest timestamp
-                cursor.execute(f"""
+                cursor.execute(
+                    """
                     SELECT
                         COUNT(*) as total_records,
                         MAX(timestamp) as latest_timestamp
                     FROM {query_info['table']}
-                """)
+                """
+                )
 
                 row = cursor.fetchone()
                 total_records = row[0]
@@ -226,11 +224,7 @@ class DataVerifier:
                         name=f"Freshness: {query_info['name']}",
                         status="warn",
                         message="No data collected yet",
-                        details={
-                            "database": db_name,
-                            "table": query_info['table'],
-                            "records": 0
-                        }
+                        details={"database": db_name, "table": query_info["table"], "records": 0},
                     )
                     continue
 
@@ -239,17 +233,17 @@ class DataVerifier:
                     age = datetime.now() - latest_timestamp
                     age_hours = age.total_seconds() / 3600
 
-                    if age_hours <= query_info['max_age_hours']:
+                    if age_hours <= query_info["max_age_hours"]:
                         self.add_result(
                             name=f"Freshness: {query_info['name']}",
                             status="pass",
                             message=f"Data is fresh ({age_hours:.1f} hours old)",
                             details={
                                 "database": db_name,
-                                "table": query_info['table'],
+                                "table": query_info["table"],
                                 "records": total_records,
-                                "age_hours": round(age_hours, 1)
-                            }
+                                "age_hours": round(age_hours, 1),
+                            },
                         )
                     else:
                         self.add_result(
@@ -258,11 +252,11 @@ class DataVerifier:
                             message=f"Data is stale ({age_hours:.1f} hours old)",
                             details={
                                 "database": db_name,
-                                "table": query_info['table'],
+                                "table": query_info["table"],
                                 "records": total_records,
                                 "age_hours": round(age_hours, 1),
-                                "max_age_hours": query_info['max_age_hours']
-                            }
+                                "max_age_hours": query_info["max_age_hours"],
+                            },
                         )
                 else:
                     self.add_result(
@@ -271,9 +265,9 @@ class DataVerifier:
                         message="No timestamp data available",
                         details={
                             "database": db_name,
-                            "table": query_info['table'],
-                            "records": total_records
-                        }
+                            "table": query_info["table"],
+                            "records": total_records,
+                        },
                     )
 
             except Exception as e:
@@ -281,7 +275,7 @@ class DataVerifier:
                     name=f"Freshness: {query_info['name']}",
                     status="fail",
                     message=f"Error checking freshness: {str(e)}",
-                    details={"database": db_name, "error": str(e)}
+                    details={"database": db_name, "error": str(e)},
                 )
 
     async def _verify_data_quality(self):
@@ -293,22 +287,22 @@ class DataVerifier:
             "fundmind": {
                 "table": "tefas_fund_data",
                 "critical_fields": ["code", "date", "price"],
-                "name": "TEFAS data"
+                "name": "TEFAS data",
             },
             "minder_news": {
                 "table": "news_articles",
                 "critical_fields": ["title", "source"],
-                "name": "News data"
+                "name": "News data",
             },
             "minder_weather": {
                 "table": "weather_data",
                 "critical_fields": ["location", "temperature_c"],
-                "name": "Weather data"
+                "name": "Weather data",
             },
             "minder_crypto": {
                 "table": "crypto_data",
                 "critical_fields": ["symbol", "price"],
-                "name": "Crypto data"
+                "name": "Crypto data",
             },
         }
 
@@ -317,12 +311,14 @@ class DataVerifier:
                 conn = psycopg2.connect(dbname=db_name, **self.db_config)
                 cursor = conn.cursor()
 
-                for field in check_info['critical_fields']:
-                    cursor.execute(f"""
+                for field in check_info["critical_fields"]:
+                    cursor.execute(
+                        """
                         SELECT COUNT(*)
                         FROM {check_info['table']}
                         WHERE {field} IS NULL
-                    """)
+                    """
+                    )
 
                     null_count = cursor.fetchone()[0]
 
@@ -333,10 +329,10 @@ class DataVerifier:
                             message=f"{null_count} NULL values found",
                             details={
                                 "database": db_name,
-                                "table": check_info['table'],
+                                "table": check_info["table"],
                                 "field": field,
-                                "null_count": null_count
-                            }
+                                "null_count": null_count,
+                            },
                         )
 
                 conn.close()
@@ -347,10 +343,7 @@ class DataVerifier:
                         name=f"Quality: {check_info['name']}",
                         status="pass",
                         message="All critical fields have valid data",
-                        details={
-                            "database": db_name,
-                            "table": check_info['table']
-                        }
+                        details={"database": db_name, "table": check_info["table"]},
                     )
 
             except Exception as e:
@@ -358,7 +351,7 @@ class DataVerifier:
                     name=f"Quality: {check_info['name']}",
                     status="fail",
                     message=f"Error checking quality: {str(e)}",
-                    details={"database": db_name, "error": str(e)}
+                    details={"database": db_name, "error": str(e)},
                 )
 
     async def _verify_plugin_config(self):
@@ -377,14 +370,14 @@ class DataVerifier:
                     name=f"Config: {Path(config_file).name}",
                     status="pass",
                     message="Configuration file exists",
-                    details={"file": config_file}
+                    details={"file": config_file},
                 )
             else:
                 self.add_result(
                     name=f"Config: {Path(config_file).name}",
                     status="warn",
                     message="Configuration file missing",
-                    details={"file": config_file}
+                    details={"file": config_file},
                 )
 
     def _generate_summary(self) -> Dict[str, Any]:
@@ -403,7 +396,7 @@ class DataVerifier:
             "warned": warned,
             "failed": failed,
             "results": [r.dict() for r in self.results],
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         return summary
@@ -422,7 +415,7 @@ def print_summary(summary: Dict[str, Any]):
     print("=" * 60)
     print(f"Timestamp: {summary['timestamp']}")
     print(f"Overall Status: {summary['overall_status'].upper()}")
-    print(f"\nSummary:")
+    print("\nSummary:")
     print(f"  Total Checks: {summary['total_checks']}")
     print(f"  Passed: {summary['passed']}")
     print(f"  Warnings: {summary['warned']}")
@@ -430,19 +423,19 @@ def print_summary(summary: Dict[str, Any]):
     print("\nDetailed Results:")
     print("-" * 60)
 
-    for result in summary['results']:
-        status_icon = status_colors.get(result['status'], "?")
+    for result in summary["results"]:
+        status_icon = status_colors.get(result["status"], "?")
         print(f"{status_icon} {result['name']}: {result['message']}")
 
     print("=" * 60)
 
     # Print recommendations
-    if summary['failed'] > 0:
+    if summary["failed"] > 0:
         print("\n🚨 CRITICAL ISSUES FOUND:")
         print("  1. Check database connectivity")
         print("  2. Run: ./scripts/database/01_init_databases.sh")
         print("  3. Verify plugin configuration")
-    elif summary['warned'] > 0:
+    elif summary["warned"] > 0:
         print("\n⚠️  WARNINGS:")
         print("  1. Data may be stale - check collection jobs")
         print("  2. Review plugin logs: docker-compose logs -f minder")
@@ -467,6 +460,7 @@ async def main():
 
     # Override password from environment
     import os
+
     db_password = os.getenv("POSTGRES_PASSWORD")
     if db_password:
         config["database"]["password"] = db_password
@@ -479,9 +473,9 @@ async def main():
     print_summary(summary)
 
     # Exit with appropriate code
-    if summary['failed'] > 0:
+    if summary["failed"] > 0:
         sys.exit(1)
-    elif summary['warned'] > 0:
+    elif summary["warned"] > 0:
         sys.exit(2)
     else:
         sys.exit(0)

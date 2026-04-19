@@ -131,3 +131,35 @@ dmypy.json
 # Pyre
 .pyre/
 .pytype/
+
+# Python cache
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+.pytest_cache/
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Data volumes
+data/*
+!data/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Manual tests
+tests/manual/
+
+# Build artifacts
+.build/
+dist/
+*.egg-info/

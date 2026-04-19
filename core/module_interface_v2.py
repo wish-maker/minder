@@ -4,7 +4,7 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Callable, Dict, List, Optional
 
 
 class ModuleStatus(Enum):
@@ -93,7 +93,12 @@ class BaseModule(ABC):
         Returns:
             Dict with records_collected, records_updated, errors
         """
-        return {"records_collected": 0, "records_updated": 0, "errors": 0, "message": "Data collection not implemented"}
+        return {
+            "records_collected": 0,
+            "records_updated": 0,
+            "errors": 0,
+            "message": "Data collection not implemented",
+        }
 
     async def analyze(self) -> Dict[str, Any]:
         """

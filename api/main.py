@@ -3,10 +3,12 @@ Minder FastAPI Application
 Main REST API for Minder platform
 """
 
+import asyncio
 import logging
 import os
 from typing import Any, Dict, List, Optional
 
+import psutil
 from fastapi import FastAPI, HTTPException
 from fastapi.openapi.utils import get_openapi
 from pydantic import BaseModel
@@ -26,10 +28,52 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global variables
-kernel = None
-character_engine = None
-voice_interface = None
+
+# ============================================================================
+# Application State (Dependency Injection)
+# ============================================================================
+
+
+class AppState:
+    """
+    Centralized application state with dependency injection
+
+    Replaces global variables with proper state management through FastAPI's app.state
+    """
+
+    def __init__(self):
+        """Initialize all application components"""
+        self.kernel: Optional[MinderKernel] = None
+        self.character_engine: Optional[CharacterEngine] = None
+        self.voice_interface: Optional[VoiceInterface] = None
+
+    async def initialize(self, config: Dict[str, Any]):
+        """
+        Initialize all components
+
+        Args:
+            config: Application configuration dict
+        """
+        logger.info("🚀 Initializing application state...")
+
+        # Initialize kernel
+        self.kernel = MinderKernel(config)
+        await self.kernel.start()
+        logger.info("✅ Kernel initialized")
+
+        # Initialize character engine
+        self.character_engine = CharacterEngine(config)
+        logger.info("✅ Character engine initialized")
+
+        # Initialize voice interface
+        self.voice_interface = VoiceInterface(config.get("voice", {}))
+        logger.info("✅ Voice interface initialized")
+
+    async def cleanup(self):
+        """Cleanup all components"""
+        if self.kernel:
+            await self.kernel.stop()
+        logger.info("✅ Application state cleaned up")
 
 
 # ============================================================================
@@ -322,9 +366,13 @@ app.include_router(plugin_store.router)
 @app.on_event("startup")
 async def startup():
     """Initialize Minder on startup"""
-    global kernel, character_engine, voice_interface
-
     logger.info("🚀 Starting Minder API...")
+
+    # Wait for dependencies to be ready
+    import asyncio
+
+    logger.info("⏳ Waiting for dependencies to be ready...")
+    await asyncio.sleep(5)  # Give postgres time to be fully ready
 
     # Validate required secrets
     _validate_secrets()
@@ -342,7 +390,7 @@ async def startup():
                 ),
             }
         },
-        "plugins": {"network": {}, "weather": {}, "crypto": {}, "news": {}},
+        "plugins": {},  # Don't auto-load plugins at startup
         "plugin_store": {
             "enabled": True,
             "store_path": "/app/plugins",  # Use actual plugins directory
@@ -355,20 +403,34 @@ async def startup():
     auth.auth_manager = AuthManager()
     logger.info("✅ Authentication manager initialized")
 
-    kernel = MinderKernel(config)
-    await kernel.start()
+    # Initialize application state with dependency injection
+    app.state.app_state = AppState()
+    await app.state.app_state.initialize(config)
 
     # Validate plugin health on startup
-    await _validate_plugin_health(kernel)
+    await _validate_plugin_health(app.state.app_state.kernel)
 
     # Set kernel reference for plugin store router
-    plugin_store.set_kernel(kernel)
-
-    character_engine = CharacterEngine(config)
-    voice_interface = VoiceInterface(config.get("voice", {}))
+    plugin_store.set_kernel(app.state.app_state.kernel)
 
     # Setup modular routes
-    _setup_routes(kernel, character_engine)
+    _setup_routes(app.state.app_state.kernel, app.state.app_state.character_engine)
+
+    # Initialize monitoring
+    from . import monitoring_endpoints
+
+    monitoring_config = {
+        "monitoring": {
+            "enabled": True,
+            "export_interval": 60,
+            "max_buffer_size": 10000,
+        }
+    }
+    monitoring_endpoints.initialize_monitoring(monitoring_config)
+    await monitoring_endpoints.start_monitoring()
+
+    # Start system metrics update task
+    asyncio.create_task(_update_system_metrics_loop())
 
     logger.info("✅ Minder API ready")
 
@@ -376,8 +438,15 @@ async def startup():
 @app.on_event("shutdown")
 async def shutdown():
     """Cleanup on shutdown"""
-    if kernel:
-        await kernel.stop()
+    # Stop monitoring
+    from . import monitoring_endpoints
+
+    await monitoring_endpoints.stop_monitoring()
+
+    # Cleanup application state
+    if hasattr(app.state, "app_state"):
+        await app.state.app_state.cleanup()
+
     logger.info("✅ Minder API stopped")
 
 
@@ -414,6 +483,32 @@ async def _validate_plugin_health(kernel: MinderKernel):
 
     except Exception as e:
         logger.error(f"❌ Error validating plugin health: {e}")
+
+
+async def _update_system_metrics_loop():
+    """Background task to update system metrics every 5 seconds"""
+    from . import monitoring_endpoints
+
+    while True:
+        try:
+            if monitoring_endpoints.prometheus_exporter:
+                # Get system metrics
+                cpu_percent = psutil.cpu_percent(interval=0.1)
+                memory = psutil.virtual_memory()
+
+                # Update Prometheus metrics
+                monitoring_endpoints.prometheus_exporter.update_system_metrics(
+                    cpu_percent=cpu_percent,
+                    memory_percent=memory.percent,
+                    available_mb=memory.available / 1024 / 1024,
+                )
+
+            # Sleep for 5 seconds
+            await asyncio.sleep(5)
+
+        except Exception as e:
+            logger.error(f"Error updating system metrics: {e}")
+            await asyncio.sleep(10)  # Wait longer on error
 
 
 def _validate_secrets():
@@ -531,6 +626,7 @@ def _validate_secrets():
 
 def _setup_routes(kernel, character_engine):
     """Setup modular routes"""
+    from . import monitoring_endpoints
     from .auth_endpoints import routes as auth_routes
     from .characters import endpoints as characters_endpoints
     from .chat import endpoints as chat_endpoints
@@ -545,6 +641,9 @@ def _setup_routes(kernel, character_engine):
     app.include_router(characters_endpoints.setup_character_routes(characters_endpoints.router, character_engine))
     app.include_router(system_endpoints.router)
     app.include_router(correlations_endpoints.setup_correlation_routes(correlations_endpoints.router, kernel))
+
+    # Include monitoring routes
+    app.include_router(monitoring_endpoints.router)
 
 
 # Root endpoint
@@ -573,10 +672,10 @@ async def health_check():
     This endpoint is specifically for container orchestration health checks.
     For detailed system status, use /system/status
     """
-    if not kernel:
+    if not app.state.app_state or not app.state.app_state.kernel:
         raise HTTPException(status_code=503, detail="Kernel not initialized")
 
-    status = await kernel.get_system_status()
+    status = await app.state.app_state.kernel.get_system_status()
     return {
         "status": ("healthy" if status["status"] == "running" else "unhealthy"),
         "system": status,

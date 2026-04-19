@@ -2,14 +2,16 @@
 """
 Test plugin installation by manually loading plugins
 """
-import sys
+
 import asyncio
-from pathlib import Path
+import sys
+from pathlib import Path  # noqa: F401, E402
 
 sys.path.insert(0, "/root/minder")
 
-from core.config import MinderConfig
-from plugins.store import PluginStore
+from core.config import MinderConfig  # noqa: F401, E402
+from plugins.store import PluginStore  # noqa: E402
+
 
 async def test_plugin_store():
     """Test if plugin store can load existing plugins"""
@@ -39,6 +41,7 @@ async def test_plugin_store():
         print(f"    Author: {plugin['author']}")
 
     return plugins
+
 
 if __name__ == "__main__":
     plugins = asyncio.run(test_plugin_store())

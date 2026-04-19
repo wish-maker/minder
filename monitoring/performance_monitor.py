@@ -4,12 +4,12 @@ Tracks system performance, resource usage, and API metrics
 """
 
 import asyncio
-import psutil
-import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
-from collections import deque
 import logging
+from collections import deque
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -93,18 +93,22 @@ class PerformanceMonitor:
         """Collect CPU, memory, and I/O metrics"""
         # CPU metrics
         cpu_percent = psutil.cpu_percent(interval=0.1)
-        self.cpu_history.append({
-            "timestamp": datetime.now(),
-            "value": cpu_percent,
-        })
+        self.cpu_history.append(
+            {
+                "timestamp": datetime.now(),
+                "value": cpu_percent,
+            }
+        )
 
         # Memory metrics
         memory = psutil.virtual_memory()
-        self.memory_history.append({
-            "timestamp": datetime.now(),
-            "value": memory.percent,
-            "available_mb": memory.available / 1024 / 1024,
-        })
+        self.memory_history.append(
+            {
+                "timestamp": datetime.now(),
+                "value": memory.percent,
+                "available_mb": memory.available / 1024 / 1024,
+            }
+        )
 
     async def _check_thresholds(self):
         """Check if any metrics exceed thresholds"""
@@ -120,12 +124,14 @@ class PerformanceMonitor:
 
     def record_api_response(self, endpoint: str, response_time_ms: float, status_code: int):
         """Record API response time"""
-        self.api_response_times.append({
-            "timestamp": datetime.now(),
-            "endpoint": endpoint,
-            "response_time_ms": response_time_ms,
-            "status_code": status_code,
-        })
+        self.api_response_times.append(
+            {
+                "timestamp": datetime.now(),
+                "endpoint": endpoint,
+                "response_time_ms": response_time_ms,
+                "status_code": status_code,
+            }
+        )
 
         # Alert on slow responses
         if response_time_ms > self.thresholds["response_time_ms"]:
@@ -133,11 +139,13 @@ class PerformanceMonitor:
 
     def record_query_time(self, query_type: str, duration_ms: float):
         """Record database query execution time"""
-        self.query_times.append({
-            "timestamp": datetime.now(),
-            "query_type": query_type,
-            "duration_ms": duration_ms,
-        })
+        self.query_times.append(
+            {
+                "timestamp": datetime.now(),
+                "query_type": query_type,
+                "duration_ms": duration_ms,
+            }
+        )
 
         # Alert on slow queries
         if duration_ms > self.thresholds["query_time_ms"]:
@@ -154,12 +162,14 @@ class PerformanceMonitor:
             }
 
         metrics = self.plugin_metrics[plugin_name]
-        metrics["operations"].append({
-            "timestamp": datetime.now(),
-            "operation": operation,
-            "duration_ms": duration_ms,
-            "success": success,
-        })
+        metrics["operations"].append(
+            {
+                "timestamp": datetime.now(),
+                "operation": operation,
+                "duration_ms": duration_ms,
+                "success": success,
+            }
+        )
         metrics["total_duration_ms"] += duration_ms
 
         if success:
@@ -211,7 +221,8 @@ class PerformanceMonitor:
             "max_response_time_ms": max(response_times),
             "p95_response_time_ms": self._percentile(response_times, 95),
             "p99_response_time_ms": self._percentile(response_times, 99),
-            "error_rate": sum(1 for m in self.api_response_times if m["status_code"] >= 400) / len(self.api_response_times),
+            "error_rate": sum(1 for m in self.api_response_times if m["status_code"] >= 400)
+            / len(self.api_response_times),
         }
 
     def get_plugin_metrics(self, plugin_name: Optional[str] = None) -> Dict[str, Any]:
@@ -221,10 +232,7 @@ class PerformanceMonitor:
                 return {"status": "plugin_not_found"}
             return self._format_plugin_metrics(plugin_name, self.plugin_metrics[plugin_name])
 
-        return {
-            name: self._format_plugin_metrics(name, metrics)
-            for name, metrics in self.plugin_metrics.items()
-        }
+        return {name: self._format_plugin_metrics(name, metrics) for name, metrics in self.plugin_metrics.items()}
 
     def _format_plugin_metrics(self, plugin_name: str, metrics: Dict) -> Dict[str, Any]:
         """Format plugin metrics for display"""

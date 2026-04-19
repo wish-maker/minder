@@ -7,23 +7,23 @@ Preserves plugin state across reloads.
 """
 
 import asyncio
-import hashlib
 import logging
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from fastapi import APIRouter, HTTPException
+
 try:
-    import watchdog.observers
     import watchdog.events
+    import watchdog.observers
 
     WATCHDOG_AVAILABLE = True
 except ImportError:
     WATCHDOG_AVAILABLE = False
     logging.warning("watchdog not installed - file watching disabled")
 
-from core.plugin_loader import PluginLoader
 from core.plugin_sandbox import SandboxedPluginLoader
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,7 @@ class PluginReloader:
 
                 # Step 3: Load new version
                 plugin_path = Path(f"/app/plugins/{plugin_name}")
-                sandbox = await self.loader.load_plugin(plugin_path, trusted=False)
+                await self.loader.load_plugin(plugin_path, trusted=False)
                 logger.info(f"✓ Loaded new version of {plugin_name}")
 
                 # Step 4: Restore state
@@ -241,8 +241,6 @@ class PluginChangeHandler:
 
 
 # HTTP API endpoints for hot reload
-from fastapi import APIRouter, HTTPException
-
 router = APIRouter(prefix="/plugins/reload", tags=["Plugin Reload"])
 
 _reloader: Optional[PluginReloader] = None

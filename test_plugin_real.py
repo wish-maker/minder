@@ -2,10 +2,12 @@
 """
 Test if weather plugin actually works
 """
+
 import sys
+
 sys.path.insert(0, "/root/minder")
 
-from pathlib import Path
+from pathlib import Path  # noqa: E402
 
 # Test 1: Import plugin
 print("=" * 60)
@@ -15,6 +17,7 @@ print("=" * 60)
 try:
     sys.path.insert(0, "/root/minder/plugins/weather")
     from weather_module import WeatherModule
+
     print("✓ Weather plugin imported successfully")
 except Exception as e:
     print(f"✗ Import failed: {e}")
@@ -53,6 +56,7 @@ try:
 except Exception as e:
     print(f"✗ Registration failed: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
 
@@ -62,6 +66,7 @@ print("TEST 4: Health Check")
 print("=" * 60)
 
 try:
+
     async def test_health():
         health = await plugin.health_check()
         print(f"✓ Health check: {health['status']}")

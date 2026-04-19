@@ -4,8 +4,9 @@ Minder System Health Check
 Comprehensive system test to verify all components
 """
 
-import requests
 from typing import Dict
+
+import requests
 
 BASE_URL = "http://localhost:8000"
 

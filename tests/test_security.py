@@ -3,13 +3,13 @@ Unit Tests for Security System
 Tests input validation, sanitization, and security features
 """
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from api.security import InputSanitizer  # noqa: E402
 from api.middleware import NetworkDetectionMiddleware  # noqa: E402
+from api.security import InputSanitizer  # noqa: E402
 
 
 class TestInputSanitization:

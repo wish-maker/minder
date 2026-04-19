@@ -50,6 +50,15 @@ borsapy==0.8.7  # Turkish financial markets data library (yfinance-like API for 
 # - beautifulsoup4: news plugin only
 # - sentence-transformers: moved to optional/requirements-ml.txt
 
+# System Monitoring
+psutil==5.9.6  # For NetworkModule system monitoring
+prometheus-client==0.20.0  # For Prometheus metrics export
+
+# File Monitoring (for hot reload)
+watchdog>=3.0.0  # For file system monitoring and hot reload
+
 # Testing
 pytest-mock>=3.12.0
 pytest-asyncio>=0.21.0
+pytest-cov>=4.0.0
+asyncpg==0.29.0

@@ -99,7 +99,8 @@ services:
     image: minder-api:latest
     container_name: minder-api
     restart: unless-stopped
-    network_mode: host  # Use host network to access Tailscale VPN
+    networks:
+      - default  # Use bridge network for inter-container communication
     env_file:
       - .env  # Load environment variables from .env file
     environment:
@@ -113,7 +114,7 @@ services:
       - INFLUXDB_PORT=8086
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - REDIS_HOST=localhost
+      - REDIS_HOST=redis
       - REDIS_PORT=6379
       - OLLAMA_HOST=ollama
       - OLLAMA_PORT=11434
@@ -141,14 +142,20 @@ services:
       - ./logs:/var/log/minder
       - ./data:/var/lib/minder
       - ./config.yaml:/app/config.yaml
+      - ./config:/app/config  # Mount config directory for plugin configs
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - influxdb
-      - qdrant
-      - redis
-      - ollama
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -213,3 +220,7 @@ volumes:
   grafana_data:
   prometheus_data:
   alertmanager_data:
+
+networks:
+  default:
+    driver: bridge

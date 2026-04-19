@@ -17,6 +17,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import asyncpg
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -34,14 +35,14 @@ class RiskMetricsCollector:
     4. Track collection statistics
     """
 
-    def __init__(self, db_config: Dict[str, Any]):
+    def __init__(self, pool: asyncpg.Pool):
         """
         Initialize risk metrics collector
 
         Args:
-            db_config: Database connection config
+            pool: asyncpg connection pool
         """
-        self.db_config = db_config
+        self.pool = pool
         self.logger = logger
 
         # Collection statistics
@@ -54,7 +55,7 @@ class RiskMetricsCollector:
             "end_time": None,
         }
 
-    def collect(
+    async def collect(
         self,
         api,
         fund_codes: Optional[List[str]] = None,
@@ -90,7 +91,7 @@ class RiskMetricsCollector:
         for fund_code in fund_codes:
             for period in periods:
                 try:
-                    self._collect_fund_period(api, fund_code, period)
+                    await self._collect_fund_period(api, fund_code, period)
                     self.stats["funds_processed"] += 1
 
                 except Exception as e:

@@ -6,7 +6,6 @@ Single source of truth for all Minder configuration.
 Uses Pydantic for validation and type safety.
 """
 
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -135,7 +134,11 @@ class SecurityConfig(BaseModel):
     trust_vpn_network: bool = True
 
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://192.168.68.*", "http://100.*.*.*"]
+    allowed_origins: List[str] = [
+        "http://localhost:3000",
+        "http://192.168.68.*",
+        "http://100.*.*.*",
+    ]
 
     @field_validator("jwt_secret_key")
     def validate_jwt_secret(cls, v):

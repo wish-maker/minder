@@ -2,12 +2,11 @@
 """
 Test sandbox subprocess isolation
 """
-import sys
-import asyncio
+
 import multiprocessing as mp
-import signal
 import resource
-from pathlib import Path
+import signal
+import sys
 
 sys.path.insert(0, "/root/minder")
 

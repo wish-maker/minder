@@ -8,8 +8,10 @@ Production-grade monitoring, metrics, and health checks
 import asyncio
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException
 
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
@@ -277,9 +279,6 @@ class PluginDiagnostics:
 
 
 # HTTP API endpoints
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-
 router = APIRouter(prefix="/plugins/observability", tags=["Plugin Observability"])
 
 _metrics: Optional[PluginMetrics] = None
@@ -288,7 +287,9 @@ _performance_tracker: Optional[PluginPerformanceTracker] = None
 
 
 def set_observability_components(
-    metrics: PluginMetrics, health_monitor: PluginHealthMonitor, performance_tracker: PluginPerformanceTracker
+    metrics: PluginMetrics,
+    health_monitor: PluginHealthMonitor,
+    performance_tracker: PluginPerformanceTracker,
 ):
     """Set global observability components"""
     global _metrics, _health_monitor, _performance_tracker
@@ -374,7 +375,7 @@ async def example_observability():
     start_time = time.time()
 
     try:
-        result = await loader.execute_plugin_method(plugin_name, "collect_data")
+        await loader.execute_plugin_method(plugin_name, "collect_data")
 
         duration = time.time() - start_time
 
@@ -391,7 +392,7 @@ async def example_observability():
 
 
 if __name__ == "__main__":
-    import sys
     import socket
+    import sys
 
     asyncio.run(example_observability())

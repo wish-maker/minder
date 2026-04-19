@@ -3,27 +3,26 @@ Plugin Sandboxing and Permission Enforcement Tests
 Tests security features for untrusted 3rd party plugins
 """
 
-import pytest
-import tempfile
-from pathlib import Path
 from unittest.mock import Mock, patch
 
-from core.plugin_sandbox import (
-    SubprocessSandbox,
-    ThreadSandbox,
-    SandboxedPluginLoader,
-    SandboxTimeout,
-    SandboxMemoryLimit,
-)
+import pytest
+
+from core.plugin_manifest import PluginManifest, PluginPermissions
 from core.plugin_permissions import (
-    PermissionEnforcer,
-    NetworkPermissionChecker,
-    FilesystemPermissionChecker,
     DatabasePermissionChecker,
+    FilesystemPermissionChecker,
+    NetworkPermissionChecker,
     PermissionDenied,
+    PermissionEnforcer,
     SandboxedPlugin,
 )
-from core.plugin_manifest import PluginManifest, PluginPermissions
+from core.plugin_sandbox import (  # noqa: F401
+    SandboxedPluginLoader,
+    SandboxMemoryLimit,
+    SandboxTimeout,
+    SubprocessSandbox,
+    ThreadSandbox,
+)
 
 
 class TestNetworkPermissionChecker:
@@ -40,9 +39,9 @@ class TestNetworkPermissionChecker:
                 network={
                     "allowed_hosts": ["api.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         checker = NetworkPermissionChecker(manifest)
@@ -59,9 +58,9 @@ class TestNetworkPermissionChecker:
                 network={
                     "allowed_hosts": ["api.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         checker = NetworkPermissionChecker(manifest)
@@ -82,9 +81,9 @@ class TestNetworkPermissionChecker:
                 network={
                     "allowed_hosts": ["*.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         checker = NetworkPermissionChecker(manifest)
@@ -107,10 +106,10 @@ class TestNetworkPermissionChecker:
             permissions=PluginPermissions(
                 network={
                     "allowed_hosts": ["*"],
-                    "allowed_ports": [443],  # Only HTTPS
-                    "max_requests_per_minute": 60
-                }
-            )
+                    "allowed_ports": [443],
+                    "max_requests_per_minute": 60,
+                }  # Only HTTPS
+            ),
         )
 
         checker = NetworkPermissionChecker(manifest)
@@ -135,9 +134,9 @@ class TestNetworkPermissionChecker:
                 network={
                     "allowed_hosts": ["*"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 2  # Very low limit
-                }
-            )
+                    "max_requests_per_minute": 2,
+                }  # Very low limit
+            ),
         )
 
         checker = NetworkPermissionChecker(manifest)
@@ -163,13 +162,7 @@ class TestFilesystemPermissionChecker:
             version="1.0.0",
             description="Test plugin for unit testing",
             author="Test Author",
-            permissions=PluginPermissions(
-                filesystem={
-                    "read": ["/tmp/safe/*"],
-                    "write": [],
-                    "execute": []
-                }
-            )
+            permissions=PluginPermissions(filesystem={"read": ["/tmp/safe/*"], "write": [], "execute": []}),
         )
 
         checker = FilesystemPermissionChecker(manifest)
@@ -182,13 +175,7 @@ class TestFilesystemPermissionChecker:
             version="1.0.0",
             description="Test plugin for unit testing",
             author="Test Author",
-            permissions=PluginPermissions(
-                filesystem={
-                    "read": ["/tmp/safe/*"],
-                    "write": [],
-                    "execute": []
-                }
-            )
+            permissions=PluginPermissions(filesystem={"read": ["/tmp/safe/*"], "write": [], "execute": []}),
         )
 
         checker = FilesystemPermissionChecker(manifest)
@@ -205,13 +192,7 @@ class TestFilesystemPermissionChecker:
             version="1.0.0",
             description="Test plugin for unit testing",
             author="Test Author",
-            permissions=PluginPermissions(
-                filesystem={
-                    "read": [],
-                    "write": ["/tmp/safe/output/*"],
-                    "execute": []
-                }
-            )
+            permissions=PluginPermissions(filesystem={"read": [], "write": ["/tmp/safe/output/*"], "execute": []}),
         )
 
         checker = FilesystemPermissionChecker(manifest)
@@ -226,13 +207,7 @@ class TestFilesystemPermissionChecker:
             version="1.0.0",
             description="Test plugin for unit testing",
             author="Test Author",
-            permissions=PluginPermissions(
-                filesystem={
-                    "read": [],
-                    "write": [],
-                    "execute": []  # No execution allowed
-                }
-            )
+            permissions=PluginPermissions(filesystem={"read": [], "write": [], "execute": []}),  # No execution allowed
         )
 
         checker = FilesystemPermissionChecker(manifest)
@@ -254,12 +229,8 @@ class TestDatabasePermissionChecker:
             description="Test plugin for unit testing",
             author="Test Author",
             permissions=PluginPermissions(
-                database={
-                    "databases": ["mydb"],
-                    "tables": ["users"],
-                    "operations": ["SELECT"]
-                }
-            )
+                database={"databases": ["mydb"], "tables": ["users"], "operations": ["SELECT"]}
+            ),
         )
 
         checker = DatabasePermissionChecker(manifest)
@@ -274,11 +245,11 @@ class TestDatabasePermissionChecker:
             author="Test Author",
             permissions=PluginPermissions(
                 database={
-                    "databases": ["mydb"],  # Only mydb allowed
+                    "databases": ["mydb"],
                     "tables": [],
-                    "operations": []
-                }
-            )
+                    "operations": [],
+                }  # Only mydb allowed
+            ),
         )
 
         checker = DatabasePermissionChecker(manifest)
@@ -298,10 +269,10 @@ class TestDatabasePermissionChecker:
             permissions=PluginPermissions(
                 database={
                     "databases": [],
-                    "tables": ["users"],  # Only users table
-                    "operations": []
-                }
-            )
+                    "tables": ["users"],
+                    "operations": [],
+                }  # Only users table
+            ),
         )
 
         checker = DatabasePermissionChecker(manifest)
@@ -319,12 +290,8 @@ class TestDatabasePermissionChecker:
             description="Test plugin for unit testing",
             author="Test Author",
             permissions=PluginPermissions(
-                database={
-                    "databases": [],
-                    "tables": [],
-                    "operations": ["SELECT"]  # Read-only
-                }
-            )
+                database={"databases": [], "tables": [], "operations": ["SELECT"]}  # Read-only
+            ),
         )
 
         checker = DatabasePermissionChecker(manifest)
@@ -349,9 +316,9 @@ class TestPermissionEnforcer:
                 network={
                     "allowed_hosts": ["api.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         enforcer = PermissionEnforcer(manifest)
@@ -375,9 +342,9 @@ class TestPermissionEnforcer:
                 network={
                     "allowed_hosts": ["api.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         enforcer = PermissionEnforcer(manifest)
@@ -401,9 +368,9 @@ class TestSandboxedPlugin:
                 network={
                     "allowed_hosts": ["api.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         plugin_instance = Mock()
@@ -425,9 +392,9 @@ class TestSandboxedPlugin:
                 network={
                     "allowed_hosts": ["api.example.com"],
                     "allowed_ports": [443],
-                    "max_requests_per_minute": 60
+                    "max_requests_per_minute": 60,
                 }
-            )
+            ),
         )
 
         plugin_instance = Mock()
@@ -443,13 +410,14 @@ class TestSandboxedPluginLoader:
 
     def test_choose_subprocess_for_untrusted(self, tmp_path):
         """Test untrusted plugins use subprocess sandbox"""
-        from core.plugin_manifest import validate_plugin_for_installation
+        from core.plugin_manifest import validate_plugin_for_installation  # noqa: F401
 
         # Create test plugin
         plugin_dir = tmp_path / "untrusted_plugin"
         plugin_dir.mkdir()
 
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: untrusted_plugin
 version: 1.0.0
 description: Untrusted test plugin
@@ -467,9 +435,11 @@ permissions:
   resources:
     max_memory_mb: 256
 capabilities: []
-        """)
+        """
+        )
 
-        (plugin_dir / "untrusted_plugin_plugin.py").write_text("""
+        (plugin_dir / "untrusted_plugin_plugin.py").write_text(
+            """
 from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 class UntrustedPlugin(BaseModule):
@@ -480,7 +450,8 @@ class UntrustedPlugin(BaseModule):
             description="Test",
             author="External",
         )
-        """)
+        """
+        )
 
         loader = SandboxedPluginLoader()
 

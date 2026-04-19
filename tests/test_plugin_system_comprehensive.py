@@ -3,19 +3,19 @@ Comprehensive Plugin System Tests
 Tests manifest validation, security validation, installation, and loading
 """
 
-import pytest
 import tempfile
-import shutil
+from datetime import datetime  # noqa: F401
 from pathlib import Path
-from datetime import datetime
 
+import pytest
+
+from core.module_interface_v2 import BaseModule, ModuleMetadata  # noqa: F401
+from core.plugin_loader import PluginLoader
 from core.plugin_manifest import (
-    PluginManifest,
     ManifestValidator,
+    PluginManifest,
     validate_plugin_for_installation,
 )
-from core.module_interface_v2 import BaseModule, ModuleMetadata
-from core.plugin_loader import PluginLoader
 
 
 class TestPluginManifest:
@@ -102,9 +102,7 @@ class TestManifestValidator:
 
     def test_validate_plugin_directory_missing(self):
         """Test validation of non-existent directory"""
-        is_valid, errors = ManifestValidator.validate_plugin_directory(
-            Path("/nonexistent/path")
-        )
+        is_valid, errors = ManifestValidator.validate_plugin_directory(Path("/nonexistent/path"))
         assert not is_valid
         assert len(errors) > 0
 
@@ -125,21 +123,25 @@ class TestManifestValidator:
         plugin_dir.mkdir()
 
         # Create manifest
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: test_plugin
 version: 1.0.0
 description: Test plugin
 author: Test Author
-        """)
+        """
+        )
 
         # Create plugin file
-        (plugin_dir / "test_plugin_plugin.py").write_text("""
+        (plugin_dir / "test_plugin_plugin.py").write_text(
+            """
 from core.module_interface_v2 import BaseModule
 
 class TestPlugin(BaseModule):
     async def register(self):
         pass
-        """)
+        """
+        )
 
         # Create README
         (plugin_dir / "README.md").write_text("# Test Plugin")
@@ -158,7 +160,8 @@ class TestPluginInstallationValidation:
         plugin_dir = tmp_path / "valid_plugin"
         plugin_dir.mkdir()
 
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: valid_plugin
 version: 1.0.0
 description: A valid test plugin
@@ -185,9 +188,11 @@ permissions:
     max_cpu_percent: 30
     max_execution_time: 120
 capabilities: []
-        """)
+        """
+        )
 
-        (plugin_dir / "valid_plugin_plugin.py").write_text("""
+        (plugin_dir / "valid_plugin_plugin.py").write_text(
+            """
 from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 class ValidPlugin(BaseModule):
@@ -198,7 +203,8 @@ class ValidPlugin(BaseModule):
             description="Test plugin",
             author="Test Author",
         )
-        """)
+        """
+        )
 
         (plugin_dir / "README.md").write_text("# Valid Plugin")
 
@@ -215,12 +221,14 @@ class ValidPlugin(BaseModule):
         plugin_dir.mkdir()
 
         # Only create manifest, no plugin file
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: incomplete_plugin
 version: 1.0.0
 description: Incomplete plugin
 author: Test
-        """)
+        """
+        )
 
         is_valid, manifest, errors = validate_plugin_for_installation(plugin_dir)
 
@@ -234,10 +242,7 @@ class TestPluginLoader:
     @pytest.mark.asyncio
     async def test_load_plugin_not_found(self):
         """Test loading non-existent plugin"""
-        config = {
-            "plugins_path": "/tmp",
-            "plugins": {}
-        }
+        config = {"plugins_path": "/tmp", "plugins": {}}
 
         loader = PluginLoader(config)
         plugin = await loader.load_plugin("nonexistent_plugin")
@@ -246,10 +251,7 @@ class TestPluginLoader:
 
     def test_loader_initialization(self):
         """Test loader can be initialized"""
-        config = {
-            "plugins_path": "/tmp",
-            "plugins": {}
-        }
+        config = {"plugins_path": "/tmp", "plugins": {}}
 
         loader = PluginLoader(config)
         assert loader is not None
@@ -265,7 +267,8 @@ class TestPluginSecurity:
         plugin_dir = tmp_path / "limited_plugin"
         plugin_dir.mkdir()
 
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: limited_plugin
 version: 1.0.0
 description: Plugin with resource limits
@@ -276,7 +279,8 @@ permissions:
     max_cpu_percent: 25
     max_execution_time: 60
     max_disk_space_mb: 512
-        """)
+        """
+        )
 
         manifest = ManifestValidator.load_manifest(plugin_dir)
         assert manifest is not None
@@ -288,7 +292,8 @@ permissions:
         plugin_dir = tmp_path / "network_plugin"
         plugin_dir.mkdir()
 
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: network_plugin
 version: 1.0.0
 description: Plugin with network access
@@ -298,7 +303,8 @@ permissions:
     allowed_hosts: ["api.example.com"]
     allowed_ports: [443]
     max_requests_per_minute: 60
-        """)
+        """
+        )
 
         manifest = ManifestValidator.load_manifest(plugin_dir)
         assert manifest is not None
@@ -316,7 +322,8 @@ class TestThirdPartyPluginSupport:
         plugin_dir.mkdir()
 
         # Third-party plugin must follow manifest schema
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: third_party_plugin
 version: 1.0.0
 description: Third-party plugin
@@ -347,9 +354,11 @@ permissions:
 capabilities:
   - data_collection
   - analysis
-        """)
+        """
+        )
 
-        (plugin_dir / "third_party_plugin_plugin.py").write_text("""
+        (plugin_dir / "third_party_plugin_plugin.py").write_text(
+            """
 from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 class ThirdPartyPlugin(BaseModule):
@@ -362,13 +371,16 @@ class ThirdPartyPlugin(BaseModule):
             dependencies=["requests>=2.31.0"],
             capabilities=["data_collection", "analysis"],
         )
-        """)
+        """
+        )
 
-        (plugin_dir / "README.md").write_text("""
+        (plugin_dir / "README.md").write_text(
+            """
 # Third-Party Plugin
 
 External plugin demonstrating 3rd party support.
-        """)
+        """
+        )
 
         is_valid, manifest, errors = validate_plugin_for_installation(plugin_dir)
 
@@ -383,11 +395,13 @@ External plugin demonstrating 3rd party support.
         plugin_dir.mkdir()
 
         # Missing required fields
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: bad_plugin
 version: 1.0.0
 description: Missing required metadata
-        """)
+        """
+        )
 
         is_valid, manifest, errors = validate_plugin_for_installation(plugin_dir)
 
@@ -403,7 +417,8 @@ class TestPluginSandboxing:
         plugin_dir = tmp_path / "sandboxed_plugin"
         plugin_dir.mkdir()
 
-        (plugin_dir / "plugin.yml").write_text("""
+        (plugin_dir / "plugin.yml").write_text(
+            """
 name: sandboxed_plugin
 version: 1.0.0
 description: Sandboxed plugin
@@ -424,7 +439,8 @@ permissions:
     max_memory_mb: 256
     max_cpu_percent: 30
     max_execution_time: 120
-        """)
+        """
+        )
 
         manifest = ManifestValidator.load_manifest(plugin_dir)
         assert manifest is not None

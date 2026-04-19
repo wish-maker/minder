@@ -3,12 +3,12 @@ Minder Module Template
 Kopyalayıp yeni modül oluşturun
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+from core.event_bus import Event, EventType
 from core.module_interface import BaseModule, ModuleMetadata, ModuleStatus
-from core.event_bus import EventType, Event
 
 
 class ModuleTemplate(BaseModule):

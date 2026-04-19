@@ -9,11 +9,10 @@ Each plugin runs in a separate process with limited resources.
 import asyncio
 import logging
 import multiprocessing as mp
-import signal
 import resource
-import sys
-import time
+import signal
 from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -100,7 +99,7 @@ class SubprocessSandbox(PluginSandbox):
         # Get resource limits from manifest
         limits = self.manifest.permissions.resources
         max_memory_mb = limits.max_memory_mb
-        max_cpu_percent = limits.max_cpu_percent
+        _ = limits.max_cpu_percent  # Reserved for future use
         max_execution_time = limits.max_execution_time
 
         # Create process with resource limits
@@ -186,7 +185,14 @@ class SubprocessSandbox(PluginSandbox):
             from core.plugin_loader import PluginLoader
 
             loader = PluginLoader({"plugins_path": Path("/app/plugins")})
-            plugin = loader.load_plugin(plugin_name)
+
+            # Run async load_plugin in subprocess context
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                plugin = loop.run_until_complete(loader.load_plugin(plugin_name))
+            finally:
+                loop.close()
 
             if plugin is None:
                 result_queue.put({"error": f"Plugin not found: {plugin_name}"})

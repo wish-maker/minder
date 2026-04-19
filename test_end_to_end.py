@@ -5,10 +5,10 @@ Tests all components with real data (no mock data)
 """
 
 import asyncio
-import aiohttp
-import json
 import time
-from datetime import datetime
+
+import aiohttp
+
 
 async def test_end_to_end():
     """Complete end-to-end test of Minder system"""
@@ -43,7 +43,7 @@ async def test_end_to_end():
     print("\n2. PLUGIN DATA COLLECTION (REAL DATA TEST)")
     print("-" * 70)
 
-    plugins_to_test = ['weather', 'network', 'news']
+    plugins_to_test = ["weather", "network", "news"]
     real_data_results = {}
 
     for plugin in plugins_to_test:
@@ -54,21 +54,21 @@ async def test_end_to_end():
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     f"{base_url}/plugins/{plugin}/collect_data",
-                    timeout=aiohttp.ClientTimeout(total=60)
+                    timeout=aiohttp.ClientTimeout(total=60),
                 ) as resp:
                     if resp.status == 200:
                         result = await resp.json()
 
                         # Check if real data was collected
-                        if result.get('records_collected', 0) > 0:
+                        if result.get("records_collected", 0) > 0:
                             print(f"  ✓ Real data collected: {result['records_collected']} records")
                             real_data_results[plugin] = True
                         else:
-                            print(f"  ⚠ No data collected - might be API rate limiting")
+                            print("  ⚠ No data collected - might be API rate limiting")
                             real_data_results[plugin] = False
 
                         # Show sample data
-                        if 'sample_data' in result:
+                        if "sample_data" in result:
                             print(f"  Sample: {result['sample_data']}")
                     else:
                         print(f"  ✗ Collection failed: HTTP {resp.status}")
@@ -90,12 +90,12 @@ async def test_end_to_end():
             async with session.get(f"{base_url}/system/status") as resp:
                 status = await resp.json()
 
-        databases = status.get('databases', {})
+        databases = status.get("databases", {})
         print(f"✓ Database pairs: {databases.get('total_pairs', 0)}")
         print(f"✓ Total correlations: {databases.get('total_correlations', 0)}")
 
         # Check if databases are actually storing data
-        if databases.get('total_correlations', 0) > 0:
+        if databases.get("total_correlations", 0) > 0:
             print("✓ Real database writes confirmed")
         else:
             print("⚠ No correlations yet - run plugin analysis first")
@@ -144,8 +144,7 @@ async def test_end_to_end():
         # Test with auth (for protected endpoints)
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{base_url}/auth/login",
-                json={"username": "admin", "password": "wrong_password"}
+                f"{base_url}/auth/login", json={"username": "admin", "password": "wrong_password"}
             ) as resp:
                 if resp.status == 401:
                     print("✓ Authentication working (invalid credentials rejected)")
@@ -157,23 +156,22 @@ async def test_end_to_end():
     print("\n6. PLUGIN ANALYSIS TEST (REAL PROCESSING)")
     print("-" * 70)
 
-    for plugin in ['weather', 'network']:
+    for plugin in ["weather", "network"]:
         try:
             print(f"\n🔍 Analyzing {plugin} data...")
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{base_url}/plugins/{plugin}/analyze",
-                    timeout=aiohttp.ClientTimeout(total=30)
+                    f"{base_url}/plugins/{plugin}/analyze", timeout=aiohttp.ClientTimeout(total=30)
                 ) as resp:
                     if resp.status == 200:
                         result = await resp.json()
 
-                        if result.get('metrics'):
-                            print(f"  ✓ Analysis completed")
+                        if result.get("metrics"):
+                            print("  ✓ Analysis completed")
                             print(f"  Metrics: {list(result.get('metrics', {}).keys())}")
                         else:
-                            print(f"  ⚠ No metrics - collect data first")
+                            print("  ⚠ No metrics - collect data first")
                     else:
                         print(f"  ✗ Analysis failed: HTTP {resp.status}")
 
@@ -189,10 +187,10 @@ async def test_end_to_end():
     total_plugins = len(real_data_results)
 
     print(f"Real Data Collection: {real_data_count}/{total_plugins} plugins")
-    print(f"System Health: ✓ PASS")
-    print(f"Database Operations: ✓ PASS")
-    print(f"API Performance: ✓ PASS")
-    print(f"Authentication: ✓ PASS")
+    print("System Health: ✓ PASS")
+    print("Database Operations: ✓ PASS")
+    print("API Performance: ✓ PASS")
+    print("Authentication: ✓ PASS")
 
     if real_data_count == total_plugins:
         print("\n✅ ALL TESTS PASSED - REAL DATA CONFIRMED")
@@ -205,6 +203,7 @@ async def test_end_to_end():
         print("\n❌ TESTS FAILED - NO REAL DATA COLLECTED")
         print("   Check plugin configurations and API access")
         return False
+
 
 if __name__ == "__main__":
     success = asyncio.run(test_end_to_end())

@@ -7,10 +7,9 @@ Ensures plugins can only access declared resources.
 """
 
 import logging
-import os
 import re
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import List
 from urllib.parse import urlparse
 
 import requests
@@ -206,7 +205,7 @@ class FilesystemPermissionChecker:
             if pattern not in self._resolved_paths:
                 try:
                     self._resolved_paths[pattern] = Path(pattern).resolve()
-                except:
+                except Exception:
                     continue
 
             allowed_path = self._resolved_paths[pattern]
@@ -396,7 +395,11 @@ def example_permission_enforcement():
         "description": "Example",
         "author": "Test",
         "permissions": {
-            "network": {"allowed_hosts": ["api.example.com"], "allowed_ports": [443], "max_requests_per_minute": 60},
+            "network": {
+                "allowed_hosts": ["api.example.com"],
+                "allowed_ports": [443],
+                "max_requests_per_minute": 60,
+            },
             "filesystem": {"read": ["/tmp/safe/*"], "write": ["/tmp/safe/output/*"], "execute": []},
             "database": {"databases": ["mydb"], "tables": ["users"], "operations": ["SELECT"]},
         },

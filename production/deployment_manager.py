@@ -5,14 +5,13 @@ Handles deployment, scaling, and monitoring for production
 """
 
 import asyncio
-import aiohttp
 import logging
 import subprocess
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-import json
+from typing import Any, Dict
+
+import aiohttp
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -48,33 +47,23 @@ class ProductionDeploymentManager:
         config_path = Path("config/deployment.yaml")
 
         if config_path.exists():
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 return yaml.safe_load(f)
 
         # Default deployment configuration
         return {
             "environment": "production",
-            "replicas": {
-                "api": 2,
-                "worker": 3,
-                "monitoring": 1
-            },
+            "replicas": {"api": 2, "worker": 3, "monitoring": 1},
             "resources": {
-                "api": {
-                    "memory": "2Gi",
-                    "cpu": "1000m"
-                },
-                "worker": {
-                    "memory": "1Gi",
-                    "cpu": "500m"
-                }
+                "api": {"memory": "2Gi", "cpu": "1000m"},
+                "worker": {"memory": "1Gi", "cpu": "500m"},
             },
             "auto_scaling": {
                 "enabled": True,
                 "min_replicas": 2,
                 "max_replicas": 10,
-                "target_cpu_percent": 70
-            }
+                "target_cpu_percent": 70,
+            },
         }
 
     async def deploy(self, version: str, strategy: str = "rolling") -> Dict[str, Any]:
@@ -118,7 +107,7 @@ class ProductionDeploymentManager:
                 "timestamp": deployment_start.isoformat(),
                 "duration_seconds": deployment_time,
                 "status": "success",
-                "result": result
+                "result": result,
             }
 
             self.deployment_history.append(deployment_record)
@@ -138,7 +127,7 @@ class ProductionDeploymentManager:
                 "version": version,
                 "status": "failed",
                 "error": str(e),
-                "timestamp": deployment_start.isoformat()
+                "timestamp": deployment_start.isoformat(),
             }
 
     async def _pre_deployment_checks(self) -> None:
@@ -184,11 +173,7 @@ class ProductionDeploymentManager:
 
             logger.info(f"✓ Replica {i+1} deployed successfully")
 
-        return {
-            "strategy": "rolling",
-            "replicas_deployed": replicas,
-            "downtime_seconds": 0
-        }
+        return {"strategy": "rolling", "replicas_deployed": replicas, "downtime_seconds": 0}
 
     async def _blue_green_deploy(self, version: str) -> Dict[str, Any]:
         """Execute blue-green deployment"""
@@ -212,11 +197,7 @@ class ProductionDeploymentManager:
         # Keep blue for rollback
         logger.info("Keeping blue environment for potential rollback")
 
-        return {
-            "strategy": "blue-green",
-            "rollback_available": True,
-            "downtime_seconds": 0
-        }
+        return {"strategy": "blue-green", "rollback_available": True, "downtime_seconds": 0}
 
     async def _canary_deploy(self, version: str) -> Dict[str, Any]:
         """Execute canary deployment"""
@@ -251,11 +232,7 @@ class ProductionDeploymentManager:
         # Full rollout
         await self._full_rollout(version)
 
-        return {
-            "strategy": "canary",
-            "final_percentage": 100,
-            "downtime_seconds": 0
-        }
+        return {"strategy": "canary", "final_percentage": 100, "downtime_seconds": 0}
 
     async def rollback(self) -> Dict[str, Any]:
         """Rollback to previous version"""
@@ -289,15 +266,12 @@ class ProductionDeploymentManager:
             return {
                 "rollback_to": previous_deployment["version"],
                 "duration_seconds": rollback_time,
-                "status": "success"
+                "status": "success",
             }
 
         except Exception as e:
             logger.error(f"Rollback failed: {e}")
-            return {
-                "status": "failed",
-                "error": str(e)
-            }
+            return {"status": "failed", "error": str(e)}
 
     async def check_health(self) -> Dict[str, Any]:
         """Check system health"""
@@ -309,20 +283,16 @@ class ProductionDeploymentManager:
                         return {
                             "healthy": True,
                             "status": data.get("status", "healthy"),
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": datetime.now().isoformat(),
                         }
                     else:
                         return {
                             "healthy": False,
                             "status_code": response.status,
-                            "timestamp": datetime.now().isoformat()
+                            "timestamp": datetime.now().isoformat(),
                         }
         except Exception as e:
-            return {
-                "healthy": False,
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+            return {"healthy": False, "error": str(e), "timestamp": datetime.now().isoformat()}
 
     async def get_metrics(self) -> Dict[str, Any]:
         """Get deployment metrics"""
@@ -333,27 +303,22 @@ class ProductionDeploymentManager:
             "current_deployment": self.current_deployment,
             "deployment_history": self.deployment_history[-10:],  # Last 10 deployments
             "uptime": self._get_uptime(),
-            "performance": await self._get_performance_metrics()
+            "performance": await self._get_performance_metrics(),
         }
 
     def _check_disk_space(self) -> Dict[str, Any]:
         """Check available disk space"""
         try:
-            result = subprocess.run(
-                ["df", "/"],
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            result = subprocess.run(["d", "/"], capture_output=True, text=True, check=True)
 
-            lines = result.stdout.strip().split('\n')
+            lines = result.stdout.strip().split("\n")
             if len(lines) >= 2:
                 parts = lines[1].split()
                 return {
                     "total_gb": float(parts[1]) / 1024 / 1024,
                     "used_gb": float(parts[2]) / 1024 / 1024,
                     "available_gb": float(parts[3]) / 1024 / 1024,
-                    "percent": int(parts[4].replace('%', ''))
+                    "percent": int(parts[4].replace("%", "")),
                 }
         except Exception as e:
             logger.error(f"Error checking disk space: {e}")
@@ -363,16 +328,11 @@ class ProductionDeploymentManager:
     def _get_uptime(self) -> float:
         """Get system uptime in seconds"""
         try:
-            result = subprocess.run(
-                ["cat", "/proc/uptime"],
-                capture_output=True,
-                text=True,
-                check=True
-            )
+            result = subprocess.run(["cat", "/proc/uptime"], capture_output=True, text=True, check=True)
 
             uptime_seconds = float(result.stdout.split()[0])
             return uptime_seconds
-        except:
+        except Exception:
             return 0.0
 
     async def _start_monitoring(self):
@@ -485,10 +445,7 @@ class ProductionDeploymentManager:
 
     async def _get_deployment_metrics(self) -> Dict[str, Any]:
         """Get deployment metrics"""
-        return {
-            "error_rate": 0.0,
-            "response_time_ms": 200
-        }
+        return {"error_rate": 0.0, "response_time_ms": 200}
 
     async def _full_rollout(self, version: str):
         """Full rollout"""
@@ -503,5 +460,5 @@ class ProductionDeploymentManager:
         return {
             "cpu_usage_percent": 25.0,
             "memory_usage_percent": 45.0,
-            "avg_response_time_ms": 150
+            "avg_response_time_ms": 150,
         }

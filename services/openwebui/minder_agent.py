@@ -3,12 +3,12 @@ Complete OpenWebUI Agent Integration
 Connects Minder with OpenWebUI for function calling and character-based interactions
 """
 
-from typing import Dict, List, Any
 import logging
 from datetime import datetime
+from typing import Any, Dict, List
 
-from core.kernel import MinderKernel
 from core.character_system import CharacterEngine
+from core.kernel import MinderKernel
 from services.voice.voice_service import VoiceService
 
 logger = logging.getLogger(__name__)

@@ -102,7 +102,12 @@ class PluginManifest(BaseModel):
 
     # Lifecycle hooks
     hooks: Dict[str, List[str]] = Field(
-        default_factory=lambda: {"pre_install": [], "post_install": [], "pre_uninstall": [], "post_uninstall": []}
+        default_factory=lambda: {
+            "pre_install": [],
+            "post_install": [],
+            "pre_uninstall": [],
+            "post_uninstall": [],
+        }
     )
 
     # Testing

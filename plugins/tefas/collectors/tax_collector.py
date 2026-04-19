@@ -15,8 +15,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import asyncpg
 
 logger = logging.getLogger("minder.tefas.collectors.tax")
 
@@ -32,14 +31,14 @@ class TaxCollector:
     4. Track collection statistics
     """
 
-    def __init__(self, db_config: Dict[str, Any]):
+    def __init__(self, pool: asyncpg.Pool):
         """
         Initialize tax collector
 
         Args:
-            db_config: Database connection config
+            pool: asyncpg connection pool
         """
-        self.db_config = db_config
+        self.pool = pool
         self.logger = logger
 
         # Collection statistics
@@ -52,7 +51,7 @@ class TaxCollector:
             "end_time": None,
         }
 
-    def collect(
+    async def collect(
         self,
         api,
         fund_codes: Optional[List[str]] = None,
@@ -87,7 +86,7 @@ class TaxCollector:
         # Collect for each fund
         for fund_code in fund_codes:
             try:
-                self._collect_fund_tax_rate(api, fund_code, effective_date)
+                await self._collect_fund_tax_rate(api, fund_code, effective_date)
                 self.stats["funds_processed"] += 1
 
             except Exception as e:
@@ -111,7 +110,7 @@ class TaxCollector:
             "errors": self.stats["errors"],
         }
 
-    def _collect_fund_tax_rate(self, api, fund_code: str, effective_date: str) -> bool:
+    async def _collect_fund_tax_rate(self, api, fund_code: str, effective_date: str) -> bool:
         """
         Collect tax rate for a single fund
 
@@ -161,7 +160,7 @@ class TaxCollector:
 
         return True
 
-    def _store_tax_rate(self, fund_code: str, tax_category: str, effective_date: str, rate: float) -> bool:
+    async def _store_tax_rate(self, fund_code: str, tax_category: str, effective_date: str, rate: float) -> bool:
         """
         Store tax rate to database
 
@@ -175,52 +174,47 @@ class TaxCollector:
             True if successful, False otherwise
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
-
-            # Check if exists
-            cursor.execute(
-                """
-                SELECT id FROM tefas_tax_rates
-                WHERE fund_code = %s AND effective_date = %s
-                """,
-                (fund_code, effective_date),
-            )
-
-            existing = cursor.fetchone()
-
-            if existing:
-                # Update
-                cursor.execute(
+            async with self.pool.acquire() as conn:
+                # Check if exists
+                existing = await conn.fetchrow(
                     """
-                    UPDATE tefas_tax_rates
-                    SET tax_category = %s, rate = %s, updated_at = %s
-                    WHERE id = %s
+                    SELECT id FROM tefas_tax_rates
+                    WHERE fund_code = $1 AND effective_date = $2
                     """,
-                    (tax_category, rate, datetime.now(), existing[0]),
+                    fund_code,
+                    effective_date,
                 )
-                self.stats["records_updated"] += 1
-            else:
-                # Insert
-                cursor.execute(
-                    """
-                    INSERT INTO tefas_tax_rates (
-                        fund_code, tax_category, effective_date, rate, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (
+
+                if existing:
+                    # Update
+                    await conn.execute(
+                        """
+                        UPDATE tefas_tax_rates
+                        SET tax_category = $1, rate = $2, updated_at = $3
+                        WHERE id = $4
+                        """,
+                        tax_category,
+                        rate,
+                        datetime.now(),
+                        existing["id"],
+                    )
+                    self.stats["records_updated"] += 1
+                else:
+                    # Insert
+                    await conn.execute(
+                        """
+                        INSERT INTO tefas_tax_rates (
+                            fund_code, tax_category, effective_date, rate, created_at, updated_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6)
+                        """,
                         fund_code,
                         tax_category,
                         effective_date,
                         rate,
                         datetime.now(),
                         datetime.now(),
-                    ),
-                )
-                self.stats["records_collected"] += 1
-
-            conn.commit()
-            conn.close()
+                    )
+                    self.stats["records_collected"] += 1
 
             return True
 
@@ -228,7 +222,7 @@ class TaxCollector:
             self.logger.error(f"Database error storing tax rate for {fund_code}: {e}")
             return False
 
-    def get_tax_summary(self, effective_date: Optional[str] = None) -> Dict[str, Any]:
+    async def get_tax_summary(self, effective_date: Optional[str] = None) -> Dict[str, Any]:
         """
         Get tax summary by category
 
@@ -239,51 +233,48 @@ class TaxCollector:
             Dict with tax summary
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            async with self.pool.acquire() as conn:
+                if effective_date:
+                    results = await conn.fetch(
+                        """
+                        SELECT
+                            tax_category,
+                            AVG(rate) as avg_rate,
+                            MIN(rate) as min_rate,
+                            MAX(rate) as max_rate,
+                            COUNT(*) as fund_count
+                        FROM tefas_tax_rates
+                        WHERE effective_date <= $1
+                        GROUP BY tax_category
+                        ORDER BY tax_category
+                        """,
+                        effective_date,
+                    )
+                else:
+                    results = await conn.fetch(
+                        """
+                        SELECT
+                            tax_category,
+                            AVG(rate) as avg_rate,
+                            MIN(rate) as min_rate,
+                            MAX(rate) as max_rate,
+                            COUNT(*) as fund_count
+                        FROM tefas_tax_rates
+                        GROUP BY tax_category
+                        ORDER BY tax_category
+                        """
+                    )
 
-            if effective_date:
-                cursor.execute(
-                    """
-                    SELECT
-                        tax_category,
-                        AVG(rate) as avg_rate,
-                        MIN(rate) as min_rate,
-                        MAX(rate) as max_rate,
-                        COUNT(*) as fund_count
-                    FROM tefas_tax_rates
-                    WHERE effective_date <= %s
-                    GROUP BY tax_category
-                    ORDER BY tax_category
-                    """,
-                    (effective_date,),
-                )
-            else:
-                cursor.execute("""
-                    SELECT
-                        tax_category,
-                        AVG(rate) as avg_rate,
-                        MIN(rate) as min_rate,
-                        MAX(rate) as max_rate,
-                        COUNT(*) as fund_count
-                    FROM tefas_tax_rates
-                    GROUP BY tax_category
-                    ORDER BY tax_category
-                    """)
-
-            results = cursor.fetchall()
-            conn.close()
-
-            return {
-                "summary": [dict(row) for row in results],
-                "categories": len(results),
-            }
+                return {
+                    "summary": [dict(row) for row in results],
+                    "categories": len(results),
+                }
 
         except Exception as e:
             self.logger.error(f"Error fetching tax summary: {e}")
             return {}
 
-    def get_fund_tax_rate(self, fund_code: str, date: str) -> Optional[float]:
+    async def get_fund_tax_rate(self, fund_code: str, date: str) -> Optional[float]:
         """
         Get tax rate for a specific fund on a specific date
 
@@ -295,30 +286,26 @@ class TaxCollector:
             Tax rate or None
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                result = await conn.fetchrow(
+                    """
+                    SELECT rate
+                    FROM tefas_tax_rates
+                    WHERE fund_code = $1 AND effective_date <= $2
+                    ORDER BY effective_date DESC
+                    LIMIT 1
+                    """,
+                    fund_code,
+                    date,
+                )
 
-            cursor.execute(
-                """
-                SELECT rate
-                FROM tefas_tax_rates
-                WHERE fund_code = %s AND effective_date <= %s
-                ORDER BY effective_date DESC
-                LIMIT 1
-                """,
-                (fund_code, date),
-            )
-
-            result = cursor.fetchone()
-            conn.close()
-
-            return result[0] if result else None
+                return result["rate"] if result else None
 
         except Exception as e:
             self.logger.error(f"Error fetching tax rate for {fund_code}: {e}")
             return None
 
-    def get_tax_categories(self) -> List[str]:
+    async def get_tax_categories(self) -> List[str]:
         """
         Get all unique tax categories
 
@@ -326,19 +313,16 @@ class TaxCollector:
             List of tax categories
         """
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                results = await conn.fetch(
+                    """
+                    SELECT DISTINCT tax_category
+                    FROM tefas_tax_rates
+                    ORDER BY tax_category
+                    """
+                )
 
-            cursor.execute("""
-                SELECT DISTINCT tax_category
-                FROM tefas_tax_rates
-                ORDER BY tax_category
-                """)
-
-            results = cursor.fetchall()
-            conn.close()
-
-            return [row[0] for row in results if row[0]]
+                return [row["tax_category"] for row in results if row["tax_category"]]
 
         except Exception as e:
             self.logger.error(f"Error fetching tax categories: {e}")

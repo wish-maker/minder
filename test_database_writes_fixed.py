@@ -3,12 +3,12 @@
 Test plugin database write functionality
 Verify each plugin can write to its database correctly
 """
-import sys
+
 import asyncio
-import os
 import json
-from datetime import datetime, timedelta
-from pathlib import Path
+import os
+import sys
+from datetime import datetime, timedelta  # noqa: F401
 
 sys.path.insert(0, "/root/minder")
 
@@ -19,18 +19,19 @@ async def test_database_writes():
     print("DATABASE WRITE VERIFICATION TEST")
     print("=" * 60)
 
-    from core.kernel import MinderKernel
     import asyncpg
+    import redis
     from influxdb_client import InfluxDBClient
     from qdrant_client import QdrantClient
-    import redis
+
+    from core.kernel import MinderKernel
 
     # Test results
     results = {
         "postgres": {"status": "pending", "details": []},
         "influxdb": {"status": "pending", "details": []},
         "qdrant": {"status": "pending", "details": []},
-        "redis": {"status": "pending", "details": []}
+        "redis": {"status": "pending", "details": []},
     }
 
     # Create kernel
@@ -68,35 +69,34 @@ async def test_database_writes():
             port=5432,
             database="fundmind",
             user="postgres",
-            password=os.getenv("POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword"))
+            password=os.getenv("POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")),
         )
 
         # Create test table
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS test_news_write (
                 id SERIAL PRIMARY KEY,
                 title VARCHAR(255),
                 content TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )
-        """)
+        """
+        )
 
         # Insert test data
         test_title = f"Test News {datetime.now().isoformat()}"
         await conn.execute(
             "INSERT INTO test_news_write (title, content) VALUES ($1, $2)",
             test_title,
-            "Test content for database write verification"
+            "Test content for database write verification",
         )
 
         # Verify write
-        row = await conn.fetchrow(
-            "SELECT * FROM test_news_write WHERE title = $1",
-            test_title
-        )
+        row = await conn.fetchrow("SELECT * FROM test_news_write WHERE title = $1", test_title)
 
         if row:
-            print(f"✓ PostgreSQL write SUCCESS")
+            print("✓ PostgreSQL write SUCCESS")
             print(f"  - Inserted: {test_title}")
             print(f"  - Retrieved: {row['title']}")
             results["postgres"] = {"status": "success", "details": ["Write verified"]}
@@ -120,8 +120,11 @@ async def test_database_writes():
     try:
         influx_client = InfluxDBClient(
             url="http://localhost:8086",  # FIXED
-            token=os.getenv("INFLUXDB_TOKEN", "dV-Uwy0ZflsFl7tNKlI6XxQ_jx4HqjiSzDwM7kV_ghmBe7GKIJLwMOiKtQOvalhDbOnS969sjGwe_-Y7cPlNdg=="),
-            org="minder"
+            token=os.getenv(
+                "INFLUXDB_TOKEN",
+                "dV-Uwy0ZflsFl7tNKlI6XxQ_jx4HqjiSzDwM7kV_ghmBe7GKIJLwMOiKtQOvalhDbOnS969sjGwe_-Y7cPlNdg==",
+            ),
+            org="minder",
         )
 
         write_api = influx_client.write_api()
@@ -129,11 +132,13 @@ async def test_database_writes():
         # Write test data point
         from influxdb_client import Point
 
-        point = Point("test_weather_write") \
-            .tag("location", "test") \
-            .field("temperature", 25.5) \
-            .field("humidity", 60.0) \
+        point = (
+            Point("test_weather_write")
+            .tag("location", "test")
+            .field("temperature", 25.5)
+            .field("humidity", 60.0)
             .time(datetime.utcnow())
+        )
 
         write_api.write(bucket="weather_data", record=point)
 
@@ -142,19 +147,19 @@ async def test_database_writes():
 
         # Query to verify
         query_api = influx_client.query_api()
-        query = f'''
+        query = """
         from(bucket: "weather_data")
           |> range(start: -1m)
           |> filter(fn: (r) => r._measurement == "test_weather_write")
           |> limit(n: 1)
-        '''
+        """
 
         result = query_api.query(query)
 
         if result and len(result) > 0:
             records = list(result[0].records)
             if len(records) > 0:
-                print(f"✓ InfluxDB write SUCCESS")
+                print("✓ InfluxDB write SUCCESS")
                 print(f"  - Records written: {len(records)}")
                 results["influxdb"] = {"status": "success", "details": [f"{len(records)} records"]}
             else:
@@ -181,7 +186,7 @@ async def test_database_writes():
         # Create test collection
         collection_name = "test_network_write"
 
-        from qdrant_client.models import Distance, VectorParams, PointStruct
+        from qdrant_client.models import Distance, PointStruct, VectorParams
 
         # Check if collection exists, delete if it does
         collections = qdrant_client.get_collections().collections
@@ -192,34 +197,33 @@ async def test_database_writes():
 
         qdrant_client.create_collection(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=128, distance=Distance.COSINE)
+            vectors_config=VectorParams(size=128, distance=Distance.COSINE),
         )
 
         # Insert test vector
         import random
+
         test_vector = [random.random() for _ in range(128)]
 
         qdrant_client.upsert(
             collection_name=collection_name,
-            points=[PointStruct(
-                id=1,
-                vector=test_vector,
-                payload={"test": "database_write", "timestamp": datetime.now().isoformat()}
-            )]
+            points=[
+                PointStruct(
+                    id=1,
+                    vector=test_vector,
+                    payload={"test": "database_write", "timestamp": datetime.now().isoformat()},
+                )
+            ],
         )
 
         # Verify write - using the correct Qdrant API
-        from qdrant_client.models import Filter, SearchRequest
+        from qdrant_client.models import Filter, SearchRequest  # noqa: F401
 
-        search_result = qdrant_client.query_points(
-            collection_name=collection_name,
-            query=test_vector,
-            limit=1
-        )
+        search_result = qdrant_client.query_points(collection_name=collection_name, query=test_vector, limit=1)
 
         # Check if we got any results from the QueryResponse object
         if search_result and len(search_result.points) > 0:
-            print(f"✓ Qdrant write SUCCESS")
+            print("✓ Qdrant write SUCCESS")
             print(f"  - Vector ID: {search_result.points[0].id}")
             print(f"  - Payload: {search_result.points[0].payload}")
             results["qdrant"] = {"status": "success", "details": ["Vector written"]}
@@ -240,11 +244,7 @@ async def test_database_writes():
     print("=" * 60)
 
     try:
-        redis_client = redis.Redis(
-            host="localhost",  # FIXED
-            port=6379,
-            decode_responses=True
-        )
+        redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)  # FIXED
 
         # Write test data
         test_key = f"test_write_{datetime.now().timestamp()}"
@@ -256,7 +256,7 @@ async def test_database_writes():
         retrieved = redis_client.get(test_key)
 
         if retrieved:
-            print(f"✓ Redis write SUCCESS")
+            print("✓ Redis write SUCCESS")
             print(f"  - Key: {test_key}")
             print(f"  - Value: {retrieved}")
             results["redis"] = {"status": "success", "details": ["Value written"]}

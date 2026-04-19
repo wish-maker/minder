@@ -7,9 +7,9 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
-import psycopg2
+import asyncpg
 
-from core.module_interface import BaseModule, ModuleMetadata
+from core.module_interface_v2 import BaseModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,9 @@ class WeatherModule(BaseModule):
             "user": config.get("database", {}).get("user", "postgres"),
             "password": config.get("database", {}).get("password", ""),
         }
+
+        # Connection pool (initialized in register())
+        self.pool: asyncpg.Pool = None
 
         # Open-Meteo API configuration (no API key required - completely free)
         self.api_base = "https://api.open-meteo.com/v1/forecast"
@@ -54,6 +57,24 @@ class WeatherModule(BaseModule):
         )
 
         logger.info("🌤️  Registering Weather Module")
+
+        # Initialize connection pool
+        try:
+            self.pool = await asyncpg.create_pool(
+                host=self.db_config["host"],
+                port=self.db_config["port"],
+                database=self.db_config["database"],
+                user=self.db_config["user"],
+                password=self.db_config["password"],
+                min_size=2,
+                max_size=10,
+                command_timeout=60,
+            )
+            logger.info("✅ Weather module database pool initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize database pool: {e}")
+            raise
+
         return self.metadata
 
     async def collect_data(self, since: Optional[datetime] = None) -> Dict[str, int]:
@@ -68,30 +89,25 @@ class WeatherModule(BaseModule):
         errors = 0
 
         try:
-            # Connect to PostgreSQL
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            # Use connection pool
+            async with self.pool.acquire() as conn:
+                # Collect data for each location
+                for location in self.locations:
+                    try:
+                        weather_data = await self._fetch_weather_data(location)
 
-            # Collect data for each location
-            for location in self.locations:
-                try:
-                    weather_data = await self._fetch_weather_data(location)
+                        if weather_data:
+                            # Store to database
+                            await self._store_weather_data(conn, weather_data)
+                            records_collected += 1
+                            logger.info(f"✓ Collected weather data for {location}")
+                        else:
+                            errors += 1
+                            logger.warning(f"✗ Failed to collect weather data for {location}")
 
-                    if weather_data:
-                        # Store to database
-                        await self._store_weather_data(cursor, weather_data)
-                        records_collected += 1
-                        logger.info(f"✓ Collected weather data for {location}")
-                    else:
+                    except Exception as e:
                         errors += 1
-                        logger.warning(f"✗ Failed to collect weather data for {location}")
-
-                except Exception as e:
-                    errors += 1
-                    logger.error(f"Error collecting data for {location}: {e}")
-
-            conn.commit()
-            conn.close()
+                        logger.error(f"Error collecting data for {location}: {e}")
 
         except Exception as e:
             logger.error(f"Database connection error: {e}")
@@ -195,71 +211,66 @@ class WeatherModule(BaseModule):
             "timestamp": datetime.now(),
         }
 
-    async def _store_weather_data(self, cursor, weather_data: Dict[str, Any]):
-        """Store weather data to PostgreSQL"""
-        cursor.execute(
+    async def _store_weather_data(self, conn, weather_data: Dict[str, Any]):
+        """Store weather data to PostgreSQL using asyncpg"""
+        await conn.execute(
             """
             INSERT INTO weather_data (
                 location, temperature_c, humidity_pct, pressure_hpa,
                 wind_speed_kmh, weather_description, timestamp
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7)
         """,
-            (
-                weather_data["location"],
-                weather_data["temperature_c"],
-                weather_data["humidity_pct"],
-                weather_data["pressure_hpa"],
-                weather_data["wind_speed_kmh"],
-                weather_data["weather_description"],
-                weather_data["timestamp"],
-            ),
+            weather_data["location"],
+            weather_data["temperature_c"],
+            weather_data["humidity_pct"],
+            weather_data["pressure_hpa"],
+            weather_data["wind_speed_kmh"],
+            weather_data["weather_description"],
+            weather_data["timestamp"],
         )
 
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected weather data"""
         try:
-            conn = psycopg2.connect(**self.db_config)
-            cursor = conn.cursor()
+            async with self.pool.acquire() as conn:
+                # Calculate average metrics
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        AVG(temperature_c) as avg_temp,
+                        AVG(humidity_pct) as avg_humidity,
+                        AVG(pressure_hpa) as avg_pressure,
+                        AVG(wind_speed_kmh) as avg_wind
+                    FROM weather_data
+                    WHERE timestamp >= NOW() - INTERVAL '7 days'
+                """
+                )
 
-            # Calculate average metrics
-            cursor.execute("""
-                SELECT
-                    AVG(temperature_c) as avg_temp,
-                    AVG(humidity_pct) as avg_humidity,
-                    AVG(pressure_hpa) as avg_pressure,
-                    AVG(wind_speed_kmh) as avg_wind
-                FROM weather_data
-                WHERE timestamp >= NOW() - INTERVAL '7 days'
-            """)
-
-            result = cursor.fetchone()
-            conn.close()
-
-            if result and result[0]:
-                return {
-                    "metrics": {
-                        "avg_temp_c": round(float(result[0]), 1),
-                        "avg_humidity_pct": round(float(result[1]), 1),
-                        "avg_pressure_hpa": round(float(result[2]), 1),
-                        "avg_wind_speed_kmh": round(float(result[3]), 1),
-                    },
-                    "patterns": [
-                        {
-                            "type": "seasonal",
-                            "description": "Temperature follows seasonal pattern",
-                        }
-                    ],
-                    "insights": [
-                        "Weather data collected successfully",
-                        f"Average temperature: {round(float(result[0]), 1)}°C",
-                    ],
-                }
-            else:
-                return {
-                    "metrics": {},
-                    "patterns": [],
-                    "insights": ["No data available for analysis"],
-                }
+                if row and row["avg_temp"]:
+                    return {
+                        "metrics": {
+                            "avg_temp_c": round(float(row["avg_temp"]), 1),
+                            "avg_humidity_pct": round(float(row["avg_humidity"]), 1),
+                            "avg_pressure_hpa": round(float(row["avg_pressure"]), 1),
+                            "avg_wind_speed_kmh": round(float(row["avg_wind"]), 1),
+                        },
+                        "patterns": [
+                            {
+                                "type": "seasonal",
+                                "description": "Temperature follows seasonal pattern",
+                            }
+                        ],
+                        "insights": [
+                            "Weather data collected successfully",
+                            f"Average temperature: {round(float(row['avg_temp']), 1)}°C",
+                        ],
+                    }
+                else:
+                    return {
+                        "metrics": {},
+                        "patterns": [],
+                        "insights": ["No data available for analysis"],
+                    }
 
         except Exception as e:
             logger.error(f"Error analyzing weather data: {e}")

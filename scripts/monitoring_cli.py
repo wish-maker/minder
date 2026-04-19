@@ -11,9 +11,10 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from monitoring.performance_monitor import PerformanceMonitor
-from monitoring.metrics_collector import MetricsCollector
-import json
+import json  # noqa: E402
+
+from monitoring.metrics_collector import MetricsCollector  # noqa: F401, E402
+from monitoring.performance_monitor import PerformanceMonitor  # noqa: E402
 
 
 async def show_system_metrics():
@@ -36,11 +37,11 @@ async def show_system_metrics():
     print("SYSTEM METRICS")
     print("=" * 60)
     print(f"Timestamp: {metrics['timestamp']}")
-    print(f"\nCPU Usage:")
+    print("\nCPU Usage:")
     print(f"  Current: {metrics['cpu']['current_percent']:.1f}%")
     print(f"  Average: {metrics['cpu']['average_percent']:.1f}%")
     print(f"  Status: {metrics['cpu']['status']}")
-    print(f"\nMemory Usage:")
+    print("\nMemory Usage:")
     print(f"  Current: {metrics['memory']['current_percent']:.1f}%")
     print(f"  Average: {metrics['memory']['average_percent']:.1f}%")
     print(f"  Available: {metrics['memory']['available_mb']:.0f} MB")
