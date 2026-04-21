@@ -1,290 +1,232 @@
 # Minder
 
-**Modular RAG Platform** - Cross-database correlation and AI-powered insights
+**Modular RAG Platform** - Cross-database correlation and AI-powered insights with plugin architecture
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-65%2F66%20passing-brightgreen.svg)](https://github.com/wish-maker/minder)
-[![GitHub](https://img.shields.io/badge/GitHub-wish--maker-blue.svg)](https://github.com/wish-maker/minder)
-[![Version](https://img.shields.io/badge/version-1.0.0--stable-green.svg)](https://github.com/wish-maker/minder)
-
-## 🎯 Overview
-
-Minder is a comprehensive, modular AI platform that enables cross-database correlation and AI-powered insights across diverse data sources. Each domain operates as an independent plugin that can collect data, analyze patterns, train AI models, index knowledge, and correlate with other plugins.
-
-## ✨ Features
-
-### Core Capabilities
-- **Hot-swappable plugins**: Add/remove plugins without kernel restart
-- **Cross-plugin correlation**: Discover relationships between different data sources
-- **Event-driven architecture**: Pub/sub messaging for real-time updates
-- **Knowledge graph**: Entity resolution and relationship inference
-- **Plugin Store**: Install plugins from GitHub repositories
-- **Voice interface**: Whisper STT + Coqui XTTS v2 TTS
-- **Character system**: Pre-built AI personalities (FinBot, SysBot, etc.)
-
-### Security
-- JWT authentication with bcrypt password hashing
-- Role-based access control (admin/user/readonly)
-- Network-aware rate limiting (Redis backend)
-- CORS & security headers
-- Input validation & sanitization
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   Minder Kernel                      │
-│  - Plugin Registry & Lifecycle                      │
-│  - Event Bus (Pub/Sub)                              │
-│  - Knowledge Graph                                  │
-│  - Correlation Engine                               │
-└─────────────────────────────────────────────────────┘
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-   ┌────▼────┐      ┌───▼────┐       ┌───▼────┐
-   │  TEFAS  │      │ Network │       │ Weather │
-   │ Plugin  │      │ Plugin  │       │ Plugin  │
-   └─────────┘      └─────────┘       └─────────┘
-```
-
-## 📦 Included Plugins
-
-| Plugin | Description | Data Sources |
-|--------|-------------|--------------|
-| **TEFAS** | Turkish fund analysis | TEFAS API, PostgreSQL |
-| **Network** | Performance monitoring | InfluxDB, NetFlow |
-| **Weather** | Weather data collection | Open-Meteo API |
-| **Crypto** | Cryptocurrency tracking | CoinGecko, Binance |
-| **News** | News aggregation | Reuters, Bloomberg, Anadolu |
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 ## 🚀 Quick Start
-
-### Prerequisites
-- Docker & Docker Compose
-- 8GB+ RAM recommended
-- NVIDIA GPU (optional, for Ollama)
-
-### Installation
 
 ```bash
 # Clone repository
 git clone https://github.com/wish-maker/minder.git
 cd minder
 
-# Start with Docker
-docker-compose up -d
+# Start infrastructure
+cd infrastructure/docker
+docker compose up -d
+
+# Create plugin databases
+for db in weather_db news_db crypto_db network_db tefas_db; do
+  docker exec postgres psql -U postgres -c "CREATE DATABASE $db;"
+done
+
+# Start core service
+cd ../..
+docker compose -f infrastructure/docker/docker-compose.yml up -d core-service
 
 # Check status
-curl http://localhost:8000/health
-
-# Open OpenWebUI
-open http://localhost:3000
+curl http://localhost:8001/health
 ```
 
-### Environment Variables
+## 📁 Project Structure
 
-```bash
-cp .env.example .env
-# Edit .env with your configuration
+```
+minder/
+├── README.md                    # This file
+├── pyproject.toml               # Python project config
+├── requirements.txt              # Python dependencies
+├── .gitignore                   # Git ignore rules
+├── src/                         # Source code
+│   ├── core/                   # Core framework
+│   │   ├── kernel.py           # Main orchestrator
+│   │   ├── registry.py         # Plugin registry
+│   │   ├── event_bus.py        # Event system
+│   │   ├── plugin_loader.py    # Plugin loading
+│   │   └── ...                 # Other core modules
+│   ├── plugins/                # Plugin implementations
+│   │   ├── weather/            # Weather data collection
+│   │   ├── news/               # News aggregation
+│   │   ├── crypto/             # Cryptocurrency tracking
+│   │   ├── network/            # System monitoring
+│   │   └── tefas/              # Turkish fund data
+│   ├── services/               # Microservices
+│   │   └── core-service/       # Core API service
+│   └── shared/                 # Shared utilities
+├── tests/                      # Test suite
+│   ├── unit/                   # Unit tests
+│   ├── integration/            # Integration tests
+│   └── fixtures/               # Test fixtures
+├── infrastructure/             # Infrastructure
+│   ├── docker/                 # Docker configurations
+│   │   └── docker-compose.yml
+│   ├── prometheus/             # Monitoring configs
+│   ├── grafana/                # Dashboards
+│   └── nginx/                   # Reverse proxy
+├── config/                     # Configuration files
+├── migrations/                 # Database migrations
+└── docs/                       # Documentation
 ```
 
-Required variables:
-- `POSTGRES_PASSWORD`: PostgreSQL database password
-- `JWT_SECRET_KEY`: Secret key for JWT tokens (min 32 chars)
-- `POSTGRES_HOST`: Database host (default: postgres)
-- `POSTGRES_PORT`: Database port (default: 5432)
+## 📊 Available Plugins
 
-**⚠️ Security**: Do NOT use default passwords in production!
+### 1. Weather Plugin
+- **Port:** 8010
+- **Database:** weather_db
+- **Capabilities:** Weather data collection, forecasting
+- **Status:** Ready (requires database setup)
 
-Generate secure passwords:
+### 2. News Plugin
+- **Port:** 8011
+- **Database:** news_db
+- **Capabilities:** News aggregation, sentiment analysis
+- **Status:** Ready (requires database setup)
+
+### 3. Crypto Plugin
+- **Port:** 8012
+- **Database:** crypto_db
+- **Capabilities:** Cryptocurrency price tracking
+- **Status:** Ready (requires database setup)
+
+### 4. Network Plugin
+- **Port:** 8013
+- **Database:** network_db
+- **Capabilities:** System monitoring, network analysis
+- **Status:** Ready (requires database setup)
+
+### 5. TEFAS Plugin
+- **Port:** 8014
+- **Database:** tefas_db
+- **Capabilities:** Turkish fund data collection
+- **Status:** Ready (requires database setup and dependencies)
+
+## 🔌 Core API Endpoints
+
+### Health Check
 ```bash
-openssl rand -hex 32  # For JWT_SECRET_KEY
-openssl rand -base64 24  # For database passwords
+curl http://localhost:8001/health
 ```
 
-## 📡 API Usage
-
-### Authentication
-
+### List Plugins
 ```bash
-# Login
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin123"}'
+curl http://localhost:8001/plugins
+```
+
+### System Status
+```bash
+curl http://localhost:8001/system/status
 ```
 
 ### Plugin Management
-
 ```bash
-# List plugins
-curl http://localhost:8000/plugins
+# Enable plugin
+curl -X POST http://localhost:8001/plugins/{plugin_name}/enable
+
+# Disable plugin
+curl -X POST http://localhost:8001/plugins/{plugin_name}/disable
 
 # Run pipeline
-curl -X POST http://localhost:8000/plugins/tefas/pipeline \
+curl -X POST http://localhost:8001/plugins/{plugin_name}/pipeline \
   -H "Content-Type: application/json" \
-  -d '{"pipeline": ["collect", "analyze", "train"]}'
-
-# Get correlations
-curl http://localhost:8000/correlations
+  -d '{"pipeline": ["collect", "analyze"]}'
 ```
-
-### Chat Interface
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message": "Hangi fonları önerirsin?",
-    "character": "finbot"
-  }'
-```
-
-## 🧩 Creating Plugins
-
-### Plugin Structure
-
-```bash
-mkdir my-plugin
-cd my-plugin
-cat > plugin.yml << EOF
-name: my-plugin
-version: 1.0.0
-description: My custom Minder plugin
-author: Your Name
-EOF
-```
-
-### Implementation
-
-```python
-# my_plugin.py
-from core.module_interface import BaseModule, ModuleMetadata
-
-class MyPlugin(BaseModule):
-    async def register(self) -> ModuleMetadata:
-        return ModuleMetadata(
-            name="my-plugin",
-            version="1.0.0",
-            description="My custom plugin",
-            author="Your Name"
-        )
-
-    async def collect_data(self, since=None):
-        # Your data collection logic
-        return {'records_collected': 100}
-```
-
-See [Plugin Development Guide](docs/development/module-development.md) for details.
-
-
-## ✅ System Status
-
-**Last Verified**: April 18, 2026
-
-### Production Readiness: v1.0.0 (Stable)
-- **Test Coverage**: 65/66 tests passing (98.5%)
-- **Active Plugins**: 5/5 healthy (all v1.0.0)
-- **Database Management**: Complete (setup, backup, restore, cleanup)
-- **Data Verification**: System operational
-- **Documentation**: Updated and accurate
-
-### Plugin Status
-| Plugin | Version | Status | Data Source |
-|--------|---------|--------|-------------|
-| **TEFAS** | 1.0.0 | ✅ Healthy | borsapy 0.8.4, tefas-crawler 0.5.0 |
-| **Network** | 1.0.0 | ✅ Healthy | System metrics (psutil) |
-| **Weather** | 1.0.0 | ✅ Healthy | Open-Meteo API (free) |
-| **Crypto** | 1.0.0 | ✅ Healthy | Binance, CoinGecko, Kraken |
-| **News** | 1.0.0 | ✅ Healthy | BBC, Guardian, NPR RSS |
-
-### Dependencies
-- **Python**: 3.13
-- **borsapy**: 0.8.4 (Turkish financial data)
-- **tefas-crawler**: 0.5.0 (Turkish fund data)
-- **ollama**: >=0.3.0 (LLM integration)
-- **httpx**: >=0.25.2,<0.28.0 (HTTP client)
-
-## 📊 Monitoring
-
-- **API Health**: http://localhost:8000/health
-- **OpenWebUI**: http://localhost:3000
-- **Grafana**: http://localhost:3002 (admin/minder123)
-- **Data Verification**: `./scripts/verify_system.py`
 
 ## 🧪 Testing
 
-### Current Test Status (April 18, 2026)
-✅ **65/66 tests passing (98.5% success rate)**
-- Authentication & Security: 15/15 passing
-- API Endpoints: 12/12 passing
-- Plugin Management: 15/15 passing
-- System Health: 5/5 passing
-- Data Verification: 18/18 passing
-
-### Running Tests
+### Run All Tests
 ```bash
-# Run all tests
-pytest tests/ -v
-
-# Run specific test
-pytest tests/test_auth.py -v
-
-# Check coverage
-pytest tests/ --cov=. --cov-report=html
-
-# Verify system health
-./scripts/verify_system.py
+pytest tests/
 ```
-## 📚 Documentation
 
-- [Architecture](docs/architecture.md)
-- [Plugin Development](docs/development/module-development.md)
-- [Module Management](docs/guides/module-management.md)
-- [API Reference](docs/api/)
+### Run Unit Tests
+```bash
+pytest tests/unit/
+```
 
-## 🗺️ Roadmap
+### Run Integration Tests
+```bash
+pytest tests/integration/
+```
 
-### Version 1.0.0 (Current - Stable)
-- ✅ Core plugin system working
-- ✅ Database management complete
-- ✅ Data verification system operational
-- ✅ Backup/restore procedures tested
-- ✅ Documentation updated
+### Run Tests with Coverage
+```bash
+pytest tests/ --cov=src --cov-report=html
+```
 
-### Version 1.1.0 (Planned)
-- [ ] Connection pooling for databases
-- [ ] Automated data collection scheduling
-- [ ] Performance optimization (async I/O)
-- [ ] Enhanced monitoring dashboards
+## 🔧 Development
 
-### Version 2.0.0 (Future)
-- [ ] Mobile app with voice interface
-- [ ] Telegram bot integration
-- [ ] Real-time alert system
-- [ ] Advanced anomaly detection (AutoML)
-- [ ] Multi-language support expansion
+### Start Development Server
+```bash
+# Using pip install
+pip install -e .
+
+# Start development server
+python -m uvicorn src.services.core-service.main:app --reload
+```
+
+### Code Quality
+```bash
+# Format code
+black src/ tests/
+
+# Lint code
+ruff check src/ tests/
+
+# Type checking
+mypy src/
+```
+
+## 🐳 Deployment
+
+### Start All Services
+```bash
+cd infrastructure/docker
+docker compose up -d
+```
+
+### View Logs
+```bash
+# Core service logs
+docker logs minder-core-service -f
+
+# All services logs
+docker compose logs -f
+```
+
+### Stop Services
+```bash
+docker compose down
+```
+
+## 📖 Documentation
+
+Full documentation is available in the `docs/` directory:
+- [Architecture Guide](docs/ARCHITECTURE.md)
+- [Plugin Development](docs/PLUGIN_DEVELOPMENT.md)
+- [Deployment Guide](docs/DEPLOYMENT.md)
+- [API Documentation](docs/API.md)
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
-
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Follow the [Code Style Guide](docs/CONTRIBUTING.md)
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
-## 📄 License
+## 📝 License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see LICENSE file for details
 
-## 📧 Contact
+## 🔗 Links
 
-- **Organization**: [wish-maker](https://github.com/wish-maker)
-- **Repository**: [minder](https://github.com/wish-maker/minder)
+- **Documentation:** [docs/](docs/)
+- **API Docs:** http://localhost:8001/docs
+- **Health Check:** http://localhost:8001/health
+- **System Status:** http://localhost:8001/system/status
 
 ---
 
-**Built with ❤️ for the AI community**
+**Status:** ✅ Production Ready | **Version:** 2.0.0 | **Last Updated:** 2026-04-21

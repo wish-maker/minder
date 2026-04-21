@@ -1,0 +1,74 @@
+# Minder Production Platform - External Services Configuration
+# This compose file overrides services to use external infrastructure
+# Usage: docker compose -f docker-compose.yml -f docker-compose.external.yml up
+
+version: '3.8'
+
+# Override services to use external infrastructure
+services:
+  api-gateway:
+    environment:
+      # Override with external service endpoints
+      - REDIS_HOST=${REDIS_HOST:-minder-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+
+  plugin-registry:
+    environment:
+      # PostgreSQL override
+      - POSTGRES_HOST=${POSTGRES_HOST:-minder-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-minder}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - POSTGRES_DB=${POSTGRES_DB:-minder}
+
+  rag-pipeline:
+    environment:
+      # Qdrant override
+      - QDRANT_HOST=${QDRANT_HOST:-minder-qdrant}
+      - QDRANT_PORT=${QDRANT_PORT:-6333}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+
+# Only include external services if configured
+# Uncomment services below to use external instead of local
+
+# External Redis (e.g., Redis Labs, AWS ElastiCache)
+# Comment out the redis service in docker-compose.yml when enabling this
+# external-redis:
+#   image: redis:7-alpine
+#   container_name: minder-external-redis
+#   command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+#   ports:
+#     - "6379:6379"
+#   profiles:
+#     - external
+
+# External PostgreSQL (e.g., AWS RDS, Heroku, Neon)
+# Comment out the postgres service in docker-compose.yml when enabling this
+# external-postgres:
+#   image: postgres:16
+#   container_name: minder-external-postgres
+#   environment:
+#     POSTGRES_HOST: ${POSTGRES_HOST}
+#     POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+#     POSTGRES_USER: ${POSTGRES_USER}
+#     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+#     POSTGRES_DB: ${POSTGRES_DB}
+#   ports:
+#     - "${POSTGRES_PORT:-5432}:5432"
+#   profiles:
+#     - external
+
+# External Qdrant (e.g., Qdrant Cloud)
+# Comment out the qdrant service in docker-compose.yml when enabling this
+# external-qdrant:
+#   image: qdrant/qdrant:v1.7.4
+#   container_name: minder-external-qdrant
+#   environment:
+#     QDRANT__SERVICE_HOST: ${QDRANT_HOST}
+#     QDRANT__GRPC_PORT: ${QDRANT_PORT:-6333}
+#     QDRANT__LOG_LEVEL: DEBUG
+#   ports:
+#     - "${QDRANT_PORT:-6333}:6333"
+#   profiles:
+#     - external

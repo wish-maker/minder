@@ -1,0 +1,3 @@
+"""
+Minder Source Package
+"""

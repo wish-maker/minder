@@ -1,0 +1,154 @@
+{
+  "format_version": "2.0",
+  "id": "test_plugin",
+  "name": "Test Plugin",
+  "version": "1.0.0",
+  "description": "Test plugin for unit tests",
+  "author": "Test Author <test@example.com>",
+  "categories": ["testing"],
+  "tags": ["test", "sample"],
+  "compatibility": {
+    "minder_core": ">=2.0.0"
+  },
+  "github": {
+    "repo": "https://github.com/minder-plugins/test.git",
+    "branch": "main",
+    "tag": "v1.0.0",
+    "auto_update": false,
+    "release_channel": "stable"
+  },
+  "dependencies": {
+    "plugins": [],
+    "services": {
+      "redis": {
+        "required": false,
+        "version": ">=7.0",
+        "namespace": "plugin:test:*",
+        "auto_create": true
+      }
+    },
+    "python_packages": []
+  },
+  "core_api": {
+    "type": "http",
+    "port": 8099,
+    "protocol": "http",
+    "endpoints": {
+      "health": {
+        "path": "/health",
+        "method": "GET",
+        "auth_required": false
+      },
+      "install": {
+        "path": "/core/install",
+        "method": "POST",
+        "auth_required": true
+      },
+      "uninstall": {
+        "path": "/core/uninstall",
+        "method": "POST",
+        "auth_required": true
+      },
+      "configure": {
+        "path": "/core/configure",
+        "method": "POST",
+        "auth_required": true
+      },
+      "status": {
+        "path": "/core/status",
+        "method": "GET",
+        "auth_required": true
+      }
+    }
+  },
+  "permissions": {
+    "apis": [],
+    "file_system": {
+      "read": ["/data/test"],
+      "write": ["/data/test/output"],
+      "deny": ["/etc", "/sys", "/proc"]
+    },
+    "network": {
+      "allow": ["api.example.com:443"],
+      "deny": ["*"]
+    }
+  },
+  "resources": {
+    "cpu": {
+      "limit": "0.5",
+      "reservation": "0.1"
+    },
+    "memory": {
+      "limit": "256MB",
+      "reservation": "64MB"
+    },
+    "storage": {
+      "database": "1GB",
+      "files": "500MB"
+    },
+    "threads": {
+      "max": 2,
+      "min": 1
+    }
+  },
+  "secrets": {
+    "required": [],
+    "optional": []
+  },
+  "configuration": {
+    "schema": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "test_mode": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "ui": {
+      "title": "Test Plugin Configuration",
+      "icon": "🧪",
+      "category": "Testing"
+    }
+  },
+  "sandbox": {
+    "enabled": true,
+    "type": "process",
+    "isolation": {
+      "namespace": "test_sandbox",
+      "network": "restricted",
+      "file_system": "chroot"
+    },
+    "limits": {
+      "max_execution_time": 60,
+      "max_memory": "256MB",
+      "max_files": 100
+    }
+  },
+  "monitoring": {
+    "metrics_path": "/metrics",
+    "health_path": "/health",
+    "log_path": "/var/log/minder/test.log"
+  },
+  "scripts": {
+    "install": "/scripts/install.sh",
+    "uninstall": "/scripts/uninstall.sh"
+  },
+  "testing": {
+    "unit_tests": "/tests/unit",
+    "integration_tests": "/tests/integration"
+  },
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "date": "2026-04-20",
+      "changes": [
+        "Initial release"
+      ]
+    }
+  ]
+}

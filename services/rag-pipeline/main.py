@@ -8,8 +8,14 @@ from pydantic import BaseModel
 from typing import Dict, List, Any
 from datetime import datetime
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+# Configuration from environment variables
+QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
+QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
+MODEL_MANAGEMENT_URL = os.getenv("MODEL_MANAGEMENT_URL", "http://minder-model-management:8005")
 
 # Initialize FastAPI
 app = FastAPI(
@@ -107,7 +113,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
     # Create Qdrant collection
     from qdrant_client import QdrantClient
 
-    client = QdrantClient(url="http://qdrant:6333")
+    client = QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
 
     try:
         client.create_collection(
@@ -167,7 +173,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     # Store in Qdrant
     from qdrant_client import QdrantClient
 
-    client = QdrantClient(url="http://qdrant:6333")
+    client = QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
 
     points = []
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
@@ -292,7 +298,7 @@ async def retrieve_relevant_documents(pipeline: Dict, question: str, top_k: int)
     """Retrieve relevant documents from knowledge bases"""
     from qdrant_client import QdrantClient
 
-    client = QdrantClient(url="http://qdrant:6333")
+    client = QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
 
     # Create embedding for question
     question_embedding = await create_embeddings([question])
