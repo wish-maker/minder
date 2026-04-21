@@ -1,0 +1,330 @@
+# Minder Production Platform - Microservices Architecture
+# Phase 1: Core Infrastructure + API Gateway + Plugin Registry
+
+services:
+  # ============================================================================
+  # Infrastructure Services
+  # ============================================================================
+
+  # PostgreSQL - Primary Database
+  postgres:
+    image: postgres:16
+    container_name: minder-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: minder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_DB: minder
+      POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - minder-network
+
+  # Redis - Caching, Rate Limiting, Sessions
+  redis:
+    image: redis:7-alpine
+    container_name: minder-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dev_password_change_me}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_password_change_me}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - minder-network
+
+  # Qdrant - Vector Database for RAG
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: minder-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # ============================================================================
+  # Core Microservices (Phase 1)
+  # ============================================================================
+
+  # API Gateway - Port 8000
+  # Entry point for all API requests
+  api-gateway:
+    build:
+      context: ../../
+      dockerfile: services/api-gateway/Dockerfile
+    image: minder/api-gateway:latest
+    container_name: minder-api-gateway
+    restart: unless-stopped
+    environment:
+      # Service Discovery (use container names)
+      - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
+      - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
+      - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
+
+      # Infrastructure
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+
+      # Security
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_me}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
+
+      # Rate Limiting
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
+      - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-100}
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # Plugin Registry - Port 8001
+  # Plugin discovery, lifecycle management, health monitoring
+  plugin-registry:
+    build:
+      context: ../../
+      dockerfile: services/plugin-registry/Dockerfile
+    image: minder/plugin-registry:latest
+    container_name: minder-plugin-registry
+    restart: unless-stopped
+    environment:
+      # Database
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=minder
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - POSTGRES_DB=minder
+
+      # Service Discovery
+      - SERVICE_REGISTRY_BACKEND=redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+
+      # Plugin Storage
+      - PLUGINS_PATH=/app/plugins
+      - PLUGINS_DATA_PATH=/app/plugins-data
+
+      # Health Monitoring
+      - HEALTH_CHECK_INTERVAL_SECONDS=30
+      - HEALTH_CHECK_TIMEOUT_SECONDS=10
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
+      - ../../src/plugins:/app/plugins:ro
+      - plugins_data:/app/plugins-data
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # ============================================================================
+  # RAG Services (Phase 2) - Defined but not built yet
+  # ============================================================================
+
+  # RAG Pipeline - Port 8004
+  # Knowledge base creation, document chunking, embedding generation
+  rag-pipeline:
+    build:
+      context: ../../services/rag-pipeline
+      dockerfile: Dockerfile
+    image: minder/rag-pipeline:latest
+    container_name: minder-rag-pipeline
+    restart: unless-stopped
+    environment:
+      # Vector Database
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+
+      # Model Management
+      - MODEL_MANAGEMENT_URL=http://model-management:8005
+
+      # Embedding Configuration
+      - EMBEDDING_PROVIDER=openai
+      - EMBEDDING_MODEL=text-embedding-ada-002
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # LLM Configuration
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama2
+      - OLLAMA_BASE_URL=http://ollama:11434
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    ports:
+      - "8004:8004"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+    profiles:
+      - phase2
+
+  # Model Management - Port 8005
+  # Model registry, fine-tuning, versioning
+  model-management:
+    build:
+      context: ../../services/model-management
+      dockerfile: Dockerfile
+    image: minder/model-management:latest
+    container_name: minder-model-management
+    restart: unless-stopped
+    environment:
+      # Database
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=minder
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - POSTGRES_DB=minder
+
+      # Storage
+      - MODELS_PATH=/app/models
+      - MODEL_CACHE_PATH=/app/model-cache
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
+      - models_data:/app/models
+      - models_cache:/app/model-cache
+    ports:
+      - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+    profiles:
+      - phase2
+
+  # ============================================================================
+  # Monitoring (Optional - Phase 3)
+  # ============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: minder-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - minder-network
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: minder-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - minder-network
+    profiles:
+      - monitoring
+
+# ============================================================================
+# Volumes
+# ============================================================================
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  plugins_data:
+    driver: local
+  models_data:
+    driver: local
+  models_cache:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ============================================================================
+# Networks
+# ============================================================================
+
+networks:
+  minder-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
