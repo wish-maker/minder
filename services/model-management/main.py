@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from typing import Dict, List, Any
 from datetime import datetime
 import logging
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +20,33 @@ app = FastAPI(
     version="2.0.0",
 )
 
+
+# ============================================================================
+# Prometheus Metrics
+# ============================================================================
+
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "endpoint"]
+)
+
+models_registered_total = Gauge(
+    "models_registered_total",
+    "Total number of registered models"
+)
+
+fine_tuning_jobs_total = Counter(
+    "fine_tuning_jobs_total",
+    "Total fine-tuning jobs",
+    ["status"]  # started, completed, failed
+)
 
 # Pydantic models
 class ModelInfo(BaseModel):
@@ -64,6 +93,36 @@ async def health_check():
         "version": "2.0.0",
         "models_registered": len(models),
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# Request tracking middleware
+@app.middleware("http")
+async def track_requests(request, call_next):
+    """Track HTTP requests for metrics"""
+    import time
+
+    start_time = time.time()
+    endpoint = request.url.path
+    method = request.method
+
+    response = await call_next(request)
+
+    # Update metrics
+    duration = time.time() - start_time
+    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+
+    # Update models count
+    if endpoint == "/health":
+        models_registered_total.set(len(models))
+
+    return response
 
 
 # List all models

@@ -1,0 +1,106 @@
+# Prometheus Configuration for Minder Platform
+# Monitors all microservices and infrastructure components
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'minder-platform'
+    environment: 'development'
+
+# Alertmanager configuration (optional - Phase 4)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# Rule files (optional - Phase 4)
+# rule_files:
+#   - 'alerts/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['minder-api-gateway:8000']
+        labels:
+          service: 'api-gateway'
+          tier: 'frontend'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Plugin Registry
+  - job_name: 'plugin-registry'
+    static_configs:
+      - targets: ['minder-plugin-registry:8001']
+        labels:
+          service: 'plugin-registry'
+          tier: 'core'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # RAG Pipeline
+  - job_name: 'rag-pipeline'
+    static_configs:
+      - targets: ['minder-rag-pipeline:8004']
+        labels:
+          service: 'rag-pipeline'
+          tier: 'ml'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Model Management
+  - job_name: 'model-management'
+    static_configs:
+      - targets: ['minder-model-management:8005']
+        labels:
+          service: 'model-management'
+          tier: 'ml'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['minder-postgres:5432']
+        labels:
+          service: 'postgres'
+          tier: 'infrastructure'
+    # Note: PostgreSQL metrics require postgres_exporter
+    # This is a placeholder for Phase 4
+
+  # Redis
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['minder-redis:6379']
+        labels:
+          service: 'redis'
+          tier: 'infrastructure'
+    # Note: Redis metrics require redis_exporter
+    # This is a placeholder for Phase 4
+
+  # Qdrant
+  - job_name: 'qdrant'
+    static_configs:
+      - targets: ['minder-qdrant:6333']
+        labels:
+          service: 'qdrant'
+          tier: 'infrastructure'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Node Exporter (system metrics) - Optional for Phase 4
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+  #       labels:
+  #         service: 'node-exporter'
+  #         tier: 'infrastructure'

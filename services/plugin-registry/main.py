@@ -14,6 +14,8 @@ from datetime import datetime
 from pathlib import Path
 import sys
 import json
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
 
 from config import settings
 
@@ -31,6 +33,34 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+)
+
+# ============================================================================
+# Prometheus Metrics
+# ============================================================================
+
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "endpoint"]
+)
+
+plugins_total = Gauge(
+    "plugins_total",
+    "Total number of plugins",
+    ["status"]  # registered, enabled, disabled, error
+)
+
+health_check_failures_total = Counter(
+    "health_check_failures_total",
+    "Total health check failures",
+    ["plugin"]
 )
 
 # ============================================================================
@@ -279,6 +309,36 @@ async def health_check():
         "plugins_loaded": len(plugins_db),
         "services_registered": len(services_db),
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ============================================================================
+# Request Tracking Middleware
+# ============================================================================
+
+
+@app.middleware("http")
+async def track_requests(request, call_next):
+    """Track HTTP requests for metrics"""
+    import time
+
+    start_time = time.time()
+    endpoint = request.url.path
+    method = request.method
+
+    response = await call_next(request)
+
+    # Update metrics
+    duration = time.time() - start_time
+    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+
+    return response
 
 
 # ============================================================================

@@ -9,6 +9,8 @@ from typing import Dict, List, Any
 from datetime import datetime
 import logging
 import os
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,33 @@ app = FastAPI(
     version="2.0.0",
 )
 
+
+# ============================================================================
+# Prometheus Metrics
+# ============================================================================
+
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "endpoint"]
+)
+
+knowledge_bases_total = Gauge(
+    "knowledge_bases_total",
+    "Total number of knowledge bases"
+)
+
+documents_processed_total = Counter(
+    "documents_processed_total",
+    "Total documents processed",
+    ["status"]  # success, error
+)
 
 # Pydantic models
 class KnowledgeBaseCreate(BaseModel):
@@ -88,6 +117,36 @@ async def health_check():
         "knowledge_bases": len(knowledge_bases),
         "rag_pipelines": len(rag_pipelines),
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# Request tracking middleware
+@app.middleware("http")
+async def track_requests(request, call_next):
+    """Track HTTP requests for metrics"""
+    import time
+
+    start_time = time.time()
+    endpoint = request.url.path
+    method = request.method
+
+    response = await call_next(request)
+
+    # Update metrics
+    duration = time.time() - start_time
+    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+
+    # Update knowledge bases count
+    if endpoint == "/health":
+        knowledge_bases_total.set(len(knowledge_bases))
+
+    return response
 
 
 # Create knowledge base

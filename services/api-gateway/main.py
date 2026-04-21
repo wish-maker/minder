@@ -15,6 +15,8 @@ from typing import Dict
 import logging
 import time
 import uuid
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi import Response
 
 from config import settings
 
@@ -29,6 +31,41 @@ app = FastAPI(
     version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+)
+
+# ============================================================================
+# Prometheus Metrics
+# ============================================================================
+
+# HTTP request metrics
+http_requests_total = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["method", "endpoint", "status"]
+)
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request latency",
+    ["method", "endpoint"]
+)
+
+http_requests_in_progress = Gauge(
+    "http_requests_in_progress",
+    "HTTP requests currently in progress",
+    ["method", "endpoint"]
+)
+
+# Service health metrics
+service_health_up = Gauge(
+    "service_health_up",
+    "Service health status (1=up, 0=down)",
+    ["service"]
+)
+
+active_plugins_gauge = Gauge(
+    "active_plugins_total",
+    "Number of active plugins"
 )
 
 # ============================================================================
@@ -77,11 +114,24 @@ async def request_id_middleware(request: Request, call_next):
     request.state.request_id = request_id
     request.state.start_time = time.time()
 
+    # Update metrics
+    endpoint = request.url.path
+    method = request.method
+    http_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
+
     response = await call_next(request)
+
+    # Calculate request duration
+    duration = time.time() - request.state.start_time
+
+    # Update metrics
+    http_requests_in_progress.labels(method=method, endpoint=endpoint).dec()
+    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
 
     # Add request ID to response headers
     response.headers["X-Request-ID"] = request_id
-    response.headers["X-Response-Time"] = f"{(time.time() - request.state.start_time)*1000:.2f}ms"
+    response.headers["X-Response-Time"] = f"{duration*1000:.2f}ms"
 
     return response
 
@@ -173,6 +223,14 @@ async def health_check():
 
     status_code = 200 if health_status["status"] == "healthy" else 503
     return JSONResponse(status_code=status_code, content=health_status)
+
+
+@app.get("/metrics")
+async def metrics():
+    """
+    Prometheus metrics endpoint
+    """
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 # ============================================================================
