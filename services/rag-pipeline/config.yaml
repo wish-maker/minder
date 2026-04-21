@@ -1,0 +1,45 @@
+# RAG Pipeline Configuration
+
+service:
+  name: "rag-pipeline"
+  port: 8004
+  workers: 2
+
+# Embedding Configuration
+embeddings:
+  default_model: "text-embedding-3-small"
+  alternative_models:
+    - "text-embedding-3-large"
+    - "local sentence-transformers"
+  batch_size: 100
+  dimension: 1536
+
+# Chunking Configuration
+chunking:
+  default_chunk_size: 512
+  default_chunk_overlap: 50
+  strategies:
+    - "recursive"
+    - "semantic"
+    - "fixed"
+
+# Qdrant Configuration
+qdrant:
+  url: "http://qdrant:6333"
+  timeout: 30
+  collection_prefix: "kb_"
+
+# LLM Configuration
+llm:
+  provider: "ollama"  # or "openai"
+  default_model: "llama3:70b"
+  temperature: 0.7
+  max_tokens: 2000
+  timeout: 60
+
+# Retrieval Configuration
+retrieval:
+  default_top_k: 5
+  similarity_threshold: 0.7
+  rerank: true
+  search_type: "hybrid"  # semantic, keyword, hybrid
