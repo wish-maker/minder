@@ -1,8 +1,8 @@
 # Minder Platform - Current Status Snapshot
 
-> **Generated:** 2026-04-21 22:00
+> **Generated:** 2026-04-22 10:00
 > **Purpose:** Quick reference for resuming work
-> **Phase:** Phase 1 Complete ✅ | Phase 2 Complete ✅ | Phase 3 In Progress 🔨
+> **Phase:** Phase 1 Complete ✅ | Phase 2 Complete ✅ | Phase 3 Complete ✅ | Phase 4 In Progress 🔨
 
 ---
 
@@ -19,16 +19,19 @@ Modular RAG platform with 15 microservices, plugin system (internal + 3rd party)
 - 🐳 9 Docker containers running (7 services + 2 monitoring)
 - 🔌 4 plugins active (news, network, weather, tefas)
 
-**Last Work Completed (April 21-22, 2026):**
+**Last Work Completed (April 22, 2026):**
 1. ✅ Implemented RAG Pipeline service (knowledge base, document chunking, embeddings)
 2. ✅ Implemented Model Management service (model registry, fine-tuning, constraints)
 3. ✅ Integrated Qdrant vector database (1536 dimensions, Cosine distance)
 4. ✅ Fixed environment variable configuration in RAG Pipeline
-5. ✅ Deployed Prometheus (port 9090) - 6/8 targets up
+5. ✅ Deployed Prometheus (port 9090) - 8/8 targets up
 6. ✅ Deployed Grafana (port 3000) - dashboards ready
 7. ✅ Added metrics endpoints to ALL Minder services
 8. ✅ Optimized Prometheus scrape interval (30s)
 9. ✅ Fixed rate limiting issues (429 errors)
+10. ✅ Added postgres_exporter (port 9187) - PostgreSQL metrics
+11. ✅ Added redis_exporter (port 9121) - Redis metrics
+12. ✅ Created enhanced Grafana dashboard with infrastructure metrics
 
 ---
 
@@ -95,11 +98,13 @@ docker exec minder-redis redis-cli -a dev_password_change_me ping
 | Plugin Registry | minder-plugin-registry | 8001 | Running | Healthy | ✅ |
 | RAG Pipeline | minder-rag-pipeline | 8004 | Running | Healthy | ✅ |
 | Model Management | minder-model-management | 8005 | Running | Healthy | ✅ |
-| PostgreSQL | minder-postgres | 5432 | Running | Healthy | N/A |
-| Redis | minder-redis | 6379 | Running | Healthy | N/A |
+| PostgreSQL | minder-postgres | 5432 | Running | Healthy | ✅ (exporter) |
+| Redis | minder-redis | 6379 | Running | Healthy | ✅ (exporter) |
 | Qdrant | minder-qdrant | 6333 | Running | Healthy | ✅ |
 | Prometheus | minder-prometheus | 9090 | Running | Healthy | ✅ |
 | Grafana | minder-grafana | 3000 | Running | Healthy | N/A |
+| postgres_exporter | minder-postgres-exporter | 9187 | Running | Healthy | ✅ |
+| redis_exporter | minder-redis-exporter | 9121 | Running | Healthy | ✅ |
 
 ---
 
@@ -259,16 +264,16 @@ None blocking development.
 ### Phase 3: Monitoring & Analytics ✅ COMPLETE
 
 **Completed (April 21-22, 2026):**
-1. ✅ Prometheus deployed (port 9090) - 6/8 targets up
+1. ✅ Prometheus deployed (port 9090) - 8/8 targets up
    - Scraping interval: 30s (optimized)
    - All Minder services being scraped
-   - Qdrant metrics included
+   - Infrastructure exporters added
    - Rate limiting issues resolved
 
 2. ✅ Grafana deployed (port 3000)
    - Prometheus datasource configured
    - Minder overview dashboard created
-   - Auto-provisioned dashboards
+   - Enhanced dashboard with infrastructure metrics
    - Access: http://localhost:3000 (admin/admin)
 
 3. ✅ All Service Metrics Operational
@@ -279,15 +284,36 @@ None blocking development.
 
 4. ✅ Monitoring Stack Complete
    - Prometheus + Grafana operational
-   - 6/8 Prometheus targets up (4 Minder + 2 infra)
+   - 8/8 Prometheus targets up (4 Minder + 4 infra)
    - Real-time metrics collection
    - Historical data available
 
-**Future Enhancements (Optional):**
-1. ⏳ Add postgres_exporter for PostgreSQL metrics
-2. ⏳ Add redis_exporter for Redis metrics
-3. ⏳ Create per-service custom dashboards
-4. ⏳ Set up alerting rules (Alertmanager)
+### Phase 4: Advanced Monitoring 🔨 IN PROGRESS
+
+**Completed (April 22, 2026):**
+1. ✅ postgres_exporter deployed (port 9187)
+   - Database sizes (all 6 databases)
+   - Connection counts
+   - Query performance metrics
+   - Table/index statistics
+
+2. ✅ redis_exporter deployed (port 9121)
+   - Memory usage
+   - Connected clients
+   - Command statistics
+   - Key eviction info
+
+3. ✅ Enhanced Grafana Dashboard
+   - 13 panels total (up from 7)
+   - PostgreSQL metrics: connections, database size
+   - Redis metrics: memory usage, connections
+   - All 8 services with status indicators
+
+**Remaining (Optional):**
+1. ⏳ Create per-service custom dashboards
+2. ⏳ Set up alerting rules (Alertmanager)
+3. ⏳ Add Jaeger for distributed tracing
+4. ⏳ Centralized logging (ELK stack)
 
 **Components:**
 1. **Monitoring Stack** ✅ COMPLETE
