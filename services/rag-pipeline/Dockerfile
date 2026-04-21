@@ -15,12 +15,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements.txt .
+COPY services/rag-pipeline/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY main.py .
-COPY config.yaml .
+COPY services/rag-pipeline/main.py .
+COPY services/rag-pipeline/config.yaml .
 
 # Copy core modules
 COPY src/core /app/src/core
