@@ -177,8 +177,8 @@ services:
   # Knowledge base creation, document chunking, embedding generation
   rag-pipeline:
     build:
-      context: ../../services/rag-pipeline
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: services/rag-pipeline/Dockerfile
     image: minder/rag-pipeline:latest
     container_name: minder-rag-pipeline
     restart: unless-stopped
@@ -215,15 +215,13 @@ services:
       retries: 3
     networks:
       - minder-network
-    profiles:
-      - phase2
 
   # Model Management - Port 8005
   # Model registry, fine-tuning, versioning
   model-management:
     build:
-      context: ../../services/model-management
-      dockerfile: Dockerfile
+      context: ../../
+      dockerfile: services/model-management/Dockerfile
     image: minder/model-management:latest
     container_name: minder-model-management
     restart: unless-stopped
@@ -257,8 +255,6 @@ services:
       retries: 3
     networks:
       - minder-network
-    profiles:
-      - phase2
 
   # ============================================================================
   # Monitoring (Optional - Phase 3)
