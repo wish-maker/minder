@@ -1,0 +1,15 @@
+database:
+  host: postgres
+  port: 5432
+  user: postgres
+  password: ${POSTGRES_PASSWORD}
+  dbname: minder
+
+redis:
+  host: redis
+  port: 6379
+
+service:
+  name: template-service
+  port: 8000
+  log_level: INFO
