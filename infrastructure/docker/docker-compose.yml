@@ -292,6 +292,41 @@ services:
     profiles:
       - monitoring
 
+  # PostgreSQL Exporter - Expose PostgreSQL metrics
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.12.0
+    container_name: minder-postgres-exporter
+    restart: unless-stopped
+    environment:
+      - DATA_SOURCE_NAME=postgresql://minder:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/minder?sslmode=disable
+    ports:
+      - "9187:9187"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - minder-network
+    profiles:
+      - monitoring
+
+  # Redis Exporter - Expose Redis metrics
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.55.0
+    container_name: minder-redis-exporter
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - minder-network
+    profiles:
+      - monitoring
+
 # ============================================================================
 # Volumes
 # ============================================================================

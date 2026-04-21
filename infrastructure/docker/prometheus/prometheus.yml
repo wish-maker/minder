@@ -67,25 +67,25 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # PostgreSQL
-  - job_name: 'postgres'
+  # PostgreSQL Exporter
+  - job_name: 'postgres-exporter'
     static_configs:
-      - targets: ['minder-postgres:5432']
+      - targets: ['minder-postgres-exporter:9187']
         labels:
-          service: 'postgres'
+          service: 'postgres-exporter'
           tier: 'infrastructure'
-    # Note: PostgreSQL metrics require postgres_exporter
-    # This is a placeholder for Phase 4
+    metrics_path: '/metrics'
+    scrape_interval: 30s
 
-  # Redis
-  - job_name: 'redis'
+  # Redis Exporter
+  - job_name: 'redis-exporter'
     static_configs:
-      - targets: ['minder-redis:6379']
+      - targets: ['minder-redis-exporter:9121']
         labels:
-          service: 'redis'
+          service: 'redis-exporter'
           tier: 'infrastructure'
-    # Note: Redis metrics require redis_exporter
-    # This is a placeholder for Phase 4
+    metrics_path: '/metrics'
+    scrape_interval: 30s
 
   # Qdrant
   - job_name: 'qdrant'
