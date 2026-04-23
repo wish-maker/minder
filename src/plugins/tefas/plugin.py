@@ -24,7 +24,8 @@ from bs4 import BeautifulSoup
 # InfluxDB client
 try:
     from influxdb_client import InfluxDBClient
-    from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
+    from influxdb_client.client.write_api import ASYNCHRONOUS
+
     INFLUXDB_AVAILABLE = True
 except ImportError:
     INFLUXDB_AVAILABLE = False
@@ -202,7 +203,7 @@ class TefasModule(BaseModule):
                 influxdb_url = self.influxdb_config.get(
                     "url",
                     f"http://{self.influxdb_config.get('host', 'localhost')}:"
-                    f"{self.influxdb_config.get('port', 8086)}"
+                    f"{self.influxdb_config.get('port', 8086)}",
                 )
                 token = self.influxdb_config.get("token", os.getenv("INFLUXDB_TOKEN", ""))
                 org = self.influxdb_config.get("org", "minder")
@@ -213,10 +214,7 @@ class TefasModule(BaseModule):
                     self.influxdb_enabled = False
                 else:
                     self.influxdb_client = InfluxDBClient(
-                        url=influxdb_url,
-                        token=token,
-                        org=org,
-                        timeout=10000  # 10 seconds
+                        url=influxdb_url, token=token, org=org, timeout=10000  # 10 seconds
                     )
                     self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
                     self.logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
@@ -457,7 +455,10 @@ class TefasModule(BaseModule):
                                     Point("tefas_fund_data")
                                     .tag("fund_code", str(row.get("code", "")))
                                     .tag("fund_title", str(row.get("title", "")))
-                                    .tag("fund_type", row.get("code", "")[0] if len(row.get("code", "")) > 0 else "UNKNOWN")
+                                    .tag(
+                                        "fund_type",
+                                        row.get("code", "")[0] if len(row.get("code", "")) > 0 else "UNKNOWN",
+                                    )
                                     .time(row.get("date"))
                                     .field("price", float(row.get("price", 0)))
                                     .field("market_cap", float(row.get("market_cap", 0)))

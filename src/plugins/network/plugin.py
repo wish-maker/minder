@@ -15,7 +15,8 @@ import psutil
 # InfluxDB client
 try:
     from influxdb_client import InfluxDBClient
-    from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
+    from influxdb_client.client.write_api import ASYNCHRONOUS
+
     INFLUXDB_AVAILABLE = True
 except ImportError:
     INFLUXDB_AVAILABLE = False
@@ -98,7 +99,7 @@ class NetworkModule(BaseModule):
                 influxdb_url = self.influxdb_config.get(
                     "url",
                     f"http://{self.influxdb_config.get('host', 'localhost')}:"
-                    f"{self.influxdb_config.get('port', 8086)}"
+                    f"{self.influxdb_config.get('port', 8086)}",
                 )
                 token = self.influxdb_config.get("token", os.getenv("INFLUXDB_TOKEN", ""))
                 org = self.influxdb_config.get("org", "minder")
@@ -109,10 +110,7 @@ class NetworkModule(BaseModule):
                     self.influxdb_enabled = False
                 else:
                     self.influxdb_client = InfluxDBClient(
-                        url=influxdb_url,
-                        token=token,
-                        org=org,
-                        timeout=10000  # 10 seconds
+                        url=influxdb_url, token=token, org=org, timeout=10000  # 10 seconds
                     )
                     self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
                     logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
@@ -514,7 +512,7 @@ class NetworkModule(BaseModule):
         This method is called after plugin initialization if agent framework is available.
         Plugin can register custom actions that can be called by LLM or external systems.
         """
-        if not hasattr(self, 'agent_capability') or self.agent_capability is None:
+        if not hasattr(self, "agent_capability") or self.agent_capability is None:
             logger.info("ℹ️  Agent capability not available, skipping action registration")
             return
 
@@ -526,7 +524,7 @@ class NetworkModule(BaseModule):
             description="Get current network performance metrics",
             action_type=ActionType.CUSTOM_FUNCTION,
             parameters={"hours": 1},  # Default: last 1 hour
-            handler=self._agent_query_network_metrics
+            handler=self._agent_query_network_metrics,
         )
 
         # Register action: Check network connectivity
@@ -535,7 +533,7 @@ class NetworkModule(BaseModule):
             description="Check connectivity to external services",
             action_type=ActionType.CUSTOM_FUNCTION,
             parameters={"host": "google.com", "port": 80},
-            handler=self._agent_check_connectivity
+            handler=self._agent_check_connectivity,
         )
 
         # Register action: Test network speed
@@ -544,7 +542,7 @@ class NetworkModule(BaseModule):
             description="Test network download/upload speed",
             action_type=ActionType.CUSTOM_FUNCTION,
             parameters={"server": "auto"},
-            handler=self._agent_test_network_speed
+            handler=self._agent_test_network_speed,
         )
 
         logger.info(f"✅ Network module registered {len(self.agent_capability.actions)} agent actions")
@@ -566,7 +564,7 @@ class NetworkModule(BaseModule):
                     WHERE metric_name = 'network_bytes_sent'
                     AND timestamp >= NOW() - INTERVAL '1 hour' * $1
                 """,
-                    hours
+                    hours,
                 )
 
                 if row:
@@ -579,26 +577,17 @@ class NetworkModule(BaseModule):
                             "max_bytes_sent": float(row["max_value"]) if row["max_value"] else 0,
                             "sample_count": row["sample_count"],
                             "hours_queried": hours,
-                        }
+                        },
                     }
                 else:
-                    return {
-                        "success": False,
-                        "action": action.name,
-                        "error": "No metrics available"
-                    }
+                    return {"success": False, "action": action.name, "error": "No metrics available"}
 
         except Exception as e:
             logger.error(f"Agent action failed: {e}")
-            return {
-                "success": False,
-                "action": action.name,
-                "error": str(e)
-            }
+            return {"success": False, "action": action.name, "error": str(e)}
 
     async def _agent_check_connectivity(self, action, context) -> Dict[str, Any]:
         """Agent action: Check network connectivity"""
-        import socket
         import asyncio
 
         host = action.parameters.get("host", "google.com")
@@ -606,10 +595,7 @@ class NetworkModule(BaseModule):
         timeout = action.parameters.get("timeout", 5)
 
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port),
-                timeout=timeout
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
 
             writer.close()
             await writer.wait_closed()
@@ -617,35 +603,20 @@ class NetworkModule(BaseModule):
             return {
                 "success": True,
                 "action": action.name,
-                "data": {
-                    "host": host,
-                    "port": port,
-                    "status": "reachable",
-                    "latency_seconds": timeout
-                }
+                "data": {"host": host, "port": port, "status": "reachable", "latency_seconds": timeout},
             }
 
         except asyncio.TimeoutError:
             return {
                 "success": False,
                 "action": action.name,
-                "data": {
-                    "host": host,
-                    "port": port,
-                    "status": "timeout",
-                    "timeout_seconds": timeout
-                }
+                "data": {"host": host, "port": port, "status": "timeout", "timeout_seconds": timeout},
             }
         except Exception as e:
             return {
                 "success": False,
                 "action": action.name,
-                "data": {
-                    "host": host,
-                    "port": port,
-                    "status": "unreachable",
-                    "error": str(e)
-                }
+                "data": {"host": host, "port": port, "status": "unreachable", "error": str(e)},
             }
 
     async def _agent_test_network_speed(self, action, context) -> Dict[str, Any]:
@@ -676,16 +647,12 @@ class NetworkModule(BaseModule):
                     "downloaded_mb": downloaded_bytes / 1_000_000,
                     "duration_seconds": duration,
                     "download_speed_mbps": round(speed_mbps, 2),
-                    "test_url": test_url
-                }
+                    "test_url": test_url,
+                },
             }
 
         except Exception as e:
-            return {
-                "success": False,
-                "action": action.name,
-                "error": str(e)
-            }
+            return {"success": False, "action": action.name, "error": str(e)}
 
         # Close PostgreSQL pool
         if self.pool:
