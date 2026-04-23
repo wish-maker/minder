@@ -18,6 +18,7 @@ from fastapi import Response
 # Ollama client for fine-tuning
 try:
     from ollama import AsyncClient
+
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
@@ -53,28 +54,23 @@ app = FastAPI(
 # ============================================================================
 
 training_jobs_total = Counter(
-    "training_jobs_total",
-    "Total training jobs",
-    ["status"]  # started, completed, failed
+    "training_jobs_total", "Total training jobs", ["status"]  # started, completed, failed
 )
 
 training_duration_seconds = Histogram(
-    "training_duration_seconds",
-    "Training job duration",
-    ["base_model"]
+    "training_duration_seconds", "Training job duration", ["base_model"]
 )
 
-models_fine_tuned_total = Gauge(
-    "models_fine_tuned_total",
-    "Total number of fine-tuned models"
-)
+models_fine_tuned_total = Gauge("models_fine_tuned_total", "Total number of fine-tuned models")
 
 # ============================================================================
 # Pydantic Models
 # ============================================================================
 
+
 class TrainingJobCreate(BaseModel):
     """Create a new training job"""
+
     job_name: str
     base_model: str = DEFAULT_BASE_MODEL
     dataset_file: str  # Filename in training-data directory
@@ -85,8 +81,10 @@ class TrainingJobCreate(BaseModel):
     context_length: int = 2048
     description: Optional[str] = None
 
+
 class TrainingJobResponse(BaseModel):
     """Training job response"""
+
     job_id: str
     job_name: str
     base_model: str
@@ -100,14 +98,17 @@ class TrainingJobResponse(BaseModel):
     loss: float = 0.0
     description: Optional[str] = None
 
+
 class DatasetUploadResponse(BaseModel):
     """Dataset upload response"""
+
     filename: str
     samples_count: int
     format: str
     size_bytes: int
     validation_passed: bool
     errors: List[str] = []
+
 
 # ============================================================================
 # In-Memory Storage (use PostgreSQL in production)
@@ -119,6 +120,7 @@ datasets: Dict[str, Dict[str, Any]] = {}
 # ============================================================================
 # Ollama Client Management
 # ============================================================================
+
 
 class FineTuningEngine:
     """Manage Ollama fine-tuning operations"""
@@ -149,7 +151,7 @@ class FineTuningEngine:
         epochs: int,
         learning_rate: float,
         batch_size: int,
-        context_length: int
+        context_length: int,
     ) -> Dict[str, Any]:
         """Submit training job to Ollama"""
 
@@ -158,7 +160,7 @@ class FineTuningEngine:
 
         try:
             # Read dataset
-            with open(dataset_path, 'r') as f:
+            with open(dataset_path, "r") as f:
                 dataset = json.load(f)
 
             # Validate dataset format
@@ -198,11 +200,7 @@ class FineTuningEngine:
             logger.error(f"❌ Training job failed: {e}")
             raise
 
-    async def generate_model_card(
-        self,
-        job_id: str,
-        fine_tuned_model_id: str
-    ) -> str:
+    async def generate_model_card(self, job_id: str, fine_tuned_model_id: str) -> str:
         """Generate model card for fine-tuned model"""
         job = training_jobs.get(job_id, {})
 
@@ -256,6 +254,7 @@ fine_tuning_engine = FineTuningEngine()
 # API Endpoints
 # ============================================================================
 
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Service health check"""
@@ -289,17 +288,15 @@ async def initialize_engine():
 # Dataset Management
 # ============================================================================
 
+
 @app.post("/dataset/upload", response_model=DatasetUploadResponse, tags=["Dataset"])
 async def upload_dataset(file: UploadFile = File(...)):
     """Upload training dataset"""
     import uuid
 
     # Validate file format
-    if not file.filename.endswith(('.json', '.jsonl')):
-        raise HTTPException(
-            status_code=400,
-            detail="Dataset must be JSON or JSONL format"
-        )
+    if not file.filename.endswith((".json", ".jsonl")):
+        raise HTTPException(status_code=400, detail="Dataset must be JSON or JSONL format")
 
     # Save file
     dataset_id = str(uuid.uuid4())
@@ -314,7 +311,7 @@ async def upload_dataset(file: UploadFile = File(...)):
     samples_count = 0
 
     try:
-        if file.filename.endswith('.json'):
+        if file.filename.endswith(".json"):
             data = json.loads(content)
             samples_count = len(data)
 
@@ -329,9 +326,9 @@ async def upload_dataset(file: UploadFile = File(...)):
                         errors.append("Each example must be a dictionary")
                         validation_passed = False
 
-        elif file.filename.endswith('.jsonl'):
+        elif file.filename.endswith(".jsonl"):
             # Count lines
-            samples_count = content.decode('utf-8').count('\n')
+            samples_count = content.decode("utf-8").count("\n")
 
     except Exception as e:
         errors.append(f"Validation error: {str(e)}")
@@ -343,7 +340,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         "filename": file.filename,
         "path": str(dataset_path),
         "samples_count": samples_count,
-        "format": file.filename.split('.')[-1],
+        "format": file.filename.split(".")[-1],
         "size_bytes": len(content),
         "validation_passed": validation_passed,
         "errors": errors,
@@ -355,10 +352,10 @@ async def upload_dataset(file: UploadFile = File(...)):
     return DatasetUploadResponse(
         filename=file.filename,
         samples_count=samples_count,
-        format=file.filename.split('.')[-1],
+        format=file.filename.split(".")[-1],
         size_bytes=len(content),
         validation_passed=validation_passed,
-        errors=errors
+        errors=errors,
     )
 
 
@@ -371,6 +368,7 @@ async def list_datasets():
 # ============================================================================
 # Training Jobs
 # ============================================================================
+
 
 @app.post("/training/job", response_model=TrainingJobResponse, tags=["Training"])
 async def create_training_job(request: TrainingJobCreate, background_tasks: BackgroundTasks):
@@ -390,8 +388,7 @@ async def create_training_job(request: TrainingJobCreate, background_tasks: Back
     # Validate dataset
     if not dataset["validation_passed"]:
         raise HTTPException(
-            status_code=400,
-            detail=f"Dataset validation failed: {', '.join(dataset['errors'])}"
+            status_code=400, detail=f"Dataset validation failed: {', '.join(dataset['errors'])}"
         )
 
     job_id = str(uuid.uuid4())
@@ -444,7 +441,7 @@ async def run_training_job(job_id: str, dataset_path: str):
             epochs=job["epochs"],
             learning_rate=job["learning_rate"],
             batch_size=job["batch_size"],
-            context_length=job["context_length"]
+            context_length=job["context_length"],
         )
 
         # Update status
@@ -454,10 +451,7 @@ async def run_training_job(job_id: str, dataset_path: str):
         job["final_loss"] = result["final_loss"]
 
         # Generate model card
-        model_card = await fine_tuning_engine.generate_model_card(
-            job_id,
-            result["model_id"]
-        )
+        model_card = await fine_tuning_engine.generate_model_card(job_id, result["model_id"])
 
         # Save model card
         model_card_path = MODELS_OUTPUT_PATH / f"{result['model_id']}_README.md"
@@ -507,20 +501,23 @@ async def delete_training_job(job_id: str):
 # Model Management
 # ============================================================================
 
+
 @app.get("/models/fine-tuned", tags=["Models"])
 async def list_fine_tuned_models():
     """List all fine-tuned models"""
     models = []
     for job in training_jobs.values():
         if job["status"] == "completed" and "fine_tuned_model_id" in job:
-            models.append({
-                "model_id": job["fine_tuned_model_id"],
-                "base_model": job["base_model"],
-                "job_name": job["job_name"],
-                "job_id": job["job_id"],
-                "created_at": job["completed_at"],
-                "final_loss": job.get("final_loss", 0),
-            })
+            models.append(
+                {
+                    "model_id": job["fine_tuned_model_id"],
+                    "base_model": job["base_model"],
+                    "job_name": job["job_name"],
+                    "job_id": job["job_id"],
+                    "created_at": job["completed_at"],
+                    "final_loss": job.get("final_loss", 0),
+                }
+            )
 
     return models
 
@@ -539,6 +536,7 @@ async def root():
 # ============================================================================
 # Startup Event
 # ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():

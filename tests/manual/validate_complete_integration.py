@@ -96,7 +96,9 @@ except Exception as e:
 
 # Test 5: Run unit tests
 print("\n[5/7] Running unit tests...")
-result = subprocess.run(["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder")
+result = subprocess.run(
+    ["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder"
+)
 
 if result.returncode == 0:
     print("  ✅ Unit tests passed (14/14)")
@@ -107,7 +109,9 @@ else:
 
 # Test 6: Run integration tests
 print("\n[6/7] Running integration tests...")
-result = subprocess.run(["python3", "test_tefas_v3_integration.py"], capture_output=True, text=True, cwd="/root/minder")
+result = subprocess.run(
+    ["python3", "test_tefas_v3_integration.py"], capture_output=True, text=True, cwd="/root/minder"
+)
 
 if result.returncode == 0:
     # Extract test count

@@ -3,7 +3,9 @@ import sys
 from typing import Optional
 
 
-def setup_logger(name: str, level: int = logging.INFO, log_file: Optional[str] = None) -> logging.Logger:
+def setup_logger(
+    name: str, level: int = logging.INFO, log_file: Optional[str] = None
+) -> logging.Logger:
     """Setup standardized logger for services"""
     logger = logging.getLogger(name)
     logger.setLevel(level)

@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 
 class TefasCrawlerWrapper:
     """TEFAS crawler wrapper"""
-    
+
     async def fetch_fund_data(self, fund_code: str) -> Dict[str, Any]:
         """
         Fon verilerini crawler ile toplar
-        
+
         Args:
             fund_code: Fon kodu
-            
+
         Returns:
             Fon verileri
         """
@@ -30,11 +30,11 @@ class TefasCrawlerWrapper:
 
 class BorsapyWrapper:
     """BorsaPy wrapper"""
-    
+
     async def get_market_data(self) -> Dict[str, Any]:
         """
         Piyasa verilerini toplar
-        
+
         Returns:
             Piyasa verileri
         """
@@ -44,18 +44,18 @@ class BorsapyWrapper:
 
 class UnifiedTefasAPI:
     """Birleştirilmiş TEFAS API"""
-    
+
     def __init__(self):
         self.crawler = TefasCrawlerWrapper()
         self.borsapy = BorsapyWrapper()
-    
+
     async def get_all_fund_data(self, fund_codes: List[str]) -> Dict[str, Any]:
         """
         Tüm fon verilerini toplar
-        
+
         Args:
             fund_codes: Fon kodları listesi
-            
+
         Returns:
             Tüm fon verileri
         """

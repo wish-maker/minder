@@ -16,6 +16,7 @@ import asyncio
 # Ollama client for real embeddings and LLM
 try:
     from ollama import AsyncClient
+
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
@@ -63,38 +64,25 @@ app = FastAPI(
 # ============================================================================
 
 http_requests_total = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "endpoint", "status"]
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
 )
 
 http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request latency",
-    ["method", "endpoint"]
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-knowledge_bases_total = Gauge(
-    "knowledge_bases_total",
-    "Total number of knowledge bases"
-)
+knowledge_bases_total = Gauge("knowledge_bases_total", "Total number of knowledge bases")
 
 documents_processed_total = Counter(
-    "documents_processed_total",
-    "Total documents processed",
-    ["status"]
+    "documents_processed_total", "Total documents processed", ["status"]
 )
 
 embedding_generation_duration = Histogram(
-    "embedding_generation_duration_seconds",
-    "Time to generate embeddings",
-    ["model"]
+    "embedding_generation_duration_seconds", "Time to generate embeddings", ["model"]
 )
 
 llm_generation_duration = Histogram(
-    "llm_generation_duration_seconds",
-    "Time to generate LLM response",
-    ["model"]
+    "llm_generation_duration_seconds", "Time to generate LLM response", ["model"]
 )
 
 
@@ -102,8 +90,10 @@ llm_generation_duration = Histogram(
 # Pydantic Models
 # ============================================================================
 
+
 class KnowledgeBaseCreate(BaseModel):
     """Knowledge base creation request"""
+
     name: str
     description: str
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
@@ -114,6 +104,7 @@ class KnowledgeBaseCreate(BaseModel):
 
 class KnowledgeBaseResponse(BaseModel):
     """Knowledge base response"""
+
     id: str
     name: str
     description: str
@@ -126,6 +117,7 @@ class KnowledgeBaseResponse(BaseModel):
 
 class RAGPipelineCreate(BaseModel):
     """RAG Pipeline creation request"""
+
     name: str
     knowledge_base_ids: List[str]
     retrieval_config: Dict[str, Any] = {}
@@ -134,6 +126,7 @@ class RAGPipelineCreate(BaseModel):
 
 class QueryRequest(BaseModel):
     """Query request"""
+
     question: str
     pipeline_id: str
     top_k: int = 5
@@ -142,6 +135,7 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     """Query response"""
+
     answer: str
     sources: List[Dict[str, Any]]
     confidence: float
@@ -151,6 +145,7 @@ class QueryResponse(BaseModel):
 
 class DocumentUploadResponse(BaseModel):
     """Document upload response"""
+
     message: str
     chunks_processed: int
     vectors_created: int
@@ -168,6 +163,7 @@ rag_pipelines: Dict[str, Dict[str, Any]] = {}
 # ============================================================================
 # Ollama Client Management
 # ============================================================================
+
 
 class OllamaManager:
     """Manage Ollama client connections"""
@@ -200,7 +196,9 @@ class OllamaManager:
         try:
             # List available models to verify connection
             models = await self.client.list()
-            logger.info(f"✅ Ollama connection verified. Available models: {[m['name'] for m in models.get('models', [])]}")
+            logger.info(
+                f"✅ Ollama connection verified. Available models: {[m['name'] for m in models.get('models', [])]}"
+            )
         except Exception as e:
             logger.warning(f"⚠️  Ollama connection test failed: {e}")
             # Don't fail - models might not be pulled yet
@@ -209,12 +207,11 @@ class OllamaManager:
         """Ensure model is available, pull if necessary"""
         try:
             models = await self.client.list()
-            available = [m['name'] for m in models.get('models', [])]
+            available = [m["name"] for m in models.get("models", [])]
 
             # Check if model exists with any version tag
             model_exists = any(
-                model_name in available_model or
-                available_model.startswith(model_name + ':')
+                model_name in available_model or available_model.startswith(model_name + ":")
                 for available_model in available
             )
 
@@ -228,7 +225,9 @@ class OllamaManager:
         except Exception as e:
             logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
 
-    async def generate_embeddings(self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL) -> List[List[float]]:
+    async def generate_embeddings(
+        self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
+    ) -> List[List[float]]:
         """Generate embeddings using Ollama"""
         if not self._initialized:
             await self.initialize()
@@ -255,7 +254,7 @@ class OllamaManager:
         model: str = DEFAULT_LLM_MODEL,
         context: str = "",
         temperature: float = 0.7,
-        stream: bool = False
+        stream: bool = False,
     ) -> Dict[str, Any]:
         """Generate response using Ollama LLM"""
         if not self._initialized:
@@ -274,7 +273,7 @@ class OllamaManager:
                 options={
                     "temperature": temperature,
                     "num_predict": 2000,  # Max tokens
-                }
+                },
             )
 
             return {
@@ -317,6 +316,7 @@ ollama_manager = OllamaManager()
 # Qdrant Client Management
 # ============================================================================
 
+
 def get_qdrant_client() -> QdrantClient:
     """Get Qdrant client"""
     return QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
@@ -325,6 +325,7 @@ def get_qdrant_client() -> QdrantClient:
 # ============================================================================
 # Text Processing
 # ============================================================================
+
 
 async def extract_text_from_file(content: bytes, filename: str) -> str:
     """Extract text from file based on type"""
@@ -356,7 +357,7 @@ def chunk_text(text: str, chunk_size: int = 512, chunk_overlap: int = 50) -> Lis
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         length_function=len,
-        separators=["\n\n", "\n", ". ", " ", ""]
+        separators=["\n\n", "\n", ". ", " ", ""],
     )
 
     chunks = text_splitter.split_text(text)
@@ -366,6 +367,7 @@ def chunk_text(text: str, chunk_size: int = 512, chunk_overlap: int = 50) -> Lis
 # ============================================================================
 # API Endpoints
 # ============================================================================
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():
@@ -451,7 +453,9 @@ async def list_knowledge_bases():
     return list(knowledge_bases.values())
 
 
-@app.post("/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
+@app.post(
+    "/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"]
+)
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
     """Upload document to knowledge base"""
     if kb_id not in knowledge_bases:
@@ -466,27 +470,21 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     text = await extract_text_from_file(content, file.filename)
 
     # Chunk text
-    chunks = chunk_text(
-        text,
-        chunk_size=kb["chunk_size"],
-        chunk_overlap=kb["chunk_overlap"]
-    )
+    chunks = chunk_text(text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"])
 
     if not chunks:
         raise HTTPException(status_code=400, detail="No text content extracted")
 
     # Generate embeddings
     with embedding_generation_duration.labels(model=kb["embedding_model"]).time():
-        embeddings = await ollama_manager.generate_embeddings(
-            chunks,
-            model=kb["embedding_model"]
-        )
+        embeddings = await ollama_manager.generate_embeddings(chunks, model=kb["embedding_model"])
 
     # Store in Qdrant
     client = get_qdrant_client()
 
     points = []
     import uuid
+
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
         points.append(
             PointStruct(
@@ -519,7 +517,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         message="Document uploaded successfully",
         chunks_processed=len(chunks),
         vectors_created=len(chunks),
-        filename=file.filename
+        filename=file.filename,
     )
 
 
@@ -572,7 +570,7 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         answer_result = await ollama_manager.generate_response(
             prompt=request.question,
             context=context_result["context"],
-            **pipeline.get("generation_config", {})
+            **pipeline.get("generation_config", {}),
         )
 
     return QueryResponse(
@@ -593,10 +591,7 @@ async def retrieve_relevant_documents(pipeline: Dict, question: str, top_k: int)
     embed_model = knowledge_bases[first_kb_id]["embedding_model"]
 
     # Create embedding for question
-    question_embeddings = await ollama_manager.generate_embeddings(
-        [question],
-        model=embed_model
-    )
+    question_embeddings = await ollama_manager.generate_embeddings([question], model=embed_model)
     question_embedding = question_embeddings[0]
 
     # Search across all knowledge bases
@@ -648,6 +643,7 @@ async def root():
 # ============================================================================
 # Startup Event
 # ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():

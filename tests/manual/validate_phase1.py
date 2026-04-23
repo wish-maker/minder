@@ -144,7 +144,9 @@ except Exception as e:
 # Test 6: Run unit tests
 print("\n[6/6] Running unit tests...")
 
-result = subprocess.run(["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder")
+result = subprocess.run(
+    ["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder"
+)
 
 if result.returncode == 0:
     print("  ✅ All unit tests passed")

@@ -206,7 +206,12 @@ class ConfigurationStore:
         Returns:
             Result dict
         """
-        result = {"success": False, "from_version": None, "to_version": target_version, "errors": []}
+        result = {
+            "success": False,
+            "from_version": None,
+            "to_version": target_version,
+            "errors": [],
+        }
 
         try:
             # Get current version
@@ -229,12 +234,16 @@ class ConfigurationStore:
 
             # Rollback to target version
             update_result = await self.update_plugin_config(
-                plugin_id=plugin_id, config=target_config, create_version=False  # Don't create version of rollback
+                plugin_id=plugin_id,
+                config=target_config,
+                create_version=False,  # Don't create version of rollback
             )
 
             if update_result["success"]:
                 result["success"] = True
-                self.logger.info(f"✅ Rolled back {plugin_id} config from v{from_version} to v{target_version}")
+                self.logger.info(
+                    f"✅ Rolled back {plugin_id} config from v{from_version} to v{target_version}"
+                )
             else:
                 result["errors"].extend(update_result.get("errors", []))
 
@@ -283,7 +292,11 @@ class ConfigurationStore:
 
         version = config.get("metadata", {}).get("version", "1")
 
-        snapshot = {"version": version, "config": config.copy(), "created_at": datetime.utcnow().isoformat()}
+        snapshot = {
+            "version": version,
+            "config": config.copy(),
+            "created_at": datetime.utcnow().isoformat(),
+        }
 
         self.config_versions[plugin_id].append(snapshot)
 
@@ -350,7 +363,9 @@ class ConfigurationStore:
         """
         try:
             config = json.loads(config_json)
-            return await self.update_plugin_config(plugin_id=plugin_id, config=config, schema=schema)
+            return await self.update_plugin_config(
+                plugin_id=plugin_id, config=config, schema=schema
+            )
         except Exception as e:
             self.logger.error(f"❌ Failed to import config: {e}")
             return {"success": False, "errors": [str(e)]}
@@ -396,7 +411,9 @@ class ConfigurationStore:
             merged = self._deep_merge(current, updates)
 
             # Update
-            return await self.update_plugin_config(plugin_id=plugin_id, config=merged, schema=schema)
+            return await self.update_plugin_config(
+                plugin_id=plugin_id, config=merged, schema=schema
+            )
 
         except Exception as e:
             self.logger.error(f"❌ Failed to merge config: {e}")

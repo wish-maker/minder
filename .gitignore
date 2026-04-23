@@ -40,6 +40,18 @@ nosetests.xml
 coverage.xml
 *.mo
 .pytest_cache/
+.pytest_cache/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.typed.md
+
+# Documentation
+docs/_build/
+docs/.doctrees/
+site/
 
 # Environments
 .env

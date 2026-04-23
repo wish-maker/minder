@@ -146,7 +146,9 @@ class BaseModule(ABC):
             "message": "Knowledge indexing not implemented",
         }
 
-    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
+    async def get_correlations(
+        self, other_module: str, correlation_type: str = "auto"
+    ) -> List[Dict[str, Any]]:
         """
         Provide correlation hints with another module (OPTIONAL)
 
@@ -158,7 +160,9 @@ class BaseModule(ABC):
         """
         return []
 
-    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
+    async def get_anomalies(
+        self, severity: str = "medium", limit: int = 100
+    ) -> List[Dict[str, Any]]:
         """
         Return detected anomalies (OPTIONAL)
 
@@ -218,9 +222,14 @@ class BaseModule(ABC):
             "name": self.metadata.name if self.metadata else "unknown",
             "status": self.status.value,
             "healthy": self.status == ModuleStatus.READY,
-            "uptime_seconds": ((datetime.now() - self.metadata.registered_at).total_seconds() if self.metadata else 0),
+            "uptime_seconds": (
+                (datetime.now() - self.metadata.registered_at).total_seconds()
+                if self.metadata
+                else 0
+            ),
             "state": self.state,
-            "agent_enabled": hasattr(self, 'agent_capability') and self.agent_capability is not None,
+            "agent_enabled": hasattr(self, "agent_capability")
+            and self.agent_capability is not None,
         }
 
     async def shutdown(self):
@@ -245,7 +254,9 @@ class BaseModule(ABC):
         """
         import logging
 
-        logger = logging.getLogger(f"minder.plugin.{self.metadata.name if self.metadata else 'unknown'}")
+        logger = logging.getLogger(
+            f"minder.plugin.{self.metadata.name if self.metadata else 'unknown'}"
+        )
         log_func = getattr(logger, level, logger.info)
         log_func(message)
 

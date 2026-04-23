@@ -112,7 +112,9 @@ class WeatherModule(BaseModule):
                     self.influxdb_client = InfluxDBClient(
                         url=influxdb_url, token=token, org=org, timeout=10000  # 10 seconds
                     )
-                    self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
+                    self.influxdb_write_api = self.influxdb_client.write_api(
+                        write_options=ASYNCHRONOUS
+                    )
                     logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
             except Exception as e:
                 logger.warning(f"⚠️  Failed to initialize InfluxDB client: {e}")
@@ -194,12 +196,16 @@ class WeatherModule(BaseModule):
                     "hourly": "temperature_2m,relativehumidity_2m,surface_pressure,windspeed_10m",
                 }
 
-                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as response:
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
                     if response.status == 200:
                         data = await response.json()
                         return self._parse_openmeteo_data(data, location)
                     else:
-                        logger.error(f"Open-Meteo API returned status {response.status} for {location}")
+                        logger.error(
+                            f"Open-Meteo API returned status {response.status} for {location}"
+                        )
                         return None
 
         except Exception as e:
@@ -260,7 +266,9 @@ class WeatherModule(BaseModule):
             "humidity_pct": random.randint(50, 80),
             "pressure_hpa": random.randint(1005, 1020),
             "wind_speed_kmh": round(random.uniform(5, 25), 1),
-            "weather_description": random.choice(["clear sky", "few clouds", "scattered clouds", "overcast"]),
+            "weather_description": random.choice(
+                ["clear sky", "few clouds", "scattered clouds", "overcast"]
+            ),
             "timestamp": datetime.now(),
         }
 
@@ -313,8 +321,7 @@ class WeatherModule(BaseModule):
         try:
             async with self.pool.acquire() as conn:
                 # Calculate average metrics
-                row = await conn.fetchrow(
-                    """
+                row = await conn.fetchrow("""
                     SELECT
                         AVG(temperature_c) as avg_temp,
                         AVG(humidity_pct) as avg_humidity,
@@ -322,8 +329,7 @@ class WeatherModule(BaseModule):
                         AVG(wind_speed_kmh) as avg_wind
                     FROM weather_data
                     WHERE timestamp >= NOW() - INTERVAL '7 days'
-                """
-                )
+                """)
 
                 if row and row["avg_temp"]:
                     return {
@@ -374,7 +380,9 @@ class WeatherModule(BaseModule):
             "collections": 1,
         }
 
-    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
+    async def get_correlations(
+        self, other_module: str, correlation_type: str = "auto"
+    ) -> List[Dict[str, Any]]:
         if other_module == "tefas":
             return [
                 {
@@ -388,7 +396,9 @@ class WeatherModule(BaseModule):
 
         return []
 
-    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
+    async def get_anomalies(
+        self, severity: str = "medium", limit: int = 100
+    ) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

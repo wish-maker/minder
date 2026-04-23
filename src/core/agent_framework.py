@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ActionType(Enum):
     """Types of agent actions"""
+
     HTTP_GET = "http_get"
     HTTP_POST = "http_post"
     HTTP_PUT = "http_put"
@@ -34,7 +35,7 @@ class AgentAction:
         description: str,
         action_type: ActionType,
         parameters: Dict[str, Any],
-        handler: Optional[Callable] = None
+        handler: Optional[Callable] = None,
     ):
         self.name = name
         self.description = description
@@ -57,7 +58,7 @@ class ServiceRegistry:
         base_url: str,
         auth_type: str = "none",
         auth_config: Dict[str, Any] = None,
-        endpoints: List[Dict[str, Any]] = None
+        endpoints: List[Dict[str, Any]] = None,
     ):
         """Register a service"""
         self.services[service_id] = {
@@ -104,7 +105,9 @@ class AgentExecutor:
             await self.session.close()
             logger.info("✅ Agent executor cleaned up")
 
-    async def execute_action(self, action: AgentAction, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute_action(
+        self, action: AgentAction, context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """Execute an agent action"""
         context = context or {}
 
@@ -149,7 +152,11 @@ class AgentExecutor:
         headers = await self._build_headers(service_id if service_id else None)
 
         async with self.session.get(url, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -174,7 +181,11 @@ class AgentExecutor:
         headers["Content-Type"] = "application/json"
 
         async with self.session.post(url, json=payload, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -199,7 +210,11 @@ class AgentExecutor:
         headers["Content-Type"] = "application/json"
 
         async with self.session.put(url, json=payload, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -222,7 +237,11 @@ class AgentExecutor:
         headers = await self._build_headers(service_id if service_id else None)
 
         async with self.session.delete(url, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -231,7 +250,9 @@ class AgentExecutor:
                 "action": action.name,
             }
 
-    async def _execute_command(self, action: AgentAction, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _execute_command(
+        self, action: AgentAction, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Execute shell command (use with caution!)"""
         command = action.parameters.get("command")
         if not command:
@@ -245,7 +266,7 @@ class AgentExecutor:
                 shell=True,
                 capture_output=True,
                 text=True,
-                timeout=action.parameters.get("timeout", 30)
+                timeout=action.parameters.get("timeout", 30),
             )
 
             return {
@@ -293,6 +314,7 @@ class AgentExecutor:
             password = auth_config.get("password")
             if username and password:
                 import base64
+
                 credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 headers["Authorization"] = f"Basic {credentials}"
 
@@ -302,12 +324,7 @@ class AgentExecutor:
 class AgentCapability:
     """Agent capability for plugins"""
 
-    def __init__(
-        self,
-        plugin_id: str,
-        service_registry: ServiceRegistry,
-        executor: AgentExecutor
-    ):
+    def __init__(self, plugin_id: str, service_registry: ServiceRegistry, executor: AgentExecutor):
         self.plugin_id = plugin_id
         self.registry = service_registry
         self.executor = executor
@@ -319,7 +336,7 @@ class AgentCapability:
         description: str,
         action_type: ActionType,
         parameters: Dict[str, Any],
-        handler: Optional[Callable] = None
+        handler: Optional[Callable] = None,
     ):
         """Register a new action"""
         action = AgentAction(name, description, action_type, parameters, handler)
@@ -327,10 +344,7 @@ class AgentCapability:
         logger.info(f"✅ Plugin {self.plugin_id} registered action: {name}")
 
     async def execute_action(
-        self,
-        action_name: str,
-        parameters: Dict[str, Any] = None,
-        context: Dict[str, Any] = None
+        self, action_name: str, parameters: Dict[str, Any] = None, context: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """Execute a registered action"""
         if action_name not in self.actions:
@@ -398,10 +412,22 @@ class AgentManager:
             base_url="http://minder-rag-pipeline:8004",
             auth_type="none",
             endpoints=[
-                {"path": "/knowledge-base", "method": "POST", "description": "Create knowledge base"},
-                {"path": "/knowledge-base/{kb_id}/upload", "method": "POST", "description": "Upload document"},
-                {"path": "/pipeline/{pipeline_id}/query", "method": "POST", "description": "Query RAG pipeline"},
-            ]
+                {
+                    "path": "/knowledge-base",
+                    "method": "POST",
+                    "description": "Create knowledge base",
+                },
+                {
+                    "path": "/knowledge-base/{kb_id}/upload",
+                    "method": "POST",
+                    "description": "Upload document",
+                },
+                {
+                    "path": "/pipeline/{pipeline_id}/query",
+                    "method": "POST",
+                    "description": "Query RAG pipeline",
+                },
+            ],
         )
 
         # Model Management
@@ -414,7 +440,7 @@ class AgentManager:
                 {"path": "/models", "method": "GET", "description": "List models"},
                 {"path": "/models", "method": "POST", "description": "Register model"},
                 {"path": "/models/fine-tune", "method": "POST", "description": "Fine-tune model"},
-            ]
+            ],
         )
 
         # TTS/STT Service
@@ -426,7 +452,7 @@ class AgentManager:
             endpoints=[
                 {"path": "/tts", "method": "POST", "description": "Text-to-speech"},
                 {"path": "/stt", "method": "POST", "description": "Speech-to-text"},
-            ]
+            ],
         )
 
 

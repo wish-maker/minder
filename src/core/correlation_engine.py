@@ -14,7 +14,12 @@ class CorrelationEngine:
         self.correlations: Dict[str, List[Dict]] = {}
 
     def add_correlation(
-        self, source_module: str, target_module: str, correlation_type: str, strength: float, metadata: Dict = None
+        self,
+        source_module: str,
+        target_module: str,
+        correlation_type: str,
+        strength: float,
+        metadata: Dict = None,
     ):
         """Add a correlation between two modules"""
         key = f"{source_module}:{target_module}"
@@ -55,7 +60,10 @@ class CorrelationEngine:
             mean2 = statistics.mean(data2)
 
             numerator = sum((x - mean1) * (y - mean2) for x, y in zip(data1, data2))
-            denominator = sum((x - mean1) ** 2 for x in data1) ** 0.5 * sum((y - mean2) ** 2 for y in data2) ** 0.5
+            denominator = (
+                sum((x - mean1) ** 2 for x in data1) ** 0.5
+                * sum((y - mean2) ** 2 for y in data2) ** 0.5
+            )
 
             if denominator == 0:
                 return 0.0

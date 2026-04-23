@@ -38,7 +38,9 @@ app = FastAPI(
 # ============================================================================
 
 # HTTP request metrics
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -72,12 +74,17 @@ app.add_middleware(
 
 # Redis client for rate limiting and caching
 redis_client = redis.Redis(
-    host=settings.REDIS_HOST, port=settings.REDIS_PORT, password=settings.REDIS_PASSWORD, decode_responses=True, db=0
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    password=settings.REDIS_PASSWORD,
+    decode_responses=True,
+    db=0,
 )
 
 # HTTP client for proxying requests (with connection pooling)
 http_client = httpx.AsyncClient(
-    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20), timeout=httpx.Timeout(30.0, connect=10.0)
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    timeout=httpx.Timeout(30.0, connect=10.0),
 )
 
 # Service registry
@@ -230,7 +237,9 @@ async def health_check():
                 if response.status_code == 200:
                     health_status["checks"][service_name] = "healthy"
                 else:
-                    health_status["checks"][service_name] = f"unhealthy: HTTP {response.status_code}"
+                    health_status["checks"][
+                        service_name
+                    ] = f"unhealthy: HTTP {response.status_code}"
                     if service_name in critical_services:
                         critical_unhealthy = True
                     else:
@@ -260,7 +269,9 @@ async def health_check():
     elif optional_unhealthy:
         # Only degraded if optional services are unhealthy
         health_status["status"] = "degraded"
-        health_status["message"] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        health_status["message"] = (
+            f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        )
         status_code = 200  # Degraded is still functional, return 200
     else:
         health_status["status"] = "healthy"
@@ -359,10 +370,18 @@ async def refresh_token(request: Request):
     payload = verify_jwt_token(token)
 
     # Create new token
-    token_data = {"sub": payload.get("sub"), "username": payload.get("username"), "iat": datetime.utcnow()}
+    token_data = {
+        "sub": payload.get("sub"),
+        "username": payload.get("username"),
+        "iat": datetime.utcnow(),
+    }
     access_token = create_jwt_token(token_data)
 
-    return {"access_token": access_token, "token_type": "bearer", "expires_in": settings.JWT_EXPIRATION_MINUTES * 60}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": settings.JWT_EXPIRATION_MINUTES * 60,
+    }
 
 
 # ============================================================================
@@ -393,7 +412,11 @@ async def proxy_request(service_url: str, path: str, request: Request):
     # Proxy request
     try:
         response = await http_client.request(
-            method=request.method, url=target_url, headers=headers, content=body, params=request.query_params
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            content=body,
+            params=request.query_params,
         )
 
         return JSONResponse(

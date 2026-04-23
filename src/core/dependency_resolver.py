@@ -346,7 +346,9 @@ class DependencyResolver:
                 installed_version = self.installed_plugins[dep_id].get("version", "0.0.0")
 
                 if not self._check_version_compat(installed_version, dep_version_req):
-                    result["conflicts"].append(f"{dep_id}: requires {dep_version_req}, has {installed_version}")
+                    result["conflicts"].append(
+                        f"{dep_id}: requires {dep_version_req}, has {installed_version}"
+                    )
                 else:
                     result["satisfied"].append(dep_id)
 
@@ -433,7 +435,11 @@ class DependencyResolver:
             dependencies = self.graph.get_dependencies(node)
             children = [build_tree(dep, visited.copy()) for dep in dependencies]
 
-            return {"id": node, "version": self.graph.versions.get(node, "unknown"), "dependencies": children}
+            return {
+                "id": node,
+                "version": self.graph.versions.get(node, "unknown"),
+                "dependencies": children,
+            }
 
         return build_tree(plugin_id, set())
 

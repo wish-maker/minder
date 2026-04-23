@@ -30,7 +30,16 @@ class ManifestSchema:
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "Minder Plugin Manifest",
         "type": "object",
-        "required": ["format_version", "id", "name", "version", "description", "author", "core_api", "permissions"],
+        "required": [
+            "format_version",
+            "id",
+            "name",
+            "version",
+            "description",
+            "author",
+            "core_api",
+            "permissions",
+        ],
         "properties": {
             "format_version": {
                 "type": "string",
@@ -44,13 +53,23 @@ class ManifestSchema:
                 "maxLength": 50,
                 "description": "Unique plugin identifier (lowercase, alphanumeric)",
             },
-            "name": {"type": "string", "minLength": 3, "maxLength": 100, "description": "Human-readable plugin name"},
+            "name": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 100,
+                "description": "Human-readable plugin name",
+            },
             "version": {
                 "type": "string",
                 "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
                 "description": "Semantic version (e.g., 1.0.0, 2.1.3-beta)",
             },
-            "description": {"type": "string", "minLength": 10, "maxLength": 500, "description": "Plugin description"},
+            "description": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 500,
+                "description": "Plugin description",
+            },
             "author": {
                 "type": "string",
                 "pattern": "^.+\\s<.+@.+\\..+>$",
@@ -96,7 +115,11 @@ class ManifestSchema:
                     "branch": {"type": "string", "default": "main"},
                     "tag": {"type": "string", "description": "Git tag for this version"},
                     "auto_update": {"type": "boolean", "default": False},
-                    "release_channel": {"type": "string", "enum": ["stable", "beta", "alpha"], "default": "stable"},
+                    "release_channel": {
+                        "type": "string",
+                        "enum": ["stable", "beta", "alpha"],
+                        "default": "stable",
+                    },
                 },
             },
             "dependencies": {
@@ -154,7 +177,10 @@ class ManifestSchema:
                         "type": "array",
                         "items": {
                             "type": "object",
-                            "properties": {"name": {"type": "string"}, "version": {"type": "string"}},
+                            "properties": {
+                                "name": {"type": "string"},
+                                "version": {"type": "string"},
+                            },
                             "required": ["name"],
                         },
                     },
@@ -215,11 +241,17 @@ class ManifestSchema:
                 "properties": {
                     "cpu": {
                         "type": "object",
-                        "properties": {"limit": {"type": "string"}, "reservation": {"type": "string"}},
+                        "properties": {
+                            "limit": {"type": "string"},
+                            "reservation": {"type": "string"},
+                        },
                     },
                     "memory": {
                         "type": "object",
-                        "properties": {"limit": {"type": "string"}, "reservation": {"type": "string"}},
+                        "properties": {
+                            "limit": {"type": "string"},
+                            "reservation": {"type": "string"},
+                        },
                     },
                     "storage": {
                         "type": "object",

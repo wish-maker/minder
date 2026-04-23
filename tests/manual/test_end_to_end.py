@@ -31,7 +31,9 @@ async def test_end_to_end():
 
         print(f"✓ API Status: {health['status']}")
         print(f"✓ System Uptime: {health['system']['uptime_seconds']:.0f}s")
-        print(f"✓ Plugins Ready: {health['system']['plugins']['ready']}/{health['system']['plugins']['total']}")
+        print(
+            f"✓ Plugins Ready: {health['system']['plugins']['ready']}/{health['system']['plugins']['total']}"
+        )
         print(f"✓ Authentication: {health['authentication']}")
         print(f"✓ Network Detection: {health['network_detection']}")
 
@@ -196,7 +198,9 @@ async def test_end_to_end():
         print("\n✅ ALL TESTS PASSED - REAL DATA CONFIRMED")
         return True
     elif real_data_count > 0:
-        print(f"\n⚠️ PARTIAL SUCCESS - {real_data_count}/{total_plugins} plugins collecting real data")
+        print(
+            f"\n⚠️ PARTIAL SUCCESS - {real_data_count}/{total_plugins} plugins collecting real data"
+        )
         print("   (Some plugins may be rate-limited by external APIs)")
         return True
     else:

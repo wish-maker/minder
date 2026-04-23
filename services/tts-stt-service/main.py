@@ -17,6 +17,7 @@ from fastapi import Response as FastAPIResponse
 # TTS/STT libraries
 try:
     from gtts import gTTS
+
     TTS_AVAILABLE = True
 except ImportError:
     TTS_AVAILABLE = False
@@ -24,6 +25,7 @@ except ImportError:
 
 try:
     import speech_recognition as sr
+
     STT_AVAILABLE = True
 except ImportError:
     STT_AVAILABLE = False
@@ -66,37 +68,35 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-tts_requests_total = Counter(
-    "tts_requests_total",
-    "Total TTS requests",
-    ["language", "status"]
-)
+tts_requests_total = Counter("tts_requests_total", "Total TTS requests", ["language", "status"])
 
-stt_requests_total = Counter(
-    "stt_requests_total",
-    "Total STT requests",
-    ["language", "status"]
-)
+stt_requests_total = Counter("stt_requests_total", "Total STT requests", ["language", "status"])
 
 # ============================================================================
 # Pydantic Models
 # ============================================================================
 
+
 class TTSRequest(BaseModel):
     """Text-to-Speech request"""
+
     text: str
     language: str = DEFAULT_TTS_LANG
     slow: bool = False
 
+
 class STTResponse(BaseModel):
     """STT response"""
+
     text: str
     language: str
     confidence: float
 
+
 # ============================================================================
 # TTS Endpoints
 # ============================================================================
+
 
 @app.post("/tts", tags=["TTS"])
 async def text_to_speech(request: TTSRequest):
@@ -106,10 +106,7 @@ async def text_to_speech(request: TTSRequest):
 
     # Validate language
     if request.language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported language: {request.language}"
-        )
+        raise HTTPException(status_code=400, detail=f"Unsupported language: {request.language}")
 
     try:
         tts_requests_total.labels(language=request.language, status="success").inc()
@@ -139,7 +136,7 @@ async def text_to_speech(request: TTSRequest):
                 "Content-Disposition": f"attachment; filename=speech.mp3",
                 "X-Duration": str(duration),
                 "X-Language": request.language,
-            }
+            },
         )
 
     except Exception as e:
@@ -154,18 +151,17 @@ async def get_tts_languages():
     return {
         "languages": SUPPORTED_LANGUAGES,
         "default": DEFAULT_TTS_LANG,
-        "available": TTS_AVAILABLE
+        "available": TTS_AVAILABLE,
     }
+
 
 # ============================================================================
 # STT Endpoints
 # ============================================================================
 
+
 @app.post("/stt", response_model=STTResponse, tags=["STT"])
-async def speech_to_text(
-    file: UploadFile = File(...),
-    language: str = DEFAULT_STT_LANG
-):
+async def speech_to_text(file: UploadFile = File(...), language: str = DEFAULT_STT_LANG):
     """Convert speech to text"""
     if not STT_AVAILABLE:
         raise HTTPException(status_code=503, detail="STT not available")
@@ -202,11 +198,7 @@ async def speech_to_text(
 
         stt_requests_total.labels(language=language, status="success").inc()
 
-        return STTResponse(
-            text=text,
-            language=language,
-            confidence=confidence
-        )
+        return STTResponse(text=text, language=language, confidence=confidence)
 
     except Exception as e:
         stt_requests_total.labels(language=language, status="error").inc()
@@ -221,12 +213,14 @@ async def get_stt_languages():
         "languages": SUPPORTED_LANGUAGES,
         "auto_detect": True,
         "default": DEFAULT_STT_LANG,
-        "available": STT_AVAILABLE
+        "available": STT_AVAILABLE,
     }
+
 
 # ============================================================================
 # Health & Metrics
 # ============================================================================
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():
@@ -261,6 +255,7 @@ async def root():
 # ============================================================================
 # Startup Event
 # ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():

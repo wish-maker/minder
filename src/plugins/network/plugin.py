@@ -112,7 +112,9 @@ class NetworkModule(BaseModule):
                     self.influxdb_client = InfluxDBClient(
                         url=influxdb_url, token=token, org=org, timeout=10000  # 10 seconds
                     )
-                    self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
+                    self.influxdb_write_api = self.influxdb_client.write_api(
+                        write_options=ASYNCHRONOUS
+                    )
                     logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
             except Exception as e:
                 logger.warning(f"⚠️  Failed to initialize InfluxDB client: {e}")
@@ -412,25 +414,27 @@ class NetworkModule(BaseModule):
         try:
             async with self.pool.acquire() as conn:
                 # Calculate average metrics
-                result = await conn.fetchrow(
-                    """
+                result = await conn.fetchrow("""
                     SELECT
                         AVG(CASE WHEN metric_name = 'cpu_usage_percent' THEN metric_value END) as avg_cpu,
                         AVG(CASE WHEN metric_name = 'memory_usage_percent' THEN metric_value END) as avg_memory,
                         AVG(CASE WHEN metric_name = 'load_average_1min' THEN metric_value END) as avg_load
                     FROM network_metrics
                     WHERE timestamp >= NOW() - INTERVAL '1 hour'
-                """
-                )
+                """)
 
                 if result and result["avg_cpu"]:
                     return {
                         "metrics": {
-                            "avg_cpu_usage_pct": (round(float(result["avg_cpu"]), 1) if result["avg_cpu"] else 0),
+                            "avg_cpu_usage_pct": (
+                                round(float(result["avg_cpu"]), 1) if result["avg_cpu"] else 0
+                            ),
                             "avg_memory_usage_pct": (
                                 round(float(result["avg_memory"]), 1) if result["avg_memory"] else 0
                             ),
-                            "avg_load_avg": (round(float(result["avg_load"]), 2) if result["avg_load"] else 0),
+                            "avg_load_avg": (
+                                round(float(result["avg_load"]), 2) if result["avg_load"] else 0
+                            ),
                             "packet_loss_pct": 0.01,
                         },
                         "patterns": [
@@ -474,10 +478,14 @@ class NetworkModule(BaseModule):
             "collections": 2,
         }
 
-    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
+    async def get_correlations(
+        self, other_module: str, correlation_type: str = "auto"
+    ) -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
+    async def get_anomalies(
+        self, severity: str = "medium", limit: int = 100
+    ) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:
@@ -545,7 +553,9 @@ class NetworkModule(BaseModule):
             handler=self._agent_test_network_speed,
         )
 
-        logger.info(f"✅ Network module registered {len(self.agent_capability.actions)} agent actions")
+        logger.info(
+            f"✅ Network module registered {len(self.agent_capability.actions)} agent actions"
+        )
 
     async def _agent_query_network_metrics(self, action, context) -> Dict[str, Any]:
         """Agent action: Query network metrics"""
@@ -580,7 +590,11 @@ class NetworkModule(BaseModule):
                         },
                     }
                 else:
-                    return {"success": False, "action": action.name, "error": "No metrics available"}
+                    return {
+                        "success": False,
+                        "action": action.name,
+                        "error": "No metrics available",
+                    }
 
         except Exception as e:
             logger.error(f"Agent action failed: {e}")
@@ -595,7 +609,9 @@ class NetworkModule(BaseModule):
         timeout = action.parameters.get("timeout", 5)
 
         try:
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), timeout=timeout
+            )
 
             writer.close()
             await writer.wait_closed()
@@ -603,14 +619,24 @@ class NetworkModule(BaseModule):
             return {
                 "success": True,
                 "action": action.name,
-                "data": {"host": host, "port": port, "status": "reachable", "latency_seconds": timeout},
+                "data": {
+                    "host": host,
+                    "port": port,
+                    "status": "reachable",
+                    "latency_seconds": timeout,
+                },
             }
 
         except asyncio.TimeoutError:
             return {
                 "success": False,
                 "action": action.name,
-                "data": {"host": host, "port": port, "status": "timeout", "timeout_seconds": timeout},
+                "data": {
+                    "host": host,
+                    "port": port,
+                    "status": "timeout",
+                    "timeout_seconds": timeout,
+                },
             }
         except Exception as e:
             return {

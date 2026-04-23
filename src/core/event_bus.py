@@ -92,7 +92,9 @@ class EventBus:
             # Check for failures
             failed = sum(1 for r in results if isinstance(r, Exception))
             if failed > 0:
-                logger.warning(f"{failed}/{len(results)} subscribers failed for event: {event.type.value}")
+                logger.warning(
+                    f"{failed}/{len(results)} subscribers failed for event: {event.type.value}"
+                )
 
             return failed == 0
 
@@ -177,6 +179,7 @@ class EventBus:
             "events_published": len(self._event_history),
             "dead_letter_count": len(self._dead_letter_queue),
             "subscribers_by_type": {
-                event_type.value: len(handlers) for event_type, handlers in self._subscribers.items()
+                event_type.value: len(handlers)
+                for event_type, handlers in self._subscribers.items()
             },
         }

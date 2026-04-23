@@ -40,27 +40,19 @@ app = FastAPI(
 # ============================================================================
 
 http_requests_total = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "endpoint", "status"]
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
 )
 
 http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request latency",
-    ["method", "endpoint"]
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
 plugins_total = Gauge(
-    "plugins_total",
-    "Total number of plugins",
-    ["status"]  # registered, enabled, disabled, error
+    "plugins_total", "Total number of plugins", ["status"]  # registered, enabled, disabled, error
 )
 
 health_check_failures_total = Counter(
-    "health_check_failures_total",
-    "Total health check failures",
-    ["plugin"]
+    "health_check_failures_total", "Total health check failures", ["plugin"]
 )
 
 # ============================================================================
@@ -110,7 +102,11 @@ class PluginInstallationRequest(BaseModel):
 
 # Redis client for service discovery and caching
 redis_client = redis.Redis(
-    host=settings.REDIS_HOST, port=settings.REDIS_PORT, password=settings.REDIS_PASSWORD, decode_responses=True, db=0
+    host=settings.REDIS_HOST,
+    port=settings.REDIS_PORT,
+    password=settings.REDIS_PASSWORD,
+    decode_responses=True,
+    db=0,
 )
 
 # PostgreSQL client for plugin persistence
@@ -118,20 +114,28 @@ import asyncpg
 
 postgres_pool = None
 
+
 async def get_postgres_connection():
     """Get PostgreSQL connection from pool"""
     global postgres_pool
     if postgres_pool is None:
         postgres_pool = await asyncpg.create_pool(
-            host=settings.POSTGRES_HOST if hasattr(settings, 'POSTGRES_HOST') else 'minder-postgres',
-            port=settings.POSTGRES_PORT if hasattr(settings, 'POSTGRES_PORT') else 5432,
-            user=settings.POSTGRES_USER if hasattr(settings, 'POSTGRES_USER') else 'minder',
-            password=settings.POSTGRES_PASSWORD if hasattr(settings, 'POSTGRES_PASSWORD') else 'dev_password_change_me',
-            database=settings.POSTGRES_DB if hasattr(settings, 'POSTGRES_DB') else 'minder',
+            host=(
+                settings.POSTGRES_HOST if hasattr(settings, "POSTGRES_HOST") else "minder-postgres"
+            ),
+            port=settings.POSTGRES_PORT if hasattr(settings, "POSTGRES_PORT") else 5432,
+            user=settings.POSTGRES_USER if hasattr(settings, "POSTGRES_USER") else "minder",
+            password=(
+                settings.POSTGRES_PASSWORD
+                if hasattr(settings, "POSTGRES_PASSWORD")
+                else "dev_password_change_me"
+            ),
+            database=settings.POSTGRES_DB if hasattr(settings, "POSTGRES_DB") else "minder",
             min_size=2,
-            max_size=10
+            max_size=10,
         )
     return postgres_pool
+
 
 # ============================================================================
 # Plugin Storage
@@ -254,7 +258,9 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "enabled": True,
                     "host": "minder-influxdb",
                     "port": 8086,
-                    "token": os.environ.get("INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"),
+                    "token": os.environ.get(
+                        "INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"
+                    ),
                     "org": "minder",
                     "bucket": "minder-metrics",
                 },
@@ -283,7 +289,9 @@ async def load_plugin_from_module(plugin_dir: Path):
             plugins_db[plugin_name] = plugin_info
             plugin_instances[plugin_name] = plugin_instance
 
-            logger.info(f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})")
+            logger.info(
+                f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})"
+            )
 
     except Exception as e:
         logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
@@ -320,7 +328,7 @@ async def health_check_loop():
                     await update_plugin_in_database(
                         plugin_name,
                         health_status=plugin_info.health_status,
-                        last_health_check=last_check_dt
+                        last_health_check=last_check_dt,
                     )
 
             except Exception as e:
@@ -439,6 +447,7 @@ async def enable_plugin(plugin_name: str):
     # Update plugin instance status to READY for health check
     if plugin_name in plugin_instances:
         from src.core.interface import ModuleStatus
+
         plugin_instances[plugin_name].status = ModuleStatus.READY
 
     # Persist to database
@@ -459,6 +468,7 @@ async def disable_plugin(plugin_name: str):
     # Update plugin instance status to REGISTERED for health check
     if plugin_name in plugin_instances:
         from src.core.interface import ModuleStatus
+
         plugin_instances[plugin_name].status = ModuleStatus.REGISTERED
 
     # Persist to database
@@ -534,7 +544,7 @@ async def trigger_plugin_collection(plugin_name: str, background_tasks: Backgrou
         "message": f"Data collection triggered for {plugin_name}",
         "plugin": plugin_name,
         "status": "collecting",
-        "note": "Collection runs in background. Check /health endpoint for results."
+        "note": "Collection runs in background. Check /health endpoint for results.",
     }
 
 
@@ -652,13 +662,14 @@ if __name__ == "__main__":
 # Database Operations
 # ============================================================================
 
+
 async def load_plugins_from_database():
     """Load plugins from PostgreSQL database into memory cache"""
     global plugins_db
-    
+
     try:
         conn = await get_postgres_connection()
-        
+
         query = """
             SELECT name, version, description, author, status, enabled,
                    capabilities, data_sources, databases, health_status, 
@@ -666,28 +677,30 @@ async def load_plugins_from_database():
             FROM plugins
             ORDER BY name
         """
-        
+
         rows = await conn.fetch(query)
-        
+
         for row in rows:
             plugin_info = PluginInfo(
-                name=row['name'],
-                version=row['version'],
-                description=row['description'],
-                author=row['author'],
-                status=row['status'],
-                enabled=row['enabled'],
-                capabilities=row['capabilities'] or [],
-                data_sources=row['data_sources'] or [],
-                databases=row['databases'] or [],
-                registered_at=row['registered_at'].isoformat() if row['registered_at'] else None,
-                health_status=row['health_status'] or 'unknown',
-                last_health_check=row['last_health_check'].isoformat() if row['last_health_check'] else None
+                name=row["name"],
+                version=row["version"],
+                description=row["description"],
+                author=row["author"],
+                status=row["status"],
+                enabled=row["enabled"],
+                capabilities=row["capabilities"] or [],
+                data_sources=row["data_sources"] or [],
+                databases=row["databases"] or [],
+                registered_at=row["registered_at"].isoformat() if row["registered_at"] else None,
+                health_status=row["health_status"] or "unknown",
+                last_health_check=(
+                    row["last_health_check"].isoformat() if row["last_health_check"] else None
+                ),
             )
-            plugins_db[row['name']] = plugin_info
-        
+            plugins_db[row["name"]] = plugin_info
+
         logger.info(f"Loaded {len(plugins_db)} plugins from database")
-        
+
     except Exception as e:
         logger.error(f"Failed to load plugins from database: {e}")
 
@@ -696,24 +709,24 @@ async def update_plugin_in_database(plugin_name: str, **updates):
     """Update plugin in database"""
     try:
         conn = await get_postgres_connection()
-        
+
         # Build SET clause dynamically
         set_clauses = []
         values = []
         for key, value in updates.items():
             set_clauses.append(f"{key} = ${len(values) + 1}")
             values.append(value)
-        
+
         values.append(plugin_name)  # For WHERE clause
-        
+
         query = f"""
             UPDATE plugins
             SET {', '.join(set_clauses)}, updated_at = NOW()
             WHERE name = ${len(values)}
         """
-        
+
         await conn.execute(query, *values)
         logger.debug(f"Updated plugin {plugin_name} in database: {list(updates.keys())}")
-        
+
     except Exception as e:
         logger.error(f"Failed to update plugin {plugin_name} in database: {e}")

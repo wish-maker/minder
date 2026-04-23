@@ -26,27 +26,19 @@ app = FastAPI(
 # ============================================================================
 
 http_requests_total = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "endpoint", "status"]
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
 )
 
 http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request latency",
-    ["method", "endpoint"]
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-models_registered_total = Gauge(
-    "models_registered_total",
-    "Total number of registered models"
-)
+models_registered_total = Gauge("models_registered_total", "Total number of registered models")
 
 fine_tuning_jobs_total = Counter(
-    "fine_tuning_jobs_total",
-    "Total fine-tuning jobs",
-    ["status"]  # started, completed, failed
+    "fine_tuning_jobs_total", "Total fine-tuning jobs", ["status"]  # started, completed, failed
 )
+
 
 # Pydantic models
 class ModelInfo(BaseModel):
@@ -176,7 +168,9 @@ async def fine_tune_model(request: FineTuneRequest):
 
     # Implement fine-tuning logic
     # This is a placeholder - implement actual fine-tuning
-    fine_tuned_model_id = f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    fine_tuned_model_id = (
+        f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
 
     logger.info(f"Starting fine-tuning: {request.base_model} -> {fine_tuned_model_id}")
 
