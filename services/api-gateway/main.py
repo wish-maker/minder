@@ -38,35 +38,20 @@ app = FastAPI(
 # ============================================================================
 
 # HTTP request metrics
-http_requests_total = Counter(
-    "http_requests_total",
-    "Total HTTP requests",
-    ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request latency",
-    ["method", "endpoint"]
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
 http_requests_in_progress = Gauge(
-    "http_requests_in_progress",
-    "HTTP requests currently in progress",
-    ["method", "endpoint"]
+    "http_requests_in_progress", "HTTP requests currently in progress", ["method", "endpoint"]
 )
 
 # Service health metrics
-service_health_up = Gauge(
-    "service_health_up",
-    "Service health status (1=up, 0=down)",
-    ["service"]
-)
+service_health_up = Gauge("service_health_up", "Service health status (1=up, 0=down)", ["service"])
 
-active_plugins_gauge = Gauge(
-    "active_plugins_total",
-    "Number of active plugins"
-)
+active_plugins_gauge = Gauge("active_plugins_total", "Number of active plugins")
 
 # ============================================================================
 # Middleware Configuration
@@ -188,8 +173,7 @@ if settings.RATE_LIMIT_ENABLED:
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint
-    Returns status of API Gateway and downstream services
+    Health check endpoint with phase-aware downstream service status
     """
     health_status = {
         "service": "api-gateway",
@@ -197,31 +181,91 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "version": "2.0.0",
         "environment": settings.ENVIRONMENT,
+        "phase": settings.MINDER_PHASE,
         "checks": {},
     }
 
-    # Check Redis connection
-    try:
-        redis_client.ping()
-        health_status["checks"]["redis"] = "healthy"
-    except Exception as e:
-        health_status["checks"]["redis"] = f"unhealthy: {str(e)}"
-        health_status["status"] = "degraded"
+    # Define critical services for each phase
+    PHASE_1_SERVICES = ["redis", "plugin_registry"]
+    PHASE_2_SERVICES = ["rag_pipeline", "model_management"]
 
-    # Check downstream services (optional - may slow down health check)
-    for service_name, service_url in SERVICE_REGISTRY.items():
+    # All services to check
+    ALL_SERVICES = {
+        "redis": ("redis", lambda: redis_client.ping()),
+        "plugin_registry": (
+            settings.PLUGIN_REGISTRY_URL,
+            lambda: http_client.get(f"{settings.PLUGIN_REGISTRY_URL}/health", timeout=5.0),
+        ),
+        "rag_pipeline": (
+            settings.RAG_PIPELINE_URL,
+            lambda: http_client.get(f"{settings.RAG_PIPELINE_URL}/health", timeout=5.0),
+        ),
+        "model_management": (
+            settings.MODEL_MANAGEMENT_URL,
+            lambda: http_client.get(f"{settings.MODEL_MANAGEMENT_URL}/health", timeout=5.0),
+        ),
+    }
+
+    # Determine which services are critical for current phase
+    if settings.MINDER_PHASE == 1:
+        critical_services = PHASE_1_SERVICES
+    elif settings.MINDER_PHASE >= 2:
+        critical_services = PHASE_1_SERVICES + PHASE_2_SERVICES
+    else:
+        critical_services = PHASE_1_SERVICES
+
+    # Check all services
+    critical_unhealthy = False
+    optional_unhealthy = False
+
+    for service_name, (service_url, check_func) in ALL_SERVICES.items():
         try:
-            response = await http_client.get(f"{service_url}/health", timeout=2.0)
-            if response.status_code == 200:
+            if service_name == "redis":
+                # Redis check
+                check_func()
                 health_status["checks"][service_name] = "healthy"
             else:
-                health_status["checks"][service_name] = f"unhealthy: status {response.status_code}"
-                health_status["status"] = "degraded"
+                # HTTP service check
+                response = await check_func()
+                if response.status_code == 200:
+                    health_status["checks"][service_name] = "healthy"
+                else:
+                    health_status["checks"][service_name] = f"unhealthy: HTTP {response.status_code}"
+                    if service_name in critical_services:
+                        critical_unhealthy = True
+                    else:
+                        optional_unhealthy = True
         except Exception as e:
-            health_status["checks"][service_name] = f"unreachable: {str(e)}"
-            health_status["status"] = "degraded"
+            # Provide meaningful error messages
+            error_type = type(e).__name__
+            if error_type == "ReadTimeout":
+                error_msg = "timeout after 5.0s"
+            elif error_type == "ConnectError":
+                error_msg = "connection refused"
+            elif error_type == "ConnectTimeout":
+                error_msg = "connection timeout"
+            else:
+                error_msg = str(e) if str(e) else error_type
 
-    status_code = 200 if health_status["status"] == "healthy" else 503
+            health_status["checks"][service_name] = f"unreachable: {error_msg}"
+            if service_name in critical_services:
+                critical_unhealthy = True
+            else:
+                optional_unhealthy = True
+
+    # Determine overall status based on critical services
+    if critical_unhealthy:
+        health_status["status"] = "unhealthy"
+        status_code = 503
+    elif optional_unhealthy:
+        # Only degraded if optional services are unhealthy
+        health_status["status"] = "degraded"
+        health_status["message"] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        status_code = 200  # Degraded is still functional, return 200
+    else:
+        health_status["status"] = "healthy"
+        status_code = 200
+
     return JSONResponse(status_code=status_code, content=health_status)
 
 
