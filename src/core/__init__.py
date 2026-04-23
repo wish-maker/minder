@@ -10,7 +10,7 @@ from .event_bus import Event, EventBus, EventType
 
 # Note: MinderKernel is disabled (not yet implemented)
 # from .kernel import MinderKernel
-from .module_interface_v2 import BaseModule, ModuleMetadata, ModuleStatus
+from .interface import BaseModule, ModuleMetadata, ModuleStatus
 from .plugin_loader import PluginLoader
 from .registry import PluginRegistry
 

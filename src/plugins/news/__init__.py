@@ -26,7 +26,7 @@ Data Sources:
 Status: ✅ PRODUCTION READY (Version 1.0.0)
 """
 
-from .news_module import NewsModule
+from .plugin import NewsModule
 
 __all__ = ["NewsModule"]
 __version__ = "1.0.0"

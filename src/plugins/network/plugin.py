@@ -21,7 +21,7 @@ except ImportError:
     INFLUXDB_AVAILABLE = False
     logging.warning("influxdb-client not installed. Install with: pip install influxdb-client")
 
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 

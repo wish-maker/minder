@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .module_interface import BaseModule, ModuleMetadata, ModuleStatus
+from .interface import BaseModule, ModuleMetadata, ModuleStatus
 
 logger = logging.getLogger(__name__)
 

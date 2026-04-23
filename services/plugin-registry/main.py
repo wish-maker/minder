@@ -226,7 +226,7 @@ async def load_plugin_from_module(plugin_dir: Path):
 
         if not plugin_class:
             # Fallback: search for BaseModule subclass
-            from src.core.module_interface_v2 import BaseModule
+            from src.core.interface import BaseModule
 
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
@@ -438,7 +438,7 @@ async def enable_plugin(plugin_name: str):
 
     # Update plugin instance status to READY for health check
     if plugin_name in plugin_instances:
-        from src.core.module_interface_v2 import ModuleStatus
+        from src.core.interface import ModuleStatus
         plugin_instances[plugin_name].status = ModuleStatus.READY
 
     # Persist to database
@@ -458,7 +458,7 @@ async def disable_plugin(plugin_name: str):
 
     # Update plugin instance status to REGISTERED for health check
     if plugin_name in plugin_instances:
-        from src.core.module_interface_v2 import ModuleStatus
+        from src.core.interface import ModuleStatus
         plugin_instances[plugin_name].status = ModuleStatus.REGISTERED
 
     # Persist to database

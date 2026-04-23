@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 import asyncpg
 
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 logger = logging.getLogger(__name__)
 

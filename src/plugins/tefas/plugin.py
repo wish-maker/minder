@@ -61,7 +61,7 @@ except ImportError:
     BORSAPY_AVAILABLE = False
     TEFAS_CRAWLER_AVAILABLE = TEFAS_AVAILABLE
 
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 logger = logging.getLogger("minder.module.tefas")
 

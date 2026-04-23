@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata  # noqa: F401
+from src.core.interface import BaseModule, ModuleMetadata  # noqa: F401
 from src.core.plugin_loader import PluginLoader
 from src.core.plugin_manifest import (
     ManifestValidator,
@@ -135,7 +135,7 @@ author: Test Author
         # Create plugin file
         (plugin_dir / "test_plugin_plugin.py").write_text(
             """
-from src.core.module_interface_v2 import BaseModule
+from src.core.interface import BaseModule
 
 class TestPlugin(BaseModule):
     async def register(self):
@@ -193,7 +193,7 @@ capabilities: []
 
         (plugin_dir / "valid_plugin_plugin.py").write_text(
             """
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 class ValidPlugin(BaseModule):
     async def register(self) -> ModuleMetadata:
@@ -359,7 +359,7 @@ capabilities:
 
         (plugin_dir / "third_party_plugin_plugin.py").write_text(
             """
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 class ThirdPartyPlugin(BaseModule):
     async def register(self) -> ModuleMetadata:

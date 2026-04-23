@@ -27,7 +27,7 @@ Data Sources:
 Status: ✅ PRODUCTION READY (Version 1.0.0)
 """
 
-from .crypto_module import CryptoModule
+from .plugin import CryptoModule
 
 __all__ = ["CryptoModule"]
 __version__ = "1.0.0"

@@ -23,7 +23,7 @@ Data Source: Open-Meteo API (Free, no API key required)
 Status: ✅ PRODUCTION READY (Version 1.0.0)
 """
 
-from .weather_module import WeatherModule
+from .plugin import WeatherModule
 
 __all__ = ["WeatherModule"]
 __version__ = "1.0.0"

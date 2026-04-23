@@ -22,7 +22,7 @@ Dependencies:
 Status: ✅ PRODUCTION READY (Version 1.0.0)
 """
 
-from .network_module import NetworkModule
+from .plugin import NetworkModule
 
 __all__ = ["NetworkModule"]
 __version__ = "1.0.0"

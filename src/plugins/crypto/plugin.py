@@ -15,7 +15,7 @@ import aiohttp
 import asyncpg
 import yaml
 
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 crypto_plugin_dir = Path(__file__).parent
 if str(crypto_plugin_dir) not in sys.path:

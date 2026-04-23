@@ -440,7 +440,7 @@ capabilities: []
 
         (plugin_dir / "untrusted_plugin_plugin.py").write_text(
             """
-from src.core.module_interface_v2 import BaseModule, ModuleMetadata
+from src.core.interface import BaseModule, ModuleMetadata
 
 class UntrustedPlugin(BaseModule):
     async def register(self) -> ModuleMetadata:

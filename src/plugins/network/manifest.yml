@@ -1,0 +1,44 @@
+name: network
+version: 1.0.0
+description: Network performance monitoring and security analysis with system metrics collection
+author: FundMind AI
+license: MIT
+
+minder:
+  min_version: 1.0.0
+
+python:
+  min_version: 3.11
+
+dependencies:
+  python:
+    - asyncpg>=0.29.0
+    - psutil>=5.9.0
+    - influxdb-client>=1.38.0
+
+permissions:
+  filesystem:
+    read:
+      - /proc/net/*
+      - /sys/class/net/*
+    write: []
+    execute: []
+  network:
+    allowed_hosts: []
+    allowed_ports: []
+    max_requests_per_minute: 120
+  database:
+    databases: [minder]
+    tables: [network_metrics, system_stats]
+    operations: [read, write]
+  resources:
+    max_memory_mb: 256
+    max_cpu_percent: 30
+    max_execution_time: 120
+
+capabilities:
+  - network_monitoring
+  - system_metrics_collection
+  - performance_analysis
+  - security_analysis
+  - time_series_metrics

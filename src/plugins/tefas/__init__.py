@@ -25,7 +25,7 @@ Dependencies:
 Status: ✅ PRODUCTION READY (Version 1.0.0)
 """
 
-from .tefas_module import TefasModule
+from .plugin import TefasModule
 
 __all__ = ["TefasModule"]
 __version__ = "1.0.0"

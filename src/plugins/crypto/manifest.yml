@@ -1,0 +1,46 @@
+name: crypto
+version: 1.0.0
+description: Cryptocurrency analysis and tracking module with real-time price data, market trends, and portfolio analytics
+author: FundMind AI
+license: MIT
+
+minder:
+  min_version: 1.0.0
+
+python:
+  min_version: 3.11
+
+dependencies:
+  python:
+    - aiohttp>=3.9.0
+    - asyncpg>=0.29.0
+    - pyyaml>=6.0
+    - pandas>=2.1.0
+
+permissions:
+  filesystem:
+    read: []
+    write: []
+    execute: []
+  network:
+    allowed_hosts:
+      - api.coingecko.com
+      - api.binance.com
+      - api.kraken.com
+    allowed_ports: [443]
+    max_requests_per_minute: 60
+  database:
+    databases: [minder]
+    tables: [crypto_data, crypto_prices, crypto_markets]
+    operations: [read, write]
+  resources:
+    max_memory_mb: 512
+    max_cpu_percent: 40
+    max_execution_time: 300
+
+capabilities:
+  - cryptocurrency_price_tracking
+  - market_analysis
+  - portfolio_tracking
+  - trend_detection
+  - real_time_data
