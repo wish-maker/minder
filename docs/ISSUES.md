@@ -1507,24 +1507,38 @@ curl http://localhost:8004/health
 ```
 
 **Root Cause:**
-Unknown - Docker networking configuration issue between API Gateway and RAG Pipeline containers
+Container name mismatch between docker-compose.yml and actual running container.
+
+**Expected (docker-compose.yml):**
+- container_name: `minder-rag-pipeline`
+- Service URL: `http://minder-rag-pipeline:8004`
+
+**Actual (docker ps):**
+- Container name: `minder-rag-pipeline-ollama`
+- Image: `minder/rag-pipeline:fixed`
+
+**Analysis:**
+RAG Pipeline was started manually with incorrect name instead of via docker-compose. This causes:
+1. Wrong container name in Docker network
+2. API Gateway service discovery fails (looks for `minder-rag-pipeline`)
+3. Container not properly managed by docker-compose
 
 **Impact:**
 - API Gateway shows degraded status
-- RAG Pipeline requests routed through gateway fail
-- Direct access to RAG Pipeline works fine
+- RAG Pipeline requests through gateway fail
+- Direct access works (port 8004)
+- Docker compose management broken
 
 **Solution:**
-1. Investigate Docker network configuration
-2. Verify service discovery in docker-compose.yml
-3. Test inter-container connectivity
-4. Fix network alias or service name resolution
+1. Stop manually created container: `docker stop minder-rag-pipeline-ollama && docker rm minder-rag-pipeline-ollama`
+2. Rebuild with docker-compose: `docker compose build rag-pipeline`
+3. Start with docker-compose: `docker compose up -d rag-pipeline`
+4. Verify container name: `docker ps | grep minder-rag-pipeline`
 
 **Files to Check:**
-- infrastructure/docker/docker-compose.yml
-- services/api-gateway/config.py
+- infrastructure/docker/docker-compose.yml (line 197-220)
 
-**Estimated Effort:** 1 hour
+**Estimated Effort:** 30 minutes (will be fixed during fresh clone deployment)
 
 ---
 
