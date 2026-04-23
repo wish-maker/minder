@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 
 class AllocationCollector:
     """Varlık dağılım veri toplama"""
-    
+
     async def collect(self, fund_code: str) -> Dict[str, Any]:
         """
         Fon varlık dağılım verilerini toplar
-        
+
         Args:
             fund_code: Fon kodu
-            
+
         Returns:
             Varlık dağılım verileri
         """
@@ -31,14 +31,14 @@ class AllocationCollector:
 
 class RiskMetricsCollector:
     """Risk metrik veri toplama"""
-    
+
     async def collect(self, fund_code: str) -> Dict[str, Any]:
         """
         Fon risk metrik verilerini toplar
-        
+
         Args:
             fund_code: Fon kodu
-            
+
         Returns:
             Risk metrik verileri
         """
@@ -49,14 +49,14 @@ class RiskMetricsCollector:
 
 class TaxCollector:
     """Vergi veri toplama"""
-    
+
     async def collect(self, fund_code: str) -> Dict[str, Any]:
         """
         Fon vergi verilerini toplar
-        
+
         Args:
             fund_code: Fon kodu
-            
+
         Returns:
             Vergi verileri
         """
