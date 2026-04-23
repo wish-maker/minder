@@ -47,9 +47,28 @@ services:
     networks:
       - minder-network
 
+  # Ollama - Local LLM and Embedding Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: minder-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    environment:
+      - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,mistral,qwen2.5,nomic-embed-text,mxbai-embed-large}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
   # Qdrant - Vector Database for RAG
   qdrant:
-    image: qdrant/qdrant:v1.7.4
+    image: qdrant/qdrant:v1.17.1
     container_name: minder-qdrant
     restart: unless-stopped
     volumes:
@@ -174,7 +193,7 @@ services:
   # ============================================================================
 
   # RAG Pipeline - Port 8004
-  # Knowledge base creation, document chunking, embedding generation
+  # Knowledge base creation, document chunking, embedding generation with Ollama
   rag-pipeline:
     build:
       context: ../../
@@ -187,18 +206,13 @@ services:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
 
+      # Ollama Configuration
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2}
+
       # Model Management
-      - MODEL_MANAGEMENT_URL=http://model-management:8005
-
-      # Embedding Configuration
-      - EMBEDDING_PROVIDER=openai
-      - EMBEDDING_MODEL=text-embedding-ada-002
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-
-      # LLM Configuration
-      - LLM_PROVIDER=ollama
-      - LLM_MODEL=llama2
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
 
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -207,6 +221,8 @@ services:
       - "8004:8004"
     depends_on:
       qdrant:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
@@ -257,7 +273,77 @@ services:
       - minder-network
 
   # ============================================================================
-  # Monitoring (Optional - Phase 3)
+  # Time-Series Monitoring (InfluxDB + Telegraf + Grafana)
+  # ============================================================================
+
+  # InfluxDB 2.x - Time-series database for metrics
+  influxdb:
+    image: influxdb:2.7.4
+    container_name: minder-influxdb
+    restart: unless-stopped
+    environment:
+      # Authentication
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUXDB_ADMIN_USERNAME:-admin}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUXDB_ADMIN_PASSWORD:-minderadmin123}
+      - DOCKER_INFLUXDB_INIT_ORG=minder
+      - DOCKER_INFLUXDB_INIT_BUCKET=minder-metrics
+      - DOCKER_INFLUXDB_INIT_RETENTION=30d
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-minder-super-secret-token-change-me-in-production}
+      # Logging
+      - INFLUXDB_LOG_LEVEL=info
+      - INFLUXDB_LOG_FORMAT=auto
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb
+    ports:
+      - "8086:8086"  # HTTP API
+      - "8083:8083"  # UI (if using InfluxDB 1.x compatibility)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # Telegraf - Metrics collection agent
+  telegraf:
+    image: telegraf:1.38.3
+    container_name: minder-telegraf
+    restart: unless-stopped
+    environment:
+      # InfluxDB connection
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-minder-super-secret-token-change-me-in-production}
+      - HOSTNAME=minder-server
+      - INSTANCE=production
+      # Service credentials
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+    volumes:
+      # Telegraf configuration
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      # System metrics access
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      influxdb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["--config", "/etc/telegraf/telegraf.conf", "--non-strict-env-handling"]
+    networks:
+      - minder-network
+    # Telegraf needs host process access for some metrics
+    privileged: false
+    pid: host  # Access to host PID namespace for process metrics
+    user: root  # Run as root for /dev/stdout access
+
+  # ============================================================================
+  # Legacy Monitoring (Optional - Prometheus Stack)
   # ============================================================================
 
   prometheus:
@@ -266,6 +352,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
@@ -273,6 +360,31 @@ services:
       - minder-network
     profiles:
       - monitoring
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: minder-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - minder-network
+    profiles:
+      - monitoring
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
 
   grafana:
     image: grafana/grafana:10.2.2
@@ -291,6 +403,128 @@ services:
       - minder-network
     profiles:
       - monitoring
+
+  # ============================================================================
+  # Web UI - OpenWebUI
+  # ============================================================================
+
+  # OpenWebUI - Browser-based Chat Interface
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: minder-openwebui
+    restart: unless-stopped
+    environment:
+      # Ollama Backend Connection
+      - OLLAMA_BASE_URL=http://ollama:11434
+
+      # RAG Pipeline Connection
+      - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
+      - RAG_ENABLED=true
+
+      # Data Storage (PostgreSQL)
+      - DATABASE_URL=postgresql://minder:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/minder
+
+      # Authentication
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-this-to-a-random-secret-key}
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
+
+      # JWT Integration with Minder
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_me}
+      - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
+
+      # Application
+      - ENABLE_SIGNUP=true
+      - DEFAULT_USER_ROLE=user
+      - DEFAULT_MODELS=${OLLAMA_LLM_MODEL:-llama3.2}
+
+      # Custom branding
+      - WEBUI_NAME=Minder AI Chat
+      - WEBUI_URL=http://localhost:3000
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - openwebui_data:/app/backend/data
+    ports:
+      - "3002:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      rag-pipeline:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # Model Fine-Tuning Service - ML model training with Ollama
+  model-fine-tuning:
+    build:
+      context: ../../
+      dockerfile: services/model-fine-tuning/Dockerfile
+    image: minder/model-fine-tuning:latest
+    container_name: minder-model-fine-tuning
+    restart: unless-stopped
+    environment:
+      # Ollama Configuration
+      - OLLAMA_HOST=http://ollama:11434
+      - DEFAULT_BASE_MODEL=${DEFAULT_BASE_MODEL:-llama3.2}
+
+      # Storage
+      - TRAINING_DATA_PATH=/app/training-data
+      - MODELS_OUTPUT_PATH=/app/models
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
+      - model_fine_tuning_data:/app/training-data
+      - fine_tuned_models:/app/models
+    ports:
+      - "8007:8007"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # TTS/STT Service - Text-to-Speech and Speech-to-Text
+  tts-stt-service:
+    build:
+      context: ../../
+      dockerfile: services/tts-stt-service/Dockerfile
+    image: minder/tts-stt-service:latest
+    container_name: minder-tts-stt-service
+    restart: unless-stopped
+    environment:
+      # Model configuration
+      - TTS_MODEL=${TTS_MODEL:-tts_models/multilingual/multi-dataset/xtts_v2}
+      - STT_MODEL=${STT_MODEL:-base}
+      - DEVICE=${TTS_DEVICE:-cpu}
+      - COMPUTE_TYPE=${TTS_COMPUTE_TYPE:-int8}
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    ports:
+      - "8006:8006"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
 
   # PostgreSQL Exporter - Expose PostgreSQL metrics
   postgres-exporter:
@@ -336,6 +570,8 @@ volumes:
     driver: local
   redis_data:
     driver: local
+  ollama_data:
+    driver: local
   qdrant_data:
     driver: local
   plugins_data:
@@ -344,9 +580,25 @@ volumes:
     driver: local
   models_cache:
     driver: local
+  openwebui_data:
+    driver: local
+  model_fine_tuning_data:
+    driver: local
+  fine_tuned_models:
+    driver: local
+  tts_stt_data:
+    driver: local
+  # InfluxDB volumes
+  influxdb_data:
+    driver: local
+  influxdb_config:
+    driver: local
+  # Prometheus monitoring volumes
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  alertmanager_data:
     driver: local
 
 # ============================================================================

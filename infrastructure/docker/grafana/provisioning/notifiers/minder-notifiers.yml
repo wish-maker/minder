@@ -1,0 +1,12 @@
+apiVersion: 1
+
+notifiers:
+  - name: 'minder-email-notifier'
+    type: email
+    uid: minder-email-1
+    orgId: 1
+    isDefault: true
+    settings:
+      addresses: 'alerts@minder.ai'
+      singleEmail: false
+      uploadImage: false

@@ -113,11 +113,31 @@ redis_client = redis.Redis(
     host=settings.REDIS_HOST, port=settings.REDIS_PORT, password=settings.REDIS_PASSWORD, decode_responses=True, db=0
 )
 
+# PostgreSQL client for plugin persistence
+import asyncpg
+
+postgres_pool = None
+
+async def get_postgres_connection():
+    """Get PostgreSQL connection from pool"""
+    global postgres_pool
+    if postgres_pool is None:
+        postgres_pool = await asyncpg.create_pool(
+            host=settings.POSTGRES_HOST if hasattr(settings, 'POSTGRES_HOST') else 'minder-postgres',
+            port=settings.POSTGRES_PORT if hasattr(settings, 'POSTGRES_PORT') else 5432,
+            user=settings.POSTGRES_USER if hasattr(settings, 'POSTGRES_USER') else 'minder',
+            password=settings.POSTGRES_PASSWORD if hasattr(settings, 'POSTGRES_PASSWORD') else 'dev_password_change_me',
+            database=settings.POSTGRES_DB if hasattr(settings, 'POSTGRES_DB') else 'minder',
+            min_size=2,
+            max_size=10
+        )
+    return postgres_pool
+
 # ============================================================================
 # Plugin Storage
 # ============================================================================
 
-plugins_db: Dict[str, PluginInfo] = {}
+plugins_db: Dict[str, PluginInfo] = {}  # In-memory cache
 plugin_instances: Dict[str, any] = {}
 services_db: Dict[str, ServiceRegistration] = {}
 
@@ -230,18 +250,29 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "password": os.environ.get("REDIS_PASSWORD", "dev_password_change_me"),
                     "db": 0,
                 },
+                "influxdb": {
+                    "enabled": True,
+                    "host": "minder-influxdb",
+                    "port": 8086,
+                    "token": os.environ.get("INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"),
+                    "org": "minder",
+                    "bucket": "minder-metrics",
+                },
             }
 
             # Instantiate and register plugin
             plugin_instance = plugin_class(plugin_config)
             metadata = await plugin_instance.register()
 
+            # Initialize plugin to set status to READY
+            await plugin_instance.initialize()
+
             plugin_info = PluginInfo(
                 name=metadata.name,
                 version=metadata.version,
                 description=metadata.description,
                 author=metadata.author,
-                status="registered",
+                status="registered",  # Will be updated by health check
                 dependencies=metadata.dependencies,
                 capabilities=metadata.capabilities,
                 data_sources=metadata.data_sources,
@@ -252,7 +283,7 @@ async def load_plugin_from_module(plugin_dir: Path):
             plugins_db[plugin_name] = plugin_info
             plugin_instances[plugin_name] = plugin_instance
 
-            logger.info(f"Loaded and registered plugin: {plugin_name}")
+            logger.info(f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})")
 
     except Exception as e:
         logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
@@ -273,7 +304,8 @@ async def health_check_loop():
 
                 if plugin_info:
                     plugin_info.health_status = "healthy" if health.get("healthy") else "unhealthy"
-                    plugin_info.last_health_check = datetime.now().isoformat()
+                    last_check_dt = datetime.now()
+                    plugin_info.last_health_check = last_check_dt.isoformat()
 
                     # Update in Redis for service discovery
                     redis_client.hset(
@@ -282,6 +314,13 @@ async def health_check_loop():
                             "health_status": plugin_info.health_status,
                             "last_health_check": plugin_info.last_health_check,
                         },
+                    )
+
+                    # Update in PostgreSQL for persistence (pass datetime object, not string)
+                    await update_plugin_in_database(
+                        plugin_name,
+                        health_status=plugin_info.health_status,
+                        last_health_check=last_check_dt
                     )
 
             except Exception as e:
@@ -396,6 +435,15 @@ async def enable_plugin(plugin_name: str):
         raise HTTPException(status_code=404, detail="Plugin not found")
 
     plugin.status = "enabled"
+
+    # Update plugin instance status to READY for health check
+    if plugin_name in plugin_instances:
+        from src.core.module_interface_v2 import ModuleStatus
+        plugin_instances[plugin_name].status = ModuleStatus.READY
+
+    # Persist to database
+    await update_plugin_in_database(plugin_name, status="enabled", enabled=True)
+
     return {"message": f"Plugin {plugin_name} enabled"}
 
 
@@ -407,6 +455,15 @@ async def disable_plugin(plugin_name: str):
         raise HTTPException(status_code=404, detail="Plugin not found")
 
     plugin.status = "disabled"
+
+    # Update plugin instance status to REGISTERED for health check
+    if plugin_name in plugin_instances:
+        from src.core.module_interface_v2 import ModuleStatus
+        plugin_instances[plugin_name].status = ModuleStatus.REGISTERED
+
+    # Persist to database
+    await update_plugin_in_database(plugin_name, status="disabled", enabled=False)
+
     return {"message": f"Plugin {plugin_name} disabled"}
 
 
@@ -428,6 +485,57 @@ async def get_plugin_health(plugin_name: str):
 
     health = await plugin_instance.health_check()
     return health
+
+
+@app.post("/v1/plugins/{plugin_name}/collect")
+async def trigger_plugin_collection(plugin_name: str, background_tasks: BackgroundTasks):
+    """
+    Manually trigger data collection for a plugin
+
+    This endpoint initiates an asynchronous data collection task for the specified plugin.
+    The collection runs in the background, allowing the API to respond immediately.
+
+    Args:
+        plugin_name: Name of the plugin to trigger collection for
+
+    Returns:
+        Confirmation message with collection status
+
+    Raises:
+        HTTPException 404: If plugin is not found
+        HTTPException 400: If plugin is not enabled
+    """
+    # Check if plugin exists
+    plugin = plugins_db.get(plugin_name)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
+
+    # Check if plugin is enabled
+    if plugin.status != "enabled":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Plugin '{plugin_name}' is not enabled. Current status: {plugin.status}",
+        )
+
+    # Get plugin instance
+    plugin_instance = plugin_instances.get(plugin_name)
+    if not plugin_instance:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Plugin '{plugin_name}' instance not available",
+        )
+
+    # Trigger collection in background
+    background_tasks.add_task(plugin_instance.collect_data)
+
+    logger.info(f"Data collection triggered for plugin: {plugin_name}")
+
+    return {
+        "message": f"Data collection triggered for {plugin_name}",
+        "plugin": plugin_name,
+        "status": "collecting",
+        "note": "Collection runs in background. Check /health endpoint for results."
+    }
 
 
 # ============================================================================
@@ -496,7 +604,13 @@ async def startup_event():
     logger.info("Plugin Registry starting...")
     logger.info(f"Plugins path: {settings.PLUGINS_PATH}")
 
-    # Load plugins from disk
+    # Initialize PostgreSQL connection
+    await get_postgres_connection()
+
+    # Load plugins from database
+    await load_plugins_from_database()
+
+    # Load plugins from disk (sync with database)
     await load_plugins_from_disk()
 
     # Start health check loop
@@ -509,6 +623,11 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Plugin Registry shutting down...")
+
+    # Close PostgreSQL connection
+    global postgres_pool
+    if postgres_pool:
+        await postgres_pool.close()
 
     # Shutdown all plugin instances
     for plugin_name, plugin_instance in plugin_instances.items():
@@ -528,3 +647,73 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8001)
+
+# ============================================================================
+# Database Operations
+# ============================================================================
+
+async def load_plugins_from_database():
+    """Load plugins from PostgreSQL database into memory cache"""
+    global plugins_db
+    
+    try:
+        conn = await get_postgres_connection()
+        
+        query = """
+            SELECT name, version, description, author, status, enabled,
+                   capabilities, data_sources, databases, health_status, 
+                   last_health_check, registered_at
+            FROM plugins
+            ORDER BY name
+        """
+        
+        rows = await conn.fetch(query)
+        
+        for row in rows:
+            plugin_info = PluginInfo(
+                name=row['name'],
+                version=row['version'],
+                description=row['description'],
+                author=row['author'],
+                status=row['status'],
+                enabled=row['enabled'],
+                capabilities=row['capabilities'] or [],
+                data_sources=row['data_sources'] or [],
+                databases=row['databases'] or [],
+                registered_at=row['registered_at'].isoformat() if row['registered_at'] else None,
+                health_status=row['health_status'] or 'unknown',
+                last_health_check=row['last_health_check'].isoformat() if row['last_health_check'] else None
+            )
+            plugins_db[row['name']] = plugin_info
+        
+        logger.info(f"Loaded {len(plugins_db)} plugins from database")
+        
+    except Exception as e:
+        logger.error(f"Failed to load plugins from database: {e}")
+
+
+async def update_plugin_in_database(plugin_name: str, **updates):
+    """Update plugin in database"""
+    try:
+        conn = await get_postgres_connection()
+        
+        # Build SET clause dynamically
+        set_clauses = []
+        values = []
+        for key, value in updates.items():
+            set_clauses.append(f"{key} = ${len(values) + 1}")
+            values.append(value)
+        
+        values.append(plugin_name)  # For WHERE clause
+        
+        query = f"""
+            UPDATE plugins
+            SET {', '.join(set_clauses)}, updated_at = NOW()
+            WHERE name = ${len(values)}
+        """
+        
+        await conn.execute(query, *values)
+        logger.debug(f"Updated plugin {plugin_name} in database: {list(updates.keys())}")
+        
+    except Exception as e:
+        logger.error(f"Failed to update plugin {plugin_name} in database: {e}")

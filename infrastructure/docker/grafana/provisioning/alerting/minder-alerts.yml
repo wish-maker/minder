@@ -1,0 +1,157 @@
+apiVersion: 1
+
+contactPoints:
+  - name: 'Email Alerts'
+    orgId: 1
+    type: email
+    settings:
+      addresses: ['alerts@minder.ai']  # Change this to your email
+      singleEmail: false
+
+  - name: 'Webhook Alerts'
+    orgId: 1
+    type: webhook
+    settings:
+      url: 'http://localhost:8000/alerts/webhook'  # Minder API endpoint
+      http_method: POST
+
+policies:
+  - orgId: 1
+    name: 'Minder System Alerts'
+    folder: 'Minder'
+    rule_group: 'System Alerts'
+    edit: true
+    rules:
+      # High CPU Usage Alert
+      - orgId: 1
+        uid: cpu_high_alert
+        name: 'CPU Usage Too High'
+        type: 'threshold'
+        database: 'minder-metrics'
+        for: '5m'
+        expr: 'from(bucket:"minder-metrics") |> range(start: v.windowRangeStart, stop: v.windowRangeStop) |> filter(fn: (r) => r._measurement == "network_metrics") |> filter(fn: (r) => r.metric_name == "cpu_usage_percent") |> aggregateWindow(every: 1m, fn: mean) |> yield(name: "mean")'
+        format: 100
+        conditions:
+          - evaluator:
+              params:
+                - type: gt
+                  value: 80
+              type: query
+            query:
+              params:
+                - type: query
+                  refId: A
+              reducer:
+                params:
+                  - type: avg
+                type: avg
+            type: query
+        data: []
+        noDataState: 'NoData'
+        execErrState: 'Alerting'
+        annotations:
+          description: 'CPU usage is above 80% for 5 minutes'
+          summary: 'High CPU Usage Detected'
+
+      # High Memory Usage Alert
+      - orgId: 1
+        uid: memory_high_alert
+        name: 'Memory Usage Too High'
+        type: 'threshold'
+        database: 'minder-metrics'
+        for: '5m'
+        expr: 'from(bucket:"minder-metrics") |> range(start: v.windowRangeStart, stop: v.windowRangeStop) |> filter(fn: (r) => r._measurement == "network_metrics") |> filter(fn: (r) => r.metric_name == "memory_usage_percent") |> aggregateWindow(every: 1m, fn: mean) |> yield(name: "mean")'
+        format: 100
+        conditions:
+          - evaluator:
+              params:
+                - type: gt
+                  value: 85
+              type: query
+            query:
+              params:
+                - type: query
+                  refId: A
+              reducer:
+                params:
+                  - type: avg
+                type: avg
+            type: query
+        data: []
+        noDataState: 'NoData'
+        execErrState: 'Alerting'
+        annotations:
+          description: 'Memory usage is above 85% for 5 minutes'
+          summary: 'High Memory Usage Detected'
+
+      # Disk Space Low Alert
+      - orgId: 1
+        uid: disk_low_alert
+        name: 'Disk Space Running Low'
+        type: 'threshold'
+        database: 'minder-metrics'
+        for: '10m'
+        expr: 'from(bucket:"minder-metrics") |> range(start: v.windowRangeStart, stop: v.windowRangeStop) |> filter(fn: (r) => r._measurement == "network_metrics") |> filter(fn: (r) => r.metric_name == "disk_usage_percent") |> last() |> yield(name: "last")'
+        format: 100
+        conditions:
+          - evaluator:
+              params:
+                - type: gt
+                  value: 90
+              type: query
+            query:
+              params:
+                - type: query
+                  refId: A
+              reducer:
+                params:
+                  - type: avg
+                type: avg
+            type: query
+        data: []
+        noDataState: 'NoData'
+        execErrState: 'Alerting'
+        annotations:
+          description: 'Disk usage is above 90% - consider cleaning up or expanding storage'
+          summary: 'Low Disk Space Detected'
+
+      # High Load Average Alert
+      - orgId: 1
+        uid: load_high_alert
+        name: 'Load Average Too High'
+        type: 'threshold'
+        database: 'minder-metrics'
+        for: '10m'
+        expr: 'from(bucket:"minder-metrics") |> range(start: v.windowRangeStart, stop: v.windowRangeStop) |> filter(fn: (r) => r._measurement == "network_metrics") |> filter(fn: (r) => r.metric_name == "load_average_1min") |> aggregateWindow(every: 1m, fn: mean) |> yield(name: "mean")'
+        format: 100
+        conditions:
+          - evaluator:
+              params:
+                - type: gt
+                  value: 5.0
+              type: query
+            query:
+              params:
+                - type: query
+                  refId: A
+              reducer:
+                params:
+                  - type: avg
+                type: avg
+            type: query
+        data: []
+        noDataState: 'NoData'
+        execErrState: 'Alerting'
+        annotations:
+          description: 'Load average (1min) is above 5.0 for 10 minutes - system may be overloaded'
+          summary: 'High Load Average Detected'
+
+    notification_settings:
+      type: 'email'
+      contact_points:
+        - orgId: 1
+          name: 'Email Alerts'
+          state: ''
+        - orgId: 1
+          name: 'Webhook Alerts'
+          state: ''

@@ -1,0 +1,42 @@
+# Grafana Datasource Provisioning Configuration
+# InfluxDB 2.x datasource
+
+apiVersion: 1
+
+datasources:
+  - name: InfluxDB
+    type: influxdb
+    access: proxy
+    url: http://influxdb:8086
+    jsonData:
+      version: Flux
+      organization: minder
+      defaultBucket: minder-metrics
+      httpMode: POST
+      # InfluxDB 2.x authentication
+      authType: token
+    secureJsonData:
+      token: ${INFLUXDB_TOKEN}  # From environment variable
+    isDefault: true
+    editable: true
+    uid: influxdb-minder
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+    editable: true
+    uid: prometheus-minder
+
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    database: minder
+    user: minder
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
+    isDefault: false
+    editable: true
+    uid: postgres-minder

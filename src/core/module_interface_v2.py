@@ -197,6 +197,16 @@ class BaseModule(ABC):
         """
         self.status = ModuleStatus.READY
 
+        # Initialize agent capability if available
+        try:
+            from src.core.agent_framework import agent_manager
+
+            self.agent_capability = agent_manager.register_plugin(self.metadata.name)
+            self.log("Agent capability enabled")
+        except ImportError:
+            self.agent_capability = None
+            self.log("Agent framework not available")
+
     async def health_check(self) -> Dict[str, Any]:
         """
         Return plugin health status (called automatically)
@@ -210,6 +220,7 @@ class BaseModule(ABC):
             "healthy": self.status == ModuleStatus.READY,
             "uptime_seconds": ((datetime.now() - self.metadata.registered_at).total_seconds() if self.metadata else 0),
             "state": self.state,
+            "agent_enabled": hasattr(self, 'agent_capability') and self.agent_capability is not None,
         }
 
     async def shutdown(self):

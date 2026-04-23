@@ -8,9 +8,11 @@ Türkiye yatırım fonları analizi ve takibi - tefas-crawler entegrasyonlu
 - Otomatik fund discovery (yeni/kapalı fonlar)
 - State management ile veri takibi
 - KAP entegrasyonu ile ek veri kaynakları
+- InfluxDB time-series database entegrasyonu
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -18,6 +20,15 @@ import aiohttp
 import asyncpg
 import pandas as pd
 from bs4 import BeautifulSoup
+
+# InfluxDB client
+try:
+    from influxdb_client import InfluxDBClient
+    from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
+    INFLUXDB_AVAILABLE = True
+except ImportError:
+    INFLUXDB_AVAILABLE = False
+    logging.warning("influxdb-client not installed. Install with: pip install influxdb-client")
 
 # TEFAS crawler
 try:
@@ -134,6 +145,12 @@ class TefasModule(BaseModule):
         self.kap_base_url = "https://kap.org.tr"
         self.kap_funds_url = f"{self.kap_base_url}/tr/YatirimFonlari/ALL"
 
+        # InfluxDB configuration
+        self.influxdb_config = config.get("influxdb", {})
+        self.influxdb_enabled = self.influxdb_config.get("enabled", True) and INFLUXDB_AVAILABLE
+        self.influxdb_client: InfluxDBClient = None
+        self.influxdb_write_api = None
+
     async def register(self) -> ModuleMetadata:
         """Register module metadata"""
         self.metadata = ModuleMetadata(
@@ -158,11 +175,11 @@ class TefasModule(BaseModule):
                 "TEFAS (via borsapy 0.8.7)",
                 "KAP",
             ],
-            databases=["postgresql"],
+            databases=["postgresql", "influxdb"],
         )
         self.logger.info("📊 Registering TEFAS Module v1.0.0 (borsapy 0.8.7 + tefas-crawler)")
 
-        # Initialize connection pool
+        # Initialize PostgreSQL connection pool
         try:
             self.pool = await asyncpg.create_pool(
                 host=self.db_config["host"],
@@ -178,6 +195,38 @@ class TefasModule(BaseModule):
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize database pool: {e}")
             raise
+
+        # Initialize InfluxDB client
+        if self.influxdb_enabled:
+            try:
+                influxdb_url = self.influxdb_config.get(
+                    "url",
+                    f"http://{self.influxdb_config.get('host', 'localhost')}:"
+                    f"{self.influxdb_config.get('port', 8086)}"
+                )
+                token = self.influxdb_config.get("token", os.getenv("INFLUXDB_TOKEN", ""))
+                org = self.influxdb_config.get("org", "minder")
+                bucket = self.influxdb_config.get("bucket", "minder-metrics")
+
+                if not token:
+                    logger.warning("⚠️  InfluxDB token not provided, disabling InfluxDB")
+                    self.influxdb_enabled = False
+                else:
+                    self.influxdb_client = InfluxDBClient(
+                        url=influxdb_url,
+                        token=token,
+                        org=org,
+                        timeout=10000  # 10 seconds
+                    )
+                    self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
+                    self.logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize InfluxDB client: {e}")
+                self.influxdb_enabled = False
+        else:
+            logger.info("ℹ️  InfluxDB disabled, using PostgreSQL only")
+
+        return self.metadata
 
         return self.metadata
 
@@ -340,6 +389,14 @@ class TefasModule(BaseModule):
             # Step 3: Update state
             self.state["last_collection_date"] = datetime.now()
 
+            # Flush InfluxDB writes
+            if self.influxdb_enabled and self.influxdb_write_api:
+                try:
+                    self.influxdb_write_api.close()
+                    logger.debug("✅ InfluxDB writes flushed")
+                except Exception as e:
+                    logger.debug(f"InfluxDB flush failed: {e}")
+
             self.logger.info(f"✅ Collection complete: {records_collected} records, {errors} errors")
 
             return {
@@ -389,6 +446,37 @@ class TefasModule(BaseModule):
                             float(row.get("stock", 0)),
                             datetime.now(),
                         )
+
+                        # InfluxDB write (dual-write)
+                        if self.influxdb_enabled and self.influxdb_write_api:
+                            try:
+                                from influxdb_client import Point
+
+                                # Create point for fund price
+                                point = (
+                                    Point("tefas_fund_data")
+                                    .tag("fund_code", str(row.get("code", "")))
+                                    .tag("fund_title", str(row.get("title", "")))
+                                    .tag("fund_type", row.get("code", "")[0] if len(row.get("code", "")) > 0 else "UNKNOWN")
+                                    .time(row.get("date"))
+                                    .field("price", float(row.get("price", 0)))
+                                    .field("market_cap", float(row.get("market_cap", 0)))
+                                    .field("number_of_shares", float(row.get("number_of_shares", 0)))
+                                    .field("number_of_investors", float(row.get("number_of_investors", 0)))
+                                    .field("bank_bills_pct", float(row.get("bank_bills", 0)))
+                                    .field("government_bond_pct", float(row.get("government_bond", 0)))
+                                    .field("stock_pct", float(row.get("stock", 0)))
+                                )
+
+                                bucket = self.influxdb_config.get("bucket", "minder-metrics")
+                                org = self.influxdb_config.get("org", "minder")
+
+                                self.influxdb_write_api.write(bucket=bucket, org=org, record=point)
+
+                            except Exception as e:
+                                # Don't fail on InfluxDB write errors, just log
+                                self.logger.debug(f"InfluxDB write failed: {e}")
+
                         stored += 1
 
                     except Exception as e:
@@ -659,3 +747,25 @@ class TefasModule(BaseModule):
                 "error": str(e),
                 "fund_codes": fund_codes,
             }
+
+    async def shutdown(self) -> None:
+        """Cleanup resources before shutdown"""
+        logger.info("🔄 Shutting down TEFAS Module...")
+
+        # Close InfluxDB client
+        if self.influxdb_client:
+            try:
+                self.influxdb_client.close()
+                logger.info("✅ InfluxDB client closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing InfluxDB client: {e}")
+
+        # Close PostgreSQL pool
+        if self.pool:
+            try:
+                await self.pool.close()
+                logger.info("✅ PostgreSQL pool closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing PostgreSQL pool: {e}")
+
+        logger.info("✅ TEFAS Module shutdown complete")

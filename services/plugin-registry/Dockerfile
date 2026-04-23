@@ -20,6 +20,12 @@ COPY services/plugin-registry/requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install additional plugin-specific dependencies
+RUN pip install --no-cache-dir \
+    influxdb-client==1.50.0 \
+    tefas-crawler==0.5.0 \
+    borsapy==0.8.7
+
 # Copy application code
 COPY services/plugin-registry/main.py .
 COPY services/plugin-registry/config.py .

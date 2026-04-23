@@ -30,3 +30,8 @@ prometheus-client==0.19.0
 
 # Utilities
 python-dotenv==1.0.0
+
+# Plugin-specific dependencies (TEFAS, time-series)
+influxdb-client==1.50.0
+tefas-crawler==0.5.0
+borsapy==0.8.7

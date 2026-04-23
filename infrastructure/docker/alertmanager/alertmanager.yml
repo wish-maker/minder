@@ -1,0 +1,93 @@
+# Alertmanager Configuration for Minder Platform
+# Handles alert routing, grouping, and notification delivery
+
+global:
+  # Global resolve timeout - how long to wait before marking alert as resolved
+  resolve_timeout: 5m
+  
+  # Email notification settings (placeholder - configure for production)
+  smtp_smarthost: 'localhost:25'
+  smtp_from: 'alertmanager@minder.local'
+  smtp_require_tls: false
+
+# Route configuration - defines how alerts are grouped and sent
+route:
+  # Default receiver for all alerts
+  receiver: 'default-receiver'
+  
+  # Group alerts by these labels
+  group_by: ['alertname', 'service', 'severity']
+  
+  # Wait time before sending first notification for a new group
+  group_wait: 10s
+  
+  # Wait time before sending notification about new alerts for an existing group
+  group_interval: 10s
+  
+  # Wait time before re-notifying about the same alert group
+  repeat_interval: 12h
+  
+  # Child routes (more specific routing)
+  routes:
+    # Critical alerts go to critical receiver
+    - match:
+        severity: critical
+      receiver: 'critical-receiver'
+      group_wait: 5s
+      repeat_interval: 5m
+    
+    # Warning alerts go to warning receiver
+    - match:
+        severity: warning
+      receiver: 'warning-receiver'
+      repeat_interval: 1h
+
+# Inhibition rules - suppress certain alerts when others are firing
+inhibit_rules:
+  # Inhibit warning alerts if critical alert is firing for same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['service', 'instance']
+  
+  # Inhibit database alerts if database is down
+  - source_match:
+      alertname: 'ServiceDown'
+      service: 'postgres'
+    target_match_re:
+      alertname: '.*Database.*'
+    equal: ['service']
+
+# Receivers - define notification destinations
+receivers:
+  # Default receiver - logs to stdout (for development)
+  - name: 'default-receiver'
+  
+  # Critical receiver - immediate notification (configure for production)
+  - name: 'critical-receiver'
+    # Email configuration (uncomment and configure for production)
+    # email_configs:
+    #   - to: 'oncall@example.com'
+    #     from: 'alertmanager@minder.local'
+    #     headers:
+    #       Subject: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    
+    # Slack webhook (uncomment and configure for production)
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+    #     channel: '#alerts-critical'
+    #     title: '[CRITICAL] {{ .GroupLabels.alertname }}'
+    #     text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+  
+  # Warning receiver - non-urgent notification
+  - name: 'warning-receiver'
+    # Email configuration (uncomment and configure for production)
+    # email_configs:
+    #   - to: 'team@example.com'
+    #     headers:
+    #       Subject: '[WARNING] {{ .GroupLabels.alertname }}'
+
+# Templates for alert messages
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

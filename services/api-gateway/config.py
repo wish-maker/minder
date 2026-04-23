@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     API_VERSION: str = "v1"
 
+    # Phase Configuration (for health check)
+    MINDER_PHASE: int = 1  # Current deployment phase
+
     class Config:
         env_file = ".env"
         case_sensitive = True

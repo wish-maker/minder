@@ -8,15 +8,15 @@ global:
     cluster: 'minder-platform'
     environment: 'development'
 
-# Alertmanager configuration (optional - Phase 4)
-# alerting:
-#   alertmanagers:
-#     - static_configs:
-#         - targets: ['alertmanager:9093']
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['minder-alertmanager:9093']
 
-# Rule files (optional - Phase 4)
-# rule_files:
-#   - 'alerts/*.yml'
+# Rule files
+rule_files:
+  - 'alerts.yml'
 
 # Scrape configurations
 scrape_configs:

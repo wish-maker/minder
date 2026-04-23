@@ -1,108 +1,95 @@
-# Git
-.git
-.gitignore
-
-# Docker
-Dockerfile
-docker-compose.yml
-.dockerignore
-
 # Python
-__pycache__
+__pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-*.egg-info
-dist
-build
-.eggs
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
 *.egg
+MANIFEST
 
-# Virtual environments
+# Virtual Environment
 venv/
-env/
 ENV/
-.venv
+env/
 
 # IDE
-.vscode
-.idea
+.vscode/
+.idea/
 *.swp
 *.swo
 *~
+.DS_Store
 
 # Testing
-.pytest_cache
+.pytest_cache/
 .coverage
-htmlcov
-.tox
-.hypothesis
+htmlcov/
+.tox/
+
+# Documentation
+docs/_build/
+*.md
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Environment
+.env
+.env.*
+!.env.example
 
 # Logs
 *.log
 logs/
 
-# Documentation
-docs/
-*.md
-!README.md
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Development files
-.env.example
-.env.local
-.env.development
-.env.test
+# OS
+Thumbs.db
+.DS_Store
 
 # Temporary files
 *.tmp
 *.temp
-.DS_Store
+.cache/
+
+# Data files
+data/
+*.csv
+*.json
+*.jsonl
+!training-data/*.jsonl
+!requirements*.txt
 
 # Test files
 tests/
-test_*.py
+test_*
 *_test.py
-
-# Memory and cache (Claude Code)
-.memory/
-.remember/
-.claude/
-
-# Backup files
-*.bak
-*.backup
-*.old
-
-# Test artifacts
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Documentation builds
-docs/_build/
-site/
-
-# Development configs
-*.env.local
-*.env.development
-*.env.test
-
-# MyPy cache
-.mypy_cache/
-.dmypy.json
-
-# Pyre cache
-.pyre/
-.pytype/
-
-# Memory and cache
-.memory/
-.remember/
-.claude/
-
-# ML models (too large for image)
-models/
-*.pkl
-*.h5
-*.pb

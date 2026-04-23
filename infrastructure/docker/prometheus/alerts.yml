@@ -1,0 +1,227 @@
+# Alert Rules for Minder Platform
+# Defines when alerts should trigger
+
+groups:
+  # Service Availability Alerts
+  - name: service_availability
+    interval: 30s
+    rules:
+      # Service is down
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute"
+      
+      # Service health check failing
+      - alert: ServiceHealthCheckFailing
+        expr: up{job=~"api-gateway|plugin-registry|rag-pipeline|model-management"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Health check failing for {{ $labels.job }}"
+          description: "Service {{ $labels.job }} health check has been failing for 2 minutes"
+  
+  # Performance Alerts
+  - name: performance
+    interval: 30s
+    rules:
+      # High request latency
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High latency on {{ $labels.job }}"
+          description: "P95 latency for {{ $labels.job }} is {{ $value }}s (threshold: 1s)"
+      
+      # Very high request latency
+      - alert: VeryHighRequestLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 3
+        for: 2m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Very high latency on {{ $labels.job }}"
+          description: "P95 latency for {{ $labels.job }} is {{ $value }}s (threshold: 3s)"
+      
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          / 
+          sum(rate(http_requests_total[5m])) by (job)
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "Error rate for {{ $labels.job }} is {{ $value | humanizePercentage }} (threshold: 5%)"
+      
+      # Critical error rate
+      - alert: CriticalErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (job)
+          / 
+          sum(rate(http_requests_total[5m])) by (job)
+          > 0.15
+        for: 2m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical error rate on {{ $labels.job }}"
+          description: "Error rate for {{ $labels.job }} is {{ $value | humanizePercentage }} (threshold: 15%)"
+  
+  # Infrastructure Alerts
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # PostgreSQL connection count high
+      - alert: PostgresConnectionCountHigh
+        expr: pg_stat_activity_count{datname="minder"} > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "PostgreSQL connection count high"
+          description: "PostgreSQL has {{ $value }} active connections (threshold: 80)"
+      
+      # Redis memory usage high
+      - alert: RedisMemoryUsageHigh
+        expr: |
+          (redis_used_memory_bytes / redis_total_system_memory_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "Redis memory usage high"
+          description: "Redis is using {{ $value | humanizePercentage }} of system memory"
+      
+      # Redis memory usage critical
+      - alert: RedisMemoryUsageCritical
+        expr: |
+          (redis_used_memory_bytes / redis_total_system_memory_bytes) > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          category: infrastructure
+        annotations:
+          summary: "Redis memory usage critical"
+          description: "Redis is using {{ $value | humanizePercentage }} of system memory"
+      
+      # Database size growing rapidly
+      - alert: DatabaseSizeGrowingRapidly
+        expr: |
+          increase(pg_database_size_bytes{datname="minder"}[1h]) > 1000000000
+        for: 5m
+        labels:
+          severity: warning
+          category: infrastructure
+        annotations:
+          summary: "Database growing rapidly"
+          description: "Database {{ $labels.datname }} grew by {{ $value | humanize }}B in the last hour"
+  
+  # Plugin Alerts
+  - name: plugins
+    interval: 30s
+    rules:
+      # No plugins loaded
+      - alert: NoPluginsLoaded
+        expr: plugins_total{status="active"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: plugins
+        annotations:
+          summary: "No active plugins loaded"
+          description: "Plugin registry reports 0 active plugins"
+      
+      # Plugin health degraded
+      - alert: PluginHealthDegraded
+        expr: |
+          sum(plugins_total{status="unhealthy"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: plugins
+        annotations:
+          summary: "Plugin health degraded"
+          description: "{{ $value }} plugins are in unhealthy state"
+  
+  # RAG Pipeline Alerts
+  - name: rag_pipeline
+    interval: 30s
+    rules:
+      # Knowledge base count zero
+      - alert: NoKnowledgeBases
+        expr: knowledge_bases_total == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: rag
+        annotations:
+          summary: "No knowledge bases configured"
+          description: "RAG Pipeline has 0 knowledge bases"
+      
+      # High document failure rate
+      - alert: HighDocumentFailureRate
+        expr: |
+          sum(rate(documents_processed_total{status="failed"}[5m]))
+          /
+          sum(rate(documents_processed_total[5m]))
+          > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: rag
+        annotations:
+          summary: "High document processing failure rate"
+          description: "Document failure rate is {{ $value | humanizePercentage }}"
+  
+  # Model Management Alerts
+  - name: model_management
+    interval: 30s
+    rules:
+      # No models registered
+      - alert: NoModelsRegistered
+        expr: models_registered_total == 0
+        for: 10m
+        labels:
+          severity: warning
+          category: models
+        annotations:
+          summary: "No models registered"
+          description: "Model Management has 0 models registered"
+      
+      # Fine-tuning job stuck
+      - alert: FineTuningJobStuck
+        expr: |
+          increase(fine_tuning_jobs_total{status="running"}[1h]) == 0
+          and fine_tuning_jobs_total{status="running"} > 0
+        for: 2h
+        labels:
+          severity: warning
+          category: models
+        annotations:
+          summary: "Fine-tuning job appears stuck"
+          description: "Fine-tuning job {{ $labels.job_id }} has been running for 2+ hours"

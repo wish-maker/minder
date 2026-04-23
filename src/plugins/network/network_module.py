@@ -1,14 +1,25 @@
 """
 Minder Network Analysis Module
+Enhanced with InfluxDB time-series database integration
 """
 
 import logging
+import os
 import platform
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import asyncpg
 import psutil
+
+# InfluxDB client
+try:
+    from influxdb_client import InfluxDBClient
+    from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
+    INFLUXDB_AVAILABLE = True
+except ImportError:
+    INFLUXDB_AVAILABLE = False
+    logging.warning("influxdb-client not installed. Install with: pip install influxdb-client")
 
 from src.core.module_interface_v2 import BaseModule, ModuleMetadata
 
@@ -33,6 +44,12 @@ class NetworkModule(BaseModule):
         # Connection pool (initialized in register())
         self.pool: asyncpg.Pool = None
 
+        # InfluxDB configuration
+        self.influxdb_config = config.get("influxdb", {})
+        self.influxdb_enabled = self.influxdb_config.get("enabled", True) and INFLUXDB_AVAILABLE
+        self.influxdb_client: InfluxDBClient = None
+        self.influxdb_write_api = None
+
         # Network monitoring configuration
         self.interfaces = config.get("network", {}).get("interfaces", ["eth0", "wlan0"])
         self.collection_interval = config.get("network", {}).get("collection_interval", 60)
@@ -50,14 +67,15 @@ class NetworkModule(BaseModule):
                 "security_analysis",
                 "traffic_analysis",
                 "anomaly_detection",
+                "agent_actions",  # Agent capability
             ],
             data_sources=["System Metrics"],
-            databases=["postgresql"],
+            databases=["postgresql", "influxdb"],
         )
 
         logger.info("🌐 Registering Network Module")
 
-        # Initialize connection pool
+        # Initialize PostgreSQL connection pool
         try:
             self.pool = await asyncpg.create_pool(
                 host=self.db_config["host"],
@@ -73,6 +91,36 @@ class NetworkModule(BaseModule):
         except Exception as e:
             logger.error(f"❌ Failed to initialize database pool: {e}")
             raise
+
+        # Initialize InfluxDB client
+        if self.influxdb_enabled:
+            try:
+                influxdb_url = self.influxdb_config.get(
+                    "url",
+                    f"http://{self.influxdb_config.get('host', 'localhost')}:"
+                    f"{self.influxdb_config.get('port', 8086)}"
+                )
+                token = self.influxdb_config.get("token", os.getenv("INFLUXDB_TOKEN", ""))
+                org = self.influxdb_config.get("org", "minder")
+                bucket = self.influxdb_config.get("bucket", "minder-metrics")
+
+                if not token:
+                    logger.warning("⚠️  InfluxDB token not provided, disabling InfluxDB")
+                    self.influxdb_enabled = False
+                else:
+                    self.influxdb_client = InfluxDBClient(
+                        url=influxdb_url,
+                        token=token,
+                        org=org,
+                        timeout=10000  # 10 seconds
+                    )
+                    self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
+                    logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize InfluxDB client: {e}")
+                self.influxdb_enabled = False
+        else:
+            logger.info("ℹ️  InfluxDB disabled, using PostgreSQL only")
 
         return self.metadata
 
@@ -105,6 +153,14 @@ class NetworkModule(BaseModule):
         except Exception as e:
             logger.error(f"Database connection error: {e}")
             errors += 1
+
+        # Flush InfluxDB writes
+        if self.influxdb_enabled and self.influxdb_write_api:
+            try:
+                self.influxdb_write_api.close()
+                logger.debug("✅ InfluxDB writes flushed")
+            except Exception as e:
+                logger.debug(f"InfluxDB flush failed: {e}")
 
         logger.info(f"✓ Network collection complete: {records_collected} metrics, {errors} errors")
 
@@ -314,7 +370,8 @@ class NetworkModule(BaseModule):
         return metrics
 
     async def _store_metric(self, conn, metric: Dict[str, Any]):
-        """Store metric to PostgreSQL using asyncpg"""
+        """Store metric to PostgreSQL (and InfluxDB if enabled)"""
+        # PostgreSQL write
         await conn.execute(
             """
             INSERT INTO network_metrics (
@@ -327,6 +384,30 @@ class NetworkModule(BaseModule):
             metric["interface"],
             metric["timestamp"],
         )
+
+        # InfluxDB write (dual-write)
+        if self.influxdb_enabled and self.influxdb_write_api:
+            try:
+                from influxdb_client import Point
+
+                # Convert metric to InfluxDB point
+                point = (
+                    Point("network_metrics")
+                    .tag("hostname", metric["hostname"])
+                    .tag("metric_name", metric["metric_name"])
+                    .tag("interface", metric.get("interface", "none"))
+                    .time(metric["timestamp"])
+                    .field("value", float(metric["metric_value"]))
+                )
+
+                bucket = self.influxdb_config.get("bucket", "minder-metrics")
+                org = self.influxdb_config.get("org", "minder")
+
+                self.influxdb_write_api.write(bucket=bucket, org=org, record=point)
+
+            except Exception as e:
+                # Don't fail on InfluxDB write errors, just log
+                logger.debug(f"InfluxDB write failed: {e}")
 
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected network metrics"""
@@ -403,3 +484,215 @@ class NetworkModule(BaseModule):
 
     async def query(self, query: str) -> Dict[str, Any]:
         return {"query": query, "results": []}
+
+    async def shutdown(self) -> None:
+        """Cleanup resources before shutdown"""
+        logger.info("🔄 Shutting down Network Module...")
+
+        # Close InfluxDB client
+        if self.influxdb_client:
+            try:
+                self.influxdb_client.close()
+                logger.info("✅ InfluxDB client closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing InfluxDB client: {e}")
+
+        # Close PostgreSQL pool
+        if self.pool:
+            try:
+                await self.pool.close()
+                logger.info("✅ PostgreSQL pool closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing PostgreSQL pool: {e}")
+
+        logger.info("✅ Network Module shutdown complete")
+
+    async def setup_agent_actions(self):
+        """
+        Setup agent capabilities for external API integration
+
+        This method is called after plugin initialization if agent framework is available.
+        Plugin can register custom actions that can be called by LLM or external systems.
+        """
+        if not hasattr(self, 'agent_capability') or self.agent_capability is None:
+            logger.info("ℹ️  Agent capability not available, skipping action registration")
+            return
+
+        from src.core.agent_framework import ActionType
+
+        # Register action: Query current network metrics
+        self.agent_capability.register_action(
+            name="query_network_metrics",
+            description="Get current network performance metrics",
+            action_type=ActionType.CUSTOM_FUNCTION,
+            parameters={"hours": 1},  # Default: last 1 hour
+            handler=self._agent_query_network_metrics
+        )
+
+        # Register action: Check network connectivity
+        self.agent_capability.register_action(
+            name="check_connectivity",
+            description="Check connectivity to external services",
+            action_type=ActionType.CUSTOM_FUNCTION,
+            parameters={"host": "google.com", "port": 80},
+            handler=self._agent_check_connectivity
+        )
+
+        # Register action: Test network speed
+        self.agent_capability.register_action(
+            name="test_network_speed",
+            description="Test network download/upload speed",
+            action_type=ActionType.CUSTOM_FUNCTION,
+            parameters={"server": "auto"},
+            handler=self._agent_test_network_speed
+        )
+
+        logger.info(f"✅ Network module registered {len(self.agent_capability.actions)} agent actions")
+
+    async def _agent_query_network_metrics(self, action, context) -> Dict[str, Any]:
+        """Agent action: Query network metrics"""
+        hours = action.parameters.get("hours", 1)
+
+        try:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """
+                    SELECT
+                        AVG(metric_value) as avg_value,
+                        MIN(metric_value) as min_value,
+                        MAX(metric_value) as max_value,
+                        COUNT(*) as sample_count
+                    FROM network_metrics
+                    WHERE metric_name = 'network_bytes_sent'
+                    AND timestamp >= NOW() - INTERVAL '1 hour' * $1
+                """,
+                    hours
+                )
+
+                if row:
+                    return {
+                        "success": True,
+                        "action": action.name,
+                        "data": {
+                            "avg_bytes_sent": float(row["avg_value"]) if row["avg_value"] else 0,
+                            "min_bytes_sent": float(row["min_value"]) if row["min_value"] else 0,
+                            "max_bytes_sent": float(row["max_value"]) if row["max_value"] else 0,
+                            "sample_count": row["sample_count"],
+                            "hours_queried": hours,
+                        }
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "action": action.name,
+                        "error": "No metrics available"
+                    }
+
+        except Exception as e:
+            logger.error(f"Agent action failed: {e}")
+            return {
+                "success": False,
+                "action": action.name,
+                "error": str(e)
+            }
+
+    async def _agent_check_connectivity(self, action, context) -> Dict[str, Any]:
+        """Agent action: Check network connectivity"""
+        import socket
+        import asyncio
+
+        host = action.parameters.get("host", "google.com")
+        port = action.parameters.get("port", 80)
+        timeout = action.parameters.get("timeout", 5)
+
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port),
+                timeout=timeout
+            )
+
+            writer.close()
+            await writer.wait_closed()
+
+            return {
+                "success": True,
+                "action": action.name,
+                "data": {
+                    "host": host,
+                    "port": port,
+                    "status": "reachable",
+                    "latency_seconds": timeout
+                }
+            }
+
+        except asyncio.TimeoutError:
+            return {
+                "success": False,
+                "action": action.name,
+                "data": {
+                    "host": host,
+                    "port": port,
+                    "status": "timeout",
+                    "timeout_seconds": timeout
+                }
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "action": action.name,
+                "data": {
+                    "host": host,
+                    "port": port,
+                    "status": "unreachable",
+                    "error": str(e)
+                }
+            }
+
+    async def _agent_test_network_speed(self, action, context) -> Dict[str, Any]:
+        """Agent action: Test network speed (simplified)"""
+        import time
+        import aiohttp
+
+        # Download a small test file
+        test_url = "http://speedtest.tele2.net/1MB.zip"
+
+        try:
+            start_time = time.time()
+            downloaded_bytes = 0
+
+            async with aiohttp.ClientSession() as session:
+                async with session.get(test_url) as response:
+                    if response.status == 200:
+                        async for chunk in response.content.iter_chunked(1024):
+                            downloaded_bytes += len(chunk)
+
+            duration = time.time() - start_time
+            speed_mbps = (downloaded_bytes * 8 / 1_000_000) / duration
+
+            return {
+                "success": True,
+                "action": action.name,
+                "data": {
+                    "downloaded_mb": downloaded_bytes / 1_000_000,
+                    "duration_seconds": duration,
+                    "download_speed_mbps": round(speed_mbps, 2),
+                    "test_url": test_url
+                }
+            }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "action": action.name,
+                "error": str(e)
+            }
+
+        # Close PostgreSQL pool
+        if self.pool:
+            try:
+                await self.pool.close()
+                logger.info("✅ PostgreSQL pool closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing PostgreSQL pool: {e}")
+
+        logger.info("✅ Network Module shutdown complete")

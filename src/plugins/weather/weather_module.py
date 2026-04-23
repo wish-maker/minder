@@ -1,13 +1,24 @@
 """
 Minder Weather Analysis Module
+Enhanced with InfluxDB time-series database integration
 """
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
 import asyncpg
+
+# InfluxDB client
+try:
+    from influxdb_client import InfluxDBClient
+    from influxdb_client.client.write_api import SYNCHRONOUS, ASYNCHRONOUS
+    INFLUXDB_AVAILABLE = True
+except ImportError:
+    INFLUXDB_AVAILABLE = False
+    logging.warning("influxdb-client not installed. Install with: pip install influxdb-client")
 
 from src.core.module_interface_v2 import BaseModule, ModuleMetadata
 
@@ -32,6 +43,12 @@ class WeatherModule(BaseModule):
         # Connection pool (initialized in register())
         self.pool: asyncpg.Pool = None
 
+        # InfluxDB configuration
+        self.influxdb_config = config.get("influxdb", {})
+        self.influxdb_enabled = self.influxdb_config.get("enabled", True) and INFLUXDB_AVAILABLE
+        self.influxdb_client: InfluxDBClient = None
+        self.influxdb_write_api = None
+
         # Open-Meteo API configuration (no API key required - completely free)
         self.api_base = "https://api.open-meteo.com/v1/forecast"
         self.locations = {
@@ -53,12 +70,12 @@ class WeatherModule(BaseModule):
                 "seasonal_pattern_detection",
             ],
             data_sources=["Open-Meteo API"],
-            databases=["postgresql"],
+            databases=["postgresql", "influxdb"],
         )
 
         logger.info("🌤️  Registering Weather Module")
 
-        # Initialize connection pool
+        # Initialize PostgreSQL connection pool
         try:
             self.pool = await asyncpg.create_pool(
                 host=self.db_config["host"],
@@ -74,6 +91,36 @@ class WeatherModule(BaseModule):
         except Exception as e:
             logger.error(f"❌ Failed to initialize database pool: {e}")
             raise
+
+        # Initialize InfluxDB client
+        if self.influxdb_enabled:
+            try:
+                influxdb_url = self.influxdb_config.get(
+                    "url",
+                    f"http://{self.influxdb_config.get('host', 'localhost')}:"
+                    f"{self.influxdb_config.get('port', 8086)}"
+                )
+                token = self.influxdb_config.get("token", os.getenv("INFLUXDB_TOKEN", ""))
+                org = self.influxdb_config.get("org", "minder")
+                bucket = self.influxdb_config.get("bucket", "minder-metrics")
+
+                if not token:
+                    logger.warning("⚠️  InfluxDB token not provided, disabling InfluxDB")
+                    self.influxdb_enabled = False
+                else:
+                    self.influxdb_client = InfluxDBClient(
+                        url=influxdb_url,
+                        token=token,
+                        org=org,
+                        timeout=10000  # 10 seconds
+                    )
+                    self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
+                    logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to initialize InfluxDB client: {e}")
+                self.influxdb_enabled = False
+        else:
+            logger.info("ℹ️  InfluxDB disabled, using PostgreSQL only")
 
         return self.metadata
 
@@ -112,6 +159,14 @@ class WeatherModule(BaseModule):
         except Exception as e:
             logger.error(f"Database connection error: {e}")
             errors += 1
+
+        # Flush InfluxDB writes
+        if self.influxdb_enabled and self.influxdb_write_api:
+            try:
+                self.influxdb_write_api.close()
+                logger.debug("✅ InfluxDB writes flushed")
+            except Exception as e:
+                logger.debug(f"InfluxDB flush failed: {e}")
 
         logger.info(f"✓ Weather collection complete: {records_collected} records, {errors} errors")
 
@@ -212,7 +267,8 @@ class WeatherModule(BaseModule):
         }
 
     async def _store_weather_data(self, conn, weather_data: Dict[str, Any]):
-        """Store weather data to PostgreSQL using asyncpg"""
+        """Store weather data to PostgreSQL (and InfluxDB if enabled)"""
+        # PostgreSQL write
         await conn.execute(
             """
             INSERT INTO weather_data (
@@ -228,6 +284,31 @@ class WeatherModule(BaseModule):
             weather_data["weather_description"],
             weather_data["timestamp"],
         )
+
+        # InfluxDB write (dual-write)
+        if self.influxdb_enabled and self.influxdb_write_api:
+            try:
+                from influxdb_client import Point
+
+                # Create point for weather data
+                point = (
+                    Point("weather_data")
+                    .tag("location", weather_data["location"])
+                    .time(weather_data["timestamp"])
+                    .field("temperature_c", float(weather_data.get("temperature_c", 0)))
+                    .field("humidity_pct", float(weather_data.get("humidity_pct", 0)))
+                    .field("pressure_hpa", float(weather_data.get("pressure_hpa", 0)))
+                    .field("wind_speed_kmh", float(weather_data.get("wind_speed_kmh", 0)))
+                )
+
+                bucket = self.influxdb_config.get("bucket", "minder-metrics")
+                org = self.influxdb_config.get("org", "minder")
+
+                self.influxdb_write_api.write(bucket=bucket, org=org, record=point)
+
+            except Exception as e:
+                # Don't fail on InfluxDB write errors, just log
+                logger.debug(f"InfluxDB write failed: {e}")
 
     async def analyze(self) -> Dict[str, Any]:
         """Analyze collected weather data"""
@@ -314,3 +395,25 @@ class WeatherModule(BaseModule):
 
     async def query(self, query: str) -> Dict[str, Any]:
         return {"query": query, "results": []}
+
+    async def shutdown(self) -> None:
+        """Cleanup resources before shutdown"""
+        logger.info("🔄 Shutting down Weather Module...")
+
+        # Close InfluxDB client
+        if self.influxdb_client:
+            try:
+                self.influxdb_client.close()
+                logger.info("✅ InfluxDB client closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing InfluxDB client: {e}")
+
+        # Close PostgreSQL pool
+        if self.pool:
+            try:
+                await self.pool.close()
+                logger.info("✅ PostgreSQL pool closed")
+            except Exception as e:
+                logger.warning(f"⚠️  Error closing PostgreSQL pool: {e}")
+
+        logger.info("✅ Weather Module shutdown complete")
