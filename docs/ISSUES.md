@@ -12,10 +12,10 @@
 |----------|------|----------|-------|
 | P0 - Critical | 0 | 6 | 6 |
 | P1 - High | 0 | 6 | 6 |
-| P2 - Medium | 4 | 6 | 10 |
+| P2 - Medium | 5 | 6 | 11 |
 | P3 - Low | 1 | 2 | 3 |
 
-**Total Issues:** 30 (23 resolved, 7 open)
+**Total Issues:** 31 (22 resolved, 9 open)
 
 ---
 
@@ -1474,6 +1474,60 @@ Test coverage is estimated to be below 30%, indicating insufficient testing:
 
 ---
 
-**Last Updated:** 2026-04-23 13:00
-**Recent Updates:** Added 5 new issues (P1-006, P2-008, P2-009, P2-010, P3-001)
-**Total Issues:** 30 (22 resolved, 8 open)
+### 🟡 #P2-015: API Gateway Cannot Reach RAG Pipeline
+
+**Status:** 🟡 Open
+**Priority:** P2 - Medium
+**Component:** Docker Networking, API Gateway
+**First Reported:** 2026-04-23
+**Impact:** API Gateway shows degraded status, but RAG Pipeline accessible directly
+
+**Description:**
+API Gateway reports "rag_pipeline: unreachable: connection refused" but RAG Pipeline is healthy and accessible directly on port 8004.
+
+**API Gateway Health Check:**
+```json
+{
+  "status": "degraded",
+  "checks": {
+    "rag_pipeline": "unreachable: connection refused",
+    "model_management": "unreachable: connection refused"
+  }
+}
+```
+
+**Direct RAG Pipeline Health Check:**
+```bash
+curl http://localhost:8004/health
+{
+  "status": "healthy",
+  "version": "3.0.0",
+  "ollama_available": true
+}
+```
+
+**Root Cause:**
+Unknown - Docker networking configuration issue between API Gateway and RAG Pipeline containers
+
+**Impact:**
+- API Gateway shows degraded status
+- RAG Pipeline requests routed through gateway fail
+- Direct access to RAG Pipeline works fine
+
+**Solution:**
+1. Investigate Docker network configuration
+2. Verify service discovery in docker-compose.yml
+3. Test inter-container connectivity
+4. Fix network alias or service name resolution
+
+**Files to Check:**
+- infrastructure/docker/docker-compose.yml
+- services/api-gateway/config.py
+
+**Estimated Effort:** 1 hour
+
+---
+
+**Last Updated:** 2026-04-23 14:00
+**Recent Updates:** Added P2-015 (Docker networking issue), completed comprehensive system testing
+**Total Issues:** 31 (22 resolved, 9 open)
