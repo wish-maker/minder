@@ -11,11 +11,11 @@
 | Priority | Open | Resolved | Total |
 |----------|------|----------|-------|
 | P0 - Critical | 0 | 6 | 6 |
-| P1 - High | 2 | 5 | 7 |
-| P2 - Medium | 3 | 6 | 9 |
+| P1 - High | 1 | 5 | 6 |
+| P2 - Medium | 4 | 6 | 10 |
 | P3 - Low | 1 | 2 | 3 |
 
-**Total Issues:** 25 (22 resolved, 3 open)
+**Total Issues:** 30 (22 resolved, 8 open)
 
 ---
 
@@ -1256,6 +1256,223 @@ bash tests/integration/test_phase1_infrastructure.sh
 
 ---
 
-**Last Updated:** 2026-04-21
-**Next Review:** When Phase 2 begins
+**Last Updated:** 2026-04-23 13:00
+**Next Review:** After code quality improvements
 **Maintainer:** Development Team
+
+---
+
+## Recent Issues (Added 2026-04-23)
+
+### 🟡 #P1-006: Code Quality Issues - Flake8 Violations
+
+**Status:** 🟡 Open
+**Priority:** P1 - High
+**Component:** Plugin Code Quality
+**First Reported:** 2026-04-23
+**Impact:** Code quality inconsistent, potential bugs
+
+**Description:**
+Multiple Flake8 violations found in plugin code affecting maintainability and potential functionality:
+
+```python
+# network/plugin.py:18:5
+F401 'influxdb_client.client.write_api.SYNCHRONOUS' imported but unused
+
+# network/plugin.py:234:21
+W503 line break before binary operator
+
+# tefas/plugin.py:27:5
+F401 'influxdb_client.client.write_api.SYNCHRONOUS' imported but unused
+
+# tefas/plugin.py:460:121
+E501 line too long (124 > 120 characters)
+
+# weather/plugin.py:17:5
+F401 'influxdb_client.client.write_api.SYNCHRONOUS' imported but unused
+```
+
+**Root Cause:**
+- Unused imports not cleaned up after refactoring
+- Inconsistent code formatting
+- Line length limits not enforced
+
+**Impact:**
+- Code bloat (unused imports)
+- Style inconsistency
+- Potential confusion for developers
+
+**Solution:**
+1. Remove unused imports (SYNCHRONOUS from network, tefas, weather)
+2. Fix line breaks in network plugin
+3. Fix long line in tefas plugin
+4. Enable pre-commit hooks to prevent future violations
+
+**Files to Modify:**
+- src/plugins/network/plugin.py
+- src/plugins/tefas/plugin.py
+- src/plugins/weather/plugin.py
+
+**Estimated Effort:** 2 hours
+
+---
+
+### 🟢 #P2-008: API Documentation Incomplete
+
+**Status:** 🟢 Open (Low Priority)
+**Priority:** P2 - Medium
+**Component:** API Documentation
+**First Reported:** 2026-04-23
+**Impact:** API usage unclear for developers
+
+**Description:**
+FastAPI swagger documentation incomplete and plugin APIs not documented:
+
+**Missing Documentation:**
+- FastAPI endpoints not fully documented
+- Request/response examples missing
+- Plugin API reference documentation
+- Authentication/authorization examples missing
+
+**Root Cause:**
+- Documentation not updated after API changes
+- No automated API documentation generation
+- Plugin APIs not documented in swagger
+
+**Impact:**
+- Developers struggle to use APIs
+- Integration requires source code reading
+- Onboarding time increased
+
+**Solution:**
+1. Complete FastAPI swagger documentation
+2. Add plugin API reference docs
+3. Create API usage examples
+4. Set up automated API docs generation
+
+**Estimated Effort:** 1 day
+
+---
+
+### 🟢 #P2-009: Code Style Guide Missing
+
+**Status:** 🟢 Open (Low Priority)
+**Priority:** P2 - Medium
+**Component:** Project Standards
+**First Reported:** 2026-04-23
+**Impact:** Inconsistent code quality across project
+
+**Description:**
+No comprehensive code style guide exists for the Minder project:
+
+**Missing Standards:**
+- Type hints requirements not defined
+- Documentation standards not specified
+- Error handling patterns inconsistent
+- Naming conventions not enforced
+- Code organization guidelines missing
+
+**Root Cause:**
+- No documented coding standards
+- Each developer uses different style
+- No code review checklist
+
+**Impact:**
+- Inconsistent code quality
+- Harder code reviews
+- Onboarding difficulty
+- Maintenance challenges
+
+**Solution:**
+1. Create comprehensive CODE_STYLE_GUIDE.md
+2. Define type hints requirements (mandatory for new code)
+3. Specify documentation standards
+4. Enforce naming conventions
+5. Set up pre-commit hooks
+
+**Estimated Effort:** 4 hours
+
+---
+
+### 🟢 #P2-010: Pre-commit Hooks Not Fully Configured
+
+**Status:** 🟢 Open (Low Priority)
+**Priority:** P2 - Medium
+**Component:** Development Workflow
+**First Reported:** 2026-04-23
+**Impact:** Low code quality commits reach repository
+
+**Description:**
+Pre-commit hooks exist but not comprehensive:
+
+**Current Pre-commit Hooks:**
+- ✅ black (code formatting)
+- ✅ flake8 (linting)
+- ❌ pytest (tests) - blocking commits
+
+**Missing Hooks:**
+- isort (import sorting)
+- mypy (type checking)
+- bandit (security checks)
+- pylint (code quality)
+
+**Root Cause:**
+- Pre-commit configuration incomplete
+- Tests failing, so disabled in hook
+- Type checking not enforced
+
+**Impact:**
+- Type hints not enforced
+- Import sorting inconsistent
+- Security issues not caught early
+
+**Solution:**
+1. Fix failing tests
+2. Enable pytest in pre-commit
+3. Add isort, mypy, bandit hooks
+4. Configure hook priorities
+
+**Estimated Effort:** 3 hours
+
+---
+
+### 🟢 #P3-001: Test Coverage Below 30%
+
+**Status:** 🟢 Open (Low Priority)
+**Priority:** P3 - Low
+**Component:** Testing
+**First Reported:** 2026-04-23
+**Impact:** Low test coverage, potential undetected bugs
+
+**Description:**
+Test coverage is estimated to be below 30%, indicating insufficient testing:
+
+**Current Test Status:**
+- Unit tests: 7 files (minimal coverage)
+- Integration tests: 1 file (basic infrastructure)
+- Test coverage: ~30% (estimated)
+- Missing tests for edge cases
+
+**Root Cause:**
+- Test writing not prioritized
+- No coverage tracking
+- No minimum coverage requirements
+
+**Impact:**
+- Undetected bugs in production
+- Regression risk
+- Refactoring confidence low
+
+**Solution:**
+1. Set up coverage tracking (pytest-cov)
+2. Add tests for critical paths
+3. Set minimum coverage threshold (60%)
+4. Add coverage reporting to CI/CD
+
+**Estimated Effort:** 2 days
+
+---
+
+**Last Updated:** 2026-04-23 13:00
+**Recent Updates:** Added 5 new issues (P1-006, P2-008, P2-009, P2-010, P3-001)
+**Total Issues:** 30 (22 resolved, 8 open)
