@@ -12,10 +12,10 @@
 |----------|------|----------|-------|
 | P0 - Critical | 0 | 6 | 6 |
 | P1 - High | 0 | 6 | 6 |
-| P2 - Medium | 5 | 6 | 11 |
+| P2 - Medium | 4 | 7 | 11 |
 | P3 - Low | 1 | 2 | 3 |
 
-**Total Issues:** 31 (22 resolved, 9 open)
+**Total Issues:** 31 (23 resolved, 8 open)
 
 ---
 
@@ -1474,13 +1474,14 @@ Test coverage is estimated to be below 30%, indicating insufficient testing:
 
 ---
 
-### 🟡 #P2-015: API Gateway Cannot Reach RAG Pipeline
+### ✅ #P2-015: API Gateway Cannot Reach RAG Pipeline
 
-**Status:** 🟡 Open
+**Status:** ✅ Resolved
 **Priority:** P2 - Medium
 **Component:** Docker Networking, API Gateway
 **First Reported:** 2026-04-23
-**Impact:** API Gateway shows degraded status, but RAG Pipeline accessible directly
+**Resolved:** 2026-04-23
+**Impact:** API Gateway service discovery now works correctly
 
 **Description:**
 API Gateway reports "rag_pipeline: unreachable: connection refused" but RAG Pipeline is healthy and accessible directly on port 8004.
@@ -1529,11 +1530,21 @@ RAG Pipeline was started manually with incorrect name instead of via docker-comp
 - Direct access works (port 8004)
 - Docker compose management broken
 
-**Solution:**
-1. Stop manually created container: `docker stop minder-rag-pipeline-ollama && docker rm minder-rag-pipeline-ollama`
-2. Rebuild with docker-compose: `docker compose build rag-pipeline`
-3. Start with docker-compose: `docker compose up -d rag-pipeline`
-4. Verify container name: `docker ps | grep minder-rag-pipeline`
+**Solution Implemented:**
+1. ✅ Stopped all old containers (including manually created ones)
+2. ✅ Removed all minder volumes for clean start
+3. ✅ Fresh deployment from /tmp/minder-test using docker-compose
+4. ✅ All containers created with correct names
+5. ✅ Service discovery works correctly
+6. ✅ Zero configuration errors
+
+**Resolution Verification:**
+- Fresh deployment creates containers with correct names
+- API Gateway can discover services via Docker network
+- P2-015 is RESOLVED by proper docker-compose deployment
+- See: docs/test-results/FRESH_CLONE_DEPLOYMENT_2026_04_23.md
+
+**Estimated Effort:** 30 minutes → Actual: 2 hours (including comprehensive testing)
 
 **Files to Check:**
 - infrastructure/docker/docker-compose.yml (line 197-220)
@@ -1542,6 +1553,6 @@ RAG Pipeline was started manually with incorrect name instead of via docker-comp
 
 ---
 
-**Last Updated:** 2026-04-23 14:00
-**Recent Updates:** Added P2-015 (Docker networking issue), completed comprehensive system testing
-**Total Issues:** 31 (22 resolved, 9 open)
+**Last Updated:** 2026-04-23 16:30
+**Recent Updates:** P2-015 resolved (fresh clone deployment test), completed end-to-end deployment validation
+**Total Issues:** 31 (23 resolved, 8 open)
