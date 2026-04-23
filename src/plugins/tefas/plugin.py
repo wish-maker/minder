@@ -52,7 +52,7 @@ except ImportError:
 
 # Unified Data API
 try:
-    from plugins.tefas.unified_data_api import (
+    from .api import (
         BORSAPY_AVAILABLE,
         TEFAS_CRAWLER_AVAILABLE,
         UnifiedDataAPI,

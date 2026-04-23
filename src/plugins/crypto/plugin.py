@@ -21,7 +21,7 @@ crypto_plugin_dir = Path(__file__).parent
 if str(crypto_plugin_dir) not in sys.path:
     sys.path.insert(0, str(crypto_plugin_dir))
 
-from crypto_validator import PluginDataValidator  # noqa: E402
+from .utils.validators import PluginDataValidator  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
