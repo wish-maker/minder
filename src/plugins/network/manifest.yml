@@ -1,7 +1,7 @@
 name: network
 version: 1.0.0
 description: Network performance monitoring and security analysis with system metrics collection
-author: FundMind AI
+author: Minder
 license: MIT
 
 minder:
@@ -42,3 +42,20 @@ capabilities:
   - performance_analysis
   - security_analysis
   - time_series_metrics
+
+# AI Tools for OpenWebUI Integration
+ai_tools:
+  - name: get_network_metrics
+    description: Get latest network performance metrics including latency, throughput, packet loss
+    type: analysis
+    endpoint: /analysis
+    method: GET
+    parameters:
+      limit:
+        type: integer
+        description: Number of recent metrics to return
+        default: 10
+        required: false
+    response_format:
+      metrics: array
+      average_latency: float

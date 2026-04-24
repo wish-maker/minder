@@ -196,19 +196,18 @@ class CryptoModule(BaseModule):
 
         logger.info("₿ Registering Crypto Module")
 
-        # Initialize connection pool
+        # Initialize connection pool using shared pool manager
         try:
-            self.pool = await asyncpg.create_pool(
-                host=self.db_config["host"],
-                port=self.db_config["port"],
-                database=self.db_config["database"],
-                user=self.db_config["user"],
-                password=self.db_config["password"],
+            from src.shared.database.asyncpg_pool import create_plugin_pool
+
+            self.pool = await create_plugin_pool(
+                plugin_name="crypto",
+                db_config=self.db_config,
                 min_size=2,
                 max_size=10,
                 command_timeout=60,
             )
-            logger.info("✅ Crypto module database pool initialized")
+            logger.info("✅ Crypto module database pool initialized (shared)")
         except Exception as e:
             logger.error(f"❌ Failed to initialize database pool: {e}")
             raise
@@ -459,13 +458,20 @@ class CryptoModule(BaseModule):
         }
 
     async def _store_crypto_data(self, conn, crypto_data: Dict[str, Any]):
-        """Store crypto data to PostgreSQL using asyncpg"""
+        """Store crypto data to PostgreSQL using asyncpg with UPSERT"""
         await conn.execute(
             """
-            INSERT INTO crypto_data (
+            INSERT INTO crypto_data_history (
                 symbol, name, price, market_cap,
                 volume_24h, change_24h_pct, timestamp
             ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (symbol, timestamp)
+            DO UPDATE SET
+                name = EXCLUDED.name,
+                price = EXCLUDED.price,
+                market_cap = EXCLUDED.market_cap,
+                volume_24h = EXCLUDED.volume_24h,
+                change_24h_pct = EXCLUDED.change_24h_pct
         """,
             crypto_data["symbol"],
             crypto_data["name"],
@@ -486,14 +492,16 @@ class CryptoModule(BaseModule):
         """
         try:
             async with self.pool.acquire() as conn:
-                # Get latest prices
-                results = await conn.fetch("""
+                # Get latest prices from time-series table
+                results = await conn.fetch(
+                    """
                     SELECT symbol, name, price, change_24h_pct
-                    FROM crypto_data
+                    FROM crypto_data_history
                     WHERE timestamp >= NOW() - INTERVAL '1 hour'
                     ORDER BY timestamp DESC
                     LIMIT 10
-                    """)
+                    """
+                )
 
                 if results:
                     metrics = {}
@@ -542,14 +550,10 @@ class CryptoModule(BaseModule):
             "collections": 1,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

@@ -1,7 +1,7 @@
 name: crypto
 version: 1.0.0
 description: Cryptocurrency analysis and tracking module with real-time price data, market trends, and portfolio analytics
-author: FundMind AI
+author: Minder
 license: MIT
 
 minder:
@@ -44,3 +44,22 @@ capabilities:
   - portfolio_tracking
   - trend_detection
   - real_time_data
+
+# AI Tools for OpenWebUI Integration
+ai_tools:
+  - name: get_crypto_price
+    description: Get current cryptocurrency price and market data including price, market cap, and 24h change
+    type: analysis
+    endpoint: /analysis
+    method: GET
+    parameters:
+      symbol:
+        type: string
+        description: Cryptocurrency symbol (BTC, ETH, SOL, ADA, DOT)
+        enum: ["BTC", "ETH", "SOL", "ADA", "DOT"]
+        required: true
+    response_format:
+      price: float
+      market_cap: float
+      change_24h: float
+      timestamp: string

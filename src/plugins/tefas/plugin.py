@@ -53,11 +53,7 @@ except ImportError:
 
 # Unified Data API
 try:
-    from .api import (
-        BORSAPY_AVAILABLE,
-        TEFAS_CRAWLER_AVAILABLE,
-        UnifiedDataAPI,
-    )
+    from .api import BORSAPY_AVAILABLE, TEFAS_CRAWLER_AVAILABLE, UnifiedDataAPI
 except ImportError:
     BORSAPY_AVAILABLE = False
     TEFAS_CRAWLER_AVAILABLE = TEFAS_AVAILABLE
@@ -130,9 +126,7 @@ class TefasModule(BaseModule):
             self.logger.error("❌ Neither borsapy nor tefas-crawler is available!")
 
         # Collection settings
-        self.historical_start_date = config.get("tefas", {}).get(
-            "historical_start_date", "2020-01-01"
-        )
+        self.historical_start_date = config.get("tefas", {}).get("historical_start_date", "2020-01-01")
         self.collection_batch_days = config.get("tefas", {}).get("batch_days", 30)
         self.fund_types = ["YAT", "EMK", "BYF"]  # Yatırım, Emeklilik, Bireysel
 
@@ -182,19 +176,18 @@ class TefasModule(BaseModule):
         )
         self.logger.info("📊 Registering TEFAS Module v1.0.0 (borsapy 0.8.7 + tefas-crawler)")
 
-        # Initialize PostgreSQL connection pool
+        # Initialize PostgreSQL connection pool using shared pool manager
         try:
-            self.pool = await asyncpg.create_pool(
-                host=self.db_config["host"],
-                port=self.db_config["port"],
-                database=self.db_config["database"],
-                user=self.db_config["user"],
-                password=self.db_config["password"],
+            from src.shared.database.asyncpg_pool import create_plugin_pool
+
+            self.pool = await create_plugin_pool(
+                plugin_name="tefas",
+                db_config=self.db_config,
                 min_size=5,  # TEFAS needs more connections for concurrent operations
                 max_size=20,
                 command_timeout=60,
             )
-            self.logger.info("✅ TEFAS module database pool initialized")
+            self.logger.info("✅ TEFAS module database pool initialized (shared)")
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize database pool: {e}")
             raise
@@ -218,9 +211,7 @@ class TefasModule(BaseModule):
                     self.influxdb_client = InfluxDBClient(
                         url=influxdb_url, token=token, org=org, timeout=10000  # 10 seconds
                     )
-                    self.influxdb_write_api = self.influxdb_client.write_api(
-                        write_options=ASYNCHRONOUS
-                    )
+                    self.influxdb_write_api = self.influxdb_client.write_api(write_options=ASYNCHRONOUS)
                     self.logger.info(f"✅ InfluxDB client initialized (org={org}, bucket={bucket})")
             except Exception as e:
                 logger.warning(f"⚠️  Failed to initialize InfluxDB client: {e}")
@@ -326,9 +317,7 @@ class TefasModule(BaseModule):
         else:
             raise Exception("No crawler available")
 
-    async def _collect_recent_data(
-        self, start_date: datetime, end_date: datetime
-    ) -> tuple[int, int]:
+    async def _collect_recent_data(self, start_date: datetime, end_date: datetime) -> tuple[int, int]:
         """
         Collect fund data in batches to avoid API limits
 
@@ -359,14 +348,10 @@ class TefasModule(BaseModule):
                     # Store to database
                     stored = await self._store_batch_to_db(batch_data)
                     records_collected += stored
-                    self.logger.info(
-                        f"   ✓ {current_start.date()} - {current_end.date()}: {stored} records"
-                    )
+                    self.logger.info(f"   ✓ {current_start.date()} - {current_end.date()}: {stored} records")
 
             except Exception as e:
-                self.logger.error(
-                    f"Error collecting {current_start.date()} - {current_end.date()}: {e}"
-                )
+                self.logger.error(f"Error collecting {current_start.date()} - {current_end.date()}: {e}")
                 errors += 1
 
             current_start = current_end + timedelta(days=1)
@@ -405,9 +390,7 @@ class TefasModule(BaseModule):
                 except Exception as e:
                     logger.debug(f"InfluxDB flush failed: {e}")
 
-            self.logger.info(
-                f"✅ Collection complete: {records_collected} records, {errors} errors"
-            )
+            self.logger.info(f"✅ Collection complete: {records_collected} records, {errors} errors")
 
             return {
                 "records_collected": records_collected,
@@ -469,26 +452,18 @@ class TefasModule(BaseModule):
                                     .tag("fund_title", str(row.get("title", "")))
                                     .tag(
                                         "fund_type",
-                                        (
-                                            row.get("code", "")[0]
-                                            if len(row.get("code", "")) > 0
-                                            else "UNKNOWN"
-                                        ),
+                                        (row.get("code", "")[0] if len(row.get("code", "")) > 0 else "UNKNOWN"),
                                     )
                                     .time(row.get("date"))
                                     .field("price", float(row.get("price", 0)))
                                     .field("market_cap", float(row.get("market_cap", 0)))
-                                    .field(
-                                        "number_of_shares", float(row.get("number_of_shares", 0))
-                                    )
+                                    .field("number_of_shares", float(row.get("number_of_shares", 0)))
                                     .field(
                                         "number_of_investors",
                                         float(row.get("number_of_investors", 0)),
                                     )
                                     .field("bank_bills_pct", float(row.get("bank_bills", 0)))
-                                    .field(
-                                        "government_bond_pct", float(row.get("government_bond", 0))
-                                    )
+                                    .field("government_bond_pct", float(row.get("government_bond", 0)))
                                     .field("stock_pct", float(row.get("stock", 0)))
                                 )
 
@@ -522,9 +497,7 @@ class TefasModule(BaseModule):
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    self.kap_funds_url, timeout=aiohttp.ClientTimeout(total=15)
-                ) as response:
+                async with session.get(self.kap_funds_url, timeout=aiohttp.ClientTimeout(total=15)) as response:
                     if response.status == 200:
                         html = await response.text()
                         soup = BeautifulSoup(html, "html.parser")
@@ -562,7 +535,8 @@ class TefasModule(BaseModule):
         try:
             async with self.pool.acquire() as conn:
                 # Get top performing funds
-                results = await conn.fetch("""
+                results = await conn.fetch(
+                    """
                     SELECT
                         code,
                         title,
@@ -576,7 +550,8 @@ class TefasModule(BaseModule):
                     HAVING COUNT(*) >= 20  -- At least 20 data points
                     ORDER BY avg_price DESC
                     LIMIT 10
-                    """)
+                    """
+                )
 
                 if results:
                     # Enhance with borsapy advanced features
@@ -595,15 +570,11 @@ class TefasModule(BaseModule):
                         # Try to get risk metrics from borsapy
                         if self.unified_api and BORSAPY_AVAILABLE:
                             try:
-                                risk_metrics = self.unified_api.get_risk_metrics(
-                                    fund_code, period="1y"
-                                )
+                                risk_metrics = self.unified_api.get_risk_metrics(fund_code, period="1y")
                                 if risk_metrics:
                                     fund_data["risk_metrics"] = risk_metrics
                             except Exception as e:
-                                self.logger.debug(
-                                    f"Could not get risk metrics for {fund_code}: {e}"
-                                )
+                                self.logger.debug(f"Could not get risk metrics for {fund_code}: {e}")
 
                             # Try to get tax category
                             try:
@@ -611,9 +582,7 @@ class TefasModule(BaseModule):
                                 if tax_category:
                                     fund_data["tax_category"] = tax_category
                             except Exception as e:
-                                self.logger.debug(
-                                    f"Could not get tax category for {fund_code}: {e}"
-                                )
+                                self.logger.debug(f"Could not get tax category for {fund_code}: {e}")
 
                         enhanced_funds.append(fund_data)
 
@@ -656,11 +625,7 @@ class TefasModule(BaseModule):
                                 if BORSAPY_AVAILABLE
                                 else "Data from tefas-crawler package"
                             ),
-                            (
-                                "Advanced features enabled"
-                                if BORSAPY_AVAILABLE
-                                else "Basic features only"
-                            ),
+                            ("Advanced features enabled" if BORSAPY_AVAILABLE else "Basic features only"),
                         ],
                     }
                 else:
@@ -685,14 +650,10 @@ class TefasModule(BaseModule):
     async def index_knowledge(self, force: bool = False) -> Dict[str, int]:
         return {"vectors_created": 5000, "vectors_updated": 500, "collections": 1}
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

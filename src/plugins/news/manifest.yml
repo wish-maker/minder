@@ -1,7 +1,7 @@
 name: "news"
 version: "1.0.0"
 description: News aggregation and sentiment analysis
-author: "FundMind AI"
+author: "Minder"
 license: "MIT"
 
 minder:
@@ -37,3 +37,20 @@ capabilities:
   - "news_aggregation"
   - "sentiment_analysis"
   - "trend_detection"
+
+# AI Tools for OpenWebUI Integration
+ai_tools:
+  - name: get_latest_news
+    description: Get latest news articles with sentiment analysis from RSS feeds
+    type: analysis
+    endpoint: /analysis
+    method: GET
+    parameters:
+      limit:
+        type: integer
+        description: Number of articles to return (1-50)
+        default: 10
+        required: false
+    response_format:
+      articles: array
+      total: integer

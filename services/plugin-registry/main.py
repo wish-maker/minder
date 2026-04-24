@@ -744,6 +744,107 @@ async def get_all_ai_tools():
     return {"tools": all_tools}
 
 
+@app.get("/v1/plugins/{plugin_name}/analysis")
+async def get_plugin_analysis(
+    plugin_name: str, symbol: str = None, limit: int = 10, location: str = "Istanbul", fund_type: str = "YATIRIM"
+):
+    """
+    Generic analysis endpoint for all plugins
+
+    This endpoint handles AI tool analysis requests by calling the appropriate
+    plugin's analyze() method with the provided parameters.
+
+    Called by OpenWebUI when LLM requests a plugin's AI tool.
+    """
+    global plugin_instances
+
+    # Check if plugin exists and is enabled
+    if plugin_name not in plugins_db:
+        raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
+
+    if not plugins_db[plugin_name].enabled:
+        raise HTTPException(status_code=403, detail=f"Plugin '{plugin_name}' is not enabled")
+
+    # Check if plugin instance is available
+    if plugin_name not in plugin_instances:
+        raise HTTPException(status_code=503, detail=f"Plugin '{plugin_name}' is not running")
+
+    try:
+        plugin_instance = plugin_instances[plugin_name]
+
+        # Call plugin's analyze method
+        # Note: The base analyze() method doesn't take parameters,
+        # so we return the latest analysis results
+        analysis_result = await plugin_instance.analyze()
+
+        # Enhance with plugin-specific data if available
+        if plugin_name == "crypto" and symbol:
+            # Crypto-specific: get data for specific symbol
+            if "metrics" in analysis_result and symbol in analysis_result["metrics"]:
+                return {"symbol": symbol, **analysis_result["metrics"][symbol], "timestamp": datetime.now().isoformat()}
+            else:
+                raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol}")
+
+        elif plugin_name == "news":
+            # News-specific: limit articles
+            if "insights" in analysis_result:
+                return {
+                    "articles": analysis_result.get("metrics", {}).get("latest_articles", [])[:limit],
+                    "total": min(limit, len(analysis_result.get("metrics", {}).get("latest_articles", []))),
+                    "limit": limit,
+                }
+
+        elif plugin_name == "weather" and location:
+            # Weather-specific: get data for location
+            if "metrics" in analysis_result:
+                weather_data = analysis_result["metrics"].get(
+                    location,
+                    {
+                        "temperature": analysis_result["metrics"].get("avg_temp_c", 0),
+                        "humidity": analysis_result["metrics"].get("avg_humidity_pct", 0),
+                        "conditions": "unknown",
+                    },
+                )
+                return {
+                    "location": location,
+                    "temperature": weather_data.get("temperature", 0),
+                    "humidity": weather_data.get("humidity", 0),
+                    "conditions": weather_data.get("conditions", "unknown"),
+                    "timestamp": datetime.now().isoformat(),
+                }
+
+        elif plugin_name == "network":
+            # Network-specific: return recent metrics
+            if "metrics" in analysis_result:
+                return {
+                    "metrics": [
+                        {
+                            "timestamp": datetime.now().isoformat(),
+                            "cpu_usage": analysis_result["metrics"].get("avg_cpu_usage_pct", 0),
+                            "memory_usage": analysis_result["metrics"].get("avg_memory_usage_pct", 0),
+                            "load_avg": analysis_result["metrics"].get("avg_load_avg", 0),
+                        }
+                    ],
+                    "average_latency": analysis_result["metrics"].get("avg_load_avg", 0),
+                    "limit": limit,
+                }
+
+        elif plugin_name == "tefas":
+            # TEFAS-specific: return fund data
+            if "metrics" in analysis_result and "top_funds" in analysis_result["metrics"]:
+                funds = analysis_result["metrics"]["top_funds"][:limit]
+                return {"funds": funds, "total": len(funds), "fund_type": fund_type, "limit": limit}
+
+        # Default: return full analysis
+        return analysis_result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Analysis error for plugin {plugin_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
 async def load_plugin_manifest(plugin_name: str):
     """Load plugin manifest from disk"""
     try:

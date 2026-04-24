@@ -1,7 +1,7 @@
 name: "weather"
 version: "1.0.0"
 description: Weather data collection and correlation analysis
-author: "FundMind AI"
+author: "Minder"
 license: "MIT"
 
 minder:
@@ -37,3 +37,21 @@ capabilities:
   - "weather_data_collection"
   - "forecast_analysis"
   - "seasonal_pattern_detection"
+
+ai_tools:
+  - name: get_weather_data
+    description: Get latest weather data for configured locations including temperature, humidity, conditions
+    type: analysis
+    endpoint: /analysis
+    method: GET
+    parameters:
+      location:
+        type: string
+        description: Location name - default is Istanbul
+        default: "Istanbul"
+        required: false
+    response_format:
+      temperature: float
+      humidity: float
+      conditions: string
+      timestamp: string
