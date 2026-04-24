@@ -1,0 +1,48 @@
+{
+  "dashboard": {
+    "title": "Data Quality Metrics",
+    "tags": ["minder", "data"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Records per Plugin",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "minder_plugin_records_total",
+            "legendFormat": "{{plugin}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Data Freshness",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 16, "x": 8, "y": 0},
+        "targets": [
+          {
+            "expr": "time() - minder_last_collection_timestamp",
+            "legendFormat": "{{plugin}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Storage Usage",
+        "type": "gauge",
+        "gridPos": {"h": 6, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "pg_database_size_bytes{datname=~\"minder_.*\"}",
+            "legendFormat": "{{datname}}"
+          }
+        ]
+      }
+    ]
+  }
+}
