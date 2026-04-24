@@ -4,6 +4,7 @@ Minder Crypto Analysis Module
 
 import asyncio
 import logging
+import os
 
 # Import validator from same directory using absolute path
 import sys
@@ -558,3 +559,158 @@ class CryptoModule(BaseModule):
 
     async def query(self, query: str) -> Dict[str, Any]:
         return {"query": query, "results": []}
+
+
+# ============================================================================
+# FastAPI Router for Crypto Plugin Microservice
+# ============================================================================
+
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+
+from .database import get_db
+
+# Create router
+router = APIRouter()
+
+
+class CryptoPriceResponse(BaseModel):
+    """Cryptocurrency price response for AI"""
+
+    symbol: str
+    price: float
+    market_cap: float
+    change_24h: float
+    timestamp: str
+
+
+# ============================================================================
+# AI Tool Endpoints (called by OpenWebUI/LLM)
+# ============================================================================
+
+
+@router.get("/analysis")
+async def get_crypto_analysis(
+    symbol: str = Query(..., description="Cryptocurrency symbol (BTC, ETH, SOL, ADA, DOT)"), db=Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    AI Tool: Get current cryptocurrency price and market data
+
+    Called by OpenWebUI when LLM requests get_crypto_price tool.
+
+    This is the primary AI tool endpoint that returns formatted data for LLM consumption.
+
+    Args:
+        symbol: Cryptocurrency symbol (BTC, ETH, SOL, ADA, DOT)
+        db: Database session from connection pool
+
+    Returns:
+        Dictionary with price, market_cap, change_24h, timestamp
+
+    Raises:
+        HTTPException 404: If no data found for the symbol
+    """
+    try:
+        # Query latest crypto data from time-series table
+        query = """
+            SELECT symbol, price, market_cap, change_24h_pct, timestamp
+            FROM crypto_data_history
+            WHERE symbol = $1
+            ORDER BY timestamp DESC
+            LIMIT 1
+        """
+
+        row = await db.fetchrow(query, symbol.upper())
+
+        if not row:
+            raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol}")
+
+        # Return AI-formatted response
+        return {
+            "symbol": row["symbol"],
+            "price": float(row["price"]),
+            "market_cap": float(row.get("market_cap", 0)),
+            "change_24h": float(row.get("change_24h_pct", 0)),
+            "timestamp": row["timestamp"].isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in get_crypto_analysis: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch crypto data: {str(e)}")
+
+
+# ============================================================================
+# Plugin Management Endpoints
+# ============================================================================
+
+
+@router.get("/collect")
+async def collect_crypto_data(db=Depends(get_db)):
+    """
+    Trigger data collection for this plugin
+
+    Collects latest cryptocurrency data from external APIs (Binance, CoinGecko, etc.)
+    and stores to database.
+
+    This endpoint allows manual triggering of data collection.
+    """
+    # Import the BaseModule class
+    from .plugin import CryptoModule
+
+    # Build config from environment
+    config = {
+        "database": {
+            "host": os.getenv("POSTGRES_HOST", "postgres"),
+            "port": int(os.getenv("POSTGRES_PORT", "5432")),
+            "database": os.getenv("POSTGRES_DB", "minder"),
+            "user": os.getenv("POSTGRES_USER", "minder"),
+            "password": os.getenv("POSTGRES_PASSWORD", ""),
+        }
+    }
+
+    # Create module instance and register
+    crypto_module = CryptoModule(config)
+    await crypto_module.register()
+
+    # Collect data from external APIs
+    result = await crypto_module.collect_data()
+
+    return {
+        "status": "success",
+        "plugin": "crypto",
+        "collected": result["records_collected"],
+        "errors": result["errors"],
+    }
+
+
+@router.get("/analyze")
+async def analyze_crypto_data(db=Depends(get_db)):
+    """
+    Analyze collected cryptocurrency data
+
+    Returns metrics, patterns, and insights from collected data.
+    """
+    # Import the BaseModule class
+    from .plugin import CryptoModule
+
+    config = {
+        "database": {
+            "host": os.getenv("POSTGRES_HOST", "postgres"),
+            "port": int(os.getenv("POSTGRES_PORT", "5432")),
+            "database": os.getenv("POSTGRES_DB", "minder"),
+            "user": os.getenv("POSTGRES_USER", "minder"),
+            "password": os.getenv("POSTGRES_PASSWORD", ""),
+        }
+    }
+
+    crypto_module = CryptoModule(config)
+    await crypto_module.register()
+
+    # Analyze collected data
+    result = await crypto_module.analyze()
+
+    return result
