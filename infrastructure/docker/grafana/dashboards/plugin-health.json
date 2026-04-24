@@ -1,0 +1,58 @@
+{
+  "dashboard": {
+    "title": "Plugin Health Monitoring",
+    "tags": ["minder", "plugins"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Plugin Status",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "up{job=~\"minder-plugin-.*\"}",
+            "legendFormat": "{{plugin}}"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true},
+              "indexByName": {},
+              "renameByName": {"Value": "Status", "job": "Plugin"}
+            }
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Data Collection Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(minder_data_collection_total[5m])",
+            "legendFormat": "{{plugin}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Collection Errors",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(minder_collection_errors_total[5m])",
+            "legendFormat": "{{plugin}}"
+          }
+        ]
+      }
+    ]
+  }
+}
