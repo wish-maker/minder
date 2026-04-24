@@ -13,7 +13,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: minder
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: minder
       POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
     volumes:
@@ -34,13 +34,13 @@ services:
     image: redis:7-alpine
     container_name: minder-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-dev_password_change_me}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-dev_password_change_me}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -106,10 +106,10 @@ services:
       # Infrastructure
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # Security
-      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_me}
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_ALGORITHM=HS256
       - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
 
@@ -150,14 +150,14 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=minder
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=minder
 
       # Service Discovery
       - SERVICE_REGISTRY_BACKEND=redis
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
 
       # Plugin Storage
       - PLUGINS_PATH=/app/plugins
@@ -246,7 +246,7 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=minder
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=minder
 
       # Storage
@@ -289,7 +289,7 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=minder
       - DOCKER_INFLUXDB_INIT_BUCKET=minder-metrics
       - DOCKER_INFLUXDB_INIT_RETENTION=30d
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN:-minder-super-secret-token-change-me-in-production}
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=${INFLUXDB_TOKEN}
       # Logging
       - INFLUXDB_LOG_LEVEL=info
       - INFLUXDB_LOG_FORMAT=auto
@@ -314,12 +314,12 @@ services:
     restart: unless-stopped
     environment:
       # InfluxDB connection
-      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-minder-super-secret-token-change-me-in-production}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
       - HOSTNAME=minder-server
       - INSTANCE=production
       # Service credentials
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-dev_password_change_me}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     volumes:
       # Telegraf configuration
       - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
@@ -335,6 +335,11 @@ services:
       redis:
         condition: service_healthy
     command: ["--config", "/etc/telegraf/telegraf.conf", "--non-strict-env-handling"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "telegraf"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - minder-network
     # Telegraf needs host process access for some metrics
@@ -356,6 +361,11 @@ services:
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - minder-network
     profiles:
@@ -421,15 +431,20 @@ services:
       - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
       - RAG_ENABLED=true
 
+      # Minder AI Integration - Tool Calling
+      - MINDER_API_GATEWAY_URL=http://minder-api-gateway:8000
+      - MINDER_AI_TOOLS_ENABLED=true
+      - MINDER_FUNCTIONS_CONFIG=/app/config/functions.json
+
       # Data Storage (PostgreSQL)
-      - DATABASE_URL=postgresql://minder:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/minder
+      - DATABASE_URL=postgresql://minder:${POSTGRES_PASSWORD}@postgres:5432/minder
 
       # Authentication
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-this-to-a-random-secret-key}
       - WEBUI_AUTH=${WEBUI_AUTH:-true}
 
       # JWT Integration with Minder
-      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_me}
+      - JWT_SECRET=${JWT_SECRET}
       - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
 
       # Application
@@ -445,8 +460,9 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - openwebui_data:/app/backend/data
+      - ./openwebui/functions.json:/app/config/functions.json:ro
     ports:
-      - "3002:8080"
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -532,9 +548,14 @@ services:
     container_name: minder-postgres-exporter
     restart: unless-stopped
     environment:
-      - DATA_SOURCE_NAME=postgresql://minder:${POSTGRES_PASSWORD:-dev_password_change_me}@postgres:5432/minder?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://minder:${POSTGRES_PASSWORD}@postgres:5432/minder?sslmode=disable
     ports:
       - "9187:9187"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9187/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -550,9 +571,14 @@ services:
     restart: unless-stopped
     environment:
       - REDIS_ADDR=redis://redis:6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-dev_password_change_me}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     ports:
       - "9121:9121"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9121/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     depends_on:
       redis:
         condition: service_healthy
