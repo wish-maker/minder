@@ -5,160 +5,115 @@ Provides OpenAI-compatible API for tool calling
 
 import logging
 from datetime import datetime
+from typing import Dict, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
+from services.api_gateway.config import settings
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/ai", tags=["ai"])
 
-# Tool definitions (from functions.json)
-TOOLS_DEFINITIONS = {
-    "tools": [
-        {
-            "type": "function",
-            "function": {
-                "name": "get_crypto_price",
-                "description": "Get current cryptocurrency price and market data",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "symbol": {
-                            "type": "string",
-                            "enum": ["BTC", "ETH", "SOL", "ADA", "DOT"],
-                            "description": "Cryptocurrency symbol",
-                        }
-                    },
-                    "required": ["symbol"],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "collect_crypto_data",
-                "description": "Trigger cryptocurrency data collection from exchanges",
-                "parameters": {"type": "object", "properties": {}, "required": []},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_latest_news",
-                "description": "Get latest news articles with sentiment analysis",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"limit": {"type": "integer", "default": 10}, "source": {"type": "string"}},
-                    "required": [],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "collect_news",
-                "description": "Trigger news collection from RSS feeds",
-                "parameters": {"type": "object", "properties": {}, "required": []},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_plugin_status",
-                "description": "Get health status of all plugins",
-                "parameters": {"type": "object", "properties": {}, "required": []},
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_network_metrics",
-                "description": "Get latest network performance metrics",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"limit": {"type": "integer", "default": 10}},
-                    "required": [],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_weather_data",
-                "description": "Get latest weather data for configured locations",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"location": {"type": "string", "default": "Istanbul"}},
-                    "required": [],
-                },
-            },
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "get_tefas_funds",
-                "description": "Get Turkish investment fund data from TEFAS",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "fund_type": {"type": "string", "default": "YATIRIM"},
-                        "limit": {"type": "integer", "default": 10},
-                    },
-                    "required": [],
-                },
-            },
-        },
-    ]
-}
+# Tool cache (refresh every 60 seconds)
+_tools_cache: Optional[Dict] = None
+_tools_cache_time: Optional[float] = None
+CACHE_TTL = 60  # seconds
 
-# Map function names to Plugin Registry API calls
-FUNCTION_MAPPINGS = {
-    "get_crypto_price": {"url": "http://minder-plugin-registry:8001/v1/plugins/crypto/analysis", "method": "GET"},
-    "collect_crypto_data": {"url": "http://minder-plugin-registry:8001/v1/plugins/crypto/collect", "method": "POST"},
-    "get_latest_news": {"url": "http://minder-plugin-registry:8001/v1/plugins/news/analysis", "method": "GET"},
-    "collect_news": {"url": "http://minder-plugin-registry:8001/v1/plugins/news/collect", "method": "POST"},
-    "get_plugin_status": {"url": "http://minder-plugin-registry:8001/v1/plugins", "method": "GET"},
-    "get_network_metrics": {"url": "http://minder-plugin-registry:8001/v1/plugins/network/analysis", "method": "GET"},
-    "get_weather_data": {"url": "http://minder-plugin-registry:8001/v1/plugins/weather/analysis", "method": "GET"},
-    "get_tefas_funds": {"url": "http://minder-plugin-registry:8001/v1/plugins/tefas/analysis", "method": "GET"},
-}
+
+async def get_tool_definitions() -> Dict:
+    """
+    Fetch tool definitions from Plugin Registry
+
+    Returns cached definitions if available, otherwise fetches fresh.
+    """
+    global _tools_cache, _tools_cache_time
+
+    import time
+
+    current_time = time.time()
+
+    # Return cached tools if still fresh
+    if _tools_cache and _tools_cache_time:
+        if current_time - _tools_cache_time < CACHE_TTL:
+            return _tools_cache
+
+    # Fetch fresh tools from Plugin Registry
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/ai/tools", timeout=5.0)
+            response.raise_for_status()
+            _tools_cache = response.json()
+            _tools_cache_time = current_time
+            return _tools_cache
+    except Exception as e:
+        logger.error(f"Failed to fetch tool definitions: {e}")
+
+        # Return cached tools if available (fallback)
+        if _tools_cache:
+            logger.warning("Using cached tool definitions due to fetch error")
+            return _tools_cache
+
+        # Return empty tools if no cache available
+        return {"tools": []}
 
 
 @router.get("/functions/definitions")
-async def get_function_definitions():
-    """Return available tool definitions for LLM"""
-    return TOOLS_DEFINITIONS
+async def get_functions_definitions():
+    """
+    Get AI tool definitions for OpenWebUI
+
+    Returns aggregated tool definitions from all plugins.
+    Fetches dynamically from Plugin Registry.
+    """
+    return await get_tool_definitions()
 
 
 @router.post("/functions/{function_name}")
 async def execute_function(function_name: str, request: Request):
-    """Execute a Minder platform function"""
-    params = await request.json()
+    """
+    Execute a specific AI tool function
 
-    if function_name not in FUNCTION_MAPPINGS:
-        raise HTTPException(status_code=404, detail=f"Unknown function: {function_name}")
+    Fetches tool metadata from Plugin Registry and proxies to appropriate plugin endpoint.
+    """
+    # Get tool definitions to find target endpoint
+    tools_response = await get_tool_definitions()
 
-    mapping = FUNCTION_MAPPINGS[function_name]
-    url = mapping["url"]
-    method = mapping["method"]
+    # Find the requested tool
+    tool = None
+    for t in tools_response.get("tools", []):
+        if t["function"]["name"] == function_name:
+            tool = t
+            break
 
-    # Call Plugin Registry API
-    try:
-        async with httpx.AsyncClient() as client:
-            if method == "POST":
-                response = await client.post(url, json=params, timeout=30.0)
-            else:
-                # Add query parameters for GET requests
-                if params:
-                    url += "?" + "&".join(f"{k}={v}" for k, v in params.items())
-                response = await client.get(url, timeout=30.0)
+    if not tool:
+        raise HTTPException(status_code=404, detail=f"Tool {function_name} not found")
 
-            response.raise_for_status()
+    # Extract metadata
+    metadata = tool.get("metadata", {})
+    target_url = metadata.get("endpoint")
+    method = metadata.get("method", "POST")
 
-            return {"result": response.json(), "status": "success", "timestamp": datetime.utcnow().isoformat()}
-    except httpx.HTTPError as e:
-        logger.error(f"Function execution failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Function execution failed: {str(e)}")
+    if not target_url:
+        raise HTTPException(status_code=500, detail=f"Tool {function_name} missing endpoint metadata")
+
+    # Build full URL to Plugin Registry
+    url = f"{settings.PLUGIN_REGISTRY_URL}{target_url}"
+
+    # Get request body
+    body = await request.body()
+
+    # Proxy request to plugin
+    async with httpx.AsyncClient() as client:
+        if method == "GET":
+            response = await client.get(url, params=request.query_params)
+        else:  # POST
+            response = await client.post(url, content=body)
+
+        response.raise_for_status()
+
+        # Return result in OpenAI function format
+        return {"result": response.json(), "status": "success", "timestamp": datetime.now().isoformat()}
 
 
 @router.post("/chat/completions")
