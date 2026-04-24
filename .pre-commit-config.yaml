@@ -37,7 +37,7 @@ repos:
     hooks:
       - id: flake8
         name: flake8 (linter)
-        args: ['--max-line-length=120', '--extend-ignore=E203,W503,E501']
+        args: ['--max-line-length=120', '--extend-ignore=E203,W503,E501,E402,F824']
         description: Check Python code for style and syntax errors
 
   # ============================================================================

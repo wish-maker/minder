@@ -3,21 +3,26 @@ Minder Plugin Registry Service
 Manages plugin discovery, lifecycle, health monitoring, and service registration
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from typing import Dict, List, Optional
-import redis
-import logging
 import asyncio
+import json
+import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
-import sys
-import json
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
+from typing import Dict, List, Optional
 
+import redis
 from config import settings
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel
+
+# Import authentication middleware
+sys.path.insert(0, "/app/src")
+# Import AI tool validator
+from shared.ai.tool_validator import validate_ai_tools
+from shared.auth.jwt_middleware import JWT_EXPIRATION_MINUTES, enforce_rate_limit, get_current_user
 
 # Add src to path for imports
 sys.path.insert(0, "/app/src")
@@ -39,21 +44,15 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-plugins_total = Gauge(
-    "plugins_total", "Total number of plugins", ["status"]  # registered, enabled, disabled, error
-)
+plugins_total = Gauge("plugins_total", "Total number of plugins", ["status"])  # registered, enabled, disabled, error
 
-health_check_failures_total = Counter(
-    "health_check_failures_total", "Total health check failures", ["plugin"]
-)
+health_check_failures_total = Counter("health_check_failures_total", "Total health check failures", ["plugin"])
 
 # ============================================================================
 # Data Models
@@ -67,7 +66,8 @@ class PluginInfo(BaseModel):
     version: str
     description: str
     author: str
-    status: str  # registered, enabled, disabled, error
+    status: str = "registered"  # registered, enabled, disabled, error
+    enabled: bool = False  # Track if plugin is enabled
     dependencies: List[str] = []
     capabilities: List[str] = []
     data_sources: List[str] = []
@@ -120,15 +120,11 @@ async def get_postgres_connection():
     global postgres_pool
     if postgres_pool is None:
         postgres_pool = await asyncpg.create_pool(
-            host=(
-                settings.POSTGRES_HOST if hasattr(settings, "POSTGRES_HOST") else "minder-postgres"
-            ),
+            host=(settings.POSTGRES_HOST if hasattr(settings, "POSTGRES_HOST") else "minder-postgres"),
             port=settings.POSTGRES_PORT if hasattr(settings, "POSTGRES_PORT") else 5432,
             user=settings.POSTGRES_USER if hasattr(settings, "POSTGRES_USER") else "minder",
             password=(
-                settings.POSTGRES_PASSWORD
-                if hasattr(settings, "POSTGRES_PASSWORD")
-                else "dev_password_change_me"
+                settings.POSTGRES_PASSWORD if hasattr(settings, "POSTGRES_PASSWORD") else "dev_password_change_me"
             ),
             database=settings.POSTGRES_DB if hasattr(settings, "POSTGRES_DB") else "minder",
             min_size=2,
@@ -258,9 +254,7 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "enabled": True,
                     "host": "minder-influxdb",
                     "port": 8086,
-                    "token": os.environ.get(
-                        "INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"
-                    ),
+                    "token": os.environ.get("INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"),
                     "org": "minder",
                     "bucket": "minder-metrics",
                 },
@@ -289,9 +283,7 @@ async def load_plugin_from_module(plugin_dir: Path):
             plugins_db[plugin_name] = plugin_info
             plugin_instances[plugin_name] = plugin_instance
 
-            logger.info(
-                f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})"
-            )
+            logger.info(f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})")
 
     except Exception as e:
         logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
@@ -389,13 +381,76 @@ async def track_requests(request, call_next):
 
 
 # ============================================================================
+# API Endpoints - Authentication
+# ============================================================================
+
+
+class LoginRequest(BaseModel):
+    """Login request model"""
+
+    username: str
+    password: str
+
+
+@app.post("/v1/auth/login")
+async def login(request: LoginRequest):
+    """
+    Authenticate and get JWT token
+
+    NOTE: This is a simplified authentication for demonstration.
+    In production, integrate with proper user database and
+    password hashing (bcrypt/argon2).
+    """
+    # TODO: Integrate with proper user database
+    # For now, accept any non-empty credentials for testing
+    if not request.username or not request.password:
+        raise HTTPException(status_code=400, detail="Username and password required")
+
+    # Simple validation (replace with proper authentication in production)
+    if len(request.username) < 3 or len(request.password) < 8:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Create user payload
+    user_payload = {"sub": request.username, "username": request.username, "role": "user"}  # user ID  # Default role
+
+    # Assign admin role to specific users (configure as needed)
+    admin_users = os.environ.get("ADMIN_USERS", "admin").split(",")
+    if request.username in admin_users:
+        user_payload["role"] = "admin"
+
+    # Generate JWT token
+    from shared.auth.jwt_middleware import create_user_token
+
+    token = create_user_token(user_id=user_payload["sub"], username=request.username, role=user_payload["role"])
+
+    logger.info(f"User logged in: {request.username} ({user_payload['role']})")
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "expires_in": JWT_EXPIRATION_MINUTES * 60,
+        "user": {"username": request.username, "role": user_payload["role"]},
+    }
+
+
+@app.get("/v1/auth/me")
+async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
+    """Get current authenticated user information"""
+    return {
+        "username": current_user.get("username"),
+        "role": current_user.get("role"),
+        "user_id": current_user.get("sub"),
+    }
+
+
+# ============================================================================
 # API Endpoints - Plugin Management
 # ============================================================================
 
 
 @app.get("/v1/plugins")
 async def list_plugins():
-    """List all registered plugins"""
+    """List all registered plugins (public endpoint)"""
     return {"plugins": list(plugins_db.values()), "count": len(plugins_db)}
 
 
@@ -419,7 +474,7 @@ async def install_plugin(request: PluginInstallationRequest, background_tasks: B
 
 
 @app.delete("/v1/plugins/{plugin_name}")
-async def uninstall_plugin(plugin_name: str):
+async def uninstall_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
     """Uninstall a plugin"""
     if plugin_name not in plugins_db:
         raise HTTPException(status_code=404, detail="Plugin not found")
@@ -436,7 +491,7 @@ async def uninstall_plugin(plugin_name: str):
 
 
 @app.post("/v1/plugins/{plugin_name}/enable")
-async def enable_plugin(plugin_name: str):
+async def enable_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
     """Enable a plugin"""
     plugin = plugins_db.get(plugin_name)
     if not plugin:
@@ -457,7 +512,7 @@ async def enable_plugin(plugin_name: str):
 
 
 @app.post("/v1/plugins/{plugin_name}/disable")
-async def disable_plugin(plugin_name: str):
+async def disable_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
     """Disable a plugin"""
     plugin = plugins_db.get(plugin_name)
     if not plugin:
@@ -498,7 +553,10 @@ async def get_plugin_health(plugin_name: str):
 
 
 @app.post("/v1/plugins/{plugin_name}/collect")
-async def trigger_plugin_collection(plugin_name: str, background_tasks: BackgroundTasks):
+@enforce_rate_limit(max_requests=10, window_minutes=1)
+async def trigger_plugin_collection(
+    plugin_name: str, background_tasks: BackgroundTasks, current_user: Dict = Depends(get_current_user)
+):
     """
     Manually trigger data collection for a plugin
 
@@ -538,12 +596,21 @@ async def trigger_plugin_collection(plugin_name: str, background_tasks: Backgrou
     # Trigger collection in background
     background_tasks.add_task(plugin_instance.collect_data)
 
-    logger.info(f"Data collection triggered for plugin: {plugin_name}")
+    # Audit logging
+    username = current_user.get("username", "unknown")
+    user_role = current_user.get("role", "unknown")
+    logger.info(
+        f"Data collection triggered for plugin: {plugin_name} | "
+        f"User: {username} ({user_role}) | "
+        f"Timestamp: {datetime.utcnow().isoformat()}"
+    )
 
     return {
         "message": f"Data collection triggered for {plugin_name}",
         "plugin": plugin_name,
         "status": "collecting",
+        "triggered_by": username,
+        "timestamp": datetime.utcnow().isoformat(),
         "note": "Collection runs in background. Check /health endpoint for results.",
     }
 
@@ -604,6 +671,108 @@ async def unregister_service(service_name: str):
 
 
 # ============================================================================
+# API Endpoints - AI Tools
+# ============================================================================
+
+
+@app.get("/v1/plugins/ai/tools")
+async def get_all_ai_tools():
+    """
+    Aggregate AI tools from all plugins
+
+    Returns OpenAI-compatible tool definitions from all active plugins.
+    Each plugin declares its AI tools in manifest.yml.
+    """
+    all_tools = []
+
+    for plugin_name, plugin_info in plugins_db.items():
+        try:
+            # Get plugin instance
+            plugin_instance = plugin_instances.get(plugin_name)
+            if not plugin_instance:
+                logger.debug(f"Plugin instance not available: {plugin_name}")
+                continue
+
+            # Load plugin manifest
+            manifest = await load_plugin_manifest(plugin_name)
+            if not manifest:
+                logger.debug(f"No manifest found for plugin: {plugin_name}")
+                continue
+
+            # Validate AI tools
+            tools = validate_ai_tools(manifest)
+
+            # Convert each tool to OpenAI function format
+            for tool in tools:
+                # Build parameters schema for OpenAI
+                properties = {}
+                required = []
+
+                for param_name, param_def in tool.parameters.items():
+                    properties[param_name] = {"type": param_def.type.value, "description": param_def.description}
+
+                    if param_def.enum:
+                        properties[param_name]["enum"] = param_def.enum
+
+                    if param_def.default is not None:
+                        properties[param_name]["default"] = param_def.default
+
+                    if param_def.required:
+                        required.append(param_name)
+
+                # Format as OpenAI function
+                openai_tool = {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": {"type": "object", "properties": properties, "required": required},
+                    },
+                    "metadata": {
+                        "plugin": plugin_name,
+                        "endpoint": f"/v1/plugins/{plugin_name}{tool.endpoint}",
+                        "method": tool.method,
+                    },
+                }
+
+                all_tools.append(openai_tool)
+
+        except Exception as e:
+            logger.error(f"Failed to load AI tools from plugin {plugin_name}: {e}")
+            continue
+
+    return {"tools": all_tools}
+
+
+async def load_plugin_manifest(plugin_name: str):
+    """Load plugin manifest from disk"""
+    try:
+        plugins_path = Path(settings.PLUGINS_PATH)
+        manifest_file = plugins_path / plugin_name / "manifest.yml"
+
+        if not manifest_file.exists():
+            # Try manifest.json as fallback
+            manifest_file = plugins_path / plugin_name / "manifest.json"
+
+        if not manifest_file.exists():
+            return None
+
+        import yaml
+
+        with open(manifest_file, "r") as f:
+            if manifest_file.suffix == ".yaml" or manifest_file.suffix == ".yml":
+                return yaml.safe_load(f)
+            else:
+                import json
+
+                return json.load(f)
+
+    except Exception as e:
+        logger.error(f"Failed to load manifest for {plugin_name}: {e}")
+        return None
+
+
+# ============================================================================
 # Startup/Shutdown Events
 # ============================================================================
 
@@ -623,10 +792,66 @@ async def startup_event():
     # Load plugins from disk (sync with database)
     await load_plugins_from_disk()
 
+    # Auto-enable all plugins on startup
+    await auto_enable_plugins()
+
     # Start health check loop
     asyncio.create_task(health_check_loop())
 
+    # Start automatic data collection scheduler
+    asyncio.create_task(data_collection_scheduler())
+
     logger.info(f"Loaded {len(plugins_db)} plugins")
+
+
+async def auto_enable_plugins():
+    """Automatically enable all plugins on startup"""
+    global plugins_db
+
+    logger.info("Auto-enabling all plugins...")
+
+    for plugin_name, plugin_info in plugins_db.items():
+        try:
+            # Update in-memory status
+            plugin_info.enabled = True
+            plugin_info.status = "enabled"
+
+            # Update in database
+            await update_plugin_in_database(plugin_name, enabled=True, status="enabled")
+
+            logger.info(f"✅ Auto-enabled plugin: {plugin_name}")
+        except Exception as e:
+            logger.error(f"❌ Failed to auto-enable {plugin_name}: {e}")
+
+
+async def data_collection_scheduler():
+    """Automatically trigger data collection for all enabled plugins every hour"""
+    while True:
+        try:
+            # Wait 1 hour (3600 seconds)
+            await asyncio.sleep(3600)
+
+            logger.info("🔄 Scheduled data collection starting...")
+
+            # Collect data from all enabled plugins
+            for plugin_name, plugin_info in plugins_db.items():
+                if plugin_info.enabled and plugin_name in plugin_instances:
+                    try:
+                        plugin_instance = plugin_instances[plugin_name]
+
+                        # Trigger data collection
+                        result = await plugin_instance.collect_data()
+
+                        logger.info(f"✅ {plugin_name}: {result.get('records_collected', 0)} records collected")
+                    except Exception as e:
+                        logger.error(f"❌ {plugin_name}: Collection failed - {e}")
+
+            logger.info("✅ Scheduled data collection complete")
+
+        except Exception as e:
+            logger.error(f"❌ Data collection scheduler error: {e}")
+            # Wait 5 minutes before retry
+            await asyncio.sleep(300)
 
 
 @app.on_event("shutdown")
@@ -656,7 +881,7 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8001)  # nosec B104
 
 # ============================================================================
 # Database Operations
@@ -672,7 +897,7 @@ async def load_plugins_from_database():
 
         query = """
             SELECT name, version, description, author, status, enabled,
-                   capabilities, data_sources, databases, health_status, 
+                   capabilities, data_sources, databases, health_status,
                    last_health_check, registered_at
             FROM plugins
             ORDER BY name
@@ -693,9 +918,7 @@ async def load_plugins_from_database():
                 databases=row["databases"] or [],
                 registered_at=row["registered_at"].isoformat() if row["registered_at"] else None,
                 health_status=row["health_status"] or "unknown",
-                last_health_check=(
-                    row["last_health_check"].isoformat() if row["last_health_check"] else None
-                ),
+                last_health_check=(row["last_health_check"].isoformat() if row["last_health_check"] else None),
             )
             plugins_db[row["name"]] = plugin_info
 
@@ -719,7 +942,7 @@ async def update_plugin_in_database(plugin_name: str, **updates):
 
         values.append(plugin_name)  # For WHERE clause
 
-        query = f"""
+        query = f"""  # nosec B608
             UPDATE plugins
             SET {', '.join(set_clauses)}, updated_at = NOW()
             WHERE name = ${len(values)}

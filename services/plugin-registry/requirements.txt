@@ -30,6 +30,7 @@ prometheus-client==0.19.0
 
 # Utilities
 python-dotenv==1.0.0
+pyjwt==2.8.0
 
 # Plugin-specific dependencies (TEFAS, time-series)
 influxdb-client==1.50.0

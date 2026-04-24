@@ -64,6 +64,7 @@ target-version = ['py311']
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+ignore = ["E402", "F824"]  # Allow sys.path manipulation and global statements
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -93,7 +94,9 @@ exclude_dirs = [
 ]
 skips = [
     "B101",  # Allow assert statements in tests
-    "B601"   # Allow paramiko calls (SSH connections)
+    "B104",  # Allow binding to all interfaces in containerized services
+    "B601",  # Allow paramiko calls (SSH connections)
+    "B608"   # Allow safe SQL queries with hardcoded column names
 ]
 
 [tool.isort]

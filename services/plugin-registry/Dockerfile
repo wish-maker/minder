@@ -32,6 +32,7 @@ COPY services/plugin-registry/config.py .
 
 # Copy shared core library and plugins (from build context)
 COPY src/core /app/src/core
+COPY src/shared /app/src/shared
 COPY src/plugins /app/plugins
 
 # Create non-root user

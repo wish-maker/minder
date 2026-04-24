@@ -170,6 +170,8 @@ services:
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+    env_file:
+      - .env
     volumes:
       - ../../src/plugins:/app/plugins:ro
       - plugins_data:/app/plugins-data
