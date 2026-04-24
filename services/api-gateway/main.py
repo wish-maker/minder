@@ -4,21 +4,23 @@ Central entry point for all API requests
 Handles authentication, rate limiting, request routing, and logging
 """
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-import httpx
-import redis
-from jose import jwt
-from datetime import datetime, timedelta
-from typing import Dict
 import logging
 import time
 import uuid
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
+from datetime import datetime, timedelta
+from typing import Dict
 
+import httpx
+import redis
 from config import settings
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from jose import jwt
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+
+# Import AI integration router
+from routes.ai import router as ai_router
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -33,14 +35,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Include AI integration router
+app.include_router(ai_router)
+
 # ============================================================================
 # Prometheus Metrics
 # ============================================================================
 
 # HTTP request metrics
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -221,11 +224,18 @@ async def health_check():
     else:
         critical_services = PHASE_1_SERVICES
 
-    # Check all services
+    # In Phase 1, only check critical services to avoid "degraded" status
+    services_to_check = (
+        {k: v for k, v in ALL_SERVICES.items() if k in critical_services}
+        if settings.MINDER_PHASE == 1
+        else ALL_SERVICES
+    )
+
+    # Check only services relevant to current phase
     critical_unhealthy = False
     optional_unhealthy = False
 
-    for service_name, (service_url, check_func) in ALL_SERVICES.items():
+    for service_name, (service_url, check_func) in services_to_check.items():
         try:
             if service_name == "redis":
                 # Redis check
@@ -237,9 +247,7 @@ async def health_check():
                 if response.status_code == 200:
                     health_status["checks"][service_name] = "healthy"
                 else:
-                    health_status["checks"][
-                        service_name
-                    ] = f"unhealthy: HTTP {response.status_code}"
+                    health_status["checks"][service_name] = f"unhealthy: HTTP {response.status_code}"
                     if service_name in critical_services:
                         critical_unhealthy = True
                     else:
@@ -269,9 +277,7 @@ async def health_check():
     elif optional_unhealthy:
         # Only degraded if optional services are unhealthy
         health_status["status"] = "degraded"
-        health_status["message"] = (
-            f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
-        )
+        health_status["message"] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
         status_code = 200  # Degraded is still functional, return 200
     else:
         health_status["status"] = "healthy"
@@ -450,7 +456,22 @@ async def list_plugins(request: Request):
 async def proxy_to_plugin_registry(path: str, request: Request):
     """
     Proxy all /v1/plugins/* requests to Plugin Registry service
+    Authentication required for POST/PUT/DELETE/PATCH methods
     """
+    # Require authentication for write operations
+    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Authentication required")
+
+        token = auth_header.split(" ")[1]
+        try:
+            payload = verify_jwt_token(token)
+            # Add user info to headers for downstream services
+            request.state.user = payload
+        except HTTPException:
+            raise
+
     service_url = SERVICE_REGISTRY.get("plugin_registry")
     return await proxy_request(service_url, f"v1/plugins/{path}", request)
 
@@ -511,4 +532,4 @@ async def shutdown_event():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)  # nosec: B104

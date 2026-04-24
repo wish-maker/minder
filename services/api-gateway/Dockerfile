@@ -17,9 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY services/api-gateway/main.py .
 COPY services/api-gateway/config.py .
+COPY services/api-gateway/routes /app/routes
 
-# Copy shared core library (will be provided from build context)
+# Copy shared libraries
 COPY src/core /app/src/core
+COPY src/shared /app/src/shared
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
