@@ -59,7 +59,7 @@ services:
     environment:
       - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,mistral,qwen2.5,nomic-embed-text,mxbai-embed-large}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/11434' || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
