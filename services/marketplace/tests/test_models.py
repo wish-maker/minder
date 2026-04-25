@@ -1,6 +1,9 @@
 # services/marketplace/tests/test_models.py
 from datetime import datetime
 
+import pytest
+from pydantic import ValidationError
+
 from services.marketplace.models.installation import InstallationResponse
 from services.marketplace.models.license import LicenseCreate
 from services.marketplace.models.plugin import PluginCreate, PluginResponse
@@ -92,3 +95,67 @@ def test_installation_response_model():
 
     assert installation.id == "550e8400-e29b-41d4-a716-446655440004"
     assert installation.enabled is True
+
+
+def test_invalid_email_rejected():
+    """Test that invalid email addresses are rejected"""
+    data = {
+        "name": "test-plugin",
+        "display_name": "Test Plugin",
+        "description": "A test plugin",
+        "author": "Test Author",
+        "author_email": "invalid-email",  # Invalid email format
+        "repository_url": "https://github.com/test/plugin.git",
+        "distribution_type": "git",
+        "pricing_model": "free",
+        "category_id": "550e8400-e29b-41d4-a716-446655440000",
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        PluginCreate(**data)
+
+    # Verify the error is about email validation
+    errors = exc_info.value.errors()
+    assert any("email" in str(error.get("loc", "")).lower() for error in errors)
+
+
+def test_invalid_uuid_rejected():
+    """Test that invalid UUIDs are rejected"""
+    data = {
+        "name": "test-plugin",
+        "display_name": "Test Plugin",
+        "description": "A test plugin",
+        "author": "Test Author",
+        "repository_url": "https://github.com/test/plugin.git",
+        "distribution_type": "git",
+        "pricing_model": "free",
+        "category_id": "not-a-valid-uuid",  # Invalid UUID
+    }
+
+    with pytest.raises(ValidationError) as exc_info:
+        PluginCreate(**data)
+
+    # Verify the error is about UUID validation
+    errors = exc_info.value.errors()
+    assert any("category_id" in str(error.get("loc", "")) for error in errors)
+
+
+def test_html_sanitization():
+    """Test that HTML tags are properly escaped"""
+    data = {
+        "name": "test-plugin",
+        "display_name": "<script>alert('xss')</script>Test Plugin",
+        "description": "Description with <b>HTML</b> tags",
+        "author": "Test Author",
+        "repository_url": "https://github.com/test/plugin.git",
+        "distribution_type": "git",
+        "pricing_model": "free",
+    }
+
+    plugin = PluginCreate(**data)
+
+    # Verify HTML tags are escaped
+    assert "&lt;script&gt;" in plugin.display_name
+    assert "<script>" not in plugin.display_name
+    assert "&lt;b&gt;" in plugin.description
+    assert "<b>" not in plugin.description

@@ -45,10 +45,14 @@ class PluginCreate(BaseModel):
     docker_image: Optional[str] = None
     pricing_model: PricingModel = PricingModel.FREE
     base_tier: str = "community"
-    category_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
-    developer_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
+    category_id: Optional[str] = Field(
+        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    )
+    developer_id: Optional[str] = Field(
+        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    )
 
-    @field_validator("display_name", "description", mode="before")
+    @field_validator("display_name", "description", mode="after")
     @classmethod
     def sanitize_html(cls, v: Optional[str]) -> Optional[str]:
         """Sanitize HTML in text fields"""
@@ -60,18 +64,26 @@ class PluginCreate(BaseModel):
 class PluginUpdate(BaseModel):
     """Model for updating a plugin"""
 
-    display_name: Optional[str] = None
+    display_name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     pricing_model: Optional[PricingModel] = None
     base_tier: Optional[str] = None
     status: Optional[PluginStatus] = None
     featured: Optional[bool] = None
 
+    @field_validator("display_name", "description", mode="after")
+    @classmethod
+    def sanitize_html(cls, v: Optional[str]) -> Optional[str]:
+        """Sanitize HTML in text fields"""
+        if v is None:
+            return None
+        return html.escape(v)
+
 
 class PluginResponse(BaseModel):
     """Model for plugin response"""
 
-    id: str = Field(..., pattern="^[0-9a-f-]{36}$")
+    id: str = Field(..., pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
     name: str
     display_name: str
     description: Optional[str]
@@ -91,8 +103,12 @@ class PluginResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     published_at: Optional[datetime]
-    developer_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
-    category_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
+    developer_id: Optional[str] = Field(
+        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    )
+    category_id: Optional[str] = Field(
+        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    )
 
     class Config:
         from_attributes = True
