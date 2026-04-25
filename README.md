@@ -1,232 +1,265 @@
-# Minder
+# 🚀 Minder Platform
 
-**Modular RAG Platform** - Cross-database correlation and AI-powered insights with plugin architecture
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![Production Ready](https://img.shields.io/badge/production%20ready-72%25-yellow.svg)](CURRENT_STATUS.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+**Modular RAG platform with 20 microservices, plugin system, and real-time data collection.**
 
-## 🚀 Quick Start
+> **⚠️ Status:** 72% production ready. Core infrastructure is solid and secure, but AI chat integration and dashboards need completion. See [CURRENT_STATUS.md](CURRENT_STATUS.md) for details.
+
+---
+
+## ✨ Features
+
+- 🔌 **Plugin System**: 5 built-in plugins (crypto, news, network, weather, TEFAS)
+- 🏗️ **Microservices Architecture**: 20 containers, API Gateway pattern
+- 📊 **Monitoring Stack**: Prometheus + Grafana + InfluxDB + Telegraf
+- 🔐 **JWT Authentication**: Secure API access with rate limiting
+- 💾 **Multi-Database**: PostgreSQL, InfluxDB, Qdrant (vector), Redis
+- 🤖 **AI Integration**: Ollama LLM + OpenWebUI chat interface (tool calling in progress)
+- ⚠️ **Production Ready**: 72% - see [CURRENT_STATUS.md](CURRENT_STATUS.md)
+
+---
+
+## ⚡ Quick Start (One-Line Installation)
 
 ```bash
-# Clone repository
-git clone https://github.com/wish-maker/minder.git
+git clone https://github.com/your-org/minder.git
 cd minder
-
-# Start infrastructure
-cd infrastructure/docker
-docker compose up -d
-
-# Create plugin databases
-for db in weather_db news_db crypto_db network_db tefas_db; do
-  docker exec postgres psql -U postgres -c "CREATE DATABASE $db;"
-done
-
-# Start core service
-cd ../..
-docker compose -f infrastructure/docker/docker-compose.yml up -d core-service
-
-# Check status
-curl http://localhost:8001/health
+./install.sh
 ```
 
-## 📁 Project Structure
+**That's it!** 🎉 The installation script will:
+1. ✅ Check prerequisites (Docker, Docker Compose)
+2. ✅ Generate secure credentials automatically
+3. ✅ Start all 15 services
+4. ✅ Verify deployment
+5. ✅ Run health checks
 
-```
-minder/
-├── README.md                    # This file
-├── pyproject.toml               # Python project config
-├── requirements.txt              # Python dependencies
-├── .gitignore                   # Git ignore rules
-├── src/                         # Source code
-│   ├── core/                   # Core framework
-│   │   ├── kernel.py           # Main orchestrator
-│   │   ├── registry.py         # Plugin registry
-│   │   ├── event_bus.py        # Event system
-│   │   ├── plugin_loader.py    # Plugin loading
-│   │   └── ...                 # Other core modules
-│   ├── plugins/                # Plugin implementations
-│   │   ├── weather/            # Weather data collection
-│   │   ├── news/               # News aggregation
-│   │   ├── crypto/             # Cryptocurrency tracking
-│   │   ├── network/            # System monitoring
-│   │   └── tefas/              # Turkish fund data
-│   ├── services/               # Microservices
-│   │   └── core-service/       # Core API service
-│   └── shared/                 # Shared utilities
-├── tests/                      # Test suite
-│   ├── unit/                   # Unit tests
-│   ├── integration/            # Integration tests
-│   └── fixtures/               # Test fixtures
-├── infrastructure/             # Infrastructure
-│   ├── docker/                 # Docker configurations
-│   │   └── docker-compose.yml
-│   ├── prometheus/             # Monitoring configs
-│   ├── grafana/                # Dashboards
-│   └── nginx/                   # Reverse proxy
-├── config/                     # Configuration files
-├── migrations/                 # Database migrations
-└── docs/                       # Documentation
-```
+**After installation, open:** http://localhost:8000/docs
 
-## 📊 Available Plugins
+---
 
-### 1. Weather Plugin
-- **Port:** 8010
-- **Database:** weather_db
-- **Capabilities:** Weather data collection, forecasting
-- **Status:** Ready (requires database setup)
+## 📋 Prerequisites
 
-### 2. News Plugin
-- **Port:** 8011
-- **Database:** news_db
-- **Capabilities:** News aggregation, sentiment analysis
-- **Status:** Ready (requires database setup)
+- **Docker** 20.10+
+- **Docker Compose** 2.0+
+- **8GB RAM** minimum (16GB recommended)
+- **20GB disk space**
 
-### 3. Crypto Plugin
-- **Port:** 8012
-- **Database:** crypto_db
-- **Capabilities:** Cryptocurrency price tracking
-- **Status:** Ready (requires database setup)
+**No Python, no Node.js, no dependencies to install manually!** Everything runs in Docker.
 
-### 4. Network Plugin
-- **Port:** 8013
-- **Database:** network_db
-- **Capabilities:** System monitoring, network analysis
-- **Status:** Ready (requires database setup)
+---
 
-### 5. TEFAS Plugin
-- **Port:** 8014
-- **Database:** tefas_db
-- **Capabilities:** Turkish fund data collection
-- **Status:** Ready (requires database setup and dependencies)
+## 🌐 Access Points
 
-## 🔌 Core API Endpoints
+Once installed, access these services:
 
-### Health Check
+| Service | URL | Description |
+|---------|-----|-------------|
+| **API Gateway** | http://localhost:8000 | Main API entry point |
+| **API Documentation** | http://localhost:8000/docs | Interactive API docs |
+| **Plugin Registry** | http://localhost:8001 | Plugin management |
+| **Grafana Dashboard** | http://localhost:3000 | Monitoring dashboards |
+| **Prometheus** | http://localhost:9090 | Metrics explorer |
+| **OpenWebUI** | http://localhost:8080 | AI chat interface |
+
+---
+
+## 🔐 Authentication
+
+### Get API Token
+
 ```bash
-curl http://localhost:8001/health
-```
-
-### List Plugins
-```bash
-curl http://localhost:8001/plugins
-```
-
-### System Status
-```bash
-curl http://localhost:8001/system/status
-```
-
-### Plugin Management
-```bash
-# Enable plugin
-curl -X POST http://localhost:8001/plugins/{plugin_name}/enable
-
-# Disable plugin
-curl -X POST http://localhost:8001/plugins/{plugin_name}/disable
-
-# Run pipeline
-curl -X POST http://localhost:8001/plugins/{plugin_name}/pipeline \
+curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"pipeline": ["collect", "analyze"]}'
+  -d '{"username":"admin","password":"any_password_8_chars"}'
 ```
 
-## 🧪 Testing
-
-### Run All Tests
-```bash
-pytest tests/
+Response:
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "expires_in": 3600
+}
 ```
 
-### Run Unit Tests
+### Use Token
+
 ```bash
-pytest tests/unit/
+curl -X POST http://localhost:8000/v1/plugins/crypto/collect \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-### Run Integration Tests
+---
+
+## 🔧 Common Commands
+
+### Start Platform
 ```bash
-pytest tests/integration/
+./start.sh
 ```
 
-### Run Tests with Coverage
+### Stop Platform
 ```bash
-pytest tests/ --cov=src --cov-report=html
-```
-
-## 🔧 Development
-
-### Start Development Server
-```bash
-# Using pip install
-pip install -e .
-
-# Start development server
-python -m uvicorn src.services.core-service.main:app --reload
-```
-
-### Code Quality
-```bash
-# Format code
-black src/ tests/
-
-# Lint code
-ruff check src/ tests/
-
-# Type checking
-mypy src/
-```
-
-## 🐳 Deployment
-
-### Start All Services
-```bash
-cd infrastructure/docker
-docker compose up -d
+./stop.sh
 ```
 
 ### View Logs
 ```bash
-# Core service logs
-docker logs minder-core-service -f
+# All services
+docker compose -f infrastructure/docker/docker-compose.yml logs -f
 
-# All services logs
-docker compose logs -f
+# Specific service
+docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
 ```
 
-### Stop Services
+### Check Status
 ```bash
-docker compose down
+docker compose -f infrastructure/docker/docker-compose.yml ps
 ```
-
-## 📖 Documentation
-
-Full documentation is available in the `docs/` directory:
-- [Architecture Guide](docs/ARCHITECTURE.md)
-- [Plugin Development](docs/PLUGIN_DEVELOPMENT.md)
-- [Deployment Guide](docs/DEPLOYMENT.md)
-- [API Documentation](docs/API.md)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Follow the [Code Style Guide](docs/CONTRIBUTING.md)
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
-
-## 📝 License
-
-MIT License - see LICENSE file for details
-
-## 🔗 Links
-
-- **Documentation:** [docs/](docs/)
-- **API Docs:** http://localhost:8001/docs
-- **Health Check:** http://localhost:8001/health
-- **System Status:** http://localhost:8001/system/status
 
 ---
 
-**Status:** ✅ Production Ready | **Version:** 2.0.0 | **Last Updated:** 2026-04-21
+## 📊 Active Plugins
+
+| Plugin | Description | Data Source |
+|--------|-------------|--------------|
+| **crypto** | Cryptocurrency prices | Binance, CoinGecko, Kraken |
+| **news** | News aggregation | BBC, Guardian, NPR |
+| **network** | Network metrics | System monitoring |
+| **weather** | Weather data | OpenWeatherMap |
+| **tefas** | Turkish investment funds | TEFAS API (45K+ funds) |
+
+---
+
+## 🔒 Security
+
+### Auto-Generated Credentials
+
+The `install.sh` script automatically generates secure credentials:
+- ✅ **PostgreSQL password** (32 chars, cryptographically random)
+- ✅ **Redis password** (32 chars, cryptographically random)
+- ✅ **JWT secret** (64 chars, cryptographically random)
+- ✅ **InfluxDB token** (32 chars, cryptographically random)
+
+**All credentials are stored in `infrastructure/docker/.env` with secure permissions (600).**
+
+### Production Security
+
+Before deploying to production:
+1. ✅ Secure credentials are auto-generated
+2. ✅ JWT authentication is enabled by default
+3. ✅ Rate limiting is configured (10-60 req/min)
+4. ✅ Audit logging is enabled
+5. ⚠️ **Enable HTTPS/TLS** (configure reverse proxy)
+6. ⚠️ **Review firewall rules** (restrict port exposure)
+
+---
+
+## 🐛 Troubleshooting
+
+### Services Not Starting
+
+```bash
+# Check logs
+docker compose -f infrastructure/docker/docker-compose.yml logs
+
+# Check disk space
+df -h
+```
+
+### Port Already in Use
+
+```bash
+# Check what's using port 8000
+sudo lsof -i :8000
+```
+
+### Out of Memory
+
+```bash
+# Check available memory
+free -h
+```
+
+### Reset Everything
+
+```bash
+# Stop and remove all containers
+./stop.sh
+
+# Remove volumes (WARNING: deletes data!)
+docker compose -f infrastructure/docker/docker-compose.yml down -v
+
+# Reinstall
+./install.sh
+```
+
+---
+
+## 📚 Documentation
+
+- **[API Reference](docs/API_REFERENCE.md)** - Complete API documentation
+- **[Security Guide](docs/SECURITY_SETUP_GUIDE.md)** - Security best practices
+- **[API Authentication](docs/API_AUTHENTICATION_GUIDE.md)** - Authentication guide
+- **[System Analysis](docs/SYSTEM_ANALYSIS_REPORT.md)** - Architecture analysis
+- **[Current Status](docs/CURRENT_STATUS.md)** - Development status
+- **[Known Issues](docs/ISSUES.md)** - Issue tracking
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please read our contributing guidelines.
+
+### Development Setup
+
+```bash
+# Clone repository
+git clone https://github.com/your-org/minder.git
+cd minder
+
+# Run installation
+./install.sh
+```
+
+---
+
+## 📝 License
+
+This project is licensed under the MIT License.
+
+---
+
+## 🎉 What's New
+
+### v2.0.0 (2026-04-23) - **72% Production Ready**
+
+**✅ Completed:**
+- ✅ **Security vulnerabilities fixed** - Removed all hardcoded credentials
+- ✅ **JWT Authentication** - Secure API with rate limiting and audit logging
+- ✅ **Code quality improved** - Eliminated 135 duplicate lines, fixed bare excepts
+- ✅ **Health monitoring** - 100% service health check coverage
+- ✅ **One-click installation** - Automated setup with secure credential generation
+- ✅ **AI tool definitions created** - 8 tools defined for LLM integration
+- ✅ **Plugin system operational** - All 5 plugins healthy and collecting data
+
+**⚠️ In Progress:**
+- ⚠️ **OpenWebUI AI integration** - Tool calling mechanism created, needs end-to-end testing
+- ⚠️ **User dashboards** - Grafana installed, dashboards need to be created
+
+**❌ Not Started:**
+- ❌ Python SDK for developers
+- ❌ Postman collection
+- ❌ Alert system configuration
+- ❌ Reporting system
+
+**See [ISSUES.md](ISSUES.md) for complete task tracking.**
+
+---
+
+**Made with ❤️ by the Minder Team**

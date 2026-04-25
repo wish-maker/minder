@@ -1,0 +1,160 @@
+{
+  "name": "minder_platform_tools",
+  "description": "Minder Platform AI Tools - Enable LLM to call Minder APIs",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_crypto_price",
+        "description": "Get current cryptocurrency price and market data from Minder Platform database. Returns price, market cap, and 24h change.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "symbol": {
+              "type": "string",
+              "description": "Cryptocurrency symbol (e.g., BTC, ETH, SOL, ADA, DOT)",
+              "enum": ["BTC", "ETH", "SOL", "ADA", "DOT"]
+            }
+          },
+          "required": ["symbol"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "collect_crypto_data",
+        "description": "Trigger cryptocurrency data collection from Binance, CoinGecko, and Kraken. Collects latest prices, market caps, and trading data.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_latest_news",
+        "description": "Get latest news articles from Minder Platform database with sentiment analysis. Returns headlines, sources, and sentiment scores.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "description": "Maximum number of articles to return (default: 10)",
+              "default": 10
+            },
+            "source": {
+              "type": "string",
+              "description": "Filter by news source (BBC, Guardian, NPR)"
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "collect_news",
+        "description": "Trigger news collection from RSS feeds (BBC, Guardian, NPR). Collects latest articles with sentiment analysis.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_plugin_status",
+        "description": "Get health status and information for all Minder Platform plugins. Returns list with health status, enabled state, and last health check time.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_network_metrics",
+        "description": "Get latest network performance metrics including latency, throughput, packet loss, and connection statistics from Minder Platform.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "type": "integer",
+              "description": "Number of recent metrics to return (default: 10)",
+              "default": 10
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather_data",
+        "description": "Get latest weather data including temperature, humidity, conditions, and forecasts for configured locations from Minder Platform.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "location": {
+              "type": "string",
+              "description": "Location to get weather for (default: Istanbul)",
+              "default": "Istanbul"
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_tefas_funds",
+        "description": "Get Turkish investment fund data from TEFAS. Returns fund prices, daily returns, and performance metrics from 45,000+ funds.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "fund_type": {
+              "type": "string",
+              "description": "Filter by fund type",
+              "enum": ["YATIRIM", "BORSA", "SI",
+              "default": "YATIRIM"
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Number of funds to return (default: 10)",
+              "default": 10
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "enable_plugin",
+        "description": "Enable a Minder Platform plugin (crypto, news, network, weather, tefas). Requires admin privileges. Returns success message.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "plugin_name": {
+              "type": "string",
+              "description": "Plugin name to enable",
+              "enum": ["crypto", "news", "network", "weather", "tefas"]
+            }
+          },
+          "required": ["plugin_name"]
+        }
+      }
+    }
+  ]
+}

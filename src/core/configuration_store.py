@@ -3,14 +3,15 @@ Minder Configuration Store
 Central configuration management with schema validation and versioning
 """
 
-import logging
+import hashlib
 import json
-from typing import Dict, Optional, Any, List
+import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import jsonschema
-from jsonschema import validate, ValidationError
-import hashlib
+from jsonschema import ValidationError, validate
 
 logger = logging.getLogger(__name__)
 
@@ -241,9 +242,7 @@ class ConfigurationStore:
 
             if update_result["success"]:
                 result["success"] = True
-                self.logger.info(
-                    f"✅ Rolled back {plugin_id} config from v{from_version} to v{target_version}"
-                )
+                self.logger.info(f"✅ Rolled back {plugin_id} config from v{from_version} to v{target_version}")
             else:
                 result["errors"].extend(update_result.get("errors", []))
 
@@ -320,7 +319,8 @@ class ConfigurationStore:
                 version_num = int(v["version"])
                 if version_num > max_version:
                     max_version = version_num
-            except:
+            except (ValueError, TypeError, KeyError):
+                # Skip invalid version entries
                 pass
 
         return str(max_version + 1)
@@ -363,9 +363,7 @@ class ConfigurationStore:
         """
         try:
             config = json.loads(config_json)
-            return await self.update_plugin_config(
-                plugin_id=plugin_id, config=config, schema=schema
-            )
+            return await self.update_plugin_config(plugin_id=plugin_id, config=config, schema=schema)
         except Exception as e:
             self.logger.error(f"❌ Failed to import config: {e}")
             return {"success": False, "errors": [str(e)]}
@@ -411,9 +409,7 @@ class ConfigurationStore:
             merged = self._deep_merge(current, updates)
 
             # Update
-            return await self.update_plugin_config(
-                plugin_id=plugin_id, config=merged, schema=schema
-            )
+            return await self.update_plugin_config(plugin_id=plugin_id, config=merged, schema=schema)
 
         except Exception as e:
             self.logger.error(f"❌ Failed to merge config: {e}")

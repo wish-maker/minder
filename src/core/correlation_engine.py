@@ -3,8 +3,8 @@ Minder Correlation Engine
 Provides correlation analysis between modules
 """
 
-from typing import List, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List
 
 
 class CorrelationEngine:
@@ -60,16 +60,14 @@ class CorrelationEngine:
             mean2 = statistics.mean(data2)
 
             numerator = sum((x - mean1) * (y - mean2) for x, y in zip(data1, data2))
-            denominator = (
-                sum((x - mean1) ** 2 for x in data1) ** 0.5
-                * sum((y - mean2) ** 2 for y in data2) ** 0.5
-            )
+            denominator = sum((x - mean1) ** 2 for x in data1) ** 0.5 * sum((y - mean2) ** 2 for y in data2) ** 0.5
 
             if denominator == 0:
                 return 0.0
 
             return numerator / denominator
-        except:
+        except (statistics.StatisticsError, ValueError, ZeroDivisionError, TypeError):
+            # Return neutral correlation on calculation errors
             return 0.0
 
 

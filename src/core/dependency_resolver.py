@@ -4,8 +4,9 @@ Jellyfin-inspired dependency management with topological sorting
 """
 
 import logging
-from typing import Dict, List, Set, Optional, Tuple
 from collections import defaultdict, deque
+from typing import Dict, List, Optional, Set, Tuple
+
 import semver
 
 logger = logging.getLogger(__name__)
@@ -346,9 +347,7 @@ class DependencyResolver:
                 installed_version = self.installed_plugins[dep_id].get("version", "0.0.0")
 
                 if not self._check_version_compat(installed_version, dep_version_req):
-                    result["conflicts"].append(
-                        f"{dep_id}: requires {dep_version_req}, has {installed_version}"
-                    )
+                    result["conflicts"].append(f"{dep_id}: requires {dep_version_req}, has {installed_version}")
                 else:
                     result["satisfied"].append(dep_id)
 

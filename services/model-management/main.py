@@ -3,13 +3,13 @@ Minder Model Management Service
 Manages base models, fine-tuning, and deployment
 """
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict, List, Any
-from datetime import datetime
 import logging
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
+from datetime import datetime
+from typing import Any, Dict, List
+
+from fastapi import FastAPI, HTTPException, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +25,7 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -168,9 +166,7 @@ async def fine_tune_model(request: FineTuneRequest):
 
     # Implement fine-tuning logic
     # This is a placeholder - implement actual fine-tuning
-    fine_tuned_model_id = (
-        f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    )
+    fine_tuned_model_id = f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     logger.info(f"Starting fine-tuning: {request.base_model} -> {fine_tuned_model_id}")
 

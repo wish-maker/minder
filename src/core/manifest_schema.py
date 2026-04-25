@@ -3,13 +3,14 @@ Minder Plugin Manifest Schema Validator
 Jellyfin-inspired manifest.json validation with JSON Schema
 """
 
-import json
-import re
-from typing import Dict, List, Optional, Any
-from pathlib import Path
-from jsonschema import validate, ValidationError, Draft7Validator
 import hashlib
+import json
 import logging
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from jsonschema import Draft7Validator, ValidationError, validate
 
 logger = logging.getLogger(__name__)
 
@@ -484,8 +485,9 @@ def validate_manifest_from_url(url: str) -> Dict[str, Any]:
     Returns:
         Validation result dict
     """
-    import httpx
     import tempfile
+
+    import httpx
 
     validator = ManifestValidator()
 

@@ -3,16 +3,18 @@ Minder TTS/STT Service - Minimal Working Version
 Simple text-to-speech and speech-to-text functionality
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-from datetime import datetime
 import logging
 import os
 import tempfile
-from fastapi.responses import Response
-from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import FastAPI, File, HTTPException
 from fastapi import Response as FastAPIResponse
+from fastapi import UploadFile
+from fastapi.responses import Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from pydantic import BaseModel
 
 # TTS/STT libraries
 try:

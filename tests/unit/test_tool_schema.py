@@ -25,7 +25,10 @@ def test_ai_tool_definition():
         method="GET",
         parameters={
             "symbol": ToolParameter(
-                type=ParameterType.STRING, description="Cryptocurrency symbol", enum=["BTC", "ETH"], required=True
+                type=ParameterType.STRING,
+                description="Cryptocurrency symbol",
+                enum=["BTC", "ETH"],
+                required=True,
             )
         },
     )
@@ -43,7 +46,12 @@ def test_validate_ai_tools_from_list():
                 "endpoint": "/analysis",
                 "method": "GET",
                 "parameters": {
-                    "symbol": {"type": "string", "description": "Symbol", "enum": ["BTC", "ETH"], "required": True}
+                    "symbol": {
+                        "type": "string",
+                        "description": "Symbol",
+                        "enum": ["BTC", "ETH"],
+                        "required": True,
+                    }
                 },
             }
         ]

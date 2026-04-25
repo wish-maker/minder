@@ -62,23 +62,15 @@ print("  ✅ TEFAS Module v3.0 present")
 # Test 4: Import tests
 print("\n[4/7] Testing imports...")
 try:
-    from plugins.tefas.unified_data_api import (  # noqa: F401
-        BORSAPY_AVAILABLE,
-        TEFAS_CRAWLER_AVAILABLE,
-        UnifiedDataAPI,
-    )
+    from plugins.tefas.unified_data_api import BORSAPY_AVAILABLE, TEFAS_CRAWLER_AVAILABLE, UnifiedDataAPI  # noqa: F401
 
     print("  ✅ UnifiedDataAPI import successful")
 
-    from plugins.tefas.collectors.risk_metrics_collector import (  # noqa: F401
-        RiskMetricsCollector,
-    )
+    from plugins.tefas.collectors.risk_metrics_collector import RiskMetricsCollector  # noqa: F401
 
     print("  ✅ RiskMetricsCollector import successful")
 
-    from plugins.tefas.collectors.allocation_collector import (  # noqa: F401
-        AllocationCollector,
-    )
+    from plugins.tefas.collectors.allocation_collector import AllocationCollector  # noqa: F401
 
     print("  ✅ AllocationCollector import successful")
 
@@ -96,9 +88,7 @@ except Exception as e:
 
 # Test 5: Run unit tests
 print("\n[5/7] Running unit tests...")
-result = subprocess.run(
-    ["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder"
-)
+result = subprocess.run(["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder")
 
 if result.returncode == 0:
     print("  ✅ Unit tests passed (14/14)")
@@ -109,9 +99,7 @@ else:
 
 # Test 6: Run integration tests
 print("\n[6/7] Running integration tests...")
-result = subprocess.run(
-    ["python3", "test_tefas_v3_integration.py"], capture_output=True, text=True, cwd="/root/minder"
-)
+result = subprocess.run(["python3", "test_tefas_v3_integration.py"], capture_output=True, text=True, cwd="/root/minder")
 
 if result.returncode == 0:
     # Extract test count

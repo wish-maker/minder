@@ -3,15 +3,15 @@ Minder RAG Pipeline Service - Production Ready
 Real Ollama integration with proper embedding generation and LLM inference
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-from datetime import datetime
+import asyncio
 import logging
 import os
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
-import asyncio
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel
 
 # Ollama client for real embeddings and LLM
 try:
@@ -24,7 +24,7 @@ except ImportError:
 
 # Qdrant client
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct, Batch
+from qdrant_client.models import Batch, Distance, PointStruct, VectorParams
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +63,7 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -73,17 +71,13 @@ http_request_duration_seconds = Histogram(
 
 knowledge_bases_total = Gauge("knowledge_bases_total", "Total number of knowledge bases")
 
-documents_processed_total = Counter(
-    "documents_processed_total", "Total documents processed", ["status"]
-)
+documents_processed_total = Counter("documents_processed_total", "Total documents processed", ["status"])
 
 embedding_generation_duration = Histogram(
     "embedding_generation_duration_seconds", "Time to generate embeddings", ["model"]
 )
 
-llm_generation_duration = Histogram(
-    "llm_generation_duration_seconds", "Time to generate LLM response", ["model"]
-)
+llm_generation_duration = Histogram("llm_generation_duration_seconds", "Time to generate LLM response", ["model"])
 
 
 # ============================================================================
@@ -225,9 +219,7 @@ class OllamaManager:
         except Exception as e:
             logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
 
-    async def generate_embeddings(
-        self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
-    ) -> List[List[float]]:
+    async def generate_embeddings(self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL) -> List[List[float]]:
         """Generate embeddings using Ollama"""
         if not self._initialized:
             await self.initialize()
@@ -329,8 +321,9 @@ def get_qdrant_client() -> QdrantClient:
 
 async def extract_text_from_file(content: bytes, filename: str) -> str:
     """Extract text from file based on type"""
-    from pypdf import PdfReader
     import io
+
+    from pypdf import PdfReader
 
     if filename.endswith(".pdf"):
         pdf_file = io.BytesIO(content)
@@ -453,9 +446,7 @@ async def list_knowledge_bases():
     return list(knowledge_bases.values())
 
 
-@app.post(
-    "/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"]
-)
+@app.post("/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
     """Upload document to knowledge base"""
     if kb_id not in knowledge_bases:

@@ -3,17 +3,17 @@ Minder Model Fine-Tuning Service
 Real ML model training with Ollama, LoRA/QLoRA support
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
-from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-from datetime import datetime
+import asyncio
+import json
 import logging
 import os
-import json
-import asyncio
+from datetime import datetime
 from pathlib import Path
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
+from typing import Any, Dict, List, Optional
+
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Response, UploadFile
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel
 
 # Ollama client for fine-tuning
 try:
@@ -53,13 +53,9 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-training_jobs_total = Counter(
-    "training_jobs_total", "Total training jobs", ["status"]  # started, completed, failed
-)
+training_jobs_total = Counter("training_jobs_total", "Total training jobs", ["status"])  # started, completed, failed
 
-training_duration_seconds = Histogram(
-    "training_duration_seconds", "Training job duration", ["base_model"]
-)
+training_duration_seconds = Histogram("training_duration_seconds", "Training job duration", ["base_model"])
 
 models_fine_tuned_total = Gauge("models_fine_tuned_total", "Total number of fine-tuned models")
 
@@ -387,9 +383,7 @@ async def create_training_job(request: TrainingJobCreate, background_tasks: Back
 
     # Validate dataset
     if not dataset["validation_passed"]:
-        raise HTTPException(
-            status_code=400, detail=f"Dataset validation failed: {', '.join(dataset['errors'])}"
-        )
+        raise HTTPException(status_code=400, detail=f"Dataset validation failed: {', '.join(dataset['errors'])}")
 
     job_id = str(uuid.uuid4())
 

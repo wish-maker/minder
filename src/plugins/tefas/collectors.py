@@ -3,10 +3,10 @@ TEFAS Data Collectors
 Türkiye yatırım fonları veri toplama modülleri
 """
 
-import logging
 import asyncio
-from typing import Any, Dict, List
+import logging
 from datetime import datetime
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 

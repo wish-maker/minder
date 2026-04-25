@@ -14,18 +14,18 @@ from typing import Dict, List, Optional
 
 import redis
 from config import settings
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
 
 # Import authentication middleware
 sys.path.insert(0, "/app/src")
+# Import proxy router for microservices
+from routes.plugins import ProxyRouter
+
 # Import AI tool validator
 from shared.ai.tool_validator import validate_ai_tools
 from shared.auth.jwt_middleware import JWT_EXPIRATION_MINUTES, enforce_rate_limit, get_current_user
-
-# Add src to path for imports
-sys.path.insert(0, "/app/src")
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -140,6 +140,13 @@ async def get_postgres_connection():
 plugins_db: Dict[str, PluginInfo] = {}  # In-memory cache
 plugin_instances: Dict[str, any] = {}
 services_db: Dict[str, ServiceRegistration] = {}
+
+# ============================================================================
+# Dynamic Proxy Router
+# ============================================================================
+
+# Initialize proxy router for microservices
+proxy_router = ProxyRouter(services_db)
 
 # ============================================================================
 # Plugin Loading
@@ -670,6 +677,107 @@ async def unregister_service(service_name: str):
     return {"message": f"Service {service_name} unregistered"}
 
 
+@app.get("/v1/services/{service_name}/health")
+async def check_service_health(service_name: str):
+    """
+    Check health of a registered microservice
+
+    Performs health check on the registered service by calling its /health endpoint.
+    Updates service health status in Redis.
+    """
+    try:
+        health_data = await proxy_router.health_check_proxy(service_name)
+
+        # Update health status in Redis
+        redis_client.hset(
+            f"service:{service_name}",
+            mapping={
+                "health_status": "healthy",
+                "last_health_check": datetime.now().isoformat(),
+            },
+        )
+
+        return {
+            "service": service_name,
+            "status": "healthy",
+            "health_data": health_data,
+            "checked_at": datetime.now().isoformat(),
+        }
+
+    except HTTPException:
+        # Update unhealthy status in Redis
+        redis_client.hset(
+            f"service:{service_name}",
+            mapping={
+                "health_status": "unhealthy",
+                "last_health_check": datetime.now().isoformat(),
+            },
+        )
+        raise
+
+
+# ============================================================================
+# Dynamic Proxy Endpoints for Microservices
+# ============================================================================
+
+
+@app.api_route("/v1/proxy/{service_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def proxy_to_service(service_name: str, path: str, request: Request):
+    """
+    Dynamic proxy endpoint for plugin microservices
+
+    Forwards HTTP requests to registered plugin microservices.
+    This enables the API Gateway to route AI tool calls to appropriate services
+    without hardcoding endpoints.
+
+    Examples:
+        GET  /v1/proxy/crypto/analysis?symbol=BTC
+        POST /v1/proxy/news/collect
+        GET  /v1/proxy/weather/analysis?location=Istanbul
+    """
+    # Build the full path for proxying
+    proxy_path = f"/{path}"
+
+    # Add query string if present
+    if request.url.query:
+        proxy_path = f"{proxy_path}?{request.url.query}"
+
+    # Forward request to service
+    return await proxy_router.forward_request(service_name, proxy_path, request)
+
+
+@app.get("/v1/proxy")
+async def list_proxyable_services():
+    """
+    List all services that can be proxied
+
+    Returns information about registered microservices that are available
+    for dynamic proxy routing.
+    """
+    proxyable_services = []
+
+    for service_name, service in services_db.items():
+        # Check if service is healthy
+        health_status = redis_client.hget(f"service:{service_name}", "health_status") or "unknown"
+
+        proxyable_services.append(
+            {
+                "service_name": service_name,
+                "service_type": service.service_type,
+                "health_status": health_status,
+                "endpoint": f"http://{service.host}:{service.port}",
+                "proxy_url": f"/v1/proxy/{service_name}",
+                "metadata": service.metadata,
+            }
+        )
+
+    return {
+        "services": proxyable_services,
+        "count": len(proxyable_services),
+        "timestamp": datetime.now().isoformat(),
+    }
+
+
 # ============================================================================
 # API Endpoints - AI Tools
 # ============================================================================
@@ -971,6 +1079,13 @@ async def shutdown_event():
             await plugin_instance.shutdown()
         except Exception as e:
             logger.error(f"Error shutting down {plugin_name}: {e}")
+
+    # Close proxy router HTTP client
+    try:
+        await proxy_router.close()
+        logger.info("✅ Proxy router closed")
+    except Exception as e:
+        logger.error(f"Error closing proxy router: {e}")
 
     redis_client.close()
 

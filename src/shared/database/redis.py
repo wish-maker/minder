@@ -1,7 +1,8 @@
-import redis.asyncio as aioredis
-from typing import Optional, Any, Dict
 import json
 import logging
+from typing import Any, Dict, Optional
+
+import redis.asyncio as aioredis
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,7 @@ class RedisHelper:
 
     async def connect(self):
         """Connect to Redis"""
-        self.client = await aioredis.from_url(
-            f"{self.url}/{self.db}", encoding="utf-8", decode_responses=True
-        )
+        self.client = await aioredis.from_url(f"{self.url}/{self.db}", encoding="utf-8", decode_responses=True)
         logger.info(f"Connected to Redis, db: {self.db}")
 
     async def disconnect(self):

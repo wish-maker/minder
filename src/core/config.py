@@ -152,9 +152,7 @@ class PluginStoreConfig(BaseModel):
 
     enabled: bool = True
     store_path: str = "/var/lib/minder/plugins"
-    index_url: str = (
-        "https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json"
-    )
+    index_url: str = "https://raw.githubusercontent.com/minder-plugins/plugin-index/main/plugins.json"
     github_token: str = ""  # Optional
 
     # Security

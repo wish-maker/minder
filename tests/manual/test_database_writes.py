@@ -43,9 +43,7 @@ async def test_database_writes():
                 "port": 5432,
                 "database": "fundmind",
                 "user": "postgres",
-                "password": os.getenv(
-                    "POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")
-                ),
+                "password": os.getenv("POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")),
             }
         },
         "plugins": {"network": {}, "weather": {}, "crypto": {}, "news": {}},
@@ -75,14 +73,16 @@ async def test_database_writes():
         )
 
         # Create test table
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS test_news_write (
                 id SERIAL PRIMARY KEY,
                 title VARCHAR(255),
                 content TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )
-        """)
+        """
+        )
 
         # Insert test data
         test_title = f"Test News {datetime.now().isoformat()}"
@@ -219,9 +219,7 @@ async def test_database_writes():
         # Verify write - using the correct Qdrant API
         from qdrant_client.models import Filter, SearchRequest  # noqa: F401
 
-        search_result = qdrant_client.query_points(
-            collection_name=collection_name, query=test_vector, limit=1
-        )
+        search_result = qdrant_client.query_points(collection_name=collection_name, query=test_vector, limit=1)
 
         # Check if we got any results from the QueryResponse object
         if search_result and len(search_result.points) > 0:

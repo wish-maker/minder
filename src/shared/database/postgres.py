@@ -1,6 +1,7 @@
-import asyncpg
-from typing import Optional, Any
 import logging
+from typing import Any, Optional
+
+import asyncpg
 
 logger = logging.getLogger(__name__)
 

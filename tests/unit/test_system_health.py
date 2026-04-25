@@ -61,10 +61,7 @@ def test_api_endpoints() -> Dict[str, bool]:
         if response.status_code == 200:
             data = response.json()
             print(f"✅ GET /health - Status: {data['status']}")
-            print(
-                f"   Plugins: {data['system']['plugins']['ready']}/"
-                f"{data['system']['plugins']['total']} ready"
-            )
+            print(f"   Plugins: {data['system']['plugins']['ready']}/" f"{data['system']['plugins']['total']} ready")
             results["health"] = True
         else:
             print(f"❌ GET /health - Status: {response.status_code}")

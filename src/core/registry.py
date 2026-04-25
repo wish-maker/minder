@@ -42,9 +42,7 @@ class PluginRegistry:
 
                 for dep in metadata.dependencies:
                     if dep not in self.plugins:
-                        logger.error(
-                            f"Plugin {metadata.name} depends on {dep} which is not registered"
-                        )
+                        logger.error(f"Plugin {metadata.name} depends on {dep} which is not registered")
                         return False
 
                 self.plugins[metadata.name] = plugin
@@ -191,7 +189,5 @@ class PluginRegistry:
         if not plugins_dir.exists():
             return []
 
-        plugin_dirs = [
-            d.name for d in plugins_dir.iterdir() if d.is_dir() and not d.name.startswith("_")
-        ]
+        plugin_dirs = [d.name for d in plugins_dir.iterdir() if d.is_dir() and not d.name.startswith("_")]
         return plugin_dirs
