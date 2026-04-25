@@ -1,6 +1,14 @@
--- Create marketplace database
--- Note: Run this manually if needed: CREATE DATABASE minder_marketplace;
--- The script assumes we're connected to the minder_marketplace database
+-- Create marketplace database if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'minder_marketplace') THEN
+        CREATE DATABASE minder_marketplace;
+    END IF;
+END
+$$;
+
+-- Connect to the marketplace database
+\c minder_marketplace
 
 -- Categories table
 CREATE TABLE marketplace_categories (
@@ -18,9 +26,10 @@ CREATE TABLE marketplace_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(100) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'user', -- 'user', 'developer', 'admin'
+    role VARCHAR(20) NOT NULL DEFAULT 'user',
     created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    updated_at TIMESTAMP DEFAULT NOW(),
+    CONSTRAINT check_role CHECK (role IN ('user', 'developer', 'admin'))
 );
 
 -- Plugins table (marketplace metadata)
@@ -29,21 +38,21 @@ CREATE TABLE marketplace_plugins (
     name VARCHAR(100) UNIQUE NOT NULL,
     display_name VARCHAR(200) NOT NULL,
     description TEXT,
-    author VARCHAR(100),
-    author_email VARCHAR(255),
+    author VARCHAR(100) NOT NULL,
+    author_email VARCHAR(255) NOT NULL,
 
     -- Distribution
     repository_url VARCHAR(500),
-    distribution_type VARCHAR(20) NOT NULL DEFAULT 'git', -- 'git', 'docker', 'hybrid'
+    distribution_type VARCHAR(20) NOT NULL DEFAULT 'git',
     docker_image VARCHAR(255),
     current_version VARCHAR(50),
 
     -- Pricing & Tiers
-    pricing_model VARCHAR(20) NOT NULL DEFAULT 'free', -- 'free', 'paid', 'freemium'
-    base_tier VARCHAR(20) NOT NULL DEFAULT 'community', -- 'community', 'professional', 'enterprise'
+    pricing_model VARCHAR(20) NOT NULL DEFAULT 'free',
+    base_tier VARCHAR(20) NOT NULL DEFAULT 'community',
 
     -- Status
-    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected', 'archived'
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
     featured BOOLEAN DEFAULT FALSE,
     download_count INTEGER DEFAULT 0,
     rating_average DECIMAL(3,2),
@@ -56,7 +65,12 @@ CREATE TABLE marketplace_plugins (
 
     -- Relationships
     developer_id UUID REFERENCES marketplace_users(id),
-    category_id UUID REFERENCES marketplace_categories(id)
+    category_id UUID REFERENCES marketplace_categories(id),
+
+    -- Constraints
+    CONSTRAINT check_distribution_type CHECK (distribution_type IN ('git', 'docker', 'hybrid')),
+    CONSTRAINT check_pricing_model CHECK (pricing_model IN ('free', 'paid', 'freemium')),
+    CONSTRAINT check_status CHECK (status IN ('pending', 'approved', 'rejected', 'archived'))
 );
 
 -- Plugin versions (for version management)
@@ -97,19 +111,21 @@ CREATE TABLE marketplace_plugin_tiers (
     price_yearly_cents INTEGER DEFAULT 0,
 
     -- Features
-    features JSONB NOT NULL, -- {"features": ["feature1", "feature2"]}
-    limitations JSONB, -- {"limits": {"api_calls_per_day": 1000}}
+    features JSONB NOT NULL,
+    limitations JSONB,
 
     -- AI Tools per tier
-    ai_tools JSONB, -- {"tools": ["tool1", "tool2"]} or "all"
+    ai_tools JSONB,
 
-    UNIQUE(plugin_id, tier_name)
+    UNIQUE(plugin_id, tier_name),
+    CONSTRAINT check_price_monthly CHECK (price_monthly_cents >= 0),
+    CONSTRAINT check_price_yearly CHECK (price_yearly_cents >= 0)
 );
 
 -- User licenses
 CREATE TABLE marketplace_licenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES marketplace_users(id),
+    user_id UUID REFERENCES marketplace_users(id) ON DELETE CASCADE,
     plugin_id UUID REFERENCES marketplace_plugins(id),
 
     -- License details
@@ -135,7 +151,7 @@ CREATE TABLE marketplace_licenses (
 -- Plugin installations (per-user/plugin instances)
 CREATE TABLE marketplace_installations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID REFERENCES marketplace_users(id),
+    user_id UUID REFERENCES marketplace_users(id) ON DELETE CASCADE,
     plugin_id UUID REFERENCES marketplace_plugins(id),
     version VARCHAR(50),
 
@@ -183,6 +199,7 @@ CREATE INDEX idx_marketplace_plugins_name ON marketplace_plugins(name);
 CREATE INDEX idx_marketplace_plugins_status ON marketplace_plugins(status);
 CREATE INDEX idx_marketplace_plugins_category ON marketplace_plugins(category_id);
 CREATE INDEX idx_marketplace_plugins_developer ON marketplace_plugins(developer_id);
+CREATE INDEX idx_marketplace_plugins_featured ON marketplace_plugins(featured, status) WHERE featured = TRUE;
 
 CREATE INDEX idx_marketplace_plugin_versions_plugin ON marketplace_plugin_versions(plugin_id);
 CREATE INDEX idx_marketplace_plugin_versions_version ON marketplace_plugin_versions(version);
@@ -213,3 +230,33 @@ INSERT INTO marketplace_categories (name, display_name, description, icon) VALUE
 -- Insert admin user
 INSERT INTO marketplace_users (id, username, email, role) VALUES
 ('00000000-0000-0000-0000-000000000001', 'admin', 'admin@minder.local', 'admin');
+
+-- Create updated_at trigger function
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers for updated_at
+CREATE TRIGGER update_marketplace_categories_updated_at
+    BEFORE UPDATE ON marketplace_categories
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_marketplace_users_updated_at
+    BEFORE UPDATE ON marketplace_users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_marketplace_plugins_updated_at
+    BEFORE UPDATE ON marketplace_plugins
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_marketplace_licenses_updated_at
+    BEFORE UPDATE ON marketplace_licenses
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
