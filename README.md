@@ -26,7 +26,7 @@
 ## ⚡ Quick Start (One-Line Installation)
 
 ```bash
-git clone https://github.com/your-org/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 ./install.sh
 ```
@@ -220,7 +220,7 @@ Contributions welcome! Please read our contributing guidelines.
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 
 # Run installation

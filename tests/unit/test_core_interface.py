@@ -4,14 +4,11 @@ Test Core Plugin Interface
 Unit tests for BaseModule and related classes
 """
 
-import pytest
 from datetime import datetime
 
-from src.core.interface import (
-    BaseModule,
-    ModuleMetadata,
-    ModuleStatus,
-)
+import pytest
+
+from src.core.interface import BaseModule, ModuleMetadata, ModuleStatus
 
 
 class TestModuleStatus:

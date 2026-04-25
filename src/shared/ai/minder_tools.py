@@ -3,13 +3,14 @@ Minder AI Agent - Tool Calling Interface for LLMs
 Enables LLMs (Llama 3.2 via Ollama) to call Minder Platform APIs
 """
 
-from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
-import httpx
 import json
 import logging
-from typing import Dict, Any, List
 from datetime import datetime
+from typing import Any, Dict, List
+
+import httpx
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -25,25 +26,20 @@ MINDER_FUNCTIONS = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Cryptocurrency symbols to collect (BTC, ETH, SOL, ADA, DOT)",
-                    "default": ["BTC", "ETH", "SOL", "ADA", "DOT"]
+                    "default": ["BTC", "ETH", "SOL", "ADA", "DOT"],
                 }
             },
-            "required": []
-        }
+            "required": [],
+        },
     },
     {
         "name": "get_crypto_price",
         "description": "Get current price and market data for a specific cryptocurrency from the database.",
         "parameters": {
             "type": "object",
-            "properties": {
-                "symbol": {
-                    "type": "string",
-                    "description": "Cryptocurrency symbol (e.g., BTC, ETH, SOL)"
-                }
-            },
-            "required": ["symbol"]
-        }
+            "properties": {"symbol": {"type": "string", "description": "Cryptocurrency symbol (e.g., BTC, ETH, SOL)"}},
+            "required": ["symbol"],
+        },
     },
     {
         "name": "collect_news",
@@ -54,11 +50,11 @@ MINDER_FUNCTIONS = [
                 "source": {
                     "type": "string",
                     "description": "Specific news source to collect from",
-                    "enum": ["BBC", "Guardian", "NPR", "ALL"]
+                    "enum": ["BBC", "Guardian", "NPR", "ALL"],
                 }
             },
-            "required": []
-        }
+            "required": [],
+        },
     },
     {
         "name": "get_latest_news",
@@ -66,28 +62,16 @@ MINDER_FUNCTIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "limit": {
-                    "type": "integer",
-                    "description": "Maximum number of articles to return",
-                    "default": 10
-                },
-                "source": {
-                    "type": "string",
-                    "description": "Filter by news source"
-                }
+                "limit": {"type": "integer", "description": "Maximum number of articles to return", "default": 10},
+                "source": {"type": "string", "description": "Filter by news source"},
             },
-            "required": []
-        }
+            "required": [],
+        },
     },
     {
         "name": "get_plugin_status",
         "description": "Get health status and information for all Minder plugins. Returns list of plugins with their health status.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "type": "object"
-        }
+        "parameters": {"type": "object", "properties": {}, "required": [], "type": "object"},
     },
     {
         "name": "enable_plugin",
@@ -98,11 +82,11 @@ MINDER_FUNCTIONS = [
                 "plugin_name": {
                     "type": "string",
                     "description": "Plugin name to enable",
-                    "enum": ["crypto", "news", "network", "weather", "tefas"]
+                    "enum": ["crypto", "news", "network", "weather", "tefas"],
                 }
             },
-            "required": ["plugin_name"]
-        }
+            "required": ["plugin_name"],
+        },
     },
     {
         "name": "get_network_metrics",
@@ -110,14 +94,10 @@ MINDER_FUNCTIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "limit": {
-                    "type": "integer",
-                    "description": "Number of recent metrics to return",
-                    "default": 10
-                }
+                "limit": {"type": "integer", "description": "Number of recent metrics to return", "default": 10}
             },
-            "required": []
-        }
+            "required": [],
+        },
     },
     {
         "name": "get_weather_data",
@@ -125,15 +105,11 @@ MINDER_FUNCTIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "location": {
-                    "type": "string",
-                    "description": "Location to get weather for",
-                    "default": "Istanbul"
-                }
+                "location": {"type": "string", "description": "Location to get weather for", "default": "Istanbul"}
             },
-            "required": []
-        }
-    }
+            "required": [],
+        },
+    },
 ]
 
 
@@ -144,11 +120,7 @@ class MinderToolExecutor:
         self.plugin_registry_url = "http://minder-plugin-registry:8001"
         self.api_gateway_url = "http://minder-api-gateway:8000"
 
-    async def execute_tool(
-        self,
-        tool_name: str,
-        parameters: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def execute_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a Minder Platform tool
 
@@ -179,9 +151,7 @@ class MinderToolExecutor:
     async def _collect_crypto_data(self, params: Dict) -> Dict:
         """Trigger crypto data collection"""
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.plugin_registry_url}/v1/plugins/crypto/collect"
-            )
+            response = await client.post(f"{self.plugin_registry_url}/v1/plugins/crypto/collect")
             response.raise_for_status()
             return response.json()
 
@@ -189,18 +159,14 @@ class MinderToolExecutor:
         """Get crypto price from database"""
         symbol = params.get("symbol", "BTC")
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.plugin_registry_url}/v1/plugins/crypto/analysis?symbol={symbol}"
-            )
+            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/crypto/analysis?symbol={symbol}")
             response.raise_for_status()
             return response.json()
 
     async def _collect_news(self, params: Dict) -> Dict:
         """Trigger news collection"""
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.plugin_registry_url}/v1/plugins/news/collect"
-            )
+            response = await client.post(f"{self.plugin_registry_url}/v1/plugins/news/collect")
             response.raise_for_status()
             return response.json()
 
@@ -208,18 +174,14 @@ class MinderToolExecutor:
         """Get latest news from database"""
         limit = params.get("limit", 10)
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.plugin_registry_url}/v1/plugins/news/analysis?limit={limit}"
-            )
+            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/news/analysis?limit={limit}")
             response.raise_for_status()
             return response.json()
 
     async def _get_plugin_status(self, params: Dict) -> Dict:
         """Get all plugin status"""
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.plugin_registry_url}/v1/plugins"
-            )
+            response = await client.get(f"{self.plugin_registry_url}/v1/plugins")
             response.raise_for_status()
             return response.json()
 
@@ -227,9 +189,7 @@ class MinderToolExecutor:
         """Enable a plugin"""
         plugin_name = params.get("plugin_name")
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.plugin_registry_url}/v1/plugins/{plugin_name}/enable"
-            )
+            response = await client.post(f"{self.plugin_registry_url}/v1/plugins/{plugin_name}/enable")
             response.raise_for_status()
             return response.json()
 
@@ -237,18 +197,14 @@ class MinderToolExecutor:
         """Get network metrics"""
         limit = params.get("limit", 10)
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.plugin_registry_url}/v1/plugins/network/analysis?limit={limit}"
-            )
+            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/network/analysis?limit={limit}")
             response.raise_for_status()
             return response.json()
 
     async def _get_weather_data(self, params: Dict) -> Dict:
         """Get weather data"""
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.plugin_registry_url}/v1/plugins/weather/analysis"
-            )
+            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/weather/analysis")
             response.raise_for_status()
             return response.json()
 
@@ -261,6 +217,7 @@ tool_executor = MinderToolExecutor()
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/v1/ai", tags=["AI Integration"])
+
 
 @router.post("/chat")
 async def chat_with_tools(request: Request):
@@ -281,39 +238,38 @@ async def chat_with_tools(request: Request):
         # For now, execute first tool
         # In production, LLM should decide which tool to use
         return {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": "I'll help you with that. Let me call the appropriate tool.",
-                    "tool_calls": [{
-                        "id": "call_1",
-                        "type": "function",
-                        "function": {
-                            "name": tools[0]["name"],
-                            "arguments": json.dumps(tools[0].get("parameters", {}))
-                        }
-                    }]
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "I'll help you with that. Let me call the appropriate tool.",
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": tools[0]["name"],
+                                    "arguments": json.dumps(tools[0].get("parameters", {})),
+                                },
+                            }
+                        ],
+                    }
                 }
-            }]
+            ]
         }
 
     # If no tools, route to Ollama directly
     ollama_url = "http://ollama:11434/api/chat"
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            ollama_url,
-            json=body
-        )
+        response = await client.post(ollama_url, json=body)
         return response.json()
 
 
 @router.post("/functions/definitions")
 async def get_function_definitions():
     """Get available Minder Platform function definitions"""
-    return {
-        "functions": MINDER_FUNCTIONS
-    }
+    return {"functions": MINDER_FUNCTIONS}
 
 
 @router.post("/functions/{function_name}")
@@ -327,17 +283,10 @@ async def execute_function(function_name: str, request: Request):
     try:
         result = await tool_executor.execute_tool(function_name, params)
 
-        return {
-            "result": result,
-            "status": "success",
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        return {"result": result, "status": "success", "timestamp": datetime.utcnow().isoformat()}
     except Exception as e:
         logger.error(f"Error executing function {function_name}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error executing function: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error executing function: {str(e)}")
 
 
 @router.get("/status")
@@ -346,10 +295,7 @@ async def get_ai_status():
     # Check Ollama status
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "http://ollama:11434/api/tags",
-                timeout=5.0
-            )
+            response = await client.get("http://ollama:11434/api/tags", timeout=5.0)
             ollama_status = "healthy" if response.status_code == 200 else "unhealthy"
             models = response.json().get("models", [])
     except:
@@ -361,7 +307,7 @@ async def get_ai_status():
         "available_models": [m["name"] for m in models],
         "tools_available": len(MINDER_FUNCTIONS),
         "tool_names": [f["name"] for f in MINDER_FUNCTIONS],
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 
@@ -380,45 +326,38 @@ async def chat_with_minder(user_message: str) -> str:
 
     # 2. Prepare message with tools
     messages = [
-        {"role": "system", "content": "You are a helpful assistant for Minder Platform. You can use tools to collect and analyze data."},
-        {"role": "user", "content": user_message}
+        {
+            "role": "system",
+            "content": "You are a helpful assistant for Minder Platform. You can use tools to collect and analyze data.",
+        },
+        {"role": "user", "content": user_message},
     ]
 
     # 3. Call Ollama with tools
-    response = ollama.chat(
-        'llama3.2',
-        messages=messages,
-        tools=tools
-    )
+    response = ollama.chat("llama3.2", messages=messages, tools=tools)
 
     # 4. Check if LLM wants to use tools
-    if 'message' in response and 'tool_calls' in response['message']:
-        tool_calls = response['message']['tool_calls']
+    if "message" in response and "tool_calls" in response["message"]:
+        tool_calls = response["message"]["tool_calls"]
 
         # Execute each tool call
         tool_results = []
         for tool_call in tool_calls:
-            function_name = tool_call['function']['name']
-            arguments = json.loads(tool_call['function']['arguments'])
+            function_name = tool_call["function"]["name"]
+            arguments = json.loads(tool_call["function"]["arguments"])
 
             result = await tool_executor.execute_tool(function_name, arguments)
-            tool_results.append({
-                "tool_call_id": tool_call['id'],
-                "role": "tool",
-                "name": function_name,
-                "content": json.dumps(result)
-            })
+            tool_results.append(
+                {"tool_call_id": tool_call["id"], "role": "tool", "name": function_name, "content": json.dumps(result)}
+            )
 
         # 5. Get final response from LLM with tool results
         messages.extend(tool_results)
-        final_response = ollama.chat(
-            'llama3.2',
-            messages=messages
-        )
+        final_response = ollama.chat("llama3.2", messages=messages)
 
-        return final_response['message']['content']
+        return final_response["message"]["content"]
 
-    return response['message']['content']
+    return response["message"]["content"]
 
 
 # Example conversations
@@ -426,26 +365,22 @@ EXAMPLE_CONVERSATIONS = [
     {
         "user": "What's the current price of Bitcoin?",
         "expected_tool": "get_crypto_price",
-        "expected_params": {"symbol": "BTC"}
+        "expected_params": {"symbol": "BTC"},
     },
     {
         "user": "Collect the latest crypto data for me",
         "expected_tool": "collect_crypto_data",
-        "expected_params": {"symbols": ["BTC", "ETH", "SOL"]}
+        "expected_params": {"symbols": ["BTC", "ETH", "SOL"]},
     },
     {
         "user": "What are the latest news headlines?",
         "expected_tool": "get_latest_news",
-        "expected_params": {"limit": 5}
+        "expected_params": {"limit": 5},
     },
-    {
-        "user": "Check the status of all plugins",
-        "expected_tool": "get_plugin_status",
-        "expected_params": {}
-    },
+    {"user": "Check the status of all plugins", "expected_tool": "get_plugin_status", "expected_params": {}},
     {
         "user": "Get the latest network metrics",
         "expected_tool": "get_network_metrics",
-        "expected_params": {"limit": 10}
-    }
+        "expected_params": {"limit": 10},
+    },
 ]

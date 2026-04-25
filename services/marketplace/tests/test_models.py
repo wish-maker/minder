@@ -16,7 +16,7 @@ def test_plugin_create_model():
         "repository_url": "https://github.com/test/plugin.git",
         "distribution_type": "git",
         "pricing_model": "free",
-        "category_id": "test-category-id",
+        "category_id": "550e8400-e29b-41d4-a716-446655440000",
     }
 
     plugin = PluginCreate(**data)
@@ -29,7 +29,7 @@ def test_plugin_create_model():
 def test_plugin_response_model():
     """Test plugin response model"""
     data = {
-        "id": "test-id",
+        "id": "550e8400-e29b-41d4-a716-446655440001",
         "name": "test-plugin",
         "display_name": "Test Plugin",
         "description": "A test plugin",
@@ -55,27 +55,31 @@ def test_plugin_response_model():
 
     plugin = PluginResponse(**data)
 
-    assert plugin.id == "test-id"
+    assert plugin.id == "550e8400-e29b-41d4-a716-446655440001"
     assert plugin.name == "test-plugin"
     assert plugin.rating_average == 4.5
 
 
 def test_license_create_model():
     """Test license creation model"""
-    data = {"user_id": "user-id", "plugin_id": "plugin-id", "tier": "professional"}
+    data = {
+        "user_id": "550e8400-e29b-41d4-a716-446655440002",
+        "plugin_id": "550e8400-e29b-41d4-a716-446655440003",
+        "tier": "professional",
+    }
 
     license_data = LicenseCreate(**data)
 
-    assert license_data.user_id == "user-id"
+    assert license_data.user_id == "550e8400-e29b-41d4-a716-446655440002"
     assert license_data.tier == "professional"
 
 
 def test_installation_response_model():
     """Test installation response model"""
     data = {
-        "id": "installation-id",
-        "user_id": "user-id",
-        "plugin_id": "plugin-id",
+        "id": "550e8400-e29b-41d4-a716-446655440004",
+        "user_id": "550e8400-e29b-41d4-a716-446655440005",
+        "plugin_id": "550e8400-e29b-41d4-a716-446655440006",
         "version": "1.0.0",
         "status": "installed",
         "enabled": True,
@@ -86,5 +90,5 @@ def test_installation_response_model():
 
     installation = InstallationResponse(**data)
 
-    assert installation.id == "installation-id"
+    assert installation.id == "550e8400-e29b-41d4-a716-446655440004"
     assert installation.enabled is True

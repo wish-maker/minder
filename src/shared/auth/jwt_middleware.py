@@ -3,13 +3,14 @@ JWT Authentication Middleware for Minder Platform
 Provides JWT validation and API key authentication for protected endpoints
 """
 
-from fastapi import HTTPException, Security, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from typing import Optional, Dict, List
-import jwt
+import logging
 import os
 from datetime import datetime, timedelta
-import logging
+from typing import Dict, List, Optional
+
+import jwt
+from fastapi import HTTPException, Security, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 logger = logging.getLogger(__name__)
 
@@ -121,32 +122,27 @@ def require_roles(allowed_roles: List[str]):
         async def protected_endpoint():
             ...
     """
+
     def decorator(func):
         async def wrapper(*args, current_user: Dict = None, **kwargs):
             if not current_user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
             user_role = current_user.get("role", "user")
             if user_role not in allowed_roles:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Insufficient permissions. Required roles: {allowed_roles}"
+                    detail=f"Insufficient permissions. Required roles: {allowed_roles}",
                 )
 
             return await func(*args, current_user=current_user, **kwargs)
+
         return wrapper
+
     return decorator
 
 
-def create_user_token(
-    user_id: str,
-    username: str,
-    role: str = "user",
-    extra_payload: Dict = None
-) -> str:
+def create_user_token(user_id: str, username: str, role: str = "user", extra_payload: Dict = None) -> str:
     """
     Create JWT token for user
 
@@ -176,11 +172,7 @@ def create_user_token(
 rate_limit_store: Dict[str, List[datetime]] = {}
 
 
-async def check_rate_limit(
-    user_id: str,
-    max_requests: int = 60,
-    window_minutes: int = 1
-) -> bool:
+async def check_rate_limit(user_id: str, max_requests: int = 60, window_minutes: int = 1) -> bool:
     """
     Check if user has exceeded rate limit
 
@@ -222,21 +214,21 @@ def enforce_rate_limit(max_requests: int = 60, window_minutes: int = 1):
         async def rate_limited_endpoint():
             ...
     """
+
     def decorator(func):
         async def wrapper(*args, current_user: Dict = None, **kwargs):
             if not current_user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Authentication required"
-                )
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
             user_id = current_user.get("sub")
             if not await check_rate_limit(user_id, max_requests, window_minutes):
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail=f"Rate limit exceeded: {max_requests} requests per {window_minutes} minute(s)"
+                    detail=f"Rate limit exceeded: {max_requests} requests per {window_minutes} minute(s)",
                 )
 
             return await func(*args, current_user=current_user, **kwargs)
+
         return wrapper
+
     return decorator

@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 class LicenseCreate(BaseModel):
     """Model for creating a license"""
 
-    user_id: str
-    plugin_id: str
+    user_id: str = Field(..., pattern="^[0-9a-f-]{36}$")
+    plugin_id: str = Field(..., pattern="^[0-9a-f-]{36}$")
     tier: str = Field(..., pattern="^(community|professional|enterprise)$")
     valid_until: Optional[datetime] = None
 
@@ -24,15 +24,15 @@ class LicenseValidate(BaseModel):
 class LicenseResponse(BaseModel):
     """Model for license response"""
 
-    id: str
-    user_id: str
-    plugin_id: str
+    id: str = Field(..., pattern="^[0-9a-f-]{36}$")
+    user_id: str = Field(..., pattern="^[0-9a-f-]{36}$")
+    plugin_id: str = Field(..., pattern="^[0-9a-f-]{36}$")
     tier: str
     license_key: str
     valid_from: datetime
     valid_until: Optional[datetime]
     active: bool
-    usage_count: int
+    usage_count: int = Field(..., ge=0)
     last_used_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime

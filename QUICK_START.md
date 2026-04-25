@@ -38,7 +38,7 @@ docker compose version
 ## Step 2: Clone Repository
 
 ```bash
-git clone https://github.com/your-org/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 ```
 

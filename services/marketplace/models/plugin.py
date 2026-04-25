@@ -1,9 +1,10 @@
 # services/marketplace/models/plugin.py
+import html
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
 
 
 class PricingModel(str, Enum):
@@ -38,13 +39,22 @@ class PluginCreate(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     author: str = Field(..., max_length=100)
-    author_email: Optional[str] = None
-    repository_url: Optional[str] = None
+    author_email: Optional[EmailStr] = None
+    repository_url: Optional[HttpUrl] = None
     distribution_type: DistributionType = DistributionType.GIT
     docker_image: Optional[str] = None
     pricing_model: PricingModel = PricingModel.FREE
     base_tier: str = "community"
-    category_id: Optional[str] = None
+    category_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
+    developer_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
+
+    @field_validator("display_name", "description", mode="before")
+    @classmethod
+    def sanitize_html(cls, v: Optional[str]) -> Optional[str]:
+        """Sanitize HTML in text fields"""
+        if v is None:
+            return None
+        return html.escape(v)
 
 
 class PluginUpdate(BaseModel):
@@ -61,28 +71,28 @@ class PluginUpdate(BaseModel):
 class PluginResponse(BaseModel):
     """Model for plugin response"""
 
-    id: str
+    id: str = Field(..., pattern="^[0-9a-f-]{36}$")
     name: str
     display_name: str
     description: Optional[str]
     author: str
-    author_email: Optional[str]
-    repository_url: Optional[str]
-    distribution_type: str
+    author_email: Optional[EmailStr]
+    repository_url: Optional[HttpUrl]
+    distribution_type: DistributionType
     docker_image: Optional[str]
     current_version: Optional[str]
-    pricing_model: str
+    pricing_model: PricingModel
     base_tier: str
-    status: str
+    status: PluginStatus
     featured: bool
-    download_count: int
-    rating_average: Optional[float]
-    rating_count: int
+    download_count: int = Field(..., ge=0)
+    rating_average: Optional[float] = Field(None, ge=0, le=5.0)
+    rating_count: int = Field(..., ge=0)
     created_at: datetime
     updated_at: datetime
     published_at: Optional[datetime]
-    developer_id: Optional[str]
-    category_id: Optional[str]
+    developer_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
+    category_id: Optional[str] = Field(None, pattern="^[0-9a-f-]{36}$")
 
     class Config:
         from_attributes = True

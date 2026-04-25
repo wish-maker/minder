@@ -3,9 +3,10 @@ Shared Database Pool Manager for Minder Platform
 Provides centralized connection pool management for all plugins
 """
 
-import asyncpg
-from typing import Dict, Optional
 import logging
+from typing import Dict, Optional
+
+import asyncpg
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class DatabasePoolManager:
     - Automatic cleanup
     """
 
-    _instance: Optional['DatabasePoolManager'] = None
+    _instance: Optional["DatabasePoolManager"] = None
     _pools: Dict[str, asyncpg.Pool] = {}
 
     def __new__(cls):
@@ -31,12 +32,7 @@ class DatabasePoolManager:
         return cls._instance
 
     async def create_pool(
-        self,
-        config: Dict,
-        pool_name: str = "default",
-        min_size: int = 2,
-        max_size: int = 10,
-        command_timeout: int = 60
+        self, config: Dict, pool_name: str = "default", min_size: int = 2, max_size: int = 10, command_timeout: int = 60
     ) -> asyncpg.Pool:
         """
         Create or get existing database connection pool
@@ -95,15 +91,12 @@ class DatabasePoolManager:
                 server_settings={
                     "application_name": "minder_platform",
                     "timezone": "UTC",
-                }
+                },
             )
 
             self._pools[pool_name] = pool
 
-            logger.info(
-                f"✅ Database pool created: {pool_name} "
-                f"(min={min_size}, max={max_size})"
-            )
+            logger.info(f"✅ Database pool created: {pool_name} " f"(min={min_size}, max={max_size})")
 
             return pool
 
@@ -201,11 +194,7 @@ db_pool_manager = DatabasePoolManager()
 
 
 async def create_plugin_pool(
-    plugin_name: str,
-    db_config: Dict,
-    min_size: int = 2,
-    max_size: int = 10,
-    command_timeout: int = 60
+    plugin_name: str, db_config: Dict, min_size: int = 2, max_size: int = 10, command_timeout: int = 60
 ) -> asyncpg.Pool:
     """
     Convenience function to create pool for a plugin
@@ -222,11 +211,7 @@ async def create_plugin_pool(
     """
     pool_name = f"plugin_{plugin_name}"
     return await db_pool_manager.create_pool(
-        config=db_config,
-        pool_name=pool_name,
-        min_size=min_size,
-        max_size=max_size,
-        command_timeout=command_timeout
+        config=db_config, pool_name=pool_name, min_size=min_size, max_size=max_size, command_timeout=command_timeout
     )
 
 
@@ -255,13 +240,7 @@ if __name__ == "__main__":
         """Example usage"""
 
         # Example 1: Create pool for plugin
-        config = {
-            "host": "localhost",
-            "port": 5432,
-            "database": "minder",
-            "user": "minder",
-            "password": "password"
-        }
+        config = {"host": "localhost", "port": 5432, "database": "minder", "user": "minder", "password": "password"}
 
         pool = await create_plugin_pool("crypto", config)
         print(f"Pool created: {pool}")
