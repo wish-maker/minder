@@ -191,7 +191,7 @@ def calculate_delay(
     delay *= jitter
 
     # Cap at max delay
-    return min(delay, max_delay)
+    return float(min(delay, max_delay))
 
 
 def is_transient_error(exception: Exception) -> bool:
@@ -219,7 +219,7 @@ def is_transient_error(exception: Exception) -> bool:
         if code:
             # 40xxx: Transaction rollback
             # 53xxx: Insufficient resources
-            return code.startswith("40") or code.startswith("53")
+            return bool(code.startswith("40") or code.startswith("53"))
 
     return False
 
@@ -269,7 +269,6 @@ async def retry(
     if strategy == RetryStrategy.NONE:
         return await operation()
 
-    last_exception = None
     total_delay = 0.0
 
     for attempt in range(1, max_attempts + 1):
@@ -290,8 +289,6 @@ async def retry(
             return result
 
         except Exception as e:
-            last_exception = e
-
             # Check if exception is retryable
             if retry_on:
                 if not isinstance(e, retry_on):

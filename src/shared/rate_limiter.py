@@ -3,12 +3,10 @@ Rate limiting middleware for Minder services.
 Redis-based rate limiting with configurable limits.
 """
 
-import asyncio
-import json
 import logging
 import time
 from functools import wraps
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from fastapi import HTTPException, Request, Response
 from redis.asyncio import Redis
@@ -160,7 +158,7 @@ async def add_rate_limit_headers(response: Response, info: Dict[str, Any]) -> No
     response.headers["X-RateLimit-Window"] = str(info.get("window", ""))
 
 
-def rate_limit(limit: int = 100, window: int = 60, key_func: Optional[callable] = None):
+def rate_limit(limit: int = 100, window: int = 60, key_func: Optional[Callable[..., Any]] = None):
     """
     Decorator for rate limiting API endpoints.
 
@@ -205,7 +203,7 @@ def rate_limit(limit: int = 100, window: int = 60, key_func: Optional[callable] 
             try:
                 result = await func(*args, **kwargs)
                 response_obj = result if isinstance(result, Response) else None
-            except Exception as e:
+            except Exception:
                 raise
 
             # Get response object if not already created
@@ -339,7 +337,8 @@ class IPWhitelist:
     async def is_whitelisted(self, ip: str) -> bool:
         """Check if IP is whitelisted"""
         try:
-            return await self.redis.sismember(self.whitelist_key, ip)
+            result = await self.redis.sismember(self.whitelist_key, ip)
+            return bool(result)
         except Exception as e:
             logger.error(f"Failed to check IP whitelist: {e}")
             return False

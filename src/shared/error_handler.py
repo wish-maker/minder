@@ -9,11 +9,9 @@ from typing import Any, Dict, Optional
 
 import aiohttp
 from asyncpg import PostgresConnectionError, PostgresError
-from fastapi import HTTPException, Request, status
+from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError as PydanticValidationError
-
-from .validators import ValidationError
 
 logger = logging.getLogger("minder.error_handler")
 
@@ -66,7 +64,7 @@ class ResourceNotFoundError(MinderError):
         )
 
 
-class ValidationError(MinderError):
+class InputValidationError(MinderError):
     """Input validation failed"""
 
     def __init__(self, message: str, field: Optional[str] = None, details: Optional[Dict] = None):
@@ -155,7 +153,7 @@ class ErrorResponse:
         Returns:
             Dictionary with error information
         """
-        response = {"error": {"code": error_code, "message": message, "status_code": status_code}}
+        response: Dict[str, Any] = {"error": {"code": error_code, "message": message, "status_code": status_code}}
 
         if details:
             response["error"]["details"] = details
@@ -377,7 +375,7 @@ def setup_error_handlers(app):
     app.add_exception_handler(AuthenticationError, minder_exception_handler)
     app.add_exception_handler(AuthorizationError, minder_exception_handler)
     app.add_exception_handler(ResourceNotFoundError, minder_exception_handler)
-    app.add_exception_handler(ValidationError, minder_exception_handler)
+    app.add_exception_handler(InputValidationError, minder_exception_handler)
     app.add_exception_handler(RateLimitExceededError, minder_exception_handler)
     app.add_exception_handler(ServiceUnavailableError, minder_exception_handler)
     app.add_exception_handler(DatabaseError, minder_exception_handler)
