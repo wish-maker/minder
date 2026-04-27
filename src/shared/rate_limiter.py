@@ -5,6 +5,7 @@ Redis-based rate limiting with configurable limits.
 
 import logging
 import time
+from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
@@ -342,6 +343,24 @@ class IPWhitelist:
         except Exception as e:
             logger.error(f"Failed to check IP whitelist: {e}")
             return False
+
+
+@dataclass
+class RateLimitInfo:
+    """Rate limit information"""
+    limit: int
+    remaining: int
+    reset_time: int
+    window: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "limit": self.limit,
+            "remaining": self.remaining,
+            "reset_time": self.reset_time,
+            "window": self.window,
+        }
 
 
 class RateLimitExceeded(Exception):

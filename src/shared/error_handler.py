@@ -35,6 +35,15 @@ class MinderError(Exception):
         self.details = details or {}
         super().__init__(message)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert error to dictionary"""
+        return {
+            "message": self.message,
+            "code": self.code,
+            "status_code": self.status_code,
+            "details": self.details,
+        }
+
 
 class AuthenticationError(MinderError):
     """Authentication failed"""

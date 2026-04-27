@@ -14,16 +14,25 @@ from redis.asyncio import Redis
 from httpx import AsyncClient, ASGITransport
 from fastapi.testclient import TestClient
 
-# Import FastAPI apps
+# Import FastAPI apps (optional, try-except for unit tests)
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from services.api_gateway.main import app as gateway_app
-from services.plugin_registry.main import app as registry_app
-from services.marketplace.main import app as marketplace_app
-from services.rag_pipeline.main import app as rag_app
-from services.model_management.main import app as model_app
-from services.tts_stt_service.main import app as tts_app
+try:
+    from services.api_gateway.main import app as gateway_app
+    from services.plugin_registry.main import app as registry_app
+    from services.marketplace.main import app as marketplace_app
+    from services.rag_pipeline.main import app as rag_app
+    from services.model_management.main import app as model_app
+    from services.tts_stt_service.main import app as tts_app
+except ImportError:
+    # Services not available for unit tests
+    gateway_app = None
+    registry_app = None
+    marketplace_app = None
+    rag_app = None
+    model_app = None
+    tts_app = None
 
 
 # Test configuration
