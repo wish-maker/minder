@@ -84,6 +84,31 @@ services:
     networks:
       - minder-network
 
+  # Neo4j - Graph Database for Plugin Dependencies
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: minder-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/neo4j_test_password_change_me
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_memory_heap_initial_size: 512m
+      NEO4J_dbms_memory_heap_max_size: 1G
+    volumes:
+      - neo4j_data:/data
+      - ./neo4j/init-cypher.sh:/docker-entrypoint-initdb.d/init-cypher.sh:ro
+    ports:
+      - "7474:7474"  # HTTP
+      - "7687:7687"  # Bolt
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - minder-network
+
   # ============================================================================
   # Core Microservices (Phase 1)
   # ============================================================================
@@ -170,6 +195,9 @@ services:
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+
+      # Marketplace Integration
+      - MARKETPLACE_URL=http://minder-marketplace:8002
     env_file:
       - .env
     volumes:
@@ -184,6 +212,61 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # Plugin State Manager - Port 8003
+  # Central plugin state management, licensing, and AI tools execution
+  plugin-state-manager:
+    build:
+      context: ../../
+      dockerfile: services/plugin-state-manager/Dockerfile
+    image: minder/plugin-state-manager:latest
+    container_name: minder-plugin-state-manager
+    restart: unless-stopped
+    environment:
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=minder
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - DB_NAME=minder_marketplace
+
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # Services
+      - MARKETPLACE_URL=http://minder-marketplace:8002
+      - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
+
+      # Security
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=HS256
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+      - DEFAULT_PLUGINS_CONFIG=/app/config/default_plugins.yml
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      marketplace:
+        condition: service_healthy
+      plugin-registry:
+        condition: service_healthy
+    volumes:
+      - ../../config/default_plugins.yml:/app/config/default_plugins.yml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -601,6 +684,8 @@ volumes:
   ollama_data:
     driver: local
   qdrant_data:
+    driver: local
+  neo4j_data:
     driver: local
   plugins_data:
     driver: local

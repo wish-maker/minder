@@ -2,20 +2,15 @@
 import os
 
 import asyncpg
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 
 async def get_db_connection():
-    """Create database connection from environment variables"""
+    """Create database connection for testing"""
     return await asyncpg.connect(
-        host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT", "5432")),
-        user=os.getenv("DB_USER", "minder"),
-        password=os.getenv("DB_PASSWORD"),
-        database=os.getenv("DB_NAME", "minder_marketplace"),
+        host="localhost",
+        port=5432,
+        user="minder",
+        database="minder_marketplace",
     )
 
 

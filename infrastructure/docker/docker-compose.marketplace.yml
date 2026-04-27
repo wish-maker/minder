@@ -1,0 +1,43 @@
+# infrastructure/docker/docker-compose.marketplace.yml
+# Marketplace service configuration
+services:
+  marketplace:
+    build:
+      context: ../..
+      dockerfile: services/marketplace/Dockerfile
+    image: minder/marketplace:latest
+    container_name: minder-marketplace
+    ports:
+      - "8002:8002"
+    environment:
+      # Use service names from main compose file
+      - MARKETPLACE_DATABASE_HOST=postgres
+      - MARKETPLACE_DATABASE_PORT=5432
+      - MARKETPLACE_REDIS_HOST=redis
+      - MARKETPLACE_REDIS_PORT=6379
+      - PLUGIN_REGISTRY_URL=http://plugin-registry:8001
+      - JWT_SECRET=${JWT_SECRET:-dev_jwt_secret_change_me}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    env_file:
+      - .env.marketplace
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      plugin-registry:
+        condition: service_healthy
+    networks:
+      - minder-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  minder-network:
+    external: true

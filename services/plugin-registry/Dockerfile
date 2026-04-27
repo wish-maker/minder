@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir \
 # Copy application code
 COPY services/plugin-registry/main.py .
 COPY services/plugin-registry/config.py .
+COPY services/plugin-registry/routes /app/routes
 
 # Copy shared core library and plugins (from build context)
 COPY src/core /app/src/core

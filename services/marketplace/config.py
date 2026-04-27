@@ -33,6 +33,11 @@ class MarketplaceSettings(BaseSettings):
     # Plugin Registry integration
     PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
 
+    # Neo4j Graph Database
+    NEO4J_URI: str = "bolt://neo4j:7687"
+    NEO4J_USER: str = "neo4j"
+    NEO4J_PASSWORD: str = "neo4j_test_password_change_me"
+
     # Application
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
