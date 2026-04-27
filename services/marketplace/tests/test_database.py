@@ -16,14 +16,12 @@ async def test_database_pool_connection():
         assert result == 1
 
         # Check tables exist
-        tables = await conn.fetch(
-            """
+        tables = await conn.fetch("""
             SELECT table_name
             FROM information_schema.tables
             WHERE table_schema = 'public'
             ORDER BY table_name
-        """
-        )
+        """)
         table_names = [row["table_name"] for row in tables]
         assert "marketplace_plugins" in table_names
 

@@ -5,13 +5,14 @@ Plugin state models for API requests/responses
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
 
 class PluginState(str, Enum):
     """Plugin state enumeration"""
+
     INSTALLED = "installed"
     ENABLED = "enabled"
     DISABLED = "disabled"
@@ -20,6 +21,7 @@ class PluginState(str, Enum):
 
 class LicenseTier(str, Enum):
     """License tier enumeration"""
+
     FREE = "free"
     COMMUNITY = "community"
     PRO = "pro"
@@ -28,6 +30,7 @@ class LicenseTier(str, Enum):
 
 class PluginStateResponse(BaseModel):
     """Plugin state response model"""
+
     id: str
     plugin_name: str
     state: PluginState
@@ -45,29 +48,34 @@ class PluginStateResponse(BaseModel):
 
 class PluginStateListResponse(BaseModel):
     """Plugin state list response"""
+
     plugins: list[PluginStateResponse]
     count: int
 
 
 class EnablePluginRequest(BaseModel):
     """Enable plugin request"""
+
     reason: Optional[str] = None
 
 
 class DisablePluginRequest(BaseModel):
     """Disable plugin request"""
+
     reason: Optional[str] = None
     force: bool = False  # Force disable even if required
 
 
 class UpdatePluginConfigRequest(BaseModel):
     """Update plugin configuration"""
+
     config: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
 
 
 class DefaultPluginResponse(BaseModel):
     """Default plugin response"""
+
     id: str
     plugin_name: str
     priority: int
@@ -81,6 +89,7 @@ class DefaultPluginResponse(BaseModel):
 
 class PluginDependencyResponse(BaseModel):
     """Plugin dependency response"""
+
     id: str
     plugin_name: str
     depends_on: str

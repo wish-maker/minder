@@ -9,21 +9,18 @@ import time
 from typing import Any, Dict
 
 import httpx
-
 from models.tool_execution import (
     ToolDiscoveryResponse,
     ToolExecutionRequest,
     ToolExecutionResponse,
-    ToolSchema
+    ToolSchema,
 )
 
 logger = logging.getLogger(__name__)
 
 
 async def execute_tool(
-    tool_name: str,
-    parameters: Dict[str, Any],
-    user_id: str = "default"
+    tool_name: str, parameters: Dict[str, Any], user_id: str = "default"
 ) -> ToolExecutionResponse:
     """
     Execute an AI tool
@@ -49,20 +46,14 @@ async def execute_tool(
         )
 
         if tool_response.status_code == 404:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Tool {tool_name} not found"
-            )
+            raise HTTPException(status_code=404, detail=f"Tool {tool_name} not found")
 
         tool_response.raise_for_status()
         tool_data = tool_response.json()
 
         # Check if tool is active
         if not tool_data.get("active"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Tool {tool_name} is not active"
-            )
+            raise HTTPException(status_code=400, detail=f"Tool {tool_name} is not active")
 
         # Get plugin name
         plugin_name = tool_data.get("plugin_name")
@@ -83,8 +74,8 @@ async def execute_tool(
                         "error": "License tier too low",
                         "tier_required": license_check["tier_required"],
                         "user_tier": license_check["user_tier"],
-                        "reason": license_check["reason"]
-                    }
+                        "reason": license_check["reason"],
+                    },
                 )
 
         # Check if plugin is enabled
@@ -95,14 +86,13 @@ async def execute_tool(
 
             if not plugin_state:
                 raise HTTPException(
-                    status_code=404,
-                    detail=f"Plugin {plugin_name} not found in state database"
+                    status_code=404, detail=f"Plugin {plugin_name} not found in state database"
                 )
 
             if plugin_state["state"] != "enabled":
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Plugin {plugin_name} is not enabled (current state: {plugin_state['state']})"
+                    detail=f"Plugin {plugin_name} is not enabled (current state: {plugin_state['state']})",
                 )
 
         # Execute tool via plugin registry
@@ -117,15 +107,9 @@ async def execute_tool(
         # Execute request
         try:
             if http_method.upper() == "GET":
-                response = await client.get(
-                    execution_url,
-                    params=parameters
-                )
+                response = await client.get(execution_url, params=parameters)
             else:  # POST
-                response = await client.post(
-                    execution_url,
-                    json=parameters
-                )
+                response = await client.post(execution_url, json=parameters)
 
             response.raise_for_status()
 
@@ -137,24 +121,20 @@ async def execute_tool(
                 plugin_name=plugin_name,
                 result=result,
                 execution_time=execution_time,
-                tier_required=tool_data.get("required_tier", "community")
+                tier_required=tool_data.get("required_tier", "community"),
             )
 
         except httpx.HTTPStatusError as e:
             raise HTTPException(
                 status_code=e.response.status_code,
-                detail=f"Tool execution failed: {e.response.text}"
+                detail=f"Tool execution failed: {e.response.text}",
             )
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Tool execution error: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Tool execution error: {str(e)}")
 
 
 async def discover_tools(
-    active_only: bool = True,
-    tier_filter: str = None
+    active_only: bool = True, tier_filter: str = None
 ) -> ToolDiscoveryResponse:
     """
     Discover all available AI tools
@@ -174,8 +154,7 @@ async def discover_tools(
             params["tier"] = tier_filter
 
         response = await client.get(
-            "http://minder-marketplace:8002/v1/marketplace/ai/tools",
-            params=params
+            "http://minder-marketplace:8002/v1/marketplace/ai/tools", params=params
         )
 
         response.raise_for_status()
@@ -192,21 +171,20 @@ async def discover_tools(
             if isinstance(response_format, str):
                 response_format = json.loads(response_format)
 
-            tools.append(ToolSchema(
-                name=tool_data["tool_name"],
-                description=tool_data["description"],
-                type=tool_data["type"],
-                parameters=parameters,
-                response_format=response_format,
-                endpoint=tool_data["endpoint"],
-                method=tool_data["method"],
-                required_tier=tool_data["required_tier"]
-            ))
+            tools.append(
+                ToolSchema(
+                    name=tool_data["tool_name"],
+                    description=tool_data["description"],
+                    type=tool_data["type"],
+                    parameters=parameters,
+                    response_format=response_format,
+                    endpoint=tool_data["endpoint"],
+                    method=tool_data["method"],
+                    required_tier=tool_data["required_tier"],
+                )
+            )
 
-        return ToolDiscoveryResponse(
-            tools=tools,
-            count=len(tools)
-        )
+        return ToolDiscoveryResponse(tools=tools, count=len(tools))
 
 
 async def discover_plugin_tools(plugin_id: str) -> ToolDiscoveryResponse:
@@ -238,18 +216,17 @@ async def discover_plugin_tools(plugin_id: str) -> ToolDiscoveryResponse:
             if isinstance(response_format, str):
                 response_format = json.loads(response_format)
 
-            tools.append(ToolSchema(
-                name=tool_data["tool_name"],
-                description=tool_data["description"],
-                type=tool_data["type"],
-                parameters=parameters,
-                response_format=response_format,
-                endpoint=tool_data["endpoint"],
-                method=tool_data["method"],
-                required_tier=tool_data["required_tier"]
-            ))
+            tools.append(
+                ToolSchema(
+                    name=tool_data["tool_name"],
+                    description=tool_data["description"],
+                    type=tool_data["type"],
+                    parameters=parameters,
+                    response_format=response_format,
+                    endpoint=tool_data["endpoint"],
+                    method=tool_data["method"],
+                    required_tier=tool_data["required_tier"],
+                )
+            )
 
-        return ToolDiscoveryResponse(
-            tools=tools,
-            count=len(tools)
-        )
+        return ToolDiscoveryResponse(tools=tools, count=len(tools))

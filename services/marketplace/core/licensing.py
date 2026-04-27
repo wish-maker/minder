@@ -9,10 +9,7 @@ license_generator = LicenseGenerator()
 
 
 async def create_license(
-    user_id: str,
-    plugin_id: str,
-    tier: str,
-    valid_until: Optional[datetime] = None
+    user_id: str, plugin_id: str, tier: str, valid_until: Optional[datetime] = None
 ) -> Dict:
     """
     Create a new license for a user and plugin
@@ -24,9 +21,7 @@ async def create_license(
 
     # Generate license key
     license_key = license_generator.generate_license_key(
-        user_id=user_id,
-        plugin_id=plugin_id,
-        tier=tier
+        user_id=user_id, plugin_id=plugin_id, tier=tier
     )
 
     # Set default validity (1 year) if not specified
@@ -40,7 +35,8 @@ async def create_license(
             SELECT * FROM marketplace_licenses
             WHERE user_id = $1 AND plugin_id = $2 AND active = TRUE
             """,
-            user_id, plugin_id
+            user_id,
+            plugin_id,
         )
 
         if existing:
@@ -51,7 +47,10 @@ async def create_license(
                 SET tier = $3, license_key = $4, valid_until = $5, updated_at = NOW()
                 WHERE id = $6
                 """,
-                tier, license_key, valid_until, existing["id"]
+                tier,
+                license_key,
+                valid_until,
+                existing["id"],
             )
 
             return {
@@ -62,7 +61,7 @@ async def create_license(
                 "license_key": license_key,
                 "valid_from": existing["valid_from"],
                 "valid_until": valid_until,
-                "active": True
+                "active": True,
             }
 
         # Create new license
@@ -74,7 +73,11 @@ async def create_license(
             VALUES ($1, $2, $3, $4, $5, TRUE)
             RETURNING id, user_id, plugin_id, tier, license_key, valid_from, valid_until, created_at
             """,
-            user_id, plugin_id, tier, license_key, valid_until
+            user_id,
+            plugin_id,
+            tier,
+            license_key,
+            valid_until,
         )
 
         return {
@@ -85,14 +88,11 @@ async def create_license(
             "license_key": row["license_key"],
             "valid_from": row["valid_from"],
             "valid_until": row["valid_until"],
-            "active": True
+            "active": True,
         }
 
 
-async def validate_license(
-    license_key: str,
-    plugin_id: str
-) -> Dict:
+async def validate_license(license_key: str, plugin_id: str) -> Dict:
     """
     Validate a license key
 
@@ -108,21 +108,19 @@ async def validate_license(
             SELECT * FROM marketplace_licenses
             WHERE license_key = $1 AND plugin_id = $2 AND active = TRUE
             """,
-            license_key, plugin_id
+            license_key,
+            plugin_id,
         )
 
         if not row:
-            return {
-                "valid": False,
-                "reason": "License not found or inactive"
-            }
+            return {"valid": False, "reason": "License not found or inactive"}
 
         # Check expiration
         if row["valid_until"] and row["valid_until"] < datetime.now():
             return {
                 "valid": False,
                 "reason": "License expired",
-                "valid_until": row["valid_until"].isoformat()
+                "valid_until": row["valid_until"].isoformat(),
             }
 
         # Update usage
@@ -132,7 +130,7 @@ async def validate_license(
             SET usage_count = usage_count + 1, last_used_at = NOW()
             WHERE id = $1
             """,
-            row["id"]
+            row["id"],
         )
 
         return {
@@ -141,7 +139,7 @@ async def validate_license(
             "plugin_id": row["plugin_id"],
             "tier": row["tier"],
             "valid_until": row["valid_until"].isoformat() if row["valid_until"] else None,
-            "usage_count": row["usage_count"] + 1
+            "usage_count": row["usage_count"] + 1,
         }
 
 
@@ -161,24 +159,28 @@ async def get_user_licenses(user_id: str) -> list:
             WHERE l.user_id = $1
             ORDER BY l.created_at DESC
             """,
-            user_id
+            user_id,
         )
 
         licenses = []
         for row in rows:
-            licenses.append({
-                "id": str(row["id"]),
-                "user_id": row["user_id"],
-                "plugin_id": row["plugin_id"],
-                "plugin_name": row["plugin_name"],
-                "plugin_display_name": row["plugin_display_name"],
-                "tier": row["tier"],
-                "license_key": row["license_key"],
-                "valid_from": row["valid_from"].isoformat(),
-                "valid_until": row["valid_until"].isoformat() if row["valid_until"] else None,
-                "active": row["active"],
-                "usage_count": row["usage_count"],
-                "last_used_at": row["last_used_at"].isoformat() if row["last_used_at"] else None
-            })
+            licenses.append(
+                {
+                    "id": str(row["id"]),
+                    "user_id": row["user_id"],
+                    "plugin_id": row["plugin_id"],
+                    "plugin_name": row["plugin_name"],
+                    "plugin_display_name": row["plugin_display_name"],
+                    "tier": row["tier"],
+                    "license_key": row["license_key"],
+                    "valid_from": row["valid_from"].isoformat(),
+                    "valid_until": row["valid_until"].isoformat() if row["valid_until"] else None,
+                    "active": row["active"],
+                    "usage_count": row["usage_count"],
+                    "last_used_at": (
+                        row["last_used_at"].isoformat() if row["last_used_at"] else None
+                    ),
+                }
+            )
 
         return licenses

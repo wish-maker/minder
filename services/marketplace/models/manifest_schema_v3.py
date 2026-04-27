@@ -4,13 +4,15 @@ Supports AI tools configuration, tier-based access, and modular plugin architect
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any, List, Union
-from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class PluginTier(str, Enum):
     """Plugin access tiers"""
+
     COMMUNITY = "community"
     PROFESSIONAL = "professional"
     ENTERPRISE = "enterprise"
@@ -18,6 +20,7 @@ class PluginTier(str, Enum):
 
 class AIToolType(str, Enum):
     """AI tool types"""
+
     ANALYSIS = "analysis"
     ACTION = "action"
     QUERY = "query"
@@ -26,6 +29,7 @@ class AIToolType(str, Enum):
 
 class AIToolCategory(str, Enum):
     """AI tool categories"""
+
     DATA = "data"
     ANALYSIS = "analysis"
     AUTOMATION = "automation"
@@ -35,6 +39,7 @@ class AIToolCategory(str, Enum):
 
 class HttpMethod(str, Enum):
     """HTTP methods for tool endpoints"""
+
     GET = "GET"
     POST = "POST"
     PUT = "PUT"
@@ -44,6 +49,7 @@ class HttpMethod(str, Enum):
 
 class ParameterSchema(BaseModel):
     """Parameter schema definition"""
+
     type: str = Field(..., description="Parameter type (string, integer, boolean, etc.)")
     description: str = Field(..., description="Parameter description")
     required: bool = Field(False, description="Whether parameter is required")
@@ -56,15 +62,21 @@ class ParameterSchema(BaseModel):
 
 class ToolConfigurationSchema(BaseModel):
     """Tool configuration schema"""
+
     type: str = Field(default="object", description="Schema type")
-    properties: Dict[str, Dict[str, Any]] = Field(default_factory=dict, description="Configuration properties")
+    properties: Dict[str, Dict[str, Any]] = Field(
+        default_factory=dict, description="Configuration properties"
+    )
     required: List[str] = Field(default_factory=list, description="Required configuration keys")
 
 
 class AIToolDefinition(BaseModel):
     """AI tool definition within plugin manifest"""
+
     name: str = Field(..., min_length=1, max_length=100, description="Unique tool name")
-    display_name: str = Field(..., min_length=1, max_length=200, description="Human-readable tool name")
+    display_name: str = Field(
+        ..., min_length=1, max_length=200, description="Human-readable tool name"
+    )
     description: str = Field(..., min_length=1, max_length=1000, description="Tool description")
 
     # Tool classification
@@ -76,17 +88,26 @@ class AIToolDefinition(BaseModel):
     http_method: HttpMethod = Field(default=HttpMethod.POST, description="HTTP method")
 
     # Schemas
-    parameters_schema: Dict[str, ParameterSchema] = Field(default_factory=dict, description="Input parameters")
+    parameters_schema: Dict[str, ParameterSchema] = Field(
+        default_factory=dict, description="Input parameters"
+    )
     response_schema: Dict[str, Any] = Field(default_factory=dict, description="Response schema")
 
     # Configuration
-    configuration_schema: ToolConfigurationSchema = Field(default_factory=ToolConfigurationSchema,
-                                                         description="Configuration schema")
-    default_configuration: Dict[str, Any] = Field(default_factory=dict, description="Default configuration")
+    configuration_schema: ToolConfigurationSchema = Field(
+        default_factory=ToolConfigurationSchema, description="Configuration schema"
+    )
+    default_configuration: Dict[str, Any] = Field(
+        default_factory=dict, description="Default configuration"
+    )
 
     # Access control
-    required_tier: PluginTier = Field(default=PluginTier.COMMUNITY, description="Minimum required tier")
-    requires_configuration: bool = Field(default=False, description="Whether tool requires configuration")
+    required_tier: PluginTier = Field(
+        default=PluginTier.COMMUNITY, description="Minimum required tier"
+    )
+    requires_configuration: bool = Field(
+        default=False, description="Whether tool requires configuration"
+    )
     allow_user_configuration: bool = Field(default=True, description="Allow users to configure")
 
     # State
@@ -102,15 +123,15 @@ class AIToolDefinition(BaseModel):
     implementation_code: Optional[str] = Field(None, description="Inline tool implementation code")
     implementation_file: Optional[str] = Field(None, description="Path to implementation file")
 
-    @field_validator('endpoint_path')
+    @field_validator("endpoint_path")
     @classmethod
     def validate_endpoint_path(cls, v: str) -> str:
         """Validate endpoint path starts with /"""
-        if not v.startswith('/'):
-            v = '/' + v
+        if not v.startswith("/"):
+            v = "/" + v
         return v
 
-    @field_validator('tags')
+    @field_validator("tags")
     @classmethod
     def validate_tags(cls, v: List[str]) -> List[str]:
         """Validate and normalize tags"""
@@ -119,18 +140,24 @@ class AIToolDefinition(BaseModel):
 
 class PluginAIConfig(BaseModel):
     """Plugin-level AI tools configuration"""
+
     default_enabled: bool = Field(default=True, description="Enable AI tools by default")
-    tools: List[AIToolDefinition] = Field(default_factory=list, description="AI tools provided by plugin")
+    tools: List[AIToolDefinition] = Field(
+        default_factory=list, description="AI tools provided by plugin"
+    )
 
     # Global configuration
-    shared_configuration: ToolConfigurationSchema = Field(default_factory=ToolConfigurationSchema,
-                                                         description="Shared configuration for all tools")
-    shared_defaults: Dict[str, Any] = Field(default_factory=dict,
-                                            description="Default values for shared configuration")
+    shared_configuration: ToolConfigurationSchema = Field(
+        default_factory=ToolConfigurationSchema, description="Shared configuration for all tools"
+    )
+    shared_defaults: Dict[str, Any] = Field(
+        default_factory=dict, description="Default values for shared configuration"
+    )
 
 
 class DependencySpec(BaseModel):
     """Plugin dependency specification"""
+
     name: str = Field(..., description="Dependency name")
     version: str = Field(..., description="Required version (semver)")
     optional: bool = Field(default=False, description="Whether dependency is optional")
@@ -166,18 +193,24 @@ class PluginManifestV3(BaseModel):
     ai_tools: Optional[PluginAIConfig] = Field(None, description="AI tools provided by plugin")
 
     # Dependencies
-    dependencies: List[DependencySpec] = Field(default_factory=list, description="Plugin dependencies")
+    dependencies: List[DependencySpec] = Field(
+        default_factory=list, description="Plugin dependencies"
+    )
     python_version: str = Field(default=">=3.11", description="Required Python version")
 
     # Installation
     install_command: Optional[str] = Field(None, description="Custom installation command")
-    configuration_schema: ToolConfigurationSchema = Field(default_factory=ToolConfigurationSchema,
-                                                          description="Plugin configuration schema")
-    default_configuration: Dict[str, Any] = Field(default_factory=dict,
-                                                   description="Default plugin configuration")
+    configuration_schema: ToolConfigurationSchema = Field(
+        default_factory=ToolConfigurationSchema, description="Plugin configuration schema"
+    )
+    default_configuration: Dict[str, Any] = Field(
+        default_factory=dict, description="Default plugin configuration"
+    )
 
     # Lifecycle
-    requires_restart: bool = Field(default=False, description="Whether plugin requires restart after install")
+    requires_restart: bool = Field(
+        default=False, description="Whether plugin requires restart after install"
+    )
     is_default_enabled: bool = Field(default=True, description="Enable by default")
     can_be_disabled: bool = Field(default=True, description="Allow users to disable")
 
@@ -190,33 +223,36 @@ class PluginManifestV3(BaseModel):
 
     # Compatibility
     minder_version: str = Field(default=">=1.0.0", description="Compatible Minder version")
-    breaking_changes: List[str] = Field(default_factory=list,
-                                        description="List of breaking changes in this version")
+    breaking_changes: List[str] = Field(
+        default_factory=list, description="List of breaking changes in this version"
+    )
 
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.now, description="Creation timestamp")
     updated_at: datetime = Field(default_factory=datetime.now, description="Last update timestamp")
 
-    @field_validator('name')
+    @field_validator("name")
     @classmethod
     def validate_name(cls, v: str) -> str:
         """Validate plugin name format"""
         v = v.lower().strip()
-        if not v.replace('-', '').replace('_', '').isalnum():
-            raise ValueError("Plugin name must contain only alphanumeric characters, hyphens, and underscores")
+        if not v.replace("-", "").replace("_", "").isalnum():
+            raise ValueError(
+                "Plugin name must contain only alphanumeric characters, hyphens, and underscores"
+            )
         return v
 
-    @field_validator('tags')
+    @field_validator("tags")
     @classmethod
     def validate_tags(cls, v: List[str]) -> List[str]:
         """Validate and normalize tags"""
         return [tag.lower().strip() for tag in v if tag.strip()]
 
-    @field_validator('version')
+    @field_validator("version")
     @classmethod
     def validate_version(cls, v: str) -> str:
         """Basic semantic version validation"""
-        parts = v.split('.')
+        parts = v.split(".")
         if len(parts) < 2:
             raise ValueError("Version must follow semantic versioning (e.g., 1.0.0)")
         return v
@@ -242,7 +278,7 @@ class PluginManifestV3(BaseModel):
             tier_order = {
                 PluginTier.COMMUNITY: 0,
                 PluginTier.PROFESSIONAL: 1,
-                PluginTier.ENTERPRISE: 2
+                PluginTier.ENTERPRISE: 2,
             }
             required_tier_level = tier_order[tier]
 
@@ -286,22 +322,22 @@ class PluginManifestValidator:
 
                 # Check if tools with required configuration have defaults
                 if tool.requires_configuration and not tool.default_configuration:
-                    warnings.append(f"Tool '{tool.name}' requires configuration but has no defaults")
+                    warnings.append(
+                        f"Tool '{tool.name}' requires configuration but has no defaults"
+                    )
 
                 # Validate endpoint paths
-                if not tool.endpoint_path.startswith('/'):
+                if not tool.endpoint_path.startswith("/"):
                     warnings.append(f"Tool '{tool.name}' endpoint path should start with '/'")
 
         return warnings
 
     @staticmethod
-    def check_tier_compatibility(manifest: PluginManifestV3, user_tier: PluginTier) -> Dict[str, Any]:
+    def check_tier_compatibility(
+        manifest: PluginManifestV3, user_tier: PluginTier
+    ) -> Dict[str, Any]:
         """Check if plugin is compatible with user tier"""
-        tier_order = {
-            PluginTier.COMMUNITY: 0,
-            PluginTier.PROFESSIONAL: 1,
-            PluginTier.ENTERPRISE: 2
-        }
+        tier_order = {PluginTier.COMMUNITY: 0, PluginTier.PROFESSIONAL: 1, PluginTier.ENTERPRISE: 2}
 
         plugin_tier_level = tier_order[manifest.tier]
         user_tier_level = tier_order[user_tier]
@@ -321,7 +357,7 @@ class PluginManifestValidator:
             "user_tier": user_tier,
             "available_tools": available_tools,
             "total_tools": manifest.get_ai_tools_count(),
-            "restricted_tools": manifest.get_ai_tools_count() - len(available_tools)
+            "restricted_tools": manifest.get_ai_tools_count() - len(available_tools),
         }
 
 
@@ -337,15 +373,11 @@ EXAMPLE_MANIFEST = {
     "tags": ["data", "analysis", "visualization"],
     "license": "MIT",
     "tier": "professional",
-
     "ai_tools": {
         "default_enabled": True,
         "shared_configuration": {
             "properties": {
-                "api_key": {
-                    "type": "string",
-                    "description": "API key for external services"
-                }
+                "api_key": {"type": "string", "description": "API key for external services"}
             }
         },
         "tools": [
@@ -359,19 +391,12 @@ EXAMPLE_MANIFEST = {
                 "http_method": "POST",
                 "required_tier": "community",
                 "parameters_schema": {
-                    "data": {
-                        "type": "array",
-                        "description": "Time series data",
-                        "required": True
-                    }
+                    "data": {"type": "array", "description": "Time series data", "required": True}
                 },
                 "response_schema": {
                     "type": "object",
-                    "properties": {
-                        "trends": {"type": "array"},
-                        "confidence": {"type": "number"}
-                    }
-                }
+                    "properties": {"trends": {"type": "array"}, "confidence": {"type": "number"}},
+                },
             },
             {
                 "name": "predictive_modeling",
@@ -385,51 +410,32 @@ EXAMPLE_MANIFEST = {
                 "requires_configuration": True,
                 "configuration_schema": {
                     "properties": {
-                        "model_type": {
-                            "type": "string",
-                            "description": "Type of ML model"
-                        },
+                        "model_type": {"type": "string", "description": "Type of ML model"},
                         "accuracy_threshold": {
                             "type": "number",
-                            "description": "Minimum accuracy threshold"
-                        }
+                            "description": "Minimum accuracy threshold",
+                        },
                     },
-                    "required": ["model_type"]
+                    "required": ["model_type"],
                 },
-                "default_configuration": {
-                    "model_type": "random_forest",
-                    "accuracy_threshold": 0.8
-                }
-            }
-        ]
+                "default_configuration": {"model_type": "random_forest", "accuracy_threshold": 0.8},
+            },
+        ],
     },
-
     "dependencies": [
-        {
-            "name": "pandas",
-            "version": ">=2.0.0",
-            "optional": False
-        },
-        {
-            "name": "scikit-learn",
-            "version": ">=1.3.0",
-            "optional": False
-        }
+        {"name": "pandas", "version": ">=2.0.0", "optional": False},
+        {"name": "scikit-learn", "version": ">=1.3.0", "optional": False},
     ],
-
     "configuration_schema": {
         "properties": {
             "max_data_points": {
                 "type": "integer",
-                "description": "Maximum data points for analysis"
+                "description": "Maximum data points for analysis",
             }
         }
     },
-    "default_configuration": {
-        "max_data_points": 10000
-    },
-
+    "default_configuration": {"max_data_points": 10000},
     "homepage": "https://datacorp.example/plugins/advanced-analytics",
     "repository": "https://github.com/datacorp/advanced-analytics-plugin",
-    "documentation": "https://docs.datacorp.example/advanced-analytics"
+    "documentation": "https://docs.datacorp.example/advanced-analytics",
 }

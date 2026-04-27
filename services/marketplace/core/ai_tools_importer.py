@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 async def import_ai_tools_from_manifest(
-    conn: asyncpg.Connection,
-    plugin_id: str,
-    manifest: Dict[str, Any]
+    conn: asyncpg.Connection, plugin_id: str, manifest: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Import AI tools from plugin manifest into marketplace database
@@ -32,11 +30,7 @@ async def import_ai_tools_from_manifest(
     ai_tools_section = manifest.get("ai_tools")
 
     if not ai_tools_section:
-        return {
-            "success": True,
-            "tools_imported": 0,
-            "message": "No AI tools section in manifest"
-        }
+        return {"success": True, "tools_imported": 0, "message": "No AI tools section in manifest"}
 
     # Handle both list and dict formats
     if isinstance(ai_tools_section, list):
@@ -44,10 +38,7 @@ async def import_ai_tools_from_manifest(
     elif isinstance(ai_tools_section, dict):
         tools_data = ai_tools_section.get("tools", [])
     else:
-        return {
-            "success": False,
-            "error": "ai_tools must be a list or dict"
-        }
+        return {"success": False, "error": "ai_tools must be a list or dict"}
 
     imported_count = 0
     errors = []
@@ -63,7 +54,8 @@ async def import_ai_tools_from_manifest(
             # Check if tool already exists
             existing = await conn.fetchrow(
                 "SELECT id FROM marketplace_ai_tools WHERE plugin_id = $1 AND tool_name = $2",
-                plugin_id, tool_name
+                plugin_id,
+                tool_name,
             )
 
             # Build parameters schema
@@ -77,7 +69,7 @@ async def import_ai_tools_from_manifest(
 
                 param_info = {
                     "type": param_def.get("type", "string"),
-                    "description": param_def.get("description", "")
+                    "description": param_def.get("description", ""),
                 }
 
                 if "enum" in param_def:
@@ -124,7 +116,7 @@ async def import_ai_tools_from_manifest(
                     json.dumps(parameters_schema),
                     json.dumps(response_schema),
                     required_tier,
-                    existing["id"]
+                    existing["id"],
                 )
                 logger.info(f"Updated AI tool: {tool_name} for plugin {plugin_id}")
             else:
@@ -149,7 +141,7 @@ async def import_ai_tools_from_manifest(
                     json.dumps(parameters_schema),
                     json.dumps(response_schema),
                     required_tier,
-                    True  # active
+                    True,  # active
                 )
                 logger.info(f"Imported AI tool: {tool_name} for plugin {plugin_id}")
 
@@ -164,14 +156,11 @@ async def import_ai_tools_from_manifest(
         "success": True,
         "tools_imported": imported_count,
         "errors": errors,
-        "message": f"Imported {imported_count} AI tools"
+        "message": f"Imported {imported_count} AI tools",
     }
 
 
-async def deactivate_plugin_ai_tools(
-    conn: asyncpg.Connection,
-    plugin_id: str
-) -> Dict[str, Any]:
+async def deactivate_plugin_ai_tools(conn: asyncpg.Connection, plugin_id: str) -> Dict[str, Any]:
     """
     Deactivate all AI tools for a plugin (when plugin is disabled/uninstalled)
 
@@ -184,7 +173,7 @@ async def deactivate_plugin_ai_tools(
     """
     result = await conn.execute(
         "UPDATE marketplace_ai_tools SET active = FALSE, updated_at = NOW() WHERE plugin_id = $1",
-        plugin_id
+        plugin_id,
     )
 
     # Extract count from result string (format: "UPDATE count")
@@ -192,16 +181,11 @@ async def deactivate_plugin_ai_tools(
 
     logger.info(f"Deactivated {count} AI tools for plugin {plugin_id}")
 
-    return {
-        "success": True,
-        "tools_deactivated": count
-    }
+    return {"success": True, "tools_deactivated": count}
 
 
 async def sync_plugin_tools(
-    plugin_name: str,
-    plugin_id: str,
-    manifest: Dict[str, Any]
+    plugin_name: str, plugin_id: str, manifest: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
     Synchronize AI tools for a plugin
@@ -231,8 +215,4 @@ async def sync_plugin_tools(
 
     except Exception as e:
         logger.error(f"Failed to sync AI tools for {plugin_name}: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "tools_imported": 0
-        }
+        return {"success": False, "error": str(e), "tools_imported": 0}

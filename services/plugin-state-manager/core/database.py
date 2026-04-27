@@ -3,10 +3,11 @@
 Database connection pool management
 """
 
-import asyncpg
-from typing import Optional
-import os
 import logging
+import os
+from typing import Optional
+
+import asyncpg
 
 logger = logging.getLogger(__name__)
 

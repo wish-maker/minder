@@ -72,7 +72,9 @@ class DatabaseMigrationManager:
             result["database_name"] = db_name
 
             # Check if database exists
-            exists = await admin_conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db_name)
+            exists = await admin_conn.fetchval(
+                "SELECT 1 FROM pg_database WHERE datname = $1", db_name
+            )
 
             if exists:
                 self.logger.info(f"✅ Database {db_name} already exists")
@@ -118,8 +120,7 @@ class DatabaseMigrationManager:
 
     async def _create_migrations_table(self, conn: asyncpg.Connection):
         """Create migrations tracking table"""
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS _migrations (
                 id SERIAL PRIMARY KEY,
                 version VARCHAR(255) NOT NULL UNIQUE,
@@ -128,8 +129,7 @@ class DatabaseMigrationManager:
                 execution_time_ms INTEGER,
                 success BOOLEAN DEFAULT TRUE
             )
-        """
-        )
+        """)
         self.logger.info("✅ Migrations table created/verified")
 
     async def run_migrations(
@@ -227,7 +227,9 @@ class DatabaseMigrationManager:
 
         return records
 
-    async def backup_database(self, plugin_id: str, db_config: Dict, backup_path: str = None) -> Dict:
+    async def backup_database(
+        self, plugin_id: str, db_config: Dict, backup_path: str = None
+    ) -> Dict:
         """
         Backup plugin database
 
@@ -369,13 +371,11 @@ class DatabaseMigrationManager:
             List of migration records
         """
         try:
-            rows = await conn.fetch(
-                """
+            rows = await conn.fetch("""
                 SELECT version, name, applied_at, execution_time_ms, success
                 FROM _migrations
                 ORDER BY applied_at DESC
-                """
-            )
+                """)
 
             return [dict(row) for row in rows]
 
@@ -419,19 +419,15 @@ class DatabaseMigrationManager:
             )
 
             # Create user
-            await conn.execute(
-                f"""
+            await conn.execute(f"""
                 CREATE USER "{username}" WITH PASSWORD '{password}'
-            """
-            )
+            """)
 
             # Grant privileges on plugin database
             db_name = db_config.get("database", f"{plugin_id}_db")
-            await conn.execute(
-                f"""
+            await conn.execute(f"""
                 GRANT ALL PRIVILEGES ON DATABASE "{db_name}" TO "{username}"
-            """
-            )
+            """)
 
             await conn.close()
 

@@ -15,10 +15,9 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
+from routes import licensing, state, tools
 
-from routes import state, tools, licensing
-from core.database import get_db_pool, close_db_pool, initialize_database
-
+from core.database import close_db_pool, get_db_pool, initialize_database
 
 # ============================================================================
 # Settings
@@ -70,6 +69,7 @@ settings = Settings()
 # FastAPI Application
 # ============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
@@ -86,6 +86,7 @@ async def lifespan(app: FastAPI):
 
     # Load default plugins
     from core.default_plugins import bootstrap_default_plugins
+
     await bootstrap_default_plugins()
 
     print(f"✅ {settings.APP_NAME} started successfully")
@@ -102,7 +103,7 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
     description="Merkezi plugin yönetimi ve AI tools execution",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware
@@ -119,6 +120,7 @@ app.add_middleware(
 # Health Check
 # ============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -127,7 +129,7 @@ async def health_check():
         "service": settings.APP_NAME,
         "version": settings.VERSION,
         "status": "healthy",
-        "database": "connected" if pool else "disconnected"
+        "database": "connected" if pool else "disconnected",
     }
 
 
@@ -152,5 +154,5 @@ if __name__ == "__main__":
         host=settings.HOST,
         port=settings.PORT,
         reload=True if settings.ENVIRONMENT == "development" else False,
-        log_level=settings.LOG_LEVEL.lower()
+        log_level=settings.LOG_LEVEL.lower(),
     )

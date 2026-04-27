@@ -9,18 +9,13 @@ from typing import Optional
 
 import asyncpg
 import httpx
-
 from models.plugin_state import LicenseTier
 from models.tool_execution import ToolSchema
 
 logger = logging.getLogger(__name__)
 
 
-async def validate_tool_access(
-    conn: asyncpg.Connection,
-    user_id: str,
-    tool_name: str
-) -> dict:
+async def validate_tool_access(conn: asyncpg.Connection, user_id: str, tool_name: str) -> dict:
     """
     Validate if user has access to a tool based on license tier
 
@@ -36,7 +31,7 @@ async def validate_tool_access(
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(
             "http://minder-marketplace:8002/v1/marketplace/ai/tools",
-            params={"tool_name": tool_name}
+            params={"tool_name": tool_name},
         )
 
         if response.status_code != 200:
@@ -44,7 +39,7 @@ async def validate_tool_access(
                 "allowed": False,
                 "tier_required": "community",
                 "user_tier": "unknown",
-                "reason": f"Tool {tool_name} not found"
+                "reason": f"Tool {tool_name} not found",
             }
 
         tools_data = response.json()
@@ -55,7 +50,7 @@ async def validate_tool_access(
                 "allowed": False,
                 "tier_required": "community",
                 "user_tier": "unknown",
-                "reason": f"Tool {tool_name} not found"
+                "reason": f"Tool {tool_name} not found",
             }
 
         tool = tools[0]
@@ -66,12 +61,7 @@ async def validate_tool_access(
     user_tier = "community"
 
     # Define tier hierarchy
-    tier_hierarchy = {
-        "free": 0,
-        "community": 1,
-        "pro": 2,
-        "enterprise": 3
-    }
+    tier_hierarchy = {"free": 0, "community": 1, "pro": 2, "enterprise": 3}
 
     user_level = tier_hierarchy.get(user_tier, 0)
     required_level = tier_hierarchy.get(required_tier, 0)
@@ -79,7 +69,9 @@ async def validate_tool_access(
     allowed = user_level >= required_level
 
     if not allowed:
-        reason = f"This tool requires {required_tier} tier or higher. Your current tier: {user_tier}"
+        reason = (
+            f"This tool requires {required_tier} tier or higher. Your current tier: {user_tier}"
+        )
     else:
         reason = None
 
@@ -87,18 +79,14 @@ async def validate_tool_access(
         "allowed": allowed,
         "tier_required": required_tier,
         "user_tier": user_tier,
-        "reason": reason
+        "reason": reason,
     }
 
 
-async def get_plugin_license_tier(
-    conn: asyncpg.Connection,
-    plugin_name: str
-) -> LicenseTier:
+async def get_plugin_license_tier(conn: asyncpg.Connection, plugin_name: str) -> LicenseTier:
     """Get plugin's required license tier"""
     row = await conn.fetchrow(
-        "SELECT license_tier FROM plugin_states WHERE plugin_name = $1",
-        plugin_name
+        "SELECT license_tier FROM plugin_states WHERE plugin_name = $1", plugin_name
     )
 
     if row:
@@ -106,8 +94,7 @@ async def get_plugin_license_tier(
 
     # Check default plugins
     default_row = await conn.fetchrow(
-        "SELECT min_tier FROM default_plugins WHERE plugin_name = $1",
-        plugin_name
+        "SELECT min_tier FROM default_plugins WHERE plugin_name = $1", plugin_name
     )
 
     if default_row:
@@ -117,9 +104,7 @@ async def get_plugin_license_tier(
 
 
 async def check_plugin_license(
-    conn: asyncpg.Connection,
-    plugin_name: str,
-    license_key: Optional[str] = None
+    conn: asyncpg.Connection, plugin_name: str, license_key: Optional[str] = None
 ) -> dict:
     """
     Check if plugin license is valid
@@ -137,34 +122,26 @@ async def check_plugin_license(
 
     # For free/community plugins, no license key needed
     if required_tier in [LicenseTier.FREE, LicenseTier.COMMUNITY]:
-        return {
-            "valid": True,
-            "tier": required_tier.value,
-            "message": "No license key required"
-        }
+        return {"valid": True, "tier": required_tier.value, "message": "No license key required"}
 
     # For paid plugins, validate license key
     if not license_key:
         return {
             "valid": False,
             "tier": required_tier.value,
-            "message": f"License key required for {required_tier.value} tier"
+            "message": f"License key required for {required_tier.value} tier",
         }
 
     # TODO: Implement actual license key validation
     # For now, accept any non-empty key
-    return {
-        "valid": True,
-        "tier": required_tier.value,
-        "message": "License key validated"
-    }
+    return {"valid": True, "tier": required_tier.value, "message": "License key validated"}
 
 
 async def update_plugin_license(
     conn: asyncpg.Connection,
     plugin_name: str,
     license_tier: LicenseTier,
-    license_key: Optional[str] = None
+    license_key: Optional[str] = None,
 ) -> dict:
     """
     Update plugin's license information
@@ -187,7 +164,7 @@ async def update_plugin_license(
         """,
         license_tier.value,
         license_key,
-        plugin_name
+        plugin_name,
     )
 
     return dict(row) if row else None

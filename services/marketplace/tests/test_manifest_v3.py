@@ -4,25 +4,26 @@ Tests the comprehensive plugin manifest with AI tools support
 """
 
 import os
-import pytest
 from datetime import datetime
 
+import pytest
+
 # Set test environment variables
-os.environ.setdefault('MARKETPLACE_DATABASE_HOST', 'localhost')
-os.environ.setdefault('MARKETPLACE_DATABASE_PORT', '5432')
-os.environ.setdefault('MARKETPLACE_DATABASE_USER', 'minder')
-os.environ.setdefault('MARKETPLACE_DATABASE_PASSWORD', 'dev_password_change_me')
-os.environ.setdefault('MARKETPLACE_DATABASE_NAME', 'minder_marketplace')
+os.environ.setdefault("MARKETPLACE_DATABASE_HOST", "localhost")
+os.environ.setdefault("MARKETPLACE_DATABASE_PORT", "5432")
+os.environ.setdefault("MARKETPLACE_DATABASE_USER", "minder")
+os.environ.setdefault("MARKETPLACE_DATABASE_PASSWORD", "dev_password_change_me")
+os.environ.setdefault("MARKETPLACE_DATABASE_NAME", "minder_marketplace")
 
 from services.marketplace.models.manifest_schema_v3 import (
+    EXAMPLE_MANIFEST,
+    AIToolCategory,
+    AIToolDefinition,
+    AIToolType,
+    PluginAIConfig,
     PluginManifestV3,
     PluginManifestValidator,
-    AIToolDefinition,
-    PluginAIConfig,
     PluginTier,
-    AIToolType,
-    AIToolCategory,
-    EXAMPLE_MANIFEST
 )
 
 
@@ -34,7 +35,7 @@ def test_basic_manifest_creation():
         "description": "A test plugin for validation",
         "version": "1.0.0",
         "author": "Test Author",
-        "category": "testing"
+        "category": "testing",
     }
 
     manifest = PluginManifestV3(**manifest_data)
@@ -55,7 +56,7 @@ def test_ai_tools_definition():
         "category": AIToolCategory.ANALYSIS,
         "endpoint_path": "/api/v1/analyze",
         "http_method": "POST",
-        "required_tier": PluginTier.COMMUNITY
+        "required_tier": PluginTier.COMMUNITY,
     }
 
     tool = AIToolDefinition(**tool_data)
@@ -85,7 +86,7 @@ def test_plugin_with_ai_tools():
                     "description": "Analyzes text data",
                     "tool_type": AIToolType.ANALYSIS,
                     "endpoint_path": "/api/v1/text-analysis",
-                    "required_tier": PluginTier.COMMUNITY
+                    "required_tier": PluginTier.COMMUNITY,
                 },
                 {
                     "name": "advanced_ml",
@@ -95,13 +96,10 @@ def test_plugin_with_ai_tools():
                     "endpoint_path": "/api/v1/advanced-ml",
                     "required_tier": PluginTier.PROFESSIONAL,
                     "requires_configuration": True,
-                    "default_configuration": {
-                        "model": "gpt-4",
-                        "temperature": 0.7
-                    }
-                }
-            ]
-        }
+                    "default_configuration": {"model": "gpt-4", "temperature": 0.7},
+                },
+            ],
+        },
     }
 
     manifest = PluginManifestV3(**manifest_data)
@@ -138,7 +136,7 @@ def test_tier_based_access():
                     "description": "Basic functionality",
                     "tool_type": AIToolType.ACTION,
                     "endpoint_path": "/api/basic",
-                    "required_tier": PluginTier.COMMUNITY
+                    "required_tier": PluginTier.COMMUNITY,
                 },
                 {
                     "name": "pro_tool",
@@ -146,7 +144,7 @@ def test_tier_based_access():
                     "description": "Professional features",
                     "tool_type": AIToolType.ACTION,
                     "endpoint_path": "/api/pro",
-                    "required_tier": PluginTier.PROFESSIONAL
+                    "required_tier": PluginTier.PROFESSIONAL,
                 },
                 {
                     "name": "enterprise_tool",
@@ -154,10 +152,10 @@ def test_tier_based_access():
                     "description": "Enterprise features",
                     "tool_type": AIToolType.ACTION,
                     "endpoint_path": "/api/enterprise",
-                    "required_tier": PluginTier.ENTERPRISE
-                }
+                    "required_tier": PluginTier.ENTERPRISE,
+                },
             ]
-        }
+        },
     }
 
     manifest = PluginManifestV3(**manifest_data)
@@ -197,12 +195,10 @@ def test_manifest_validation():
                     "endpoint_path": "/api/v1/well-configured",
                     "required_tier": PluginTier.COMMUNITY,
                     "requires_configuration": True,
-                    "default_configuration": {
-                        "api_key": "default_key"
-                    }
+                    "default_configuration": {"api_key": "default_key"},
                 }
             ]
-        }
+        },
     }
 
     manifest = PluginManifestV3(**manifest_data)
@@ -212,9 +208,7 @@ def test_manifest_validation():
     assert len(warnings) == 0
 
     # Check tier compatibility
-    compatibility = PluginManifestValidator.check_tier_compatibility(
-        manifest, PluginTier.COMMUNITY
-    )
+    compatibility = PluginManifestValidator.check_tier_compatibility(manifest, PluginTier.COMMUNITY)
     assert compatibility["is_compatible"] == True
     assert compatibility["total_tools"] == 1
     assert len(compatibility["available_tools"]) == 1
@@ -249,7 +243,7 @@ def test_manifest_validation_errors():
             description="Plugin with invalid name",
             version="1.0.0",
             author="Test",
-            category="test"
+            category="test",
         )
     assert "alphanumeric" in str(exc_info.value).lower()
 
@@ -261,7 +255,7 @@ def test_manifest_validation_errors():
             description="Test",
             version="invalid",
             author="Test",
-            category="test"
+            category="test",
         )
     assert "semantic" in str(exc_info.value).lower()
 
@@ -276,7 +270,7 @@ def test_configuration_requirements():
         version="1.0.0",
         author="Test",
         category="test",
-        default_configuration={"api_key": "change_me"}
+        default_configuration={"api_key": "change_me"},
     )
 
     assert manifest_with_config.requires_configuration() == True
@@ -298,10 +292,10 @@ def test_configuration_requirements():
                     "tool_type": AIToolType.ANALYSIS,
                     "endpoint_path": "/api/tool",
                     "requires_configuration": True,
-                    "default_configuration": {"setting": "value"}
+                    "default_configuration": {"setting": "value"},
                 }
             ]
-        }
+        },
     )
 
     assert manifest_with_tools.requires_configuration() == True
@@ -313,7 +307,7 @@ def test_configuration_requirements():
         description="Simple plugin",
         version="1.0.0",
         author="Test",
-        category="test"
+        category="test",
     )
 
     assert manifest_simple.requires_configuration() == False
@@ -328,7 +322,7 @@ def test_tag_normalization():
         version="1.0.0",
         author="Test",
         category="test",
-        tags=["Data Analysis", " MACHINE LEARNING ", "", "visualization"]
+        tags=["Data Analysis", " MACHINE LEARNING ", "", "visualization"],
     )
 
     assert manifest.tags == ["data analysis", "machine learning", "visualization"]
@@ -341,7 +335,7 @@ def test_endpoint_path_validation():
         display_name="Test Tool",
         description="Test",
         tool_type=AIToolType.ACTION,
-        endpoint_path="api/v1/test"  # Missing leading slash
+        endpoint_path="api/v1/test",  # Missing leading slash
     )
 
     # Should auto-correct to start with /

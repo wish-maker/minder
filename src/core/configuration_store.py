@@ -242,7 +242,9 @@ class ConfigurationStore:
 
             if update_result["success"]:
                 result["success"] = True
-                self.logger.info(f"✅ Rolled back {plugin_id} config from v{from_version} to v{target_version}")
+                self.logger.info(
+                    f"✅ Rolled back {plugin_id} config from v{from_version} to v{target_version}"
+                )
             else:
                 result["errors"].extend(update_result.get("errors", []))
 
@@ -363,7 +365,9 @@ class ConfigurationStore:
         """
         try:
             config = json.loads(config_json)
-            return await self.update_plugin_config(plugin_id=plugin_id, config=config, schema=schema)
+            return await self.update_plugin_config(
+                plugin_id=plugin_id, config=config, schema=schema
+            )
         except Exception as e:
             self.logger.error(f"❌ Failed to import config: {e}")
             return {"success": False, "errors": [str(e)]}
@@ -409,7 +413,9 @@ class ConfigurationStore:
             merged = self._deep_merge(current, updates)
 
             # Update
-            return await self.update_plugin_config(plugin_id=plugin_id, config=merged, schema=schema)
+            return await self.update_plugin_config(
+                plugin_id=plugin_id, config=merged, schema=schema
+            )
 
         except Exception as e:
             self.logger.error(f"❌ Failed to merge config: {e}")

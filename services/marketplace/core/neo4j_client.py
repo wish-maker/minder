@@ -8,9 +8,10 @@ This module handles all graph database operations including:
 - Recommendations
 """
 
-from neo4j import AsyncGraphDatabase
-from typing import List, Dict, Optional, Any
 import logging
+from typing import Any, Dict, List, Optional
+
+from neo4j import AsyncGraphDatabase
 
 logger = logging.getLogger("minder.neo4j_client")
 
@@ -18,7 +19,12 @@ logger = logging.getLogger("minder.neo4j_client")
 class Neo4jClient:
     """Neo4j graph database client for managing plugin relationships"""
 
-    def __init__(self, uri: str = "bolt://neo4j:7687", user: str = "neo4j", password: str = "neo4j_test_password_change_me"):
+    def __init__(
+        self,
+        uri: str = "bolt://neo4j:7687",
+        user: str = "neo4j",
+        password: str = "neo4j_test_password_change_me",
+    ):
         """
         Initialize Neo4j client
 
@@ -50,16 +56,13 @@ class Neo4jClient:
         """
 
         async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                id=plugin_data["id"],
-                properties=plugin_data
-            )
+            result = await session.run(query, id=plugin_data["id"], properties=plugin_data)
             record = await result.single()
             return record["plugin_id"] if record else None
 
-    async def add_dependency(self, plugin_id: str, depends_on_plugin_id: str,
-                           dependency_type: str = "requires") -> bool:
+    async def add_dependency(
+        self, plugin_id: str, depends_on_plugin_id: str, dependency_type: str = "requires"
+    ) -> bool:
         """
         Add a dependency relationship between two plugins
 
@@ -80,9 +83,7 @@ class Neo4jClient:
 
         async with self.driver.session() as session:
             result = await session.run(
-                query,
-                plugin_id=plugin_id,
-                depends_on_id=depends_on_plugin_id
+                query, plugin_id=plugin_id, depends_on_id=depends_on_plugin_id
             )
             record = await result.single()
             return record["true"] if record else False
@@ -125,8 +126,9 @@ class Neo4jClient:
             result = await session.run(query, plugin_id=plugin_id)
             return [record.data() for record in await result.list()]
 
-    async def recommend_plugins(self, installed_plugin_ids: List[str],
-                              limit: int = 5) -> List[Dict[str, Any]]:
+    async def recommend_plugins(
+        self, installed_plugin_ids: List[str], limit: int = 5
+    ) -> List[Dict[str, Any]]:
         """
         Recommend plugins based on installed ones using collaborative filtering
 
@@ -150,11 +152,7 @@ class Neo4jClient:
         """
 
         async with self.driver.session() as session:
-            result = await session.run(
-                query,
-                installed_ids=installed_plugin_ids,
-                limit=limit
-            )
+            result = await session.run(query, installed_ids=installed_plugin_ids, limit=limit)
             return [record.data() for record in await result.list()]
 
     async def get_dependency_chain(self, plugin_id: str) -> List[Dict[str, Any]]:
@@ -195,9 +193,7 @@ async def get_neo4j_client() -> Neo4jClient:
 
     if _neo4j_client is None:
         _neo4j_client = Neo4jClient(
-            uri="bolt://neo4j:7687",
-            user="neo4j",
-            password="neo4j_test_password_change_me"
+            uri="bolt://neo4j:7687", user="neo4j", password="neo4j_test_password_change_me"
         )
 
     return _neo4j_client

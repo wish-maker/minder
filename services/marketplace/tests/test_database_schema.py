@@ -19,14 +19,12 @@ async def test_database_schema_created():
     conn = await get_db_connection()
 
     # Check tables exist
-    tables = await conn.fetch(
-        """
+    tables = await conn.fetch("""
         SELECT table_name
         FROM information_schema.tables
         WHERE table_schema = 'public'
         ORDER BY table_name
-    """
-    )
+    """)
 
     table_names = [row["table_name"] for row in tables]
 
@@ -41,14 +39,12 @@ async def test_database_schema_created():
     assert "marketplace_users" in table_names
 
     # Check indexes
-    indexes = await conn.fetch(
-        """
+    indexes = await conn.fetch("""
         SELECT indexname
         FROM pg_indexes
         WHERE schemaname = 'public'
         ORDER BY indexname
-    """
-    )
+    """)
 
     index_names = [row["indexname"] for row in indexes]
     assert "idx_marketplace_plugins_name" in index_names
@@ -56,8 +52,7 @@ async def test_database_schema_created():
     assert "idx_marketplace_installations_user_plugin" in index_names
 
     # Check foreign keys
-    fks = await conn.fetch(
-        """
+    fks = await conn.fetch("""
         SELECT
             tc.table_name,
             kcu.column_name,
@@ -70,15 +65,13 @@ async def test_database_schema_created():
             ON ccu.constraint_name = tc.constraint_name
         WHERE tc.constraint_type = 'FOREIGN KEY'
         ORDER BY tc.table_name
-    """
-    )
+    """)
 
     # Should have foreign keys
     assert len(fks) > 0
 
     # Check CHECK constraints were added
-    constraints = await conn.fetch(
-        """
+    constraints = await conn.fetch("""
         SELECT
             tc.table_name,
             tc.constraint_name,
@@ -89,8 +82,7 @@ async def test_database_schema_created():
         WHERE tc.constraint_schema = 'public'
             AND tc.constraint_type = 'CHECK'
         ORDER BY tc.table_name
-    """
-    )
+    """)
 
     constraint_names = [row["constraint_name"] for row in constraints]
 
@@ -103,15 +95,13 @@ async def test_database_schema_created():
     assert "check_price_yearly" in constraint_names
 
     # Check NOT NULL constraints on plugins table
-    plugins_columns = await conn.fetch(
-        """
+    plugins_columns = await conn.fetch("""
         SELECT column_name, is_nullable
         FROM information_schema.columns
         WHERE table_name = 'marketplace_plugins'
             AND table_schema = 'public'
         ORDER BY column_name
-    """
-    )
+    """)
 
     columns_dict = {row["column_name"]: row["is_nullable"] for row in plugins_columns}
 
@@ -120,38 +110,32 @@ async def test_database_schema_created():
     assert columns_dict.get("author_email") == "NO"
 
     # Check featured plugins index exists
-    featured_index = await conn.fetch(
-        """
+    featured_index = await conn.fetch("""
         SELECT indexname
         FROM pg_indexes
         WHERE schemaname = 'public'
             AND indexname = 'idx_marketplace_plugins_featured'
-    """
-    )
+    """)
 
     assert len(featured_index) > 0, "Featured plugins index should exist"
 
     # Check trigger function exists
-    trigger_func = await conn.fetch(
-        """
+    trigger_func = await conn.fetch("""
         SELECT proname
         FROM pg_proc
         WHERE proname = 'update_updated_at_column'
-    """
-    )
+    """)
 
     assert len(trigger_func) > 0, "update_updated_at_column function should exist"
 
     # Check triggers exist
-    triggers = await conn.fetch(
-        """
+    triggers = await conn.fetch("""
         SELECT trigger_name
         FROM information_schema.triggers
         WHERE trigger_schema = 'public'
             AND trigger_name LIKE 'update_%_updated_at'
         ORDER BY trigger_name
-    """
-    )
+    """)
 
     trigger_names = [row["trigger_name"] for row in triggers]
 
@@ -162,8 +146,7 @@ async def test_database_schema_created():
     assert "update_marketplace_licenses_updated_at" in trigger_names
 
     # Check CASCADE delete on user_id foreign keys
-    cascade_fks = await conn.fetch(
-        """
+    cascade_fks = await conn.fetch("""
         SELECT
             tc.table_name,
             kcu.column_name,
@@ -176,8 +159,7 @@ async def test_database_schema_created():
         WHERE kcu.column_name = 'user_id'
             AND rc.delete_rule = 'CASCADE'
         ORDER BY tc.table_name
-    """
-    )
+    """)
 
     cascade_tables = [row["table_name"] for row in cascade_fks]
 

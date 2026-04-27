@@ -37,7 +37,12 @@ MINDER_FUNCTIONS = [
         "description": "Get current price and market data for a specific cryptocurrency from the database.",
         "parameters": {
             "type": "object",
-            "properties": {"symbol": {"type": "string", "description": "Cryptocurrency symbol (e.g., BTC, ETH, SOL)"}},
+            "properties": {
+                "symbol": {
+                    "type": "string",
+                    "description": "Cryptocurrency symbol (e.g., BTC, ETH, SOL)",
+                }
+            },
             "required": ["symbol"],
         },
     },
@@ -62,7 +67,11 @@ MINDER_FUNCTIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Maximum number of articles to return", "default": 10},
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of articles to return",
+                    "default": 10,
+                },
                 "source": {"type": "string", "description": "Filter by news source"},
             },
             "required": [],
@@ -94,7 +103,11 @@ MINDER_FUNCTIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "limit": {"type": "integer", "description": "Number of recent metrics to return", "default": 10}
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of recent metrics to return",
+                    "default": 10,
+                }
             },
             "required": [],
         },
@@ -105,7 +118,11 @@ MINDER_FUNCTIONS = [
         "parameters": {
             "type": "object",
             "properties": {
-                "location": {"type": "string", "description": "Location to get weather for", "default": "Istanbul"}
+                "location": {
+                    "type": "string",
+                    "description": "Location to get weather for",
+                    "default": "Istanbul",
+                }
             },
             "required": [],
         },
@@ -159,7 +176,9 @@ class MinderToolExecutor:
         """Get crypto price from database"""
         symbol = params.get("symbol", "BTC")
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/crypto/analysis?symbol={symbol}")
+            response = await client.get(
+                f"{self.plugin_registry_url}/v1/plugins/crypto/analysis?symbol={symbol}"
+            )
             response.raise_for_status()
             return response.json()
 
@@ -174,7 +193,9 @@ class MinderToolExecutor:
         """Get latest news from database"""
         limit = params.get("limit", 10)
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/news/analysis?limit={limit}")
+            response = await client.get(
+                f"{self.plugin_registry_url}/v1/plugins/news/analysis?limit={limit}"
+            )
             response.raise_for_status()
             return response.json()
 
@@ -189,7 +210,9 @@ class MinderToolExecutor:
         """Enable a plugin"""
         plugin_name = params.get("plugin_name")
         async with httpx.AsyncClient() as client:
-            response = await client.post(f"{self.plugin_registry_url}/v1/plugins/{plugin_name}/enable")
+            response = await client.post(
+                f"{self.plugin_registry_url}/v1/plugins/{plugin_name}/enable"
+            )
             response.raise_for_status()
             return response.json()
 
@@ -197,7 +220,9 @@ class MinderToolExecutor:
         """Get network metrics"""
         limit = params.get("limit", 10)
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{self.plugin_registry_url}/v1/plugins/network/analysis?limit={limit}")
+            response = await client.get(
+                f"{self.plugin_registry_url}/v1/plugins/network/analysis?limit={limit}"
+            )
             response.raise_for_status()
             return response.json()
 
@@ -298,7 +323,8 @@ async def get_ai_status():
             response = await client.get("http://ollama:11434/api/tags", timeout=5.0)
             ollama_status = "healthy" if response.status_code == 200 else "unhealthy"
             models = response.json().get("models", [])
-    except:
+    except (httpx.RequestError, httpx.TimeoutException, Exception) as e:
+        logger.warning(f"Ollama status check failed: {e}")
         ollama_status = "unreachable"
         models = []
 
@@ -348,7 +374,12 @@ async def chat_with_minder(user_message: str) -> str:
 
             result = await tool_executor.execute_tool(function_name, arguments)
             tool_results.append(
-                {"tool_call_id": tool_call["id"], "role": "tool", "name": function_name, "content": json.dumps(result)}
+                {
+                    "tool_call_id": tool_call["id"],
+                    "role": "tool",
+                    "name": function_name,
+                    "content": json.dumps(result),
+                }
             )
 
         # 5. Get final response from LLM with tool results
@@ -377,7 +408,11 @@ EXAMPLE_CONVERSATIONS = [
         "expected_tool": "get_latest_news",
         "expected_params": {"limit": 5},
     },
-    {"user": "Check the status of all plugins", "expected_tool": "get_plugin_status", "expected_params": {}},
+    {
+        "user": "Check the status of all plugins",
+        "expected_tool": "get_plugin_status",
+        "expected_params": {},
+    },
     {
         "user": "Get the latest network metrics",
         "expected_tool": "get_network_metrics",

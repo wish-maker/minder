@@ -25,7 +25,9 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -166,7 +168,9 @@ async def fine_tune_model(request: FineTuneRequest):
 
     # Implement fine-tuning logic
     # This is a placeholder - implement actual fine-tuning
-    fine_tuned_model_id = f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    fine_tuned_model_id = (
+        f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    )
 
     logger.info(f"Starting fine-tuning: {request.base_model} -> {fine_tuned_model_id}")
 

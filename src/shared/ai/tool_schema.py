@@ -38,11 +38,17 @@ class AIToolDefinition(BaseModel):
     type: str = Field("analysis", description="Tool type: analysis, action, query")
     endpoint: str = Field(..., description="Plugin endpoint path (e.g., /analysis)")
     method: str = Field("GET", description="HTTP method: GET, POST")
-    parameters: Dict[str, ToolParameter] = Field(default_factory=dict, description="Tool parameters")
-    response_format: Optional[Dict[str, Any]] = Field(None, description="Expected response structure")
+    parameters: Dict[str, ToolParameter] = Field(
+        default_factory=dict, description="Tool parameters"
+    )
+    response_format: Optional[Dict[str, Any]] = Field(
+        None, description="Expected response structure"
+    )
 
 
 class PluginAITools(BaseModel):
     """AI tools section in plugin manifest"""
 
-    tools: List[AIToolDefinition] = Field(default_factory=list, description="AI tools provided by this plugin")
+    tools: List[AIToolDefinition] = Field(
+        default_factory=list, description="AI tools provided by this plugin"
+    )

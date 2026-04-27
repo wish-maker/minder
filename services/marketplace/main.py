@@ -3,8 +3,8 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from services.marketplace.config import settings
 from services.marketplace.core.database import close_pool, get_pool
@@ -59,14 +59,24 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "marketplace", "version": "1.0.0", "environment": settings.ENVIRONMENT}
+    return {
+        "status": "healthy",
+        "service": "marketplace",
+        "version": "1.0.0",
+        "environment": settings.ENVIRONMENT,
+    }
 
 
 # Root endpoint
 @app.get("/")
 async def root():
     """Root endpoint"""
-    return {"service": "Minder Plugin Marketplace", "version": "1.0.0", "docs": "/docs", "health": "/health"}
+    return {
+        "service": "Minder Plugin Marketplace",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 # Global exception handler
@@ -83,12 +93,13 @@ async def global_exception_handler(request, exc):
     )
 
 
+from services.marketplace.routes.ai_tools import router as ai_tools_router
+from services.marketplace.routes.graph_dependencies import router as graph_dependencies_router
+from services.marketplace.routes.licensing import router as licensing_router
+from services.marketplace.routes.management import router as management_router
+
 # Include routers
 from services.marketplace.routes.marketplace import router as marketplace_router
-from services.marketplace.routes.management import router as management_router
-from services.marketplace.routes.ai_tools import router as ai_tools_router
-from services.marketplace.routes.licensing import router as licensing_router
-from services.marketplace.routes.graph_dependencies import router as graph_dependencies_router
 
 app.include_router(marketplace_router)
 app.include_router(management_router)

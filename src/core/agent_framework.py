@@ -106,7 +106,9 @@ class AgentExecutor:
             await self.session.close()
             logger.info("✅ Agent executor cleaned up")
 
-    async def execute_action(self, action: AgentAction, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def execute_action(
+        self, action: AgentAction, context: Dict[str, Any] = None
+    ) -> Dict[str, Any]:
         """Execute an agent action"""
         context = context or {}
 
@@ -151,7 +153,11 @@ class AgentExecutor:
         headers = await self._build_headers(service_id if service_id else None)
 
         async with self.session.get(url, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -176,7 +182,11 @@ class AgentExecutor:
         headers["Content-Type"] = "application/json"
 
         async with self.session.post(url, json=payload, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -201,7 +211,11 @@ class AgentExecutor:
         headers["Content-Type"] = "application/json"
 
         async with self.session.put(url, json=payload, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -224,7 +238,11 @@ class AgentExecutor:
         headers = await self._build_headers(service_id if service_id else None)
 
         async with self.session.delete(url, headers=headers) as response:
-            data = await response.json() if response.content_type == "application/json" else await response.text()
+            data = (
+                await response.json()
+                if response.content_type == "application/json"
+                else await response.text()
+            )
 
             return {
                 "success": response.status < 400,
@@ -233,7 +251,9 @@ class AgentExecutor:
                 "action": action.name,
             }
 
-    async def _execute_command(self, action: AgentAction, context: Dict[str, Any]) -> Dict[str, Any]:
+    async def _execute_command(
+        self, action: AgentAction, context: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Execute shell command (use with caution!)"""
         command = action.parameters.get("command")
         if not command:

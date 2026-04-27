@@ -1,11 +1,12 @@
 # services/marketplace/routes/marketplace.py
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.database import get_pool
-from services.marketplace.models.plugin import PluginResponse, PluginListResponse, PluginCreate
+from services.marketplace.models.plugin import PluginCreate, PluginListResponse, PluginResponse
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
 
@@ -16,7 +17,7 @@ async def list_plugins(
     page_size: int = Query(10, ge=1, le=100),
     category: Optional[str] = None,
     pricing_model: Optional[str] = None,
-    status: Optional[str] = "approved"
+    status: Optional[str] = "approved",
 ):
     """
     List all plugins in marketplace
@@ -77,7 +78,7 @@ async def list_plugins(
             ORDER BY created_at DESC
             LIMIT ${param_count + 1} OFFSET ${param_count + 2}
             """,
-            *params
+            *params,
         )
 
         plugins = [
@@ -103,7 +104,7 @@ async def list_plugins(
                 updated_at=row["updated_at"],
                 published_at=row["published_at"],
                 developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None
+                category_id=str(row["category_id"]) if row["category_id"] else None,
             )
             for row in rows
         ]
@@ -115,7 +116,7 @@ async def list_plugins(
             count=len(plugins),
             page=page,
             page_size=page_size,
-            total_pages=total_pages
+            total_pages=total_pages,
         )
 
 
@@ -123,7 +124,7 @@ async def list_plugins(
 async def search_plugins(
     q: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100)
+    page_size: int = Query(10, ge=1, le=100),
 ):
     """Search plugins by name or description"""
     pool = await get_pool()
@@ -140,7 +141,7 @@ async def search_plugins(
             WHERE (name ILIKE $1 OR display_name ILIKE $1 OR description ILIKE $1)
               AND status = 'approved'
             """,
-            search_pattern
+            search_pattern,
         )
 
         # Get plugins
@@ -159,7 +160,9 @@ async def search_plugins(
                 download_count DESC
             LIMIT $2 OFFSET $3
             """,
-            search_pattern, page_size, offset
+            search_pattern,
+            page_size,
+            offset,
         )
 
         plugins = [
@@ -185,7 +188,7 @@ async def search_plugins(
                 updated_at=row["updated_at"],
                 published_at=row["published_at"],
                 developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None
+                category_id=str(row["category_id"]) if row["category_id"] else None,
             )
             for row in rows
         ]
@@ -197,7 +200,7 @@ async def search_plugins(
             count=len(plugins),
             page=page,
             page_size=page_size,
-            total_pages=total_pages
+            total_pages=total_pages,
         )
 
 
@@ -246,7 +249,7 @@ async def create_plugin(plugin_data: PluginCreate):
                 plugin_data.base_tier,
                 "approved",  # Auto-approve internally created plugins
                 plugin_data.developer_id,
-                plugin_data.category_id
+                plugin_data.category_id,
             )
 
             return PluginResponse(
@@ -271,7 +274,7 @@ async def create_plugin(plugin_data: PluginCreate):
                 updated_at=row["updated_at"],
                 published_at=row["published_at"],
                 developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None
+                category_id=str(row["category_id"]) if row["category_id"] else None,
             )
 
     except Exception as e:
@@ -294,7 +297,7 @@ async def get_plugin(plugin_id: str):
             FROM marketplace_plugins
             WHERE id = $1
             """,
-            plugin_id
+            plugin_id,
         )
 
         if not row:
@@ -322,7 +325,7 @@ async def get_plugin(plugin_id: str):
             updated_at=row["updated_at"],
             published_at=row["published_at"],
             developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-            category_id=str(row["category_id"]) if row["category_id"] else None
+            category_id=str(row["category_id"]) if row["category_id"] else None,
         )
 
 
@@ -342,7 +345,7 @@ async def get_plugin(plugin_id: str):
             FROM marketplace_plugins
             WHERE id = $1
             """,
-            plugin_id
+            plugin_id,
         )
 
         if not row:
@@ -370,7 +373,7 @@ async def get_plugin(plugin_id: str):
             updated_at=row["updated_at"],
             published_at=row["published_at"],
             developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-            category_id=str(row["category_id"]) if row["category_id"] else None
+            category_id=str(row["category_id"]) if row["category_id"] else None,
         )
 
 
@@ -378,7 +381,7 @@ async def get_plugin(plugin_id: str):
 async def search_plugins(
     q: str = Query(..., min_length=1),
     page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100)
+    page_size: int = Query(10, ge=1, le=100),
 ):
     """Search plugins by name or description"""
     pool = await get_pool()
@@ -395,7 +398,7 @@ async def search_plugins(
             WHERE (name ILIKE $1 OR display_name ILIKE $1 OR description ILIKE $1)
               AND status = 'approved'
             """,
-            search_pattern
+            search_pattern,
         )
 
         # Get plugins
@@ -414,7 +417,9 @@ async def search_plugins(
                 download_count DESC
             LIMIT $2 OFFSET $3
             """,
-            search_pattern, page_size, offset
+            search_pattern,
+            page_size,
+            offset,
         )
 
         plugins = [
@@ -440,7 +445,7 @@ async def search_plugins(
                 updated_at=row["updated_at"],
                 published_at=row["published_at"],
                 developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None
+                category_id=str(row["category_id"]) if row["category_id"] else None,
             )
             for row in rows
         ]
@@ -452,14 +457,12 @@ async def search_plugins(
             count=len(plugins),
             page=page,
             page_size=page_size,
-            total_pages=total_pages
+            total_pages=total_pages,
         )
 
 
 @router.get("/plugins/featured", response_model=PluginListResponse)
-async def get_featured_plugins(
-    limit: int = Query(10, ge=1, le=50)
-):
+async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
     """Get featured plugins"""
     pool = await get_pool()
 
@@ -476,7 +479,7 @@ async def get_featured_plugins(
             ORDER BY download_count DESC
             LIMIT $1
             """,
-            limit
+            limit,
         )
 
         plugins = [
@@ -502,15 +505,11 @@ async def get_featured_plugins(
                 updated_at=row["updated_at"],
                 published_at=row["published_at"],
                 developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None
+                category_id=str(row["category_id"]) if row["category_id"] else None,
             )
             for row in rows
         ]
 
         return PluginListResponse(
-            plugins=plugins,
-            count=len(plugins),
-            page=1,
-            page_size=limit,
-            total_pages=1
+            plugins=plugins, count=len(plugins), page=1, page_size=limit, total_pages=1
         )

@@ -28,7 +28,9 @@ app = FastAPI(
 )
 
 # Prometheus metrics
-request_counter = Counter("crypto_plugin_requests_total", "Total requests to crypto plugin", ["endpoint", "method"])
+request_counter = Counter(
+    "crypto_plugin_requests_total", "Total requests to crypto plugin", ["endpoint", "method"]
+)
 
 metrics_app = make_asgi_app()
 app.mount("/metrics", metrics_app)
@@ -103,7 +105,9 @@ async def register_with_registry():
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(f"{registry_url}/v1/plugins/register", json=plugin_info, timeout=5.0)
+            response = await client.post(
+                f"{registry_url}/v1/plugins/register", json=plugin_info, timeout=5.0
+            )
             response.raise_for_status()
             logger.info(f"✅ Registered with Plugin Registry: {response.json()}")
     except Exception as e:

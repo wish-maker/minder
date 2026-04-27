@@ -126,7 +126,9 @@ def require_roles(allowed_roles: List[str]):
     def decorator(func):
         async def wrapper(*args, current_user: Dict = None, **kwargs):
             if not current_user:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+                )
 
             user_role = current_user.get("role", "user")
             if user_role not in allowed_roles:
@@ -142,7 +144,9 @@ def require_roles(allowed_roles: List[str]):
     return decorator
 
 
-def create_user_token(user_id: str, username: str, role: str = "user", extra_payload: Dict = None) -> str:
+def create_user_token(
+    user_id: str, username: str, role: str = "user", extra_payload: Dict = None
+) -> str:
     """
     Create JWT token for user
 
@@ -218,7 +222,9 @@ def enforce_rate_limit(max_requests: int = 60, window_minutes: int = 1):
     def decorator(func):
         async def wrapper(*args, current_user: Dict = None, **kwargs):
             if not current_user:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
+                )
 
             user_id = current_user.get("sub")
             if not await check_rate_limit(user_id, max_requests, window_minutes):

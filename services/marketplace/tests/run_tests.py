@@ -3,14 +3,16 @@
 Test runner for marketplace database schema tests
 Run with: python run_tests.py
 """
+
 import asyncio
-import sys
 import os
+import sys
 
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from test_database_schema import test_database_schema_created
+
 
 async def main():
     """Run the database schema test"""
@@ -27,8 +29,10 @@ async def main():
     except Exception as e:
         print(f"\n💥 Error running tests: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
+
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())

@@ -60,7 +60,10 @@ class CorrelationEngine:
             mean2 = statistics.mean(data2)
 
             numerator = sum((x - mean1) * (y - mean2) for x, y in zip(data1, data2))
-            denominator = sum((x - mean1) ** 2 for x in data1) ** 0.5 * sum((y - mean2) ** 2 for y in data2) ** 0.5
+            denominator = (
+                sum((x - mean1) ** 2 for x in data1) ** 0.5
+                * sum((y - mean2) ** 2 for y in data2) ** 0.5
+            )
 
             if denominator == 0:
                 return 0.0

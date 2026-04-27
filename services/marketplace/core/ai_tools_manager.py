@@ -6,15 +6,17 @@ Manages AI tools lifecycle, configuration, and validation
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Any, List, Optional
-from jsonschema import validate, ValidationError as JSONSchemaValidationError
+from typing import Any, Dict, List, Optional
+
+from jsonschema import ValidationError as JSONSchemaValidationError
+from jsonschema import validate
 
 from services.marketplace.core.database import get_pool
 from services.marketplace.models.ai_tools import (
+    ActivationStatus,
     AIToolConfigurationCreate,
     AIToolRegistrationCreate,
     AIToolResponse,
-    ActivationStatus
 )
 
 logger = logging.getLogger("minder.marketplace.ai_tools")
@@ -30,7 +32,7 @@ class AIToolsManager:
         configuration_schema: Dict[str, Any],
         default_configuration: Dict[str, Any],
         required_parameters: Optional[Dict[str, Any]] = None,
-        optional_parameters: Optional[Dict[str, Any]] = None
+        optional_parameters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Register AI tool configuration schema
@@ -55,7 +57,8 @@ class AIToolsManager:
                 SELECT * FROM marketplace_ai_tools_configurations
                 WHERE plugin_id = $1 AND tool_name = $2
                 """,
-                plugin_id, tool_name
+                plugin_id,
+                tool_name,
             )
 
             if existing:
@@ -72,7 +75,7 @@ class AIToolsManager:
                     json.dumps(default_configuration),
                     json.dumps(required_parameters) if required_parameters else None,
                     json.dumps(optional_parameters) if optional_parameters else None,
-                    existing["id"]
+                    existing["id"],
                 )
             else:
                 # Create new
@@ -84,11 +87,12 @@ class AIToolsManager:
                     VALUES ($1, $2, $3, $4, $5, $6)
                     RETURNING id, plugin_id, tool_name, configuration_schema, default_configuration
                     """,
-                    plugin_id, tool_name,
+                    plugin_id,
+                    tool_name,
                     json.dumps(configuration_schema),
                     json.dumps(default_configuration),
                     json.dumps(required_parameters) if required_parameters else None,
-                    json.dumps(optional_parameters) if optional_parameters else None
+                    json.dumps(optional_parameters) if optional_parameters else None,
                 )
 
             return {
@@ -96,7 +100,7 @@ class AIToolsManager:
                 "plugin_id": row["plugin_id"],
                 "tool_name": row["tool_name"],
                 "configuration_schema": json.loads(row["configuration_schema"]),
-                "default_configuration": json.loads(row["default_configuration"])
+                "default_configuration": json.loads(row["default_configuration"]),
             }
 
     async def enable_tool_for_installation(
@@ -104,7 +108,7 @@ class AIToolsManager:
         plugin_id: str,
         tool_name: str,
         installation_id: str,
-        configuration: Optional[Dict[str, Any]] = None
+        configuration: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Enable AI tool for specific installation
@@ -129,7 +133,8 @@ class AIToolsManager:
                     FROM marketplace_ai_tools_configurations
                     WHERE plugin_id = $1 AND tool_name = $2
                     """,
-                    plugin_id, tool_name
+                    plugin_id,
+                    tool_name,
                 )
 
                 if config_row:
@@ -144,7 +149,9 @@ class AIToolsManager:
                 SELECT * FROM marketplace_ai_tools_registrations
                 WHERE plugin_id = $1 AND tool_name = $2 AND installation_id = $3
                 """,
-                plugin_id, tool_name, installation_id
+                plugin_id,
+                tool_name,
+                installation_id,
             )
 
             if existing:
@@ -159,7 +166,7 @@ class AIToolsManager:
                              is_enabled, activation_status
                     """,
                     json.dumps(configuration),
-                    existing["id"]
+                    existing["id"],
                 )
             else:
                 # Create new
@@ -171,8 +178,10 @@ class AIToolsManager:
                     RETURNING id, plugin_id, tool_name, installation_id, configuration,
                              is_enabled, activation_status
                     """,
-                    plugin_id, tool_name, installation_id,
-                    json.dumps(configuration)
+                    plugin_id,
+                    tool_name,
+                    installation_id,
+                    json.dumps(configuration),
                 )
 
             return {
@@ -182,14 +191,11 @@ class AIToolsManager:
                 "installation_id": row["installation_id"],
                 "configuration": json.loads(row["configuration"]),
                 "is_enabled": row["is_enabled"],
-                "activation_status": row["activation_status"]
+                "activation_status": row["activation_status"],
             }
 
     async def disable_tool(
-        self,
-        plugin_id: str,
-        tool_name: str,
-        installation_id: Optional[str] = None
+        self, plugin_id: str, tool_name: str, installation_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Disable AI tool
@@ -214,7 +220,9 @@ class AIToolsManager:
                     WHERE plugin_id = $1 AND tool_name = $2 AND installation_id = $3
                     RETURNING id, is_enabled, activation_status
                     """,
-                    plugin_id, tool_name, installation_id
+                    plugin_id,
+                    tool_name,
+                    installation_id,
                 )
             else:
                 # Disable for all installations
@@ -225,7 +233,8 @@ class AIToolsManager:
                     WHERE plugin_id = $1 AND tool_name = $2
                     RETURNING id, is_enabled, activation_status
                     """,
-                    plugin_id, tool_name
+                    plugin_id,
+                    tool_name,
                 )
 
             if not row:
@@ -234,14 +243,11 @@ class AIToolsManager:
             return {
                 "id": str(row["id"]),
                 "is_enabled": row["is_enabled"],
-                "activation_status": row["activation_status"]
+                "activation_status": row["activation_status"],
             }
 
     async def validate_tool_configuration(
-        self,
-        plugin_id: str,
-        tool_name: str,
-        configuration: Dict[str, Any]
+        self, plugin_id: str, tool_name: str, configuration: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Validate tool configuration against schema
@@ -264,17 +270,17 @@ class AIToolsManager:
                 FROM marketplace_ai_tools_configurations
                 WHERE plugin_id = $1 AND tool_name = $2
                 """,
-                plugin_id, tool_name
+                plugin_id,
+                tool_name,
             )
 
             if not row:
-                return {
-                    "is_valid": False,
-                    "errors": ["Configuration schema not found"]
-                }
+                return {"is_valid": False, "errors": ["Configuration schema not found"]}
 
             schema = json.loads(row["configuration_schema"])
-            required_params = json.loads(row["required_parameters"]) if row["required_parameters"] else {}
+            required_params = (
+                json.loads(row["required_parameters"]) if row["required_parameters"] else {}
+            )
 
             # Validate against schema
             try:
@@ -289,7 +295,7 @@ class AIToolsManager:
                 if missing_params:
                     return {
                         "is_valid": False,
-                        "errors": [f"Missing required parameters: {', '.join(missing_params)}"]
+                        "errors": [f"Missing required parameters: {', '.join(missing_params)}"],
                     }
 
                 # Update validation status in database
@@ -300,13 +306,11 @@ class AIToolsManager:
                         validation_errors = NULL
                     WHERE plugin_id = $1 AND tool_name = $2
                     """,
-                    plugin_id, tool_name
+                    plugin_id,
+                    tool_name,
                 )
 
-                return {
-                    "is_valid": True,
-                    "errors": []
-                }
+                return {"is_valid": True, "errors": []}
 
             except JSONSchemaValidationError as e:
                 errors = [str(e.message)]
@@ -319,19 +323,15 @@ class AIToolsManager:
                         validation_errors = $3
                     WHERE plugin_id = $1 AND tool_name = $2
                     """,
-                    plugin_id, tool_name,
-                    json.dumps(errors)
+                    plugin_id,
+                    tool_name,
+                    json.dumps(errors),
                 )
 
-                return {
-                    "is_valid": False,
-                    "errors": errors
-                }
+                return {"is_valid": False, "errors": errors}
 
     async def get_tools_for_plugin(
-        self,
-        plugin_id: str,
-        include_disabled: bool = False
+        self, plugin_id: str, include_disabled: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Get all tools for a plugin
@@ -367,32 +367,39 @@ class AIToolsManager:
 
             tools = []
             for row in rows:
-                tools.append({
-                    "id": str(row["id"]),
-                    "plugin_id": str(row["plugin_id"]),
-                    "plugin_name": row["plugin_name"],
-                    "tool_name": row["tool_name"],
-                    "type": row["tool_type"],
-                    "description": row["description"],
-                    "endpoint": row["endpoint_path"],
-                    "method": row["http_method"],
-                    "parameters": row["parameters_schema"],
-                    "response_format": row["response_schema"],
-                    "required_tier": row["required_tier"],
-                    "is_enabled": row["is_enabled"],
-                    "category": row["category"],
-                    "tags": row["tags"],
-                    "configuration_schema": json.loads(row["configuration_schema"]) if row["configuration_schema"] else None,
-                    "default_configuration": json.loads(row["default_configuration"]) if row["default_configuration"] else None
-                })
+                tools.append(
+                    {
+                        "id": str(row["id"]),
+                        "plugin_id": str(row["plugin_id"]),
+                        "plugin_name": row["plugin_name"],
+                        "tool_name": row["tool_name"],
+                        "type": row["tool_type"],
+                        "description": row["description"],
+                        "endpoint": row["endpoint_path"],
+                        "method": row["http_method"],
+                        "parameters": row["parameters_schema"],
+                        "response_format": row["response_schema"],
+                        "required_tier": row["required_tier"],
+                        "is_enabled": row["is_enabled"],
+                        "category": row["category"],
+                        "tags": row["tags"],
+                        "configuration_schema": (
+                            json.loads(row["configuration_schema"])
+                            if row["configuration_schema"]
+                            else None
+                        ),
+                        "default_configuration": (
+                            json.loads(row["default_configuration"])
+                            if row["default_configuration"]
+                            else None
+                        ),
+                    }
+                )
 
             return tools
 
     async def get_all_ai_tools(
-        self,
-        active_only: bool = True,
-        category: Optional[str] = None,
-        tier: Optional[str] = None
+        self, active_only: bool = True, category: Optional[str] = None, tier: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Get all AI tools across all plugins
@@ -447,25 +454,24 @@ class AIToolsManager:
 
             tools = []
             for row in rows:
-                tools.append({
-                    "id": str(row["id"]),
-                    "plugin_id": str(row["plugin_id"]),
-                    "plugin_name": row["plugin_name"],
-                    "plugin_display_name": row["plugin_display_name"],
-                    "tool_name": row["tool_name"],
-                    "type": row["tool_type"],
-                    "description": row["description"],
-                    "endpoint": row["endpoint_path"],
-                    "method": row["http_method"],
-                    "parameters": row["parameters_schema"],
-                    "response_format": row["response_schema"],
-                    "required_tier": row["required_tier"],
-                    "is_enabled": row["is_enabled"],
-                    "category": row["category"],
-                    "tags": row["tags"]
-                })
+                tools.append(
+                    {
+                        "id": str(row["id"]),
+                        "plugin_id": str(row["plugin_id"]),
+                        "plugin_name": row["plugin_name"],
+                        "plugin_display_name": row["plugin_display_name"],
+                        "tool_name": row["tool_name"],
+                        "type": row["tool_type"],
+                        "description": row["description"],
+                        "endpoint": row["endpoint_path"],
+                        "method": row["http_method"],
+                        "parameters": row["parameters_schema"],
+                        "response_format": row["response_schema"],
+                        "required_tier": row["required_tier"],
+                        "is_enabled": row["is_enabled"],
+                        "category": row["category"],
+                        "tags": row["tags"],
+                    }
+                )
 
-            return {
-                "tools": tools,
-                "count": len(tools)
-            }
+            return {"tools": tools, "count": len(tools)}

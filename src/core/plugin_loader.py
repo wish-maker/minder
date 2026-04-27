@@ -73,7 +73,9 @@ class PluginLoader:
 
         return discovered
 
-    async def load_plugin(self, plugin_name: str, config: Optional[Dict[str, Any]] = None) -> Optional[BaseModule]:
+    async def load_plugin(
+        self, plugin_name: str, config: Optional[Dict[str, Any]] = None
+    ) -> Optional[BaseModule]:
         """Load a single plugin"""
 
         try:
@@ -87,7 +89,9 @@ class PluginLoader:
             if not plugin_file.exists():
                 raise FileNotFoundError(f"Plugin file not found for: {plugin_name}")
 
-            spec = importlib.util.spec_from_file_location(f"minder.plugins.{plugin_name}", plugin_file)
+            spec = importlib.util.spec_from_file_location(
+                f"minder.plugins.{plugin_name}", plugin_file
+            )
 
             if spec is None or spec.loader is None:
                 raise ImportError(f"Cannot load plugin spec: {plugin_name}")

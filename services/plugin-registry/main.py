@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import redis
-from config import settings
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel
+
+from config import settings
 
 # Import authentication middleware
 sys.path.insert(0, "/app/src")
@@ -44,15 +45,21 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-plugins_total = Gauge("plugins_total", "Total number of plugins", ["status"])  # registered, enabled, disabled, error
+plugins_total = Gauge(
+    "plugins_total", "Total number of plugins", ["status"]
+)  # registered, enabled, disabled, error
 
-health_check_failures_total = Counter("health_check_failures_total", "Total health check failures", ["plugin"])
+health_check_failures_total = Counter(
+    "health_check_failures_total", "Total health check failures", ["plugin"]
+)
 
 # ============================================================================
 # Data Models
@@ -120,11 +127,15 @@ async def get_postgres_connection():
     global postgres_pool
     if postgres_pool is None:
         postgres_pool = await asyncpg.create_pool(
-            host=(settings.POSTGRES_HOST if hasattr(settings, "POSTGRES_HOST") else "minder-postgres"),
+            host=(
+                settings.POSTGRES_HOST if hasattr(settings, "POSTGRES_HOST") else "minder-postgres"
+            ),
             port=settings.POSTGRES_PORT if hasattr(settings, "POSTGRES_PORT") else 5432,
             user=settings.POSTGRES_USER if hasattr(settings, "POSTGRES_USER") else "minder",
             password=(
-                settings.POSTGRES_PASSWORD if hasattr(settings, "POSTGRES_PASSWORD") else "dev_password_change_me"
+                settings.POSTGRES_PASSWORD
+                if hasattr(settings, "POSTGRES_PASSWORD")
+                else "dev_password_change_me"
             ),
             database=settings.POSTGRES_DB if hasattr(settings, "POSTGRES_DB") else "minder",
             min_size=2,
@@ -264,7 +275,9 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "enabled": True,
                     "host": "minder-influxdb",
                     "port": 8086,
-                    "token": os.environ.get("INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"),
+                    "token": os.environ.get(
+                        "INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"
+                    ),
                     "org": "minder",
                     "bucket": "minder-metrics",
                 },
@@ -293,7 +306,9 @@ async def load_plugin_from_module(plugin_dir: Path):
             plugins_db[plugin_name] = plugin_info
             plugin_instances[plugin_name] = plugin_instance
 
-            logger.info(f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})")
+            logger.info(
+                f"Loaded and registered plugin: {plugin_name} (status: {plugin_instance.status.value})"
+            )
 
             # Auto-sync AI tools with marketplace
             await sync_plugin_ai_tools(plugin_name, plugin_dir)
@@ -424,7 +439,11 @@ async def login(request: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     # Create user payload
-    user_payload = {"sub": request.username, "username": request.username, "role": "user"}  # user ID  # Default role
+    user_payload = {
+        "sub": request.username,
+        "username": request.username,
+        "role": "user",
+    }  # user ID  # Default role
 
     # Assign admin role to specific users (configure as needed)
     admin_users = os.environ.get("ADMIN_USERS", "admin").split(",")
@@ -434,7 +453,9 @@ async def login(request: LoginRequest):
     # Generate JWT token
     from shared.auth.jwt_middleware import create_user_token
 
-    token = create_user_token(user_id=user_payload["sub"], username=request.username, role=user_payload["role"])
+    token = create_user_token(
+        user_id=user_payload["sub"], username=request.username, role=user_payload["role"]
+    )
 
     logger.info(f"User logged in: {request.username} ({user_payload['role']})")
 
@@ -568,7 +589,9 @@ async def get_plugin_health(plugin_name: str):
 @app.post("/v1/plugins/{plugin_name}/collect")
 @enforce_rate_limit(max_requests=10, window_minutes=1)
 async def trigger_plugin_collection(
-    plugin_name: str, background_tasks: BackgroundTasks, current_user: Dict = Depends(get_current_user)
+    plugin_name: str,
+    background_tasks: BackgroundTasks,
+    current_user: Dict = Depends(get_current_user),
 ):
     """
     Manually trigger data collection for a plugin
@@ -727,7 +750,9 @@ async def check_service_health(service_name: str):
 # ============================================================================
 
 
-@app.api_route("/v1/proxy/{service_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/v1/proxy/{service_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
 async def proxy_to_service(service_name: str, path: str, request: Request):
     """
     Dynamic proxy endpoint for plugin microservices
@@ -823,7 +848,10 @@ async def get_all_ai_tools():
                 required = []
 
                 for param_name, param_def in tool.parameters.items():
-                    properties[param_name] = {"type": param_def.type.value, "description": param_def.description}
+                    properties[param_name] = {
+                        "type": param_def.type.value,
+                        "description": param_def.description,
+                    }
 
                     if param_def.enum:
                         properties[param_name]["enum"] = param_def.enum
@@ -840,7 +868,11 @@ async def get_all_ai_tools():
                     "function": {
                         "name": tool.name,
                         "description": tool.description,
-                        "parameters": {"type": "object", "properties": properties, "required": required},
+                        "parameters": {
+                            "type": "object",
+                            "properties": properties,
+                            "required": required,
+                        },
                     },
                     "metadata": {
                         "plugin": plugin_name,
@@ -860,7 +892,11 @@ async def get_all_ai_tools():
 
 @app.get("/v1/plugins/{plugin_name}/analysis")
 async def get_plugin_analysis(
-    plugin_name: str, symbol: str = None, limit: int = 10, location: str = "Istanbul", fund_type: str = "YATIRIM"
+    plugin_name: str,
+    symbol: str = None,
+    limit: int = 10,
+    location: str = "Istanbul",
+    fund_type: str = "YATIRIM",
 ):
     """
     Generic analysis endpoint for all plugins
@@ -895,7 +931,11 @@ async def get_plugin_analysis(
         if plugin_name == "crypto" and symbol:
             # Crypto-specific: get data for specific symbol
             if "metrics" in analysis_result and symbol in analysis_result["metrics"]:
-                return {"symbol": symbol, **analysis_result["metrics"][symbol], "timestamp": datetime.now().isoformat()}
+                return {
+                    "symbol": symbol,
+                    **analysis_result["metrics"][symbol],
+                    "timestamp": datetime.now().isoformat(),
+                }
             else:
                 raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol}")
 
@@ -903,8 +943,12 @@ async def get_plugin_analysis(
             # News-specific: limit articles
             if "insights" in analysis_result:
                 return {
-                    "articles": analysis_result.get("metrics", {}).get("latest_articles", [])[:limit],
-                    "total": min(limit, len(analysis_result.get("metrics", {}).get("latest_articles", []))),
+                    "articles": analysis_result.get("metrics", {}).get("latest_articles", [])[
+                        :limit
+                    ],
+                    "total": min(
+                        limit, len(analysis_result.get("metrics", {}).get("latest_articles", []))
+                    ),
                     "limit": limit,
                 }
 
@@ -935,7 +979,9 @@ async def get_plugin_analysis(
                         {
                             "timestamp": datetime.now().isoformat(),
                             "cpu_usage": analysis_result["metrics"].get("avg_cpu_usage_pct", 0),
-                            "memory_usage": analysis_result["metrics"].get("avg_memory_usage_pct", 0),
+                            "memory_usage": analysis_result["metrics"].get(
+                                "avg_memory_usage_pct", 0
+                            ),
                             "load_avg": analysis_result["metrics"].get("avg_load_avg", 0),
                         }
                     ],
@@ -1057,7 +1103,9 @@ async def data_collection_scheduler():
                         # Trigger data collection
                         result = await plugin_instance.collect_data()
 
-                        logger.info(f"✅ {plugin_name}: {result.get('records_collected', 0)} records collected")
+                        logger.info(
+                            f"✅ {plugin_name}: {result.get('records_collected', 0)} records collected"
+                        )
                     except Exception as e:
                         logger.error(f"❌ {plugin_name}: Collection failed - {e}")
 
@@ -1140,7 +1188,9 @@ async def load_plugins_from_database():
                 databases=row["databases"] or [],
                 registered_at=row["registered_at"].isoformat() if row["registered_at"] else None,
                 health_status=row["health_status"] or "unknown",
-                last_health_check=(row["last_health_check"].isoformat() if row["last_health_check"] else None),
+                last_health_check=(
+                    row["last_health_check"].isoformat() if row["last_health_check"] else None
+                ),
             )
             plugins_db[row["name"]] = plugin_info
 
@@ -1215,6 +1265,7 @@ async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
                 manifest = yaml.safe_load(f)
             else:
                 import json
+
                 manifest = json.load(f)
 
         # Check if plugin has AI tools
@@ -1235,16 +1286,14 @@ async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 f"{marketplace_url}/v1/marketplace/ai/sync",
-                json={
-                    "plugin_name": plugin_name,
-                    "plugin_id": plugin_id,
-                    "manifest": manifest
-                }
+                json={"plugin_name": plugin_name, "plugin_id": plugin_id, "manifest": manifest},
             )
 
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"✅ Synced {result.get('tools_imported', 0)} AI tools for {plugin_name}")
+                logger.info(
+                    f"✅ Synced {result.get('tools_imported', 0)} AI tools for {plugin_name}"
+                )
             else:
                 logger.warning(f"Failed to sync AI tools for {plugin_name}: {response.status_code}")
 
@@ -1272,8 +1321,7 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Search for existing plugin
             search_response = await client.get(
-                f"{marketplace_url}/v1/marketplace/plugins/search",
-                params={"q": plugin_name}
+                f"{marketplace_url}/v1/marketplace/plugins/search", params={"q": plugin_name}
             )
 
             if search_response.status_code == 200:
@@ -1301,7 +1349,7 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
                 "author": manifest.get("author", "Unknown"),
                 "pricing_model": "free",
                 "base_tier": "community",
-                "status": "approved"
+                "status": "approved",
             }
 
             # Only include repository_url if it exists and is not empty
@@ -1310,16 +1358,19 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
                 plugin_data["repository_url"] = repository
 
             create_response = await client.post(
-                f"{marketplace_url}/v1/marketplace/plugins",
-                json=plugin_data
+                f"{marketplace_url}/v1/marketplace/plugins", json=plugin_data
             )
 
             if create_response.status_code in [200, 201]:
                 plugin_data = create_response.json()
-                logger.info(f"Created marketplace plugin entry: {plugin_name} -> {plugin_data.get('id')}")
+                logger.info(
+                    f"Created marketplace plugin entry: {plugin_name} -> {plugin_data.get('id')}"
+                )
                 return plugin_data.get("id")
             else:
-                logger.warning(f"Failed to create marketplace plugin: {create_response.status_code}")
+                logger.warning(
+                    f"Failed to create marketplace plugin: {create_response.status_code}"
+                )
                 logger.warning(f"Response: {create_response.text}")
                 return None
 

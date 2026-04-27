@@ -15,10 +15,7 @@ from models.plugin_state import LicenseTier, PluginState
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_PLUGINS_CONFIG = os.getenv(
-    "DEFAULT_PLUGINS_CONFIG",
-    "/config/default_plugins.yml"
-)
+DEFAULT_PLUGINS_CONFIG = os.getenv("DEFAULT_PLUGINS_CONFIG", "/config/default_plugins.yml")
 
 
 async def load_default_plugins_config() -> Dict:
@@ -78,11 +75,13 @@ async def bootstrap_default_plugins():
                     plugin_config.get("required", False),
                     plugin_config.get("min_tier", "community"),
                     plugin_config.get("description"),
-                    plugin_config.get("version")
+                    plugin_config.get("version"),
                 )
                 logger.info(f"✅ Registered default plugin: {plugin_config['name']}")
             except Exception as e:
-                logger.error(f"❌ Failed to register default plugin {plugin_config.get('name')}: {e}")
+                logger.error(
+                    f"❌ Failed to register default plugin {plugin_config.get('name')}: {e}"
+                )
 
         # Insert dependencies
         for dep_config in config.get("dependencies", []):
@@ -103,7 +102,7 @@ async def bootstrap_default_plugins():
                         """,
                         dep_config["plugin"],
                         dep,
-                        dep_config.get("required", False)
+                        dep_config.get("required", False),
                     )
                     logger.info(f"✅ Registered dependency: {dep_config['plugin']} → {dep}")
             except Exception as e:
@@ -115,17 +114,20 @@ async def bootstrap_default_plugins():
         for plugin_name in default_plugin_names:
             try:
                 existing = await conn.fetchrow(
-                    "SELECT id FROM plugin_states WHERE plugin_name = $1",
-                    plugin_name
+                    "SELECT id FROM plugin_states WHERE plugin_name = $1", plugin_name
                 )
 
                 if not existing:
                     plugin_config = next(
                         (p for p in config.get("default_plugins", []) if p["name"] == plugin_name),
-                        {}
+                        {},
                     )
 
-                    initial_state = PluginState.ENABLED if plugin_config.get("auto_enable", True) else PluginState.INSTALLED
+                    initial_state = (
+                        PluginState.ENABLED
+                        if plugin_config.get("auto_enable", True)
+                        else PluginState.INSTALLED
+                    )
 
                     await conn.execute(
                         """
@@ -134,9 +136,11 @@ async def bootstrap_default_plugins():
                         """,
                         plugin_name,
                         initial_state.value,
-                        plugin_config.get("min_tier", "community")
+                        plugin_config.get("min_tier", "community"),
                     )
-                    logger.info(f"✅ Created state for default plugin: {plugin_name} ({initial_state.value})")
+                    logger.info(
+                        f"✅ Created state for default plugin: {plugin_name} ({initial_state.value})"
+                    )
             except Exception as e:
                 logger.error(f"❌ Failed to create state for {plugin_name}: {e}")
 
@@ -147,10 +151,7 @@ async def bootstrap_default_plugins():
     logger.info("✅ Default plugins bootstrap completed")
 
 
-async def enable_plugins_in_dependency_order(
-    conn: asyncpg.Connection,
-    config: Dict
-):
+async def enable_plugins_in_dependency_order(conn: asyncpg.Connection, config: Dict):
     """Enable plugins in dependency order (topological sort)"""
     # Build dependency graph
     plugins = {}
@@ -159,7 +160,7 @@ async def enable_plugins_in_dependency_order(
         plugins[name] = {
             "auto_enable": plugin_config.get("auto_enable", True),
             "deps": [],
-            "enabled": False
+            "enabled": False,
         }
 
     # Add dependencies
@@ -211,4 +212,5 @@ async def enable_plugins_in_dependency_order(
 # Helper function to get DB pool (imported from core.database)
 async def get_db_pool():
     from core.database import get_db_pool
+
     return await get_db_pool()

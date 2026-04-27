@@ -4,13 +4,15 @@ Enhanced models for AI tools management with configuration and lifecycle
 """
 
 from datetime import datetime
-from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class AIToolType(str, Enum):
     """AI tool types"""
+
     ANALYSIS = "analysis"
     ACTION = "action"
     QUERY = "query"
@@ -18,6 +20,7 @@ class AIToolType(str, Enum):
 
 class AIToolCategory(str, Enum):
     """AI tool categories"""
+
     DATA = "data"
     ANALYSIS = "analysis"
     AUTOMATION = "automation"
@@ -27,6 +30,7 @@ class AIToolCategory(str, Enum):
 
 class ActivationStatus(str, Enum):
     """AI tool activation status"""
+
     PENDING = "pending"
     ACTIVE = "active"
     INACTIVE = "inactive"
@@ -35,6 +39,7 @@ class ActivationStatus(str, Enum):
 
 class ToolParameterSchema(BaseModel):
     """Tool parameter schema definition"""
+
     type: str = Field(..., description="Parameter type")
     description: str = Field(..., description="Parameter description")
     enum: Optional[List[str]] = Field(None, description="Allowed values")
@@ -47,6 +52,7 @@ class ToolParameterSchema(BaseModel):
 
 class AIToolConfigurationCreate(BaseModel):
     """Model for creating AI tool configuration"""
+
     plugin_id: str
     tool_name: str = Field(..., min_length=1, max_length=100)
     configuration_schema: Dict[str, Any] = Field(..., description="JSON Schema for configuration")
@@ -57,6 +63,7 @@ class AIToolConfigurationCreate(BaseModel):
 
 class AIToolConfigurationResponse(BaseModel):
     """Model for AI tool configuration response"""
+
     id: str
     plugin_id: str
     tool_name: str
@@ -73,6 +80,7 @@ class AIToolConfigurationResponse(BaseModel):
 
 class AIToolRegistrationCreate(BaseModel):
     """Model for creating AI tool registration"""
+
     plugin_id: str
     tool_name: str
     installation_id: str
@@ -81,6 +89,7 @@ class AIToolRegistrationCreate(BaseModel):
 
 class AIToolRegistrationUpdate(BaseModel):
     """Model for updating AI tool registration"""
+
     configuration: Optional[Dict[str, Any]] = None
     is_enabled: Optional[bool] = None
     activation_status: Optional[ActivationStatus] = None
@@ -88,6 +97,7 @@ class AIToolRegistrationUpdate(BaseModel):
 
 class AIToolRegistrationResponse(BaseModel):
     """Model for AI tool registration response"""
+
     id: str
     plugin_id: str
     tool_name: str
@@ -109,6 +119,7 @@ class AIToolRegistrationResponse(BaseModel):
 
 class AIToolResponse(BaseModel):
     """Model for AI tool response"""
+
     id: str
     plugin_id: str
     plugin_name: str
@@ -132,6 +143,7 @@ class AIToolResponse(BaseModel):
 
 class PluginAIToolAssignment(BaseModel):
     """Model for assigning AI tool to plugin"""
+
     tool_id: str
     is_default: bool = False
     required_tier: str = "community"
@@ -142,6 +154,7 @@ class PluginAIToolAssignment(BaseModel):
 
 class AIToolListResponse(BaseModel):
     """Model for AI tool list response"""
+
     tools: List[AIToolResponse]
     count: int
     page: int
@@ -151,18 +164,21 @@ class AIToolListResponse(BaseModel):
 
 class AIToolEnableRequest(BaseModel):
     """Model for enabling AI tool"""
+
     tool_name: str
     configuration: Optional[Dict[str, Any]] = None
 
 
 class AIToolDisableRequest(BaseModel):
     """Model for disabling AI tool"""
+
     tool_name: str
     reason: Optional[str] = None
 
 
 class PluginAIToolsConfig(BaseModel):
     """Model for plugin AI tools configuration"""
+
     default_enabled: bool = True
     tools: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
 

@@ -23,7 +23,9 @@ class KnowledgeGraph:
             "created_at": datetime.now().isoformat(),
         }
 
-    def add_relationship(self, source_id: str, target_id: str, relationship_type: str, properties: Dict = None):
+    def add_relationship(
+        self, source_id: str, target_id: str, relationship_type: str, properties: Dict = None
+    ):
         """Add a relationship between two entities"""
         self.relationships.append(
             {

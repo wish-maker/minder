@@ -12,7 +12,6 @@ from typing import Dict
 
 import httpx
 import redis
-from config import settings
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -21,6 +20,8 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, ge
 
 # Import AI integration router
 from routes.ai import router as ai_router
+
+from config import settings
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -43,7 +44,9 @@ app.include_router(ai_router)
 # ============================================================================
 
 # HTTP request metrics
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -247,7 +250,9 @@ async def health_check():
                 if response.status_code == 200:
                     health_status["checks"][service_name] = "healthy"
                 else:
-                    health_status["checks"][service_name] = f"unhealthy: HTTP {response.status_code}"
+                    health_status["checks"][
+                        service_name
+                    ] = f"unhealthy: HTTP {response.status_code}"
                     if service_name in critical_services:
                         critical_unhealthy = True
                     else:
@@ -277,7 +282,9 @@ async def health_check():
     elif optional_unhealthy:
         # Only degraded if optional services are unhealthy
         health_status["status"] = "degraded"
-        health_status["message"] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        health_status["message"] = (
+            f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        )
         status_code = 200  # Degraded is still functional, return 200
     else:
         health_status["status"] = "healthy"

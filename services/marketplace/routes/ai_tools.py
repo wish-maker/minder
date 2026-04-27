@@ -15,16 +15,14 @@ router = APIRouter(prefix="/v1/marketplace/ai", tags=["AI Tools"])
 
 class AIToolsSyncRequest(BaseModel):
     """Request model for syncing AI tools from plugin manifest"""
+
     plugin_name: str
     plugin_id: str
     manifest: Dict
 
 
 @router.get("/tools")
-async def list_all_ai_tools(
-    active_only: bool = Query(True),
-    tier: str = Query(None)
-):
+async def list_all_ai_tools(active_only: bool = Query(True), tier: str = Query(None)):
     """
     List all AI tools from all plugins
 
@@ -73,31 +71,30 @@ async def list_all_ai_tools(
             WHERE {where_clause}
             ORDER BY p.name, at.tool_name
             """,
-            *params
+            *params,
         )
 
         tools = []
         for row in rows:
-            tools.append({
-                "id": str(row["id"]),
-                "plugin_id": str(row["plugin_id"]),
-                "plugin_name": row["plugin_name"],
-                "plugin_display_name": row["plugin_display_name"],
-                "tool_name": row["tool_name"],
-                "type": row["tool_type"],
-                "description": row["description"],
-                "endpoint": row["endpoint_path"],
-                "method": row["http_method"],
-                "parameters": row["parameters_schema"],
-                "response_format": row["response_schema"],
-                "required_tier": row["required_tier"],
-                "active": row["active"]
-            })
+            tools.append(
+                {
+                    "id": str(row["id"]),
+                    "plugin_id": str(row["plugin_id"]),
+                    "plugin_name": row["plugin_name"],
+                    "plugin_display_name": row["plugin_display_name"],
+                    "tool_name": row["tool_name"],
+                    "type": row["tool_type"],
+                    "description": row["description"],
+                    "endpoint": row["endpoint_path"],
+                    "method": row["http_method"],
+                    "parameters": row["parameters_schema"],
+                    "response_format": row["response_schema"],
+                    "required_tier": row["required_tier"],
+                    "active": row["active"],
+                }
+            )
 
-        return {
-            "tools": tools,
-            "count": len(tools)
-        }
+        return {"tools": tools, "count": len(tools)}
 
 
 @router.get("/plugins/{plugin_id}/tools")
@@ -107,10 +104,7 @@ async def get_plugin_ai_tools(plugin_id: str):
 
     async with pool.acquire() as conn:
         # Check if plugin exists
-        plugin = await conn.fetchrow(
-            "SELECT * FROM marketplace_plugins WHERE id = $1",
-            plugin_id
-        )
+        plugin = await conn.fetchrow("SELECT * FROM marketplace_plugins WHERE id = $1", plugin_id)
 
         if not plugin:
             raise HTTPException(status_code=404, detail="Plugin not found")
@@ -126,29 +120,31 @@ async def get_plugin_ai_tools(plugin_id: str):
             WHERE plugin_id = $1 AND active = TRUE
             ORDER BY tool_name
             """,
-            plugin_id
+            plugin_id,
         )
 
         tools = []
         for row in rows:
-            tools.append({
-                "id": str(row["id"]),
-                "tool_name": row["tool_name"],
-                "type": row["tool_type"],
-                "description": row["description"],
-                "endpoint": row["endpoint_path"],
-                "method": row["http_method"],
-                "parameters": row["parameters_schema"],
-                "response_format": row["response_schema"],
-                "required_tier": row["required_tier"],
-                "active": row["active"]
-            })
+            tools.append(
+                {
+                    "id": str(row["id"]),
+                    "tool_name": row["tool_name"],
+                    "type": row["tool_type"],
+                    "description": row["description"],
+                    "endpoint": row["endpoint_path"],
+                    "method": row["http_method"],
+                    "parameters": row["parameters_schema"],
+                    "response_format": row["response_schema"],
+                    "required_tier": row["required_tier"],
+                    "active": row["active"],
+                }
+            )
 
         return {
             "plugin_id": plugin_id,
             "plugin_name": plugin["name"],
             "tools": tools,
-            "count": len(tools)
+            "count": len(tools),
         }
 
 
@@ -179,7 +175,7 @@ async def get_ai_tool_details(tool_name: str):
             JOIN marketplace_plugins p ON at.plugin_id = p.id
             WHERE at.tool_name = $1
             """,
-            tool_name
+            tool_name,
         )
 
         if not row:
@@ -199,7 +195,7 @@ async def get_ai_tool_details(tool_name: str):
             "parameters": row["parameters_schema"],
             "response_format": row["response_schema"],
             "required_tier": row["required_tier"],
-            "active": row["active"]
+            "active": row["active"],
         }
 
 
@@ -219,19 +215,14 @@ async def sync_ai_tools(request: AIToolsSyncRequest):
     """
     try:
         result = await sync_plugin_tools(
-            plugin_name=request.plugin_name,
-            plugin_id=request.plugin_id,
-            manifest=request.manifest
+            plugin_name=request.plugin_name, plugin_id=request.plugin_id, manifest=request.manifest
         )
 
         return result
 
     except Exception as e:
         logger.error(f"AI tools sync failed for {request.plugin_name}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to sync AI tools: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to sync AI tools: {str(e)}")
 
 
 @router.delete("/plugins/{plugin_id}/tools")
@@ -252,7 +243,4 @@ async def deactivate_plugin_tools(plugin_id: str):
 
     except Exception as e:
         logger.error(f"Failed to deactivate tools for plugin {plugin_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to deactivate tools: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to deactivate tools: {str(e)}")

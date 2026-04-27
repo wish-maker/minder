@@ -9,8 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 import asyncpg
-
-from models.plugin_state import PluginState, LicenseTier
+from models.plugin_state import LicenseTier, PluginState
 
 logger = logging.getLogger(__name__)
 
@@ -23,10 +22,10 @@ def _record_to_dict(record) -> Dict:
     result = {}
     for key, value in record.items():
         # Handle UUID fields - convert to string
-        if key == 'id' and hasattr(value, '__str__'):
+        if key == "id" and hasattr(value, "__str__"):
             result[key] = str(value)
         # Handle JSONB fields - asyncpg returns them as strings
-        elif key in ('config', 'metadata'):
+        elif key in ("config", "metadata"):
             if isinstance(value, str):
                 result[key] = json.loads(value)
             else:
@@ -38,20 +37,19 @@ def _record_to_dict(record) -> Dict:
 
 class StateTransitionError(Exception):
     """State transition error"""
+
     pass
 
 
 class RequiredPluginError(Exception):
     """Required plugin error"""
+
     pass
 
 
 async def get_plugin_state(conn: asyncpg.Connection, plugin_name: str) -> Optional[Dict]:
     """Get plugin state from database"""
-    row = await conn.fetchrow(
-        "SELECT * FROM plugin_states WHERE plugin_name = $1",
-        plugin_name
-    )
+    row = await conn.fetchrow("SELECT * FROM plugin_states WHERE plugin_name = $1", plugin_name)
     return _record_to_dict(row)
 
 
@@ -59,7 +57,7 @@ async def create_plugin_state(
     conn: asyncpg.Connection,
     plugin_name: str,
     initial_state: PluginState = PluginState.INSTALLED,
-    license_tier: LicenseTier = LicenseTier.COMMUNITY
+    license_tier: LicenseTier = LicenseTier.COMMUNITY,
 ) -> Dict:
     """Create new plugin state"""
     row = await conn.fetchrow(
@@ -70,16 +68,13 @@ async def create_plugin_state(
         """,
         plugin_name,
         initial_state.value,
-        license_tier.value
+        license_tier.value,
     )
     return dict(row)
 
 
 async def update_plugin_state(
-    conn: asyncpg.Connection,
-    plugin_name: str,
-    state: PluginState,
-    metadata: Optional[Dict] = None
+    conn: asyncpg.Connection, plugin_name: str, state: PluginState, metadata: Optional[Dict] = None
 ) -> Dict:
     """Update plugin state"""
     now = datetime.now()
@@ -110,17 +105,14 @@ async def update_plugin_state(
 
     if metadata:
         await conn.execute(
-            "UPDATE plugin_states SET metadata = $1 WHERE plugin_name = $2",
-            metadata, plugin_name
+            "UPDATE plugin_states SET metadata = $1 WHERE plugin_name = $2", metadata, plugin_name
         )
 
     return dict(row)
 
 
 async def enable_plugin(
-    conn: asyncpg.Connection,
-    plugin_name: str,
-    reason: Optional[str] = None
+    conn: asyncpg.Connection, plugin_name: str, reason: Optional[str] = None
 ) -> Dict:
     """
     Enable a plugin
@@ -139,8 +131,7 @@ async def enable_plugin(
     """
     # Check if plugin is required
     default_plugin = await conn.fetchrow(
-        "SELECT required FROM default_plugins WHERE plugin_name = $1",
-        plugin_name
+        "SELECT required FROM default_plugins WHERE plugin_name = $1", plugin_name
     )
 
     if default_plugin and default_plugin["required"]:
@@ -169,10 +160,7 @@ async def enable_plugin(
 
 
 async def disable_plugin(
-    conn: asyncpg.Connection,
-    plugin_name: str,
-    force: bool = False,
-    reason: Optional[str] = None
+    conn: asyncpg.Connection, plugin_name: str, force: bool = False, reason: Optional[str] = None
 ) -> Dict:
     """
     Disable a plugin
@@ -192,8 +180,7 @@ async def disable_plugin(
     """
     # Check if plugin is required
     default_plugin = await conn.fetchrow(
-        "SELECT required FROM default_plugins WHERE plugin_name = $1",
-        plugin_name
+        "SELECT required FROM default_plugins WHERE plugin_name = $1", plugin_name
     )
 
     if default_plugin and default_plugin["required"] and not force:
@@ -208,7 +195,7 @@ async def disable_plugin(
         FROM plugin_dependencies
         WHERE depends_on = $1
         """,
-        plugin_name
+        plugin_name,
     )
 
     if dependents:
@@ -243,27 +230,20 @@ async def disable_plugin(
 
 
 async def list_plugin_states(
-    conn: asyncpg.Connection,
-    state_filter: Optional[PluginState] = None
+    conn: asyncpg.Connection, state_filter: Optional[PluginState] = None
 ) -> List[Dict]:
     """List all plugin states, optionally filtered by state"""
     if state_filter:
         rows = await conn.fetch(
-            "SELECT * FROM plugin_states WHERE state = $1 ORDER BY plugin_name",
-            state_filter.value
+            "SELECT * FROM plugin_states WHERE state = $1 ORDER BY plugin_name", state_filter.value
         )
     else:
-        rows = await conn.fetch(
-            "SELECT * FROM plugin_states ORDER BY plugin_name"
-        )
+        rows = await conn.fetch("SELECT * FROM plugin_states ORDER BY plugin_name")
 
     return [_record_to_dict(row) for row in rows]
 
 
-async def get_dependent_plugins(
-    conn: asyncpg.Connection,
-    plugin_name: str
-) -> List[Dict]:
+async def get_dependent_plugins(conn: asyncpg.Connection, plugin_name: str) -> List[Dict]:
     """Get plugins that depend on this plugin"""
     rows = await conn.fetch(
         """
@@ -273,15 +253,12 @@ async def get_dependent_plugins(
         WHERE pd.depends_on = $1
         ORDER BY pd.required DESC, pd.plugin_name
         """,
-        plugin_name
+        plugin_name,
     )
     return [_record_to_dict(row) for row in rows]
 
 
-async def resolve_dependencies(
-    conn: asyncpg.Connection,
-    plugin_name: str
-) -> List[str]:
+async def resolve_dependencies(conn: asyncpg.Connection, plugin_name: str) -> List[str]:
     """
     Resolve plugin dependencies (topological sort)
 
@@ -293,21 +270,16 @@ async def resolve_dependencies(
     dependencies = {}
 
     # Get all plugins and their dependencies
-    rows = await conn.fetch(
-        """
+    rows = await conn.fetch("""
         SELECT dp.plugin_name, pd.depends_on, pd.required
         FROM default_plugins dp
         LEFT JOIN plugin_dependencies pd ON dp.plugin_name = pd.plugin_name
         ORDER BY dp.priority DESC
-        """
-    )
+        """)
 
     for row in rows:
         name = row["plugin_name"]
-        plugins[name] = {
-            "visited": False,
-            "deps": []
-        }
+        plugins[name] = {"visited": False, "deps": []}
         if row["depends_on"]:
             plugins[name]["deps"].append(row["depends_on"])
 

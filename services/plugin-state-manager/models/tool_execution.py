@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 class ToolParameter(BaseModel):
     """Tool parameter definition"""
+
     type: str
     description: str
     enum: Optional[list[str]] = None
@@ -19,6 +20,7 @@ class ToolParameter(BaseModel):
 
 class ToolSchema(BaseModel):
     """Tool schema definition"""
+
     name: str
     description: str
     type: str  # analysis, data, action, query
@@ -31,17 +33,20 @@ class ToolSchema(BaseModel):
 
 class ToolDiscoveryResponse(BaseModel):
     """Tool discovery response"""
+
     tools: list[ToolSchema]
     count: int
 
 
 class ToolExecutionRequest(BaseModel):
     """Tool execution request"""
+
     parameters: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolExecutionResponse(BaseModel):
     """Tool execution response"""
+
     tool_name: str
     plugin_name: str
     result: Any
@@ -51,12 +56,14 @@ class ToolExecutionResponse(BaseModel):
 
 class LicenseValidationRequest(BaseModel):
     """License validation request"""
+
     user_id: str
     tool_name: str
 
 
 class LicenseValidationResponse(BaseModel):
     """License validation response"""
+
     allowed: bool
     tier_required: str
     user_tier: str

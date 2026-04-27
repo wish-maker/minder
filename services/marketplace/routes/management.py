@@ -3,16 +3,14 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.database import get_pool
-from services.marketplace.models.installation import (
-    InstallationCreate,
-    InstallationResponse
-)
+from services.marketplace.models.installation import InstallationCreate, InstallationResponse
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
 
 class InstallRequest(BaseModel):
     """Request model for plugin installation"""
+
     user_id: str
 
 
@@ -29,10 +27,7 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
 
     # Check if plugin exists
     async with pool.acquire() as conn:
-        plugin = await conn.fetchrow(
-            "SELECT * FROM marketplace_plugins WHERE id = $1",
-            plugin_id
-        )
+        plugin = await conn.fetchrow("SELECT * FROM marketplace_plugins WHERE id = $1", plugin_id)
 
         if not plugin:
             raise HTTPException(status_code=404, detail="Plugin not found")
@@ -43,7 +38,8 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
             SELECT * FROM marketplace_installations
             WHERE user_id = $1 AND plugin_id = $2
             """,
-            request.user_id, plugin_id
+            request.user_id,
+            plugin_id,
         )
 
         if existing:
@@ -54,7 +50,7 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
                 SET status = 'installed', enabled = TRUE, last_updated_at = NOW()
                 WHERE id = $1
                 """,
-                existing["id"]
+                existing["id"],
             )
 
             return InstallationResponse(
@@ -66,7 +62,7 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
                 enabled=True,
                 config_json=existing["config_json"],
                 installed_at=existing["installed_at"],
-                last_updated_at=existing["last_updated_at"]
+                last_updated_at=existing["last_updated_at"],
             )
 
         # Create new installation
@@ -76,13 +72,14 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
             VALUES ($1, $2, 'installed', TRUE)
             RETURNING id, user_id, plugin_id, version, status, enabled, config_json, installed_at, last_updated_at
             """,
-            request.user_id, plugin_id
+            request.user_id,
+            plugin_id,
         )
 
         # Increment download count
         await conn.execute(
             "UPDATE marketplace_plugins SET download_count = download_count + 1 WHERE id = $1",
-            plugin_id
+            plugin_id,
         )
 
         return InstallationResponse(
@@ -94,7 +91,7 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
             enabled=row["enabled"],
             config_json=row["config_json"],
             installed_at=row["installed_at"],
-            last_updated_at=row["last_updated_at"]
+            last_updated_at=row["last_updated_at"],
         )
 
 
@@ -110,7 +107,8 @@ async def uninstall_plugin(plugin_id: str, user_id: str = Query(...)):
             SELECT * FROM marketplace_installations
             WHERE user_id = $1 AND plugin_id = $2
             """,
-            user_id, plugin_id
+            user_id,
+            plugin_id,
         )
 
         if not existing:
@@ -123,7 +121,7 @@ async def uninstall_plugin(plugin_id: str, user_id: str = Query(...)):
             SET status = 'uninstalled', enabled = FALSE, last_updated_at = NOW()
             WHERE id = $1
             """,
-            existing["id"]
+            existing["id"],
         )
 
         return {"status": "uninstalled", "plugin_id": plugin_id}
@@ -141,7 +139,8 @@ async def enable_plugin(plugin_id: str, user_id: str = Query(...)):
             SELECT * FROM marketplace_installations
             WHERE user_id = $1 AND plugin_id = $2
             """,
-            user_id, plugin_id
+            user_id,
+            plugin_id,
         )
 
         if not existing:
@@ -154,7 +153,7 @@ async def enable_plugin(plugin_id: str, user_id: str = Query(...)):
             SET enabled = TRUE, last_updated_at = NOW()
             WHERE id = $1
             """,
-            existing["id"]
+            existing["id"],
         )
 
         return {"status": "enabled", "plugin_id": plugin_id}
@@ -172,7 +171,8 @@ async def disable_plugin(plugin_id: str, user_id: str = Query(...)):
             SELECT * FROM marketplace_installations
             WHERE user_id = $1 AND plugin_id = $2
             """,
-            user_id, plugin_id
+            user_id,
+            plugin_id,
         )
 
         if not existing:
@@ -185,7 +185,7 @@ async def disable_plugin(plugin_id: str, user_id: str = Query(...)):
             SET enabled = FALSE, last_updated_at = NOW()
             WHERE id = $1
             """,
-            existing["id"]
+            existing["id"],
         )
 
         return {"status": "disabled", "plugin_id": plugin_id}
@@ -203,7 +203,7 @@ async def get_plugin_installations(plugin_id: str):
             WHERE plugin_id = $1
             ORDER BY installed_at DESC
             """,
-            plugin_id
+            plugin_id,
         )
 
         installations = [
@@ -214,7 +214,7 @@ async def get_plugin_installations(plugin_id: str):
                 "version": row["version"],
                 "status": row["status"],
                 "enabled": row["enabled"],
-                "installed_at": row["installed_at"].isoformat()
+                "installed_at": row["installed_at"].isoformat(),
             }
             for row in rows
         ]

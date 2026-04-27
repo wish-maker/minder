@@ -41,7 +41,9 @@ async def get_tool_definitions() -> Dict:
     # Fetch fresh tools from Plugin Registry
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/ai/tools", timeout=5.0)
+            response = await client.get(
+                f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/ai/tools", timeout=5.0
+            )
             response.raise_for_status()
             _tools_cache = response.json()
             _tools_cache_time = current_time
@@ -95,7 +97,9 @@ async def execute_function(function_name: str, request: Request):
     method = metadata.get("method", "POST")
 
     if not target_url:
-        raise HTTPException(status_code=500, detail=f"Tool {function_name} missing endpoint metadata")
+        raise HTTPException(
+            status_code=500, detail=f"Tool {function_name} missing endpoint metadata"
+        )
 
     # Build full URL to Plugin Registry
     url = f"{settings.PLUGIN_REGISTRY_URL}{target_url}"
@@ -113,7 +117,11 @@ async def execute_function(function_name: str, request: Request):
         response.raise_for_status()
 
         # Return result in OpenAI function format
-        return {"result": response.json(), "status": "success", "timestamp": datetime.now().isoformat()}
+        return {
+            "result": response.json(),
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+        }
 
 
 @router.post("/chat/completions")
