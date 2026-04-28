@@ -6,11 +6,10 @@ Enables LLMs (Llama 3.2 via Ollama) to call Minder Platform APIs
 import json
 import logging
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import httpx
-from fastapi import HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Request
 
 logger = logging.getLogger(__name__)
 
@@ -165,14 +164,15 @@ class MinderToolExecutor:
         executor = tool_mappings[tool_name]
         return await executor(parameters)
 
-    async def _collect_crypto_data(self, params: Dict) -> Dict:
+    async def _collect_crypto_data(self, params: Dict) -> Dict[str, Any]:
         """Trigger crypto data collection"""
         async with httpx.AsyncClient() as client:
             response = await client.post(f"{self.plugin_registry_url}/v1/plugins/crypto/collect")
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _get_crypto_price(self, params: Dict) -> Dict:
+    async def _get_crypto_price(self, params: Dict) -> Dict[str, Any]:
         """Get crypto price from database"""
         symbol = params.get("symbol", "BTC")
         async with httpx.AsyncClient() as client:
@@ -180,16 +180,18 @@ class MinderToolExecutor:
                 f"{self.plugin_registry_url}/v1/plugins/crypto/analysis?symbol={symbol}"
             )
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _collect_news(self, params: Dict) -> Dict:
+    async def _collect_news(self, params: Dict) -> Dict[str, Any]:
         """Trigger news collection"""
         async with httpx.AsyncClient() as client:
             response = await client.post(f"{self.plugin_registry_url}/v1/plugins/news/collect")
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _get_latest_news(self, params: Dict) -> Dict:
+    async def _get_latest_news(self, params: Dict) -> Dict[str, Any]:
         """Get latest news from database"""
         limit = params.get("limit", 10)
         async with httpx.AsyncClient() as client:
@@ -197,16 +199,18 @@ class MinderToolExecutor:
                 f"{self.plugin_registry_url}/v1/plugins/news/analysis?limit={limit}"
             )
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _get_plugin_status(self, params: Dict) -> Dict:
+    async def _get_plugin_status(self, params: Dict) -> Dict[str, Any]:
         """Get all plugin status"""
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{self.plugin_registry_url}/v1/plugins")
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _enable_plugin(self, params: Dict) -> Dict:
+    async def _enable_plugin(self, params: Dict) -> Dict[str, Any]:
         """Enable a plugin"""
         plugin_name = params.get("plugin_name")
         async with httpx.AsyncClient() as client:
@@ -214,9 +218,10 @@ class MinderToolExecutor:
                 f"{self.plugin_registry_url}/v1/plugins/{plugin_name}/enable"
             )
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _get_network_metrics(self, params: Dict) -> Dict:
+    async def _get_network_metrics(self, params: Dict) -> Dict[str, Any]:
         """Get network metrics"""
         limit = params.get("limit", 10)
         async with httpx.AsyncClient() as client:
@@ -224,23 +229,22 @@ class MinderToolExecutor:
                 f"{self.plugin_registry_url}/v1/plugins/network/analysis?limit={limit}"
             )
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
-    async def _get_weather_data(self, params: Dict) -> Dict:
+    async def _get_weather_data(self, params: Dict) -> Dict[str, Any]:
         """Get weather data"""
         async with httpx.AsyncClient() as client:
             response = await client.get(f"{self.plugin_registry_url}/v1/plugins/weather/analysis")
             response.raise_for_status()
-            return response.json()
+            result: Dict[str, Any] = response.json()  # type: ignore
+            return result
 
 
 # Global executor
 tool_executor = MinderToolExecutor()
 
-
 # FastAPI endpoints for AI integration
-from fastapi import APIRouter
-
 router = APIRouter(prefix="/v1/ai", tags=["AI Integration"])
 
 
@@ -386,9 +390,11 @@ async def chat_with_minder(user_message: str) -> str:
         messages.extend(tool_results)
         final_response = ollama.chat("llama3.2", messages=messages)
 
-        return final_response["message"]["content"]
+        content = final_response["message"]["content"]
+        return str(content)
 
-    return response["message"]["content"]
+    content = response["message"]["content"]
+    return str(content)
 
 
 # Example conversations

@@ -3,7 +3,6 @@ Database optimization strategies for Minder.
 Implements query optimization, indexing, and connection pooling.
 """
 
-import asyncio
 import asyncpg
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
@@ -90,9 +89,9 @@ class DatabaseOptimizer:
 
         except Exception as e:
             logger.error(f"Failed to analyze slow queries: {e}")
-            return []
+            return []  # type: ignore[return-value]
 
-    async def explain_query(self, query: str, params: List[Any] = None) -> QueryPlan:
+    async def explain_query(self, query: str, params: Optional[List[Any]] = None) -> QueryPlan:
         """
         Get query execution plan.
 
@@ -128,7 +127,7 @@ class DatabaseOptimizer:
                 cost_match = re.search(r'Cost=(\d+\.\d+)', plan_str)
                 if cost_match:
                     return float(cost_match.group(1))
-            except:
+            except Exception:
                 pass
         return 0.0
 
@@ -451,7 +450,7 @@ class QueryCache:
         self.redis = redis_client
         self.default_ttl = default_ttl
 
-    def _get_cache_key(self, query: str, params: tuple = None) -> str:
+    def _get_cache_key(self, query: str, params: Optional[tuple] = None) -> str:
         """Generate cache key"""
         import hashlib
         query_hash = hashlib.md5(query.encode()).hexdigest()
@@ -460,7 +459,7 @@ class QueryCache:
             return f"query_cache:{query_hash}:{params_hash}"
         return f"query_cache:{query_hash}"
 
-    async def get(self, query: str, params: tuple = None) -> Optional[Any]:
+    async def get(self, query: str, params: Optional[tuple] = None) -> Optional[Any]:
         """
         Get cached query result.
 
@@ -478,7 +477,7 @@ class QueryCache:
             if result:
                 logger.debug(f"Cache hit for query: {query[:50]}...")
                 import json
-                return json.loads(result)
+                return json.loads(result)  # type: ignore[return-value]
 
             return None
 
@@ -491,7 +490,7 @@ class QueryCache:
         query: str,
         params: tuple,
         result: Any,
-        ttl: int = None
+        ttl: Optional[int] = None
     ) -> bool:
         """
         Cache query result.
@@ -520,6 +519,7 @@ class QueryCache:
 
         except Exception as e:
             logger.warning(f"Cache set failed: {e}")
+            return False
             return False
 
     async def invalidate(self, query: str) -> bool:

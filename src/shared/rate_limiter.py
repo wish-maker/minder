@@ -318,7 +318,7 @@ class IPWhitelist:
     async def add_ip(self, ip: str, reason: str = "") -> bool:
         """Add IP to whitelist"""
         try:
-            await self.redis.sadd(self.whitelist_key, ip)
+            await self.redis.sadd(self.whitelist_key, ip)  # type: ignore[call-arg]
             logger.info(f"Added IP to whitelist: {ip} ({reason})")
             return True
         except Exception as e:
@@ -328,7 +328,7 @@ class IPWhitelist:
     async def remove_ip(self, ip: str) -> bool:
         """Remove IP from whitelist"""
         try:
-            await self.redis.srem(self.whitelist_key, ip)
+            await self.redis.srem(self.whitelist_key, ip)  # type: ignore[call-arg]
             logger.info(f"Removed IP from whitelist: {ip}")
             return True
         except Exception as e:
@@ -338,10 +338,11 @@ class IPWhitelist:
     async def is_whitelisted(self, ip: str) -> bool:
         """Check if IP is whitelisted"""
         try:
-            result = await self.redis.sismember(self.whitelist_key, ip)
+            result = await self.redis.sismember(self.whitelist_key, ip)  # type: ignore[call-arg, arg-type]
             return bool(result)
         except Exception as e:
             logger.error(f"Failed to check IP whitelist: {e}")
+            return False
             return False
 
 

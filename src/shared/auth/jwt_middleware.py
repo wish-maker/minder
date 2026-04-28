@@ -6,7 +6,7 @@ Provides JWT validation and API key authentication for protected endpoints
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import jwt
 from fastapi import HTTPException, Security, status
@@ -26,7 +26,7 @@ security = HTTPBearer(auto_error=False)
 class JWTAuthMiddleware:
     """JWT Authentication Middleware"""
 
-    def __init__(self, secret_key: str = None):
+    def __init__(self, secret_key: Optional[str] = None):
         self.secret_key = secret_key or JWT_SECRET
         if not self.secret_key:
             raise ValueError("JWT_SECRET environment variable must be set")
@@ -41,12 +41,12 @@ class JWTAuthMiddleware:
         payload["iat"] = datetime.utcnow()
 
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
-        return token
+        return str(token)
 
-    def decode_token(self, token: str) -> Dict:
+    def decode_token(self, token: str) -> Dict[str, Any]:
         """Decode and validate JWT token"""
         try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
+            payload: Dict[str, Any] = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
             return payload
         except jwt.ExpiredSignatureError:
             raise HTTPException(
@@ -124,7 +124,7 @@ def require_roles(allowed_roles: List[str]):
     """
 
     def decorator(func):
-        async def wrapper(*args, current_user: Dict = None, **kwargs):
+        async def wrapper(*args, current_user: Optional[Dict[str, Any]] = None, **kwargs):
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
@@ -145,7 +145,7 @@ def require_roles(allowed_roles: List[str]):
 
 
 def create_user_token(
-    user_id: str, username: str, role: str = "user", extra_payload: Dict = None
+    user_id: str, username: str, role: str = "user", extra_payload: Optional[Dict[str, Any]] = None
 ) -> str:
     """
     Create JWT token for user
@@ -220,14 +220,14 @@ def enforce_rate_limit(max_requests: int = 60, window_minutes: int = 1):
     """
 
     def decorator(func):
-        async def wrapper(*args, current_user: Dict = None, **kwargs):
+        async def wrapper(*args, current_user: Optional[Dict[str, Any]] = None, **kwargs):
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
                 )
 
             user_id = current_user.get("sub")
-            if not await check_rate_limit(user_id, max_requests, window_minutes):
+            if not await check_rate_limit(str(user_id), max_requests, window_minutes):
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=f"Rate limit exceeded: {max_requests} requests per {window_minutes} minute(s)",

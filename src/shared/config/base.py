@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
+import yaml  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +48,10 @@ class BaseConfig:
     @property
     def postgres_url(self) -> str:
         """Get PostgreSQL connection URL"""
-        host = self.get("database.host", "postgres")
-        port = self.get("database.port", 5432)
-        user = self.get("database.user", "postgres")
-        password = self.get("database.password", "postgres")
+        host = str(self.get("database.host", "postgres"))  # type: ignore
+        port = self.get("database.port", 5432)  # type: ignore
+        user = str(self.get("database.user", "postgres"))  # type: ignore
+        password = str(self.get("database.password", "postgres"))  # type: ignore
         return f"postgresql://{user}:{password}@{host}:{port}"
 
     @property

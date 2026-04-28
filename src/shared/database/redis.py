@@ -48,14 +48,14 @@ class RedisHelper:
 
         if isinstance(value, (dict, list)):
             value = json.dumps(value)
-        await self.client.setex(key, ttl, value)
+        await self.client.setex(key, ttl, value)  # type: ignore[call-arg, arg-type]
 
     async def publish(self, channel: str, message: Dict[str, Any]):
         """Publish message to channel"""
         if not self.client:
             raise RuntimeError("Redis not connected. Call connect() first.")
 
-        await self.client.publish(channel, json.dumps(message))
+        await self.client.publish(channel, json.dumps(message))  # type: ignore[call-arg]
 
     async def subscribe(self, channel: str):
         """Subscribe to channel"""
