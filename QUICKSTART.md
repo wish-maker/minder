@@ -2,23 +2,27 @@
 
 ## 🚀 Zero-to-Hero Deployment
 
-This guide provides a **complete automated setup** from scratch.
+This guide provides a **complete automated setup** from scratch with production-ready configuration.
 
 ---
 
 ## ✅ Prerequisites
 
+### System Requirements
+
 - **Docker** 20.10+
 - **Docker Compose** 2.0+
 - **OpenSSL** (for secure credential generation)
-- **8GB+ RAM**, **20GB+ Disk Space**
+- **4GB+ RAM** (minimum), **8GB+ recommended**
+- **20GB+ Disk Space**
 - **Linux/macOS** (Windows WSL2 supported)
 
 ### Quick Install Prerequisites
 
 ```bash
-# Docker
+# Docker (Ubuntu/Debian)
 curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
 
 # Docker Compose
 sudo apt-get install docker-compose-plugin
@@ -40,12 +44,13 @@ sudo apt-get install openssl
 **What it does:**
 1. ✅ Checks all prerequisites
 2. ✅ Generates secure credentials
-3. ✅ Setup all databases
+3. ✅ Setup all databases (PostgreSQL, Redis, Neo4j, Qdrant)
 4. ✅ Builds all Docker images
-5. ✅ Deploys all services (21 services)
-6. ✅ Pulls AI models (Llama 3.2, embeddings)
+5. ✅ Deploys all services (10+ microservices)
+6. ✅ Pulls AI models (Llama 3.2, nomic-embed-text)
 7. ✅ Runs comprehensive health checks
 8. ✅ Displays access information
+9. ✅ Applies hardware optimization settings
 
 **Time:** 20-30 minutes (first run, includes AI model download)
 
@@ -57,6 +62,9 @@ sudo apt-get install openssl
 
 # 2. Generate secure configuration
 ./deploy.sh deploy
+
+# 3. Check status
+./deploy.sh status
 ```
 
 ---
@@ -65,18 +73,39 @@ sudo apt-get install openssl
 
 After successful deployment, access:
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **API Gateway** | http://localhost:8000 | See .env |
-| **API Docs** | http://localhost:8000/docs | See .env |
-| **Plugin Registry** | http://localhost:8001 | See .env |
+| Service | URL | Authentication |
+|---------|-----|---------------|
+| **API Gateway** | http://localhost:8000 | JWT / API Key |
+| **API Docs** | http://localhost:8000/docs | Public (read-only) |
+| **Plugin Registry** | http://localhost:8001 | JWT / API Key |
+| **AI Tools** | http://localhost:8010/v1/ai | JWT required |
 | **OpenWebUI** | http://localhost:8080 | Sign up enabled |
-| **Grafana** | http://localhost:3000 | admin / [see .env] |
+| **Grafana** | http://localhost:3001 | admin / [see .env] |
 | **Prometheus** | http://localhost:9090 | No auth |
+
+### Default Credentials
+
+```bash
+# Check generated credentials
+cat infrastructure/docker/.env
+
+# Grafana
+User: admin
+Password: [see .env]
+
+# Database
+User: postgres
+Password: [see .env]
+
+# Redis
+Password: [see .env]
+```
 
 ---
 
 ## 🛠️ Management Commands
+
+### Basic Operations
 
 ```bash
 # Show service status
@@ -94,6 +123,9 @@ After successful deployment, access:
 # Stop services
 ./deploy.sh stop
 
+# Start services
+./deploy.sh start
+
 # Run health checks
 ./deploy.sh health
 
@@ -101,205 +133,286 @@ After successful deployment, access:
 ./deploy.sh clean
 ```
 
----
-
-## 🔒 Security First
-
-**⚠️ CRITICAL:** The deployment automatically generates secure credentials and stores them in `infrastructure/docker/.env`.
-
-### Immediate Actions After Deployment:
-
-1. **Change Default Credentials:**
-   ```bash
-   # View generated credentials
-   cat infrastructure/docker/.env
-
-   # Change Grafana password
-   docker exec minder-grafana grafana-cli admin reset-admin-password <new-password>
-   ```
-
-2. **Secure .env File:**
-   ```bash
-   # Ensure restrictive permissions
-   chmod 600 infrastructure/docker/.env
-
-   # Never commit to git!
-   echo "infrastructure/docker/.env" >> .gitignore
-   ```
-
-3. **Enable TLS/SSL** (Production):
-   - Use reverse proxy (nginx/traefik)
-   - Enable HTTPS
-   - Configure proper certificates
-
----
-
-## 📈 Health Monitoring
-
-### Automated Health Checks
+### Advanced Operations
 
 ```bash
-# Run comprehensive health checks
-./scripts/health-check.sh
-```
+# Rebuild specific service
+docker-compose build api-gateway
 
-**Output:**
-- Infrastructure services status
-- AI services status
-- Core services status
-- Web interfaces status
-- Overall health score
+# Scale services (production)
+docker-compose up -d --scale api-gateway=3
 
-### Manual Health Checks
-
-```bash
-# Check specific service
-curl http://localhost:8000/health
-
-# Check Docker containers
-docker ps
-
-# Check resource usage
+# View resource usage
 docker stats
 
-# View service logs
-docker logs -f minder-api-gateway
+# View service dependencies
+docker-compose ps --v
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 🔒 Security Setup
 
-### Service Won't Start
+### First Steps After Deployment
 
+1. **Change default passwords**
+   ```bash
+   # Edit .env
+   nano infrastructure/docker/.env
+
+   # Restart services
+   ./deploy.sh restart
+   ```
+
+2. **Generate secure JWT secret**
+   ```bash
+   # Generate new secret
+   openssl rand -base64 32
+
+   # Update .env
+   JWT_SECRET=<generated-secret>
+   ```
+
+3. **Enable TLS/SSL** (production)
+   ```bash
+   # Add SSL certificates
+   cp /path/to/cert.pem infrastructure/nginx/ssl/
+   cp /path/to/key.pem infrastructure/nginx/ssl/
+
+   # Restart Nginx
+   docker-compose restart nginx
+   ```
+
+### Security Features
+
+- ✅ **JWT Authentication** - Token-based auth with expiration
+- ✅ **Rate Limiting** - Redis-based rate limiting
+- ✅ **Input Validation** - Comprehensive validation system
+- ✅ **Error Handling** - Secure error responses
+- ✅ **Circuit Breakers** - Failure prevention
+
+See [Security Setup Guide](docs/guides/SECURITY_SETUP_GUIDE.md) for details.
+
+---
+
+## 📊 Hardware Optimization
+
+### Adaptive Resource Management
+
+The platform includes **adaptive resource management** that automatically adjusts based on system load.
+
+**Features:**
+- **CPU Optimization** - Dynamic worker thread adjustment
+- **Memory Optimization** - Cache size optimization
+- **Connection Pooling** - Optimal pool size calculation
+- **Disk Optimization** - I/O monitoring and optimization
+- **Network Optimization** - Connection statistics
+
+### Configuration
+
+Edit `infrastructure/docker/.env`:
+
+```bash
+# Hardware Optimization
+MAX_WORKERS=8
+MIN_WORKERS=2
+TARGET_CPU_UTILIZATION=0.7
+MEMORY_CACHE_SIZE=256
+```
+
+See [Hardware Optimization Guide](docs/deployment/HARDWARE_OPTIMIZATION.md) for details.
+
+---
+
+## 🧪 Testing
+
+### Running Tests
+
+```bash
+# Run all unit tests
+pytest tests/unit/ -v
+
+# Run with coverage
+pytest tests/unit/ --cov=src --cov-report=html
+
+# Run E2E tests (requires services running)
+pytest tests/e2e/ -v -m e2e
+
+# Run specific test
+pytest tests/unit/test_validators.py -v
+
+# Run with markers
+pytest tests/ -m "unit and not slow"
+```
+
+### Test Coverage
+
+| Test Type | Count | Status |
+|------------|--------|--------|
+| **Unit Tests** | 65 | ✅ All passing |
+| **E2E Tests** | 28 | ✅ Ready |
+| **Total** | 93 | ✅ Production-ready |
+
+See [Testing Guide](docs/development/TESTING_GUIDE.md) for details.
+
+---
+
+## 🚀 Troubleshooting
+
+### Common Issues
+
+**Services won't start:**
 ```bash
 # Check logs
-./deploy.sh logs <service-name>
+./deploy.sh logs
 
-# Restart service
-docker restart minder-<service-name>
+# Check Docker status
+docker ps -a
 
-# Rebuild service
-cd infrastructure/docker
-docker compose up -d --build <service-name>
+# Restart services
+./deploy.sh restart
 ```
 
-### Out of Memory
-
+**Out of memory:**
 ```bash
 # Check resource usage
 docker stats
 
-# Stop memory-heavy services
-docker stop minder-ollama  # If not using AI features
+# Reduce workers in .env
+MAX_WORKERS=4
+
+# Restart services
+./deploy.sh restart
 ```
 
-### Port Conflicts
-
+**Port conflicts:**
 ```bash
-# Check what's using the port
+# Check port usage
 sudo lsof -i :8000
 
 # Change port in .env
-vim infrastructure/docker/.env
+API_GATEWAY_PORT=8001
 ```
 
-### Database Connection Issues
+**Type errors:**
+```bash
+# Run MyPy
+mypy src/ --config-file=mypy.ini
+```
+
+**Linting errors:**
+```bash
+# Run Flake8
+flake8 src/ --max-line-length=100
+```
+
+### Health Checks
 
 ```bash
-# Check PostgreSQL
-docker exec -it minder-postgres psql -U minder -d minder
+# Automated health check
+./scripts/health-check.sh
 
-# Check Redis
-docker exec -it minder-redis redis-cli -a <password> ping
+# Manual health check
+curl http://localhost:8000/health
 
-# Restart database
-docker restart minder-postgres
+# Check specific service
+curl http://localhost:8001/health
 ```
 
----
-
-## 🔄 Updating
-
-### Update Code
-
-```bash
-# Pull latest changes
-git pull origin main
-
-# Rebuild services
-./deploy.sh deploy
-```
-
-### Update AI Models
-
-```bash
-# Pull new models
-docker exec -it minder-ollama ollama pull <model-name>
-
-# List available models
-docker exec -it minder-ollama ollama list
-```
+See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more.
 
 ---
 
-## 🗑️ Complete Removal
+## 📈 Performance Tips
 
-```bash
-# Stop and remove all containers, volumes, and images
-./deploy.sh clean
+### Resource Optimization
 
-# Manual cleanup
-docker system prune -a --volumes
-```
+1. **Adjust worker count** based on CPU cores
+2. **Enable Redis caching** for database queries
+3. **Use connection pooling** for external services
+4. **Monitor resource usage** with Grafana
+5. **Scale horizontally** for production
 
----
+### Performance Targets
 
-## 📚 Next Steps
+- **Response Time:** <100ms (p95)
+- **Success Rate:** >95%
+- **Test Coverage:** >80%
+- **Type Safety:** >95%
 
-1. **Explore API Documentation:** http://localhost:8000/docs
-2. **Try OpenWebUI:** http://localhost:8080
-3. **Check Grafana Dashboards:** http://localhost:3000
-4. **Read Architecture Analysis:** [ARCHITECTURE_ANALYSIS.md](./ARCHITECTURE_ANALYSIS.md)
-5. **Explore Plugins:** http://localhost:8001/docs
-
----
-
-## 🆘 Getting Help
-
-- **Documentation:** `docs/`
-- **Troubleshooting:** `docs/troubleshooting/`
-- **Architecture:** `docs/architecture/`
-- **GitHub Issues:** [Create issue](https://github.com/your-repo/issues)
+See [Hardware Optimization Guide](docs/deployment/HARDWARE_OPTIMIZATION.md) for optimization strategies.
 
 ---
 
-## ⚡ Quick Reference
+## 📝 Next Steps
 
-```bash
-# Full deployment
-./deploy.sh deploy
+After successful deployment:
 
-# Service status
-./deploy.sh status
+1. **Verify all services are running**
+   ```bash
+   ./deploy.sh status
+   ```
 
-# Health check
-./deploy.sh health
+2. **Test API endpoints**
+   ```bash
+   curl http://localhost:8000/health
+   curl http://localhost:8000/docs
+   ```
 
-# View logs
-./deploy.sh logs
+3. **Access OpenWebUI**
+   ```
+   Navigate to http://localhost:8080
+   Create account or login
+   ```
 
-# Stop services
-./deploy.sh stop
+4. **Test AI integration**
+   ```bash
+   # Test AI tools endpoint
+   curl -X POST http://localhost:8010/v1/ai/chat \
+     -H "Content-Type: application/json" \
+     -d '{"messages": [{"role": "user", "content": "Hello!"}]}'
+   ```
 
-# Clean everything
-./deploy.sh clean
-```
+5. **Monitor with Grafana**
+   ```
+   Navigate to http://localhost:3001
+   View dashboards
+   ```
 
 ---
 
-**Deployment Time:** 20-30 minutes (first run)
-**Maintenance Time:** <5 minutes (updates)
-**Skill Level:** Beginner-friendly
+## 📚 Additional Resources
 
-**🎉 Congratulations! Your Minder Platform is now running!**
+### Documentation
+
+- **[Full Documentation](docs/)** - Complete documentation index
+- **[API Reference](docs/api/)** - API documentation
+- **[Architecture](docs/architecture/)** - System architecture
+- **[Deployment](docs/deployment/)** - Deployment guides
+- **[Development](docs/development/)** - Development setup
+- **[Guides](docs/guides/)** - Configuration guides
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Troubleshooting guide
+
+### External Resources
+
+- **Docker Documentation:** https://docs.docker.com/
+- **Docker Compose:** https://docs.docker.com/compose/
+- **Ollama:** https://ollama.ai/
+- **FastAPI:** https://fastapi.tiangolo.com/
+- **Grafana:** https://grafana.com/
+
+---
+
+## 🆘 Support
+
+- **Documentation:** [docs/](docs/)
+- **Issues:** [GitHub Issues](https://github.com/wish-maker/minder/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/wish-maker/minder/discussions)
+- **Quick Help:** Run `./deploy.sh help`
+
+---
+
+**Built with ❤️ by Minder AI Team**
+
+**Last Updated:** 2026-04-28
+**Version:** 2.1.0
