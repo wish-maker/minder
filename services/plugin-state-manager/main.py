@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # Server
     APP_NAME: str = "Plugin State Manager"
-    VERSION: str = "1.0.0"
+    VERSION: str = "2.1.0"
     HOST: str = "0.0.0.0"
     PORT: int = 8003
 

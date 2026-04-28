@@ -36,7 +36,7 @@ logger = logging.getLogger("minder.plugin-registry")
 app = FastAPI(
     title="Minder Plugin Registry",
     description="Plugin discovery and lifecycle management",
-    version="2.0.0",
+    version="2.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -201,7 +201,7 @@ async def load_plugin_from_manifest(manifest_path: Path):
         # For now, just store metadata
         plugin_info = PluginInfo(
             name=plugin_name,
-            version=manifest.get("version", "1.0.0"),
+            version=manifest.get("version", "2.1.0"),
             description=manifest.get("description", ""),
             author=manifest.get("author", ""),
             status="registered",
@@ -371,7 +371,7 @@ async def health_check():
         "service": "plugin-registry",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0",
+        "version": "2.1.0",
         "environment": settings.ENVIRONMENT,
         "plugins_loaded": len(plugins_db),
         "services_registered": len(services_db),

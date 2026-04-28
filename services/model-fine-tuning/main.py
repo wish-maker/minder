@@ -46,7 +46,7 @@ MODELS_OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 app = FastAPI(
     title="Minder Model Fine-Tuning Service",
     description="Production ML model fine-tuning with Ollama",
-    version="1.0.0",
+    version="2.1.0",
 )
 
 # ============================================================================
@@ -261,7 +261,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0",
+        "version": "2.1.0",
         "training_jobs": len(training_jobs),
         "datasets": len(datasets),
         "ollama_available": OLLAMA_AVAILABLE,
@@ -527,7 +527,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder Model Fine-Tuning Service",
-        "version": "1.0.0",
+        "version": "2.1.0",
         "status": "operational",
         "ollama_available": OLLAMA_AVAILABLE,
     }

@@ -31,7 +31,7 @@ logger = logging.getLogger("minder.api-gateway")
 app = FastAPI(
     title="Minder API Gateway",
     description="Central API Gateway for Minder Platform",
-    version="2.0.0",
+    version="2.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -192,7 +192,7 @@ async def health_check():
         "service": "api-gateway",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0",
+        "version": "2.1.0",
         "environment": settings.ENVIRONMENT,
         "phase": settings.MINDER_PHASE,
         "checks": {},

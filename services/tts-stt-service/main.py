@@ -63,7 +63,7 @@ SUPPORTED_LANGUAGES = {
 app = FastAPI(
     title="Minder TTS/STT Service",
     description="Text-to-Speech and Speech-to-Text service",
-    version="1.0.0",
+    version="2.1.0",
 )
 
 # ============================================================================
@@ -230,7 +230,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0",
+        "version": "2.1.0",
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
     }
@@ -247,7 +247,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder TTS/STT Service",
-        "version": "1.0.0",
+        "version": "2.1.0",
         "status": "operational",
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,

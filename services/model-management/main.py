@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Minder Model Management",
     description="Model management and fine-tuning service",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 
@@ -82,7 +82,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0",
+        "version": "2.1.0",
         "models_registered": len(models),
     }
 
@@ -225,7 +225,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder Model Management",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "operational",
     }
 
