@@ -1,66 +1,74 @@
-# 📚 User Guides
+# User Guides
 
-Welcome to the Minder Platform user guides. This section contains information for users, administrators, and operators.
+Comprehensive guides for using and configuring Minder Platform.
 
----
+## Available Guides
 
-## 🚀 Getting Started
+### Security & Authentication
 
-### Quick Start
-**[Quick Start Guide](getting-started/QUICK_START.md)** - Get Minder running in under 5 minutes
+#### [Authentication & Security](authentication.md)
+**Essential** - Complete guide to authentication and authorization.
 
-### Installation
-**[Installation Guide](getting-started/installation.md)** - Detailed step-by-step installation
+Topics:
+- SSO (Single Sign-On) setup
+- 2FA (Two-Factor Authentication)
+- User management
+- Access control rules
+- Password policies
+- Session management
 
----
+**Who should read:** Everyone, especially administrators
 
-## 🔧 Core Guides
+#### [Security Setup Guide](security-setup.md)
+**Advanced** - Hardening your Minder Platform deployment.
 
-### Authentication
-**[API Authentication Guide](API_AUTHENTICATION_GUIDE.md)** - How to authenticate with JWT tokens
-- Login with username/password
-- Generate access tokens
-- Use tokens in API requests
-- Token expiration and refresh
-
-### Security
-**[Security Setup Guide](SECURITY_SETUP_GUIDE.md)** - Security best practices
-- Secure credential generation
-- Environment variable configuration
-- Firewall setup
+Topics:
 - SSL/TLS configuration
+- Firewall rules
+- Rate limiting
+- Input validation
+- Secrets management
+- Security best practices
+
+**Who should read:** Production deployers, security engineers
+
+## Guide Categories
+
+### Configuration
+- Authentication setup
+- Security hardening
+- Environment configuration
+- Service tuning
+
+### Operations
+- Service management
+- Backup and restore
+- Monitoring setup
+- Log management
 
 ### Integration
-**[OpenWebUI Integration Guide](OPENWEBUI_INTEGRATION_GUIDE.md)** - AI chat interface
-- Install and configure OpenWebUI
-- Connect to Minder API
-- Configure AI tools
+- API integration
+- Plugin development
+- Third-party services
 
----
+## Reading Order
 
-## 📊 Available Plugins
+If you're new to Minder Platform:
 
-**[Plugin System Documentation](../architecture/plugin-system.md)** - Complete plugin overview
-- Built-in plugins (crypto, news, network, weather, tefas)
-- Plugin capabilities and data sources
-- Plugin usage examples
+1. Start with [Quick Start](../getting-started/quick-start.md)
+2. Read [Authentication Guide](authentication.md) for security setup
+3. Explore [Development Guide](../development/development.md) for customization
 
----
+## Contributing Guides
 
-## 🐛 Troubleshooting
+Want to add a guide? Please:
 
-**[Troubleshooting Guide](../troubleshooting/common-issues.md)** - Common problems and solutions
+1. Check existing guides to avoid duplication
+2. Follow the [Documentation Style Guide](../development/code-style.md#documentation)
+3. Submit a pull request
 
----
+## Additional Resources
 
-## 🔍 Quick Links
-
-- **[API Reference](../api/README.md)** - Complete API documentation
-- **[Architecture Overview](../architecture/README.md)** - System design and components
-- **[Development Guide](../development/README.md)** - For developers
-- **[Deployment Guide](../deployment/README.md)** - Production deployment
-- **[References](../references/README.md)** - Additional resources
-
----
-
-**Last Updated:** 2026-04-19
+- [API Reference](../api/reference.md) - API documentation
+- [Troubleshooting](../troubleshooting/) - Common issues
+- [Architecture](../architecture/) - System design

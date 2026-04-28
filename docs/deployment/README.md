@@ -1,152 +1,163 @@
-# 🚀 Deployment Guide
+# Deployment Documentation
 
-Complete deployment guide for the Minder Platform.
+Production deployment guides and operational procedures for Minder Platform.
 
----
+## Deployment Guides
 
-## 📖 Documentation Structure
+### [Production Deployment](production.md)
+**Essential** - Complete production deployment guide.
 
-### Main Guide
-- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Complete deployment instructions
+Covers:
+- Pre-deployment checklist
+- Security configuration
+- Resource requirements
+- Step-by-step deployment
+- Verification procedures
+- Rollback strategies
 
-### Additional Guides
-- **[Monitoring](monitoring.md)** - Prometheus + Grafana setup
-- **[Security](../guides/SECURITY_SETUP_GUIDE.md)** - Security configuration
+### [Monitoring Setup](monitoring.md)
+**Essential** - Monitoring and observability setup.
 
----
+Covers:
+- Prometheus configuration
+- Grafana dashboards
+- Alertmanager setup
+- Log aggregation
+- Metrics collection
+- Health checks
 
-## 🎯 Deployment Options
+### Hardware Optimization
+See [HARDWARE_OPTIMIZATION.md](HARDWARE_OPTIMIZATION.md) for:
+- Performance tuning
+- Resource optimization
+- Scaling strategies
+- Cost optimization
 
-### Option 1: Docker Compose (Development/Small Production)
-- **Best for:** Development, testing, small deployments
-- **Complexity:** Low
-- **Scaling:** Manual
+## Deployment Methods
 
-**See:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-
-### Option 2: Kubernetes (Production)
-- **Best for:** Large-scale production
-- **Complexity:** High
-- **Scaling:** Automatic
-
-**Status:** Planned for Phase 4
-
-### Option 3: Cloud Platforms
-- **AWS:** ECS/EKS
-- **GCP:** Cloud Run/GKE
-- **Azure:** Container Instances/AKS
-
-**Status:** Planned for Phase 4
-
----
-
-## 📋 Prerequisites
-
-### Minimum Requirements
-- CPU: 4 cores
-- RAM: 8 GB
-- Disk: 20 GB
-- OS: Linux, macOS, or Windows with WSL2
-
-### Recommended Requirements
-- CPU: 8 cores
-- RAM: 16 GB
-- Disk: 50 GB SSD
-- OS: Ubuntu 22.04 LTS or Docker-optimized Linux
-
-### Software Requirements
-- Docker Engine 24.0+
-- Docker Compose 2.20+
-- Git 2.30+
-- curl
-
----
-
-## 🚀 Quick Start Deployment
-
-### 1. Clone Repository
+### Method 1: Automated (Recommended)
 ```bash
-git clone https://github.com/wish-maker/minder.git
+git clone https://github.com/your-org/minder.git
 cd minder
+./deploy.sh
 ```
 
-### 2. Configure Environment
+### Method 2: Manual
+See [Production Deployment](production.md) for detailed manual deployment.
+
+## Pre-Deployment Checklist
+
+### Security
+- [ ] Change all default passwords
+- [ ] Configure SSL/TLS certificates
+- [ ] Set up firewall rules
+- [ ] Enable rate limiting
+- [ ] Review CORS settings
+
+### Infrastructure
+- [ ] Verify system requirements
+- [ ] Ensure Docker is installed
+- [ ] Configure reverse proxy
+- [ ] Set up monitoring
+- [ ] Plan backup strategy
+
+### Configuration
+- [ ] Review environment variables
+- [ ] Configure SMTP settings
+- [ ] Set up backup jobs
+- [ ] Test disaster recovery
+
+## Production Best Practices
+
+### Security
+1. **Use strong passwords** - Minimum 32 characters
+2. **Enable HTTPS** - SSL/TLS certificates
+3. **Configure firewalls** - Restrict access
+4. **Regular updates** - Keep dependencies current
+5. **Monitor logs** - Security auditing
+
+### Performance
+1. **Resource limits** - Set appropriate limits
+2. **Horizontal scaling** - Scale stateless services
+3. **Load balancing** - Distribute traffic
+4. **Caching** - Redis optimization
+5. **Database tuning** - Connection pooling
+
+### Reliability
+1. **Health checks** - Monitor all services
+2. **Auto-restart** - Restart policies
+3. **Backups** - Regular backup jobs
+4. **Disaster recovery** - Test recovery procedures
+5. **Monitoring** - Alert on issues
+
+## Scaling
+
+### Horizontal Scaling
 ```bash
-cd infrastructure/docker
-cp .env.example .env
-nano .env
+# Scale API Gateway to 3 instances
+docker compose -f infrastructure/docker/docker-compose.yml up -d --scale api-gateway=3
 ```
 
-### 3. Start Services
-```bash
-docker compose up -d
+### Vertical Scaling
+Edit `docker-compose.yml` to adjust resource limits:
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '2.0'
+      memory: 2G
 ```
 
-### 4. Verify Deployment
+## Monitoring
+
+### Health Checks
 ```bash
+# Automated health check
+./scripts/health-check.sh
+
+# Manual check
 curl http://localhost:8000/health
 ```
 
-**See:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed steps
+### Metrics
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000
+- **Alertmanager**: http://localhost:9093
 
----
+### Logs
+```bash
+# View all logs
+docker compose -f infrastructure/docker/docker-compose.yml logs -f
 
-## 🔒 Security Considerations
+# View service logs
+docker logs minder-api-gateway -f
+```
 
-**See:** [Security Setup Guide](../guides/SECURITY_SETUP_GUIDE.md)
+## Backup & Recovery
 
-- Generate secure passwords
-- Configure firewall rules
-- Enable HTTPS/TLS
-- Regular backups
+### Database Backup
+```bash
+# Automated daily backup
+docker exec minder-postgres pg_dump -U minder > backup.sql
+```
 
----
+### Restore
+```bash
+# Restore from backup
+docker exec -i minder-postgres psql -U minder < backup.sql
+```
 
-## 📊 Monitoring
+## Troubleshooting
 
-**See:** [Monitoring Guide](monitoring.md)
+Having deployment issues?
 
-- Prometheus (metrics collection)
-- Grafana (visualization)
-- Custom exporters
+- [Common Issues](../troubleshooting/common-issues.md)
+- [Emergency Procedures](../troubleshooting/emergency-procedures.md)
 
----
+## Support
 
-## 🔄 Updates & Maintenance
-
-**See:** [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)
-
-- Zero-downtime updates
-- Backup procedures
-- Rollback strategies
-- Log management
-
----
-
-## 🐛 Troubleshooting
-
-**See:** [Troubleshooting Guide](../troubleshooting/README.md)
-
-- Common issues
-- Emergency procedures
-- Debugging tips
-
----
-
-## 📚 Related Documentation
-
-- **[API Reference](../api/README.md)** - API documentation
-- **[Architecture](../architecture/README.md)** - System architecture
-- **[Getting Started](../getting-started/QUICK_START.md)** - Installation
-
----
-
-## 🤝 Support
-
-- **GitHub Issues:** https://github.com/wish-maker/minder/issues
-- **Documentation:** /root/minder/docs/
-- **Status Dashboard:** http://localhost:3000 (Grafana)
-
----
-
-**Last Updated:** 2026-04-19
+For production issues:
+1. Check logs: `./scripts/logs.sh`
+2. Run diagnostics: `./scripts/diagnostics.sh`
+3. Review troubleshooting guide
+4. Contact support: support@minder-platform.com

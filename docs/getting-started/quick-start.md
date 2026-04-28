@@ -1,0 +1,105 @@
+# Quick Start Guide
+
+## 5-Minute Setup
+
+### Prerequisites Check
+```bash
+# Verify Docker is installed
+docker --version
+docker compose version
+
+# Verify Docker is running
+docker ps
+```
+
+### Installation
+
+#### Option 1: Automated (Recommended)
+```bash
+# Clone and setup
+git clone https://github.com/wish-maker/minder.git
+cd minder
+./setup.sh
+```
+
+#### Option 2: Manual
+```bash
+# 1. Configure environment
+cp infrastructure/docker/.env.example infrastructure/docker/.env
+
+# 2. Start services
+docker compose -f infrastructure/docker/docker-compose.yml up -d
+
+# 3. Wait for services to be healthy (~8 minutes)
+docker ps  # All services should show "healthy" status
+```
+
+### Verification
+
+```bash
+# Test all APIs
+for port in 8000 8001 8002 8003 8004 8005 8006 8007; do
+    echo "Testing port $port..."
+    curl -s http://localhost:$port/health | jq -r '.status' 2>/dev/null || echo "Not responding"
+done
+
+# Check monitoring
+echo "Prometheus: $(curl -s http://localhost:9090/-/healthy > /dev/null && echo 'OK' || echo 'FAIL')"
+echo "Grafana: $(curl -s http://localhost:3000/api/health > /dev/null && echo 'OK' || echo 'FAIL')"
+
+# Check security
+echo "Authelia: $(curl -s http://localhost:9091/api/health | jq -r '.status' 2>/dev/null || echo 'FAIL')"
+```
+
+### First Steps
+
+1. **Change Default Passwords** ⚠️ **IMPORTANT!**
+   ```bash
+   # Access Authelia at http://localhost:9091
+   # Default credentials: admin / admin123
+   # Change immediately after first login!
+   ```
+
+2. **Access Services**:
+   - **API Gateway**: http://localhost:8000
+   - **Plugin Registry**: http://localhost:8001
+   - **Marketplace**: http://localhost:8002
+   - **AI Services**: http://localhost:8004
+   - **OpenWebUI**: http://localhost:8080
+
+3. **View Monitoring**:
+   - **Prometheus**: http://localhost:9090
+   - **Grafana**: http://localhost:3000 (admin/admin)
+
+### Common Issues
+
+**Port already in use?**
+```bash
+# Change ports in infrastructure/docker/docker-compose.yml
+# Example: ports: - "8080:8000"
+```
+
+**Services not starting?**
+```bash
+# Check logs
+docker compose -f infrastructure/docker/docker-compose.yml logs
+
+# Restart specific service
+docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+```
+
+**Memory issues?**
+```bash
+# Check Docker memory limits
+docker system df
+
+# Clean up unused resources
+docker system prune -a
+```
+
+## Next Steps
+
+- 📖 Read [Architecture Overview](../architecture/overview.md)
+- 🔐 Configure [Authentication & Security](../guides/authentication.md)
+- 🔧 See [Development Guide](../development/development.md)
+- 🐛 Check [Troubleshooting Guide](../troubleshooting/common-issues.md)

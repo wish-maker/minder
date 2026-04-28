@@ -1,434 +1,202 @@
-# 🔧 Common Issues
+# Troubleshooting Guide
 
-Frequently encountered problems and their solutions.
+## Common Issues and Solutions
 
----
+### Service Won't Start
 
-## 🚦 Service Issues
-
-### 1. Services Won't Start
-
-**Problem:**
-```
-Container status: Exited (1)
-Logs: "Connection refused" or "Port already in use"
-```
-
-**Solution:**
+#### Problem: Service immediately exits
 ```bash
-# Check port conflicts
-sudo netstat -tulpn | grep -E "8000|8001|8004|8005|5432|6379|6333"
-
-# Stop all services
-docker compose down
-
-# Start services again
-docker compose up -d
-
 # Check logs
-docker compose logs
+docker compose -f infrastructure/docker/docker-compose.yml logs <service>
+
+# Common causes:
+# 1. Port already in use
+# 2. Missing environment variables
+# 3. Database not ready
+# 4. Insufficient resources
 ```
 
-**Root Cause:**
-- Port conflicts
-- Previous containers not properly stopped
-- Database connection issues
+#### Solution: Port Conflicts
+```bash
+# Find process using port
+lsof -i :8000
 
----
+# Kill process
+kill -9 <PID>
 
-### 2. High Memory Usage
-
-**Problem:**
-```
-Container status: Memory limit exceeded
-Logs: "OOM killed"
+# Or change port in docker-compose.yml
 ```
 
-**Solution:**
+### Database Issues
+
+#### Problem: Can't connect to database
+```bash
+# Check database is running
+docker exec -it minder-postgres psql -U minder -c "SELECT 1"
+
+# Reset database
+docker compose -f infrastructure/docker/docker-compose.yml down -v
+docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
+```
+
+#### Problem: Database migration failed
+```bash
+# Check migrations
+ls migrations/
+
+# Run migrations manually
+docker exec -it minder-postgres psql -U minder -d minder -f /path/to/migration.sql
+```
+
+### Memory Issues
+
+#### Problem: Out of memory errors
 ```bash
 # Check memory usage
 docker stats
 
+# Increase Docker memory limit (Docker Desktop)
+# Settings → Resources → Memory → 8GB+
+
+# Clean up unused resources
+docker system prune -a
+```
+
+### Network Issues
+
+#### Problem: Services can't communicate
+```bash
+# Check network
+docker network ls | grep minder
+
+# Recreate network
+docker network rm docker_minder-network
+docker network create docker_minder-network
+
 # Restart services
-docker compose restart
-
-# Clear Redis cache
-docker exec minder-redis redis-cli FLUSHALL
-
-# Check service memory usage
-docker stats --no-stream | grep minder
+docker compose -f infrastructure/docker/docker-compose.yml up -d
 ```
 
-**Root Cause:**
-- Too many containers running
-- Inefficient memory usage
-- Memory leaks in plugins
+### Plugin Issues
 
-**Prevention:**
-- Limit container memory in docker-compose.yml
-- Clear caches regularly
-- Monitor memory usage
-
----
-
-### 3. Database Connection Issues
-
-**Problem:**
-```
-Logs: "could not connect to server: Connection refused"
-Logs: "FATAL: password authentication failed"
-```
-
-**Solution:**
+#### Problem: Plugin not loading
 ```bash
-# Check database status
-docker logs minder-postgres --tail 50
-docker logs minder-redis --tail 50
-
-# Restart databases
-docker compose restart postgres redis
-
-# Check database connection
-docker exec minder-postgres pg_isready
-docker exec minder-redis redis-cli ping
-
-# Test connection
-docker exec -it minder-postgres psql -U minder -d minder -c "SELECT 1;"
-```
-
-**Root Cause:**
-- Database container not running
-- Incorrect credentials in .env file
-- Network issues between containers
-
-**Prevention:**
-- Keep databases healthy
-- Use environment variables for credentials
-- Test connection regularly
-
----
-
-### 4. Plugin Load Failures
-
-**Problem:**
-```
-Plugin count: 3/5 (expected: 5/5)
-Logs: "Failed to load plugin: [plugin_name]"
-```
-
-**Solution:**
-```bash
-# Check plugin directory
-ls -la /root/minder/src/plugins/
-
-# Check plugin configuration
-cat /root/minder/src/plugins/*/plugin.yml
-
-# Test plugin manually
-cd /root/minder
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from plugins.crypto import crypto_module
-metadata = crypto_module.register()
-print(f'Plugin registered: {metadata.name}')
-"
-
-# Rebuild plugin-registry
-docker compose build plugin-registry
-docker compose up -d plugin-registry
-```
-
-**Root Cause:**
-- Plugin configuration errors
-- Missing dependencies
-- Import errors
-
-**Prevention:**
-- Follow plugin development guide
-- Test plugins locally
-- Keep dependencies updated
-
----
-
-## 🌐 Network Issues
-
-### 5. Container Networking Problems
-
-**Problem:**
-```
-Logs: "Error connecting to host: [service-name]"
-```
-
-**Solution:**
-```bash
-# Check network configuration
-docker network ls
-docker network inspect minder_default
-
-# Test connectivity
-docker exec minder-api-gateway ping minder-postgres
-docker exec minder-api-gateway ping minder-redis
-
-# Restart network
-docker network prune
-docker compose up -d
-```
-
-**Root Cause:**
-- Network configuration errors
-- Container network not created
-- DNS resolution issues
-
-**Prevention:**
-- Use docker-compose network naming
-- Test connectivity regularly
-- Use service names in configuration
-
----
-
-## 🔒 Security Issues
-
-### 6. Authentication Failures
-
-**Problem:**
-```
-Logs: "Invalid JWT token"
-Error: 401 Unauthorized
-```
-
-**Solution:**
-```bash
-# Get new token
-curl -X POST http://localhost:8000/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your_password"}'
-
-# Check JWT secret in .env
-cat infrastructure/docker/.env | grep JWT_SECRET
-
-# Restart API gateway to reload secret
-docker compose restart api-gateway
-```
-
-**Root Cause:**
-- Invalid or expired token
-- Wrong credentials
-- JWT secret mismatch
-
-**Prevention:**
-- Use secure passwords
-- Implement token refresh
-- Validate tokens properly
-
----
-
-## 📊 Monitoring Issues
-
-### 7. Metrics Not Appearing
-
-**Problem:**
-```
-Prometheus: Target status shows "down"
-Grafana: No data in panels
-```
-
-**Solution:**
-```bash
-# Check Prometheus target
-curl http://localhost:9090/api/v1/targets
-
-# Check metrics endpoint
-curl http://localhost:8000/metrics
-
-# Restart Prometheus
-docker restart minder-prometheus
-
-# Check network connectivity
-docker exec minder-prometheus wget -qO- http://minder-api-gateway:8000/metrics
-```
-
-**Root Cause:**
-- Prometheus not scraping correctly
-- Metrics endpoint not accessible
-- Network connectivity issues
-
-**Prevention:**
-- Monitor Prometheus targets
-- Keep metrics endpoint healthy
-- Test connectivity regularly
-
----
-
-## 🗄️ Data Issues
-
-### 8. Database Not Updating
-
-**Problem:**
-```
-Database tables empty
-Plugin data not being stored
-```
-
-**Solution:**
-```bash
-# Check database content
-docker exec minder-postgres psql -U minder -d minder -c "SELECT count(*) FROM plugins;"
+# Check plugin registry
+curl http://localhost:8001/plugins
 
 # Check plugin logs
-docker logs minder-plugin-registry --tail 100 | grep ERROR
+docker logs minder-plugin-registry
 
-# Restart plugin-registry
-docker compose restart plugin-registry
-
-# Check database permissions
-docker exec -it minder-postgres psql -U minder -d minder -c "\l"
+# Reload plugin
+curl -X POST http://localhost:8001/plugins/<plugin-id>/reload
 ```
 
-**Root Cause:**
-- Database connection issues
-- Permission problems
-- Plugin errors
+### Authentication Issues
 
-**Prevention:**
-- Regular database backups
-- Monitor plugin logs
-- Test data storage
-
----
-
-## 📝 General Issues
-
-### 9. Disk Space Issues
-
-**Problem:**
-```
-Logs: "No space left on device"
-Error: Container failed to start
-```
-
-**Solution:**
+#### Problem: Can't login to Authelia
 ```bash
-# Check disk usage
-df -h
+# Check Authelia is running
+docker ps | grep authelia
 
-# Clean up Docker
+# Check Authelia health
+curl http://localhost:9091/api/health
+
+# Check Authelia logs
+docker logs minder-authelia
+
+# Reset admin password
+docker exec -it minder-authelia authelia users list
+```
+
+#### Problem: 2FA not working
+```bash
+# Verify TOTP is configured
+# Access http://localhost:9091
+# Login → One-Time Password → Check configuration
+
+# Check system time is synchronized
+timedatectl status
+```
+
+### Security Layer Issues
+
+#### Problem: Traefik dashboard not accessible
+```bash
+# Check Traefik is running
+docker ps | grep traefik
+
+# Check Traefik logs
+docker logs minder-traefik
+
+# Verify Traefik health
+docker exec minder-traefik wget --quiet --tries=1 --spider http://localhost:8080/ping
+
+# Dashboard may require admin network access
+# Try: curl -H "Host: traefik.minder.local" http://localhost/
+```
+
+#### Problem: Services returning 401 Unauthorized
+```bash
+# Check Authelia is healthy
+curl http://localhost:9091/api/health
+
+# Verify session cookie
+# Check browser developer tools → Application → Cookies
+
+# Test authentication directly
+curl -X POST http://localhost:9091/api/verify \
+  -H "X-Original-URL: http://localhost:8000/api/v1/plugins" \
+  -H "Authorization: Bearer <token>"
+```
+
+### Performance Issues
+
+#### Problem: Slow API responses
+```bash
+# Check resource usage
+docker stats
+
+# Enable debug logging
+# Set LOG_LEVEL=DEBUG in .env
+
+# Check database connections
+docker exec minder-postgres psql -U minder -c "SELECT count(*) FROM pg_stat_activity;"
+```
+
+## Getting Help
+
+### Collect Diagnostic Information
+```bash
+# Save diagnostics
+./scripts/diagnostics.sh > diagnostics.txt
+
+# Include in issue report
+```
+
+### Useful Commands
+
+```bash
+# Service status
+docker ps
+
+# Resource usage
+docker stats
+
+# Logs
+docker compose -f infrastructure/docker/docker-compose.yml logs
+
+# Health check
+./scripts/health-check.sh
+
+# Restart service
+docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+```
+
+### Emergency Reset
+
+```bash
+# Full reset (WARNING: Deletes all data)
+docker compose -f infrastructure/docker/docker-compose.yml down -v
 docker system prune -a
-
-# Remove old containers
-docker compose down
-docker container prune
-
-# Clear logs
-docker logs --tail 0 $(docker ps -aq) > /dev/null 2>&1
+./setup.sh
 ```
-
-**Root Cause:**
-- Too much disk usage
-- Large Docker images
-- Old logs
-
-**Prevention:**
-- Monitor disk usage
-- Clean up regularly
-- Use volume limits
-
----
-
-### 10. Configuration Issues
-
-**Problem:**
-```
-Services not using correct configuration
-Environment variables not applied
-```
-
-**Solution:**
-```bash
-# Check environment variables
-docker exec minder-api-gateway env | grep MINDER
-
-# Check docker-compose.yml
-cat infrastructure/docker/docker-compose.yml | grep -A 5 environment
-
-# Restart services with new config
-docker compose up -d --force-recreate
-```
-
-**Root Cause:**
-- Wrong environment variables
-- Configuration not loaded
-- Cache issues
-
-**Prevention:**
-- Use .env files
-- Document configuration
-- Test configuration changes
-
----
-
-## 🔍 Debugging Tips
-
-### Enable Debug Logs
-
-```bash
-# Update .env file
-LOG_LEVEL=DEBUG
-
-# Restart services
-docker compose down
-docker compose up -d
-```
-
-### Check Container Health
-
-```bash
-# Check all containers
-docker ps -a | grep minder
-
-# Check specific container
-docker inspect minder-api-gateway
-
-# Check container logs
-docker logs minder-api-gateway --tail 100
-```
-
-### Test Endpoints
-
-```bash
-# Test health endpoint
-curl http://localhost:8000/health
-
-# Test API gateway
-curl http://localhost:8001/v1/plugins
-
-# Test specific plugin
-curl http://localhost:8000/v1/plugins/crypto/collect
-```
-
----
-
-## 📚 Related Documentation
-
-- **[Deployment Guide](../deployment/README.md)** - Deployment troubleshooting
-- **[Troubleshooting Guide](../troubleshooting/README.md)** - Overview
-- **[Known Issues](../references/ISSUES.md)** - Known problems
-- **[API Reference](../api/README.md)** - API endpoint issues
-
----
-
-## 🤝 Getting Help
-
-If you encounter an issue not listed here:
-
-1. Check [Known Issues](../references/ISSUES.md)
-2. Search GitHub Issues
-3. Create a new issue with:
-   - Detailed error messages
-   - Container logs
-   - Configuration files
-   - Steps to reproduce
-
----
-
-**Last Updated:** 2026-04-19

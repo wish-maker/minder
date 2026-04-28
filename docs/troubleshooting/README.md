@@ -1,160 +1,296 @@
-# 🔧 Troubleshooting Guide
+# Troubleshooting
 
-Common problems and solutions for the Minder Platform.
+Common issues and solutions for Minder Platform.
 
----
+## Quick Help
 
-## 📖 Documentation Structure
+### Most Common Issues
 
-### Common Issues
-- **[Common Issues](common-issues.md)** - Frequently encountered problems
+1. **Services won't start**
+   → Check logs: `docker logs <service>`
+   → Verify ports: `lsof -i :8000`
+   → Restart: `docker compose restart <service>`
 
-### Emergency Procedures
-- **[Emergency Procedures](emergency-procedures.md)** - Critical situation handling
+2. **Database connection errors**
+   → Check database: `docker exec minder-postgres pg_isready -U minder`
+   → Verify password in `.env`
+   → Restart database: `docker compose restart postgres`
 
----
+3. **Port already in use**
+   → Find process: `lsof -i :8000`
+   → Kill process: `kill -9 <PID>`
+   → Or change port in `docker-compose.yml`
 
-## 🚀 Quick Troubleshooting
+## Troubleshooting Guides
 
-### Services Won't Start
+### [Common Issues](common-issues.md)
+**Essential** - Frequently encountered issues and solutions.
 
-**Symptoms:**
-- Container status: Exited (1)
-- Logs show "Connection refused"
+Covers:
+- Installation issues
+- Service startup problems
+- Database issues
+- Network issues
+- Performance issues
 
-**Solutions:**
+### [Emergency Procedures](emergency-procedures.md)
+**Critical** - Crisis management and recovery.
+
+Covers:
+- Full system recovery
+- Service failures
+- Data corruption
+- Security incidents
+- Disaster recovery
+
+## Diagnostic Tools
+
+### Health Check
 ```bash
-# Check port conflicts
-sudo netstat -tulpn | grep -E "8000|8001|8004|8005|5432|6379|6333"
+# Automated health check
+./scripts/health-check.sh
 
-# Check disk space
-df -h
-
-# Check memory
-free -h
-
-# View logs
-docker logs <container-name> --tail 100
+# Manual check
+curl http://localhost:8000/health
 ```
 
-**See:** [Common Issues](common-issues.md) for more details
-
----
-
-### High Memory Usage
-
-**Symptoms:**
-- Services slow or unresponsive
-- OOM kills in logs
-
-**Solutions:**
+### Diagnostics Script
 ```bash
-# Restart services
-docker compose restart
+# Run diagnostics
+./scripts/diagnostics.sh
 
-# Clear Redis cache
-docker exec minder-redis redis-cli FLUSHALL
+# Shows:
+# - Service status
+# - Resource usage
+# - Configuration issues
+# - Performance metrics
+```
 
-# Check memory usage
+### Logs
+```bash
+# View all logs
+docker compose -f infrastructure/docker/docker-compose.yml logs -f
+
+# View specific service
+docker logs minder-api-gateway -f
+
+# Last 100 lines
+docker logs minder-api-gateway --tail 100
+
+# Since specific time
+docker logs minder-api-gateway --since 1h
+```
+
+### Container Status
+```bash
+# All containers
+docker ps
+
+# Container details
+docker inspect minder-api-gateway
+
+# Resource usage
 docker stats
 ```
 
-**See:** [Common Issues](common-issues.md) for more details
+## Issue Categories
 
----
+### Installation Issues
 
-### Database Connection Issues
-
-**Symptoms:**
-- Services cannot connect to databases
-- Connection errors in logs
-
-**Solutions:**
-```bash
-# Check database status
-docker logs minder-postgres --tail 50
-docker logs minder-redis --tail 50
-
-# Restart databases
-docker compose restart postgres redis
-
-# Check database connection
-docker exec minder-postgres pg_isready
+**Problem**: Services won't start after setup
+```
+Solution:
+1. Check Docker is running: docker info
+2. Verify ports are available: lsof -i :8000
+3. Check logs: docker compose logs
+4. Restart: docker compose restart
 ```
 
-**See:** [Common Issues](common-issues.md) for more details
-
----
-
-### Plugin Load Failures
-
-**Symptoms:**
-- Plugin count < 5
-- Logs show "Failed to load plugin"
-
-**Solutions:**
-```bash
-# Check plugin directory permissions
-ls -la /root/minder/src/plugins/
-
-# Check plugin configuration
-cat /root/minder/src/plugins/*/plugin.yml
-
-# Test plugin manually
-cd /root/minder
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from plugins.crypto import crypto_module
-print(crypto_module.register())
-"
+**Problem**: Out of memory errors
+```
+Solution:
+1. Check available memory: free -h
+2. Reduce service limits in docker-compose.yml
+3. Close other applications
+4. Add swap space if needed
 ```
 
-**See:** [Common Issues](common-issues.md) for more details
+### Service Issues
 
----
-
-## 🚨 Emergency Procedures
-
-**See:** [Emergency Procedures](emergency-procedures.md)
-
-### Rollback Procedure
-
-```bash
-# Stop all services
-docker compose down
-
-# Start previous version
-docker-compose.yml.backup
-docker compose up -d
+**Problem**: Service restarting continuously
+```
+Solution:
+1. Check logs: docker logs <service>
+2. Verify configuration: cat .env
+3. Check dependencies: docker compose ps
+4. Restart with rebuild: docker compose up -d --build <service>
 ```
 
-### Emergency Backup
-
-```bash
-# Quick database backup
-docker exec minder-postgres pg_dump -U minder -d minder > emergency_backup.sql
-
-# Quick config backup
-tar czf config_backup.tar.gz infrastructure/docker/.env infrastructure/docker/*.yml
+**Problem**: Service unhealthy
+```
+Solution:
+1. Wait longer (some services take time)
+2. Check health endpoint: curl http://localhost:PORT/health
+3. Review logs: docker logs <service>
+4. Verify dependencies are healthy
 ```
 
----
+### Database Issues
 
-## 📚 Related Documentation
+**Problem**: Database connection refused
+```
+Solution:
+1. Check database is running: docker exec minder-postgres pg_isready
+2. Verify password in .env matches
+3. Check network: docker network ls
+4. Restart database: docker compose restart postgres
+```
 
-- **[Deployment Guide](../deployment/README.md)** - Deployment troubleshooting
-- **[API Reference](../api/README.md)** - API endpoint issues
-- **[Known Issues](../references/ISSUES.md)** - Known problems
+**Problem**: Database corrupted
+```
+Solution:
+1. Stop services: docker compose down
+2. Remove volumes: docker compose down -v
+3. Restart: ./setup.sh
+4. Restore from backup if available
+```
 
----
+### Performance Issues
 
-## 🤝 Getting Help
+**Problem**: Slow response times
+```
+Solution:
+1. Check resource usage: docker stats
+2. Scale services: docker compose up -d --scale api-gateway=3
+3. Review logs for errors
+4. Check database performance
+```
 
-- **GitHub Issues:** https://github.com/wish-maker/minder/issues
-- **Documentation:** /root/minder/docs/
-- **Community:** (to be added)
+**Problem**: High memory usage
+```
+Solution:
+1. Check stats: docker stats
+2. Reduce resource limits in docker-compose.yml
+3. Restart services: docker compose restart
+4. Clear caches: docker system prune -a
+```
 
----
+### Security Issues
 
-**Last Updated:** 2026-04-19
+**Problem**: Cannot authenticate
+```
+Solution:
+1. Check Authelia is running: docker ps | grep authelia
+2. Verify credentials: admin/admin123 (default)
+3. Check Authelia logs: docker logs minder-authelia
+4. Reset password if needed
+```
+
+**Problem**: Rate limit errors
+```
+Solution:
+1. Wait for rate limit to reset (1 minute)
+2. Check Redis is running: docker logs minder-redis
+3. Adjust rate limits in configuration
+4. Use different API key if applicable
+```
+
+## Getting Help
+
+### Self-Service
+
+1. **Check Documentation**
+   - [Common Issues](common-issues.md)
+   - [Emergency Procedures](emergency-procedures.md)
+   - [API Reference](../api/reference.md)
+
+2. **Run Diagnostics**
+   ```bash
+   ./scripts/diagnostics.sh
+   ```
+
+3. **Check Logs**
+   ```bash
+   ./scripts/logs.sh
+   ```
+
+### Community Support
+
+- 📚 [Documentation Index](../)
+- 💬 [GitHub Discussions](https://github.com/your-org/minder/discussions)
+- 🐛 [GitHub Issues](https://github.com/your-org/minder/issues)
+
+### Professional Support
+
+For enterprise support:
+- 📧 Email: support@minder-platform.com
+- 🔒 Priority support
+- 📞 SLA guarantees
+
+## Reporting Issues
+
+When reporting issues, please include:
+
+1. **Minder Platform version**
+   ```bash
+   git log -1
+   ```
+
+2. **System information**
+   ```bash
+   ./scripts/diagnostics.sh > diagnostics.txt
+   ```
+
+3. **Service logs**
+   ```bash
+   docker logs <service> > service.log
+   ```
+
+4. **Steps to reproduce**
+   - What you were trying to do
+   - What you expected to happen
+   - What actually happened
+
+5. **Error messages**
+   - Full error output
+   - Screenshots if applicable
+
+## Emergency Contacts
+
+### Critical Issues
+- 📧 Email: emergency@minder-platform.com
+- 📱 PagerDuty: +1-XXX-XXX-XXXX
+
+### Business Hours
+- 📧 Email: support@minder-platform.com
+- 💬 Slack: #minder-support
+
+## Prevention
+
+### Regular Maintenance
+```bash
+# Weekly health check
+./scripts/health-check.sh
+
+# Monthly cleanup
+./scripts/cleanup.sh
+
+# Quarterly updates
+./scripts/update_libraries.sh
+```
+
+### Monitoring
+- Set up Grafana dashboards
+- Configure Alertmanager alerts
+- Review logs regularly
+- Monitor resource usage
+
+### Backups
+```bash
+# Daily database backup
+docker exec minder-postgres pg_dump -U minder > backup_$(date +%Y%m%d).sql
+
+# Weekly volume backup
+docker run --rm -v docker_postgres_data:/data -v $(pwd):/backup \
+  alpine tar czf /backup/postgres_$(date +%Y%m%d).tar.gz /data
+```

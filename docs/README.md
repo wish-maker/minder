@@ -1,161 +1,63 @@
-# 📚 Minder Platform Documentation
+# Minder Platform Documentation
 
-**Modular RAG platform with microservices architecture, plugin system, and real-time data collection.**
+Welcome to the Minder Platform documentation. This guide helps you get started with the microservices-based AI plugin platform.
 
-> **Status:** 72% Production Ready | **Version:** 2.0.0 | **Last Updated:** 2026-04-19
+## Quick Navigation
 
----
+### 🚀 Getting Started
+- [Quick Start Guide](getting-started/quick-start.md) - 5-minute setup
+- [Installation Guide](getting-started/installation.md) - Detailed installation instructions
 
-## 🚀 Quick Navigation
+### 📚 User Guides
+- [Authentication & Security](guides/authentication.md) - SSO, 2FA, access control
+- [Security Setup Guide](guides/security-setup.md) - Hardening your deployment
 
-### For New Users
-1. **[Getting Started](getting-started/QUICK_START.md)** - One-minute setup guide
-2. **[API Reference](api/README.md)** - Interactive API documentation
-3. **[Available Plugins](architecture/plugin-system.md)** - Built-in plugin list
+### 🔧 Development
+- [Development Guide](development/development.md) - Development workflow
+- [Code Style Guide](development/code-style.md) - Coding standards
+- [Testing Guide](development/testing.md) - Testing practices
+- [Plugin Development](development/plugin-development.md) - Building plugins
 
-### For Developers
-1. **[Architecture Overview](architecture/README.md)** - System design and components
-2. **[Plugin Development](development/PLUGIN_DEVELOPMENT.md)** - How to create plugins
-3. **[Code Standards](development/CODE_STYLE_GUIDE.md)** - Coding conventions
-4. **[Contributing](development/CONTRIBUTING.md)** - Contribution guidelines
+### 📦 Deployment
+- [Production Deployment](deployment/production.md) - Production setup
+- [Monitoring Setup](deployment/monitoring.md) - Monitoring configuration
 
-### For Operators
-1. **[Deployment Guide](deployment/README.md)** - Production deployment
-2. **[Security Guide](guides/SECURITY_SETUP_GUIDE.md)** - Security configuration
-3. **[Troubleshooting](troubleshooting/README.md)** - Common issues
-4. **[Monitoring](deployment/monitoring.md)** - Prometheus + Grafana setup
+### 🏗️ Architecture
+- [System Architecture](architecture/overview.md) - High-level design
+- [Microservices Architecture](architecture/microservices.md) - Service design
 
----
+### 🔌 API Reference
+- [API Documentation](api/reference.md) - Complete API reference
 
-## 📋 Documentation Structure
+### 🐛 Troubleshooting
+- [Common Issues](troubleshooting/common-issues.md) - Frequently asked questions
+- [Emergency Procedures](troubleshooting/emergency-procedures.md) - Crisis management
+
+## Documentation Structure
 
 ```
 docs/
-├── README.md (this file)                      # Documentation index
-│
-├── getting-started/                          # User guides for beginners
-│   ├── QUICK_START.md                        # Quick start guide
-│   └── installation.md                       # Detailed installation
-│
-├── guides/                                   # User-facing guides
-│   ├── API_AUTHENTICATION_GUIDE.md           # JWT auth
-│   ├── SECURITY_SETUP_GUIDE.md               # Security configuration
-│   ├── OPENWEBUI_INTEGRATION_GUIDE.md        # AI integration
-│   └── README.md                             # Guides index
-│
-├── api/                                      # API documentation
-│   ├── README.md                             # API overview
-│   ├── API_REFERENCE.md                      # Complete API docs
-│   └── authentication/                       # Auth endpoints
-│
-├── architecture/                             # Architecture docs
-│   ├── README.md                             # Architecture overview
-│   ├── overview.md                           # System design
-│   ├── plugin-system.md                      # Plugin architecture
-│   ├── current-status.md                     # Current state
-│   └── roadmap.md                            # Development roadmap
-│
-├── development/                              # Developer guides
-│   ├── README.md                             # Dev guide index
-│   ├── PLUGIN_DEVELOPMENT.md                 # Plugin development
-│   ├── CODE_STYLE_GUIDE.md                   # Coding standards
-│   └── CONTRIBUTING.md                       # Contribution guidelines
-│
-├── deployment/                               # Deployment guides
-│   ├── README.md                             # Deployment overview
-│   ├── DEPLOYMENT_GUIDE.md                   # Deployment guide
-│   └── monitoring.md                         # Monitoring setup
-│
-├── troubleshooting/                          # Problem solving
-│   ├── README.md                             # Troubleshooting index
-│   ├── common-issues.md                      # Common problems
-│   └── emergency-procedures.md               # Emergency procedures
-│
-├── references/                               # Reference materials
-│   ├── README.md                             # Reference index
-│   ├── ISSUES.md                             # Known issues
-│   ├── sessions.md                           # Work session logs
-│   └── test-reports/                         # Test reports
-│       ├── system-test-2026-04-23.md
-│       └── ...
-│
-└── test-results/                             # Test results (archived)
-    ├── SYSTEM_TEST_2026_04_23.md
-    └── ...
-
+├── getting-started/     # Installation and quick start
+├── guides/              # User guides and how-tos
+├── development/         # Development documentation
+├── deployment/          # Deployment and operations
+├── architecture/        # System architecture
+├── api/                 # API documentation
+└── troubleshooting/     # Troubleshooting guides
 ```
 
----
+## Contributing
 
-## 🎯 Finding What You Need
+Found a documentation issue? Please:
 
-### I want to...
+1. Check for existing issues in [GitHub Issues](https://github.com/your-org/minder/issues)
+2. Create a new issue with the `documentation` label
+3. Or submit a pull request with your improvements
 
-| Goal | Documentation |
-|------|---------------|
-| **Install and run Minder** | [Getting Started](getting-started/QUICK_START.md) |
-| **Understand the system** | [Architecture Overview](architecture/README.md) |
-| **Build a plugin** | [Plugin Development](development/PLUGIN_DEVELOPMENT.md) |
-| **Deploy to production** | [Deployment Guide](deployment/README.md) |
-| **Configure authentication** | [Security Guide](guides/SECURITY_SETUP_GUIDE.md) |
-| **Check API endpoints** | [API Reference](api/README.md) |
-| **Troubleshoot issues** | [Troubleshooting](troubleshooting/README.md) |
-| **View current status** | [Current Status](architecture/current-status.md) |
-| **Find known issues** | [Known Issues](references/ISSUES.md) |
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.
 
----
+## Additional Resources
 
-## 📖 API Documentation
-
-Interactive API documentation is available at:
-- **Local:** http://localhost:8000/docs (after installation)
-- **Online:** (to be added)
-
----
-
-## 🔍 Recent Changes
-
-### 2026-04-19
-- ✅ Organized documentation into logical sections
-- ✅ Created comprehensive navigation structure
-- ✅ Created missing guides and indexes
-- ✅ Organized test reports and references
-- ✅ Added troubleshooting section
-
-### 2026-04-23
-- ✅ Added JWT Authentication documentation
-- ✅ Added Security Setup Guide
-- ✅ Created Plugin Development Guide
-- ✅ Added Code Style Guide
-- ✅ Completed API Reference
-- ✅ Added Current Status and Roadmap
-
----
-
-## 🤝 Contributing Documentation
-
-We welcome documentation improvements! To contribute:
-
-1. Check [CONTRIBUTING.md](development/CONTRIBUTING.md)
-2. Follow [Code Style Guide](development/CODE_STYLE_GUIDE.md)
-3. Update relevant documentation files
-4. Add tests for new documentation
-5. Submit a pull request
-
----
-
-## 📞 Support
-
-- **GitHub Issues:** https://github.com/wish-maker/minder/issues
-- **Documentation:** /root/minder/docs/
-- **Status Dashboard:** http://localhost:3000 (Grafana)
-
----
-
-## 📝 License
-
-This documentation is licensed under the MIT License.
-
----
-
-**Made with ❤️ by the Minder Team**
+- [Project README](../README.md) - Main project README
+- [GitHub Repository](https://github.com/your-org/minder) - Source code
+- [Issue Tracker](https://github.com/your-org/minder/issues) - Bug reports

@@ -1,35 +1,70 @@
-# Byte-compiled / optimized / DLL files
+# ============================================================================
+# Minder Platform - .gitignore
+# ============================================================================
+# Version: 2.0
+# Last Updated: 2026-04-29
+# Purpose: Prevent committing sensitive, personal, and generated files
+# ============================================================================
+
+# ============================================================================
+# 🟢 COMMIT EDİLEBİLİR (Proje Konfigürasyonu)
+# ============================================================================
+# Aşağıdaki dizinler ekip işbirliği için gereklidir:
+#
+# ✅ .github/          → CI/CD workflows, issue & PR templates
+# ✅ .dockerignore      → Docker konfigürasyonu
+# ✅ .gitignore        → Git ignore kuralları (bu dosya)
+# ✅ .pre-commit-config.yaml → Pre-commit hooks
+# ✅ *.example         → Environment template files
+#
+# Bu dizinler ignore edilmez, team çalışması için gereklidir!
+
+# ============================================================================
+# 🔴 NEVER COMMIT (Critical Security & Personal Data)
+# ============================================================================
+
+# Claude Code & AI Systems (Personal Settings)
+.claude/
+.claude/**/*
+.claude/settings.local.json
+
+# Serena AI Assistant (Memory & Cache)
+.serena/
+.serena/**/*
+.serena/project.local.yml
+.serena/cache/
+.serena/memories/
+
+# System Memory & Logs
+.remember/
+.remember/**/*
+.remember/logs/
+.remember/tmp/
+
+# ============================================================================
+# 🟡 AUTO-GENERATED (Build & Cache Directories)
+# ============================================================================
+
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
-
-# Distribution / packaging
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs-info/
-lib64/lib/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
 
-# PyInstaller
-*.manifest
-*.spec
-
-# Unit test / coverage reports
+# Type Checkers & Linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.typed.md
+.ruff_cache/
+.pytest_cache/
 htmlcov/
 .tox/
 .nox/
@@ -38,79 +73,209 @@ htmlcov/
 .cache
 nosetests.xml
 coverage.xml
-*.mo
-.pytest_cache/
-.pytest_cache/
+*.coverag
+htmlcov/
 
-# Type checking
-.mypy_cache/
-.dmypy.json
-dmypy.json
-*.typed.md
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+build/
+.swc/
+.cache/
+.pnp.*
+.pnp.js
 
-# Documentation
-docs/_build/
-docs/.doctrees/
-site/
+# ============================================================================
+# 🔒 SECRETS & SENSITIVE FILES (Never Commit!)
+# ============================================================================
 
-# Environments
+# Environment Files (CRITICAL!)
 .env
 .env.local
 .env.development
 .env.production
 .env.staging
 .env.test
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+.env.marketplace
+*.key
+*.pem
+*.crt
+secrets/
+credentials/
+*.credentials
 
-# IDEs
+# SSL Certificates (NEVER COMMIT!)
+*.pem
+*.key
+*.crt
+ssl/*.pem
+ssl/*.key
+nginx/ssl/*
+infrastructure/docker/nginx/ssl/*
+infrastructure/nginx/ssl/*
+
+# ============================================================================
+# 💾 DATABASE & DATA FILES
+# ============================================================================
+
+*.db
+*.sqlite3
+*.sql
+*.sqlite
+*.bak
+*.backup
+*_backup
+
+# Docker volumes (don't commit data)
+*.volume
+.volumes/
+
+# Monitoring Data
+grafana/data/
+prometheus/data/
+influxdb/data/
+alertmanager/data/
+
+# ============================================================================
+# 📝 LOGS & TEMPORARY FILES
+# ============================================================================
+
+*.log
+*.tmp
+*.old
+*.save
+*.pid
+*.seed
+*.pid.lock
+tmp/
+temp/
+.remember/tmp/
+
+# ============================================================================
+# 🖥️  IDE & EDITOR SETTINGS (Personal Preferences)
+# ============================================================================
+
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
 
-# OS
+# ============================================================================
+# 📚 DOCUMENTATION BUILD
+# ============================================================================
+
+docs/_build/
+docs/.doctrees/
+site/
+docs/_build/
+docs/.doctrees/
+
+# ============================================================================
+# 🐧 OS-SPECIFIC FILES
+# ============================================================================
+
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
 
-# Project specific
-*.log
-*.db
-*.sqlite3
-*.bak
-*.backup
-*_backup
-*.tmp
-*.old
-*.save
-
-# MyPy Reports
-mypy-report/
-mypy-report.html
-
-# Temporary files
-.remember/tmp/
-tmp/
-temp/
+# ============================================================================
+# 📦 PACKAGE MANAGERS
+# ============================================================================
 
 # Node.js
-node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Next.js
-.next/
-out/
-build/
-.cache/
+# Python
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Docker
-.dockerignore
-docker-compose.override.yml
+# ============================================================================
+# 🧪 TESTING & COVERAGE
+# ============================================================================
+
+test-results/
+test-reports/
+*.test.log
+pytest-reports/
+.tox/
+.nox/
+
+# ============================================================================
+# 🗂️  ARCHIVE & OLD FILES
+# ============================================================================
+
+.archive/
+*.archive
+*.orig
+*~
+
+# ============================================================================
+# 🎨 PROJECT SPECIFIC
+# ============================================================================
+
+# MyPy Reports
+mypy-report/
+mypy-report.html
+
+# PyInstaller
+*.manifest
+*.spec
+
+# ============================================================================
+# 📋 MISC (Various Generated Files)
+# ============================================================================
+
+.history
+*.rej
+*.patch
+.diff
+*.tgz
+*.tar.gz
+.zip
+.rar
+*.session
+*.cache
+*.session
+*.swp
+
+# ============================================================================
+# 🎯 BEST PRACTICE REMINDERS
+# ============================================================================
+#
+# ✅ DO COMMIT:
+#   - .github/ (CI/CD, templates)
+#   - *.example (template files)
+#   - Dockerfile, docker-compose.yml
+#   - Source code
+#   - Documentation (docs/)
+#   - Configuration templates
+#
+# ❌ NEVER COMMIT:
+#   - .env files (use .env.example instead)
+#   - SSL certificates (*.pem, *.key)
+#   - Database files (*.db, *.sqlite3)
+#   - Cache directories (node_modules/, __pycache__/, .next/)
+#   - Personal settings (.claude/, .vscode/, .idea/)
+#   - AI system memory (.serena/, .remember/)
+#   - Log files (*.log)
+#   - Build artifacts (dist/, build/, .next/)
+#
+# 💡 TIP: Before committing, run: git status
+#    If you see sensitive files: git rm --cached <file>
+# ============================================================================

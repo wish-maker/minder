@@ -4,7 +4,7 @@ Unit tests for rate limiting module.
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from src.shared.rate_limiter import (
     RateLimiter,
@@ -24,16 +24,28 @@ def mock_redis():
     redis.sismember = AsyncMock(return_value=False)
     redis.sadd = AsyncMock(return_value=True)
     redis.srem = AsyncMock(return_value=True)
+    redis.zcount = AsyncMock(return_value=0)
     return redis
 
 
 @pytest.fixture
 def rate_limiter(mock_redis):
-    """Create RateLimiter with mock Redis"""
+    """Create RateLimiter instance"""
     from src.shared.rate_limiter import RateLimiter
     return RateLimiter(redis_client=mock_redis)
-    """Create RateLimiter instance"""
-    return RateLimiter(redis=mock_redis)
+
+
+def create_mock_pipeline(zcard_result=0):
+    """Helper to create a properly configured mock pipeline"""
+    mock_pipeline = AsyncMock()
+    mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+    mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+    mock_pipeline.zremrangebyscore = AsyncMock(return_value=0)
+    mock_pipeline.zcard = AsyncMock(return_value=zcard_result)
+    mock_pipeline.zadd = AsyncMock(return_value=1)
+    mock_pipeline.expire = AsyncMock(return_value=True)
+    mock_pipeline.execute = AsyncMock(return_value=[0, zcard_result, 1, True])
+    return mock_pipeline
 
 
 class TestRateLimiter:
@@ -42,39 +54,48 @@ class TestRateLimiter:
     @pytest.mark.asyncio
     async def test_is_rate_limited_first_request(self, rate_limiter, mock_redis):
         """Test first request is not rate limited"""
-        mock_redis.incr.return_value = 1
+        from unittest.mock import Mock
+
+        # Mock pipeline to return count of 0 (no requests yet)
+        mock_pipeline = create_mock_pipeline(zcard_result=0)
+        mock_redis.pipeline = Mock(return_value=mock_pipeline)
 
         is_allowed, info = await rate_limiter.is_allowed("test-key", limit=10, window=60)
 
         assert is_allowed
-        assert info["remaining"] > 0
+        assert info["remaining"] == 10  # 10 - 0 = 10 remaining
 
-    # NOTE: This test is skipped because it mocks the wrong Redis method (incr).
-    # The actual implementation uses Redis sorted sets (zremrangebyscore, zcard, zadd, expire).
-    # This test needs to be rewritten to match the current implementation.
-    @pytest.mark.skip(reason="Test mocks wrong Redis method - implementation changed")
     @pytest.mark.asyncio
     async def test_is_rate_limited_exceeded(self, rate_limiter, mock_redis):
         """Test request is rate limited when limit exceeded"""
-        mock_redis.incr.return_value = 11
-        mock_redis.get.return_value = "1234567890"
+        from unittest.mock import Mock
+
+        # Mock pipeline to return count of 10 (at limit)
+        mock_pipeline = create_mock_pipeline(zcard_result=10)
+        mock_redis.pipeline = Mock(return_value=mock_pipeline)
 
         is_allowed, info = await rate_limiter.is_allowed("test-key", limit=10, window=60)
 
-        # Should not be allowed when limit exceeded
+        # Should not be allowed when at limit (10 >= 10)
+        assert not is_allowed
         assert info["remaining"] == 0
+        assert info["current_count"] == 10
 
     @pytest.mark.asyncio
     async def test_is_rate_limited_custom_key_func(self, rate_limiter, mock_redis):
         """Test custom key function"""
-        mock_redis.incr.return_value = 1
+        from unittest.mock import Mock
+
+        # Mock pipeline to return count of 3
+        mock_pipeline = create_mock_pipeline(zcard_result=3)
+        mock_redis.pipeline = Mock(return_value=mock_pipeline)
 
         is_allowed, info = await rate_limiter.is_allowed(
-            "test-key", limit=10, window=60
+            "custom-key", limit=10, window=60
         )
 
         assert is_allowed
-        assert info["remaining"] > 0
+        assert info["remaining"] == 7  # 10 - 3 = 7 remaining
 
     @pytest.mark.asyncio
     async def test_is_rate_limited_redis_error(self, rate_limiter, mock_redis):
@@ -88,12 +109,16 @@ class TestRateLimiter:
     @pytest.mark.asyncio
     async def test_is_rate_limited_with_whitelist(self, rate_limiter, mock_redis):
         """Test rate limiting with whitelist"""
-        # Whitelist functionality is separate, just test basic rate limiting
-        mock_redis.incr.return_value = 1
+        from unittest.mock import Mock
+
+        # Mock pipeline to return count of 2
+        mock_pipeline = create_mock_pipeline(zcard_result=2)
+        mock_redis.pipeline = Mock(return_value=mock_pipeline)
 
         is_allowed, info = await rate_limiter.is_allowed("test-key", limit=10, window=60)
 
         assert is_allowed
+        assert info["remaining"] == 8  # 10 - 2 = 8 remaining
 
     @pytest.mark.asyncio
     async def test_get_rate_limit_info(self, rate_limiter, mock_redis):
@@ -174,7 +199,7 @@ class TestRateLimitDecorator:
     @pytest.mark.skip(reason="Decorator implementation changed - is_rate_limited method doesn't exist")
     @pytest.mark.asyncio
     async def test_rate_limit_decorator_allowed(self, mock_redis):
-        """Test rate_limit decorator when request is allowed"""
+        """Test rate limit decorator when request is allowed"""
         mock_redis.incr.return_value = 1
 
         @rate_limit(limit=10, window=60)
@@ -196,8 +221,6 @@ class TestRateLimitDecorator:
     @pytest.mark.asyncio
     async def test_rate_limit_decorator_exceeded(self, mock_redis):
         """Test rate limit decorator when limit is exceeded"""
-        mock_redis.incr.return_value = 11
-        mock_redis.get.return_value = "1234567890"
 
         @rate_limit(limit=10, window=60)
         async def test_func(request):

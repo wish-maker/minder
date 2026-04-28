@@ -1,0 +1,171 @@
+# Traefik Dynamic Configuration - Middleware
+
+http:
+  middlewares:
+    # Authelia Forward Auth
+    authelia-forwardauth:
+      forwardAuth:
+        address: "http://authelia:9091/api/verify?rd=https://auth.minder.local"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "Remote-User"
+          - "Remote-Groups"
+          - "Remote-Name"
+          - "Remote-Email"
+
+    # Authelia Basic Auth (for services that support it)
+    authelia-basic:
+      forwardAuth:
+        address: "http://authelia:9091/api/verify?rd=https://auth.minder.local"
+        trustForwardHeader: true
+
+    # Security Headers
+    security-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "strict-origin-when-cross-origin"
+          Permissions-Policy: "camera=(), microphone=(), geolocation=()"
+          Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+
+    # CORS for API
+    api-cors:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowHeaders:
+          - "*"
+        accessControlAllowOriginList:
+          - "https://minder.local"
+          - "https://*.minder.local"
+        accessControlMaxAge: 100
+        addVaryHeader: true
+
+    # Rate Limiting
+    api-rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+
+    # Strip /api prefix for internal routing
+    strip-api-prefix:
+      stripPrefix:
+        prefixes:
+          - "/api"
+        forceSlash: false
+
+    # Admin IP Whitelist (optional)
+    admin-whitelist:
+      ipWhiteList:
+        sourceRange:
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+          - "192.168.0.0/16"
+          - "127.0.0.1/32"
+
+  routers:
+    # Health Check Router (no auth required)
+    health-check:
+      rule: "PathPrefix(`/health`)"
+      service: health-check
+      entryPoints:
+        - websecure
+      priority: 1000
+      tls: {}
+
+    # Services Router (with auth)
+    services-router:
+      rule: "PathPrefix(`/`)"
+      service: services
+      entryPoints:
+        - websecure
+      middlewares:
+        - security-headers
+        - authelia-forwardauth
+      tls: {}
+
+    # API Router (with auth + CORS)
+    api-router:
+      rule: "PathPrefix(`/api`)"
+      service: api-gateway
+      entryPoints:
+        - websecure
+      middlewares:
+        - security-headers
+        - api-cors
+        - authelia-forwardauth
+      tls: {}
+
+    # Authelia Dashboard Router
+    authelia-dashboard:
+      rule: "Host(`auth.minder.local`)"
+      service: authelia
+      entryPoints:
+        - websecure
+      tls: {}
+
+    # Traefik Dashboard Router (admin only)
+    traefik-dashboard:
+      rule: "Host(`traefik.minder.local`)"
+      service: api@internal
+      middlewares:
+        - admin-whitelist
+        - security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+  services:
+    # Health Check Service (load balancer)
+    health-check:
+      loadBalancer:
+        servers:
+          - url: "http://minder-api-gateway:8000"
+        healthCheck:
+          path: /health
+          interval: 10s
+
+    # Services Load Balancer
+    services:
+      loadBalancer:
+        servers:
+          - url: "http://minder-api-gateway:8000"
+          - url: "http://minder-plugin-registry:8001"
+          - url: "http://minder-marketplace:8002"
+          - url: "http://minder-plugin-state-manager:8003"
+          - url: "http://minder-rag-pipeline:8004"
+          - url: "http://minder-model-management:8005"
+
+    # API Gateway Service
+    api-gateway:
+      loadBalancer:
+        servers:
+          - url: "http://minder-api-gateway:8000"
+        healthCheck:
+          path: /health
+          interval: 10s
+
+    # Authelia Service
+    authelia:
+      loadBalancer:
+        servers:
+          - url: "http://authelia:9091"
+        healthCheck:
+          path: /api/health
+          interval: 10s
+
+tls:
+  certificates:
+    - certFile: "/etc/certs/selfsigned.crt"
+      keyFile: "/etc/certs/selfsigned.key"
+      stores:
+        - default

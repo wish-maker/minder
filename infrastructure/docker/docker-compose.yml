@@ -3,6 +3,70 @@
 
 services:
   # ============================================================================
+  # Security & Access Control
+  # ============================================================================
+
+  # Traefik - Reverse Proxy and Load Balancer
+  traefik:
+    image: traefik:v2.10
+    container_name: minder-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.default.acme.tlschallenge=true"
+      - "--certificatesresolvers.default.acme.email=${ACME_EMAIL:-admin@minder.local}"
+      - "--certificatesresolvers.default.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8081:8080"  # Traefik dashboard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik_letsencrypt:/letsencrypt
+      - traefik_logs:/var/log/traefik
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - minder-network
+
+  # Authelia - Single Sign-On and 2FA
+  authelia:
+    image: authelia/authelia:latest
+    container_name: minder-authelia
+    restart: unless-stopped
+    environment:
+      - AUTHELIA_STORAGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - AUTHELIA_DEFAULT_ENCRYPTION_KEY=please_change_this_to_a_32_character_or_more_string
+      - AUTHELIA_DEFAULT_JWT_SECRET=please_change_this_to_a_32_character_or_more_string
+    volumes:
+      - ./authelia/configuration.yml:/config/configuration.yml:ro
+      - ./authelia/users_database.yml:/config/users_database.yml:ro
+    ports:
+      - "9091:9091"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9091/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # ============================================================================
   # Infrastructure Services
   # ============================================================================
 
@@ -16,6 +80,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: minder
       POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
+    volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
@@ -34,6 +99,7 @@ services:
     container_name: minder-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
@@ -50,6 +116,7 @@ services:
     image: ollama/ollama:latest
     container_name: minder-ollama
     restart: unless-stopped
+    volumes:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
@@ -68,6 +135,7 @@ services:
     image: qdrant/qdrant:v1.17.1
     container_name: minder-qdrant
     restart: unless-stopped
+    volumes:
       - qdrant_data:/qdrant/storage
     ports:
       - "6333:6333"  # REST API
@@ -88,8 +156,11 @@ services:
     environment:
       NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/neo4j_test_password_change_me}
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_dbms_memory_heap_initial_size: 512m
-      NEO4J_dbms_memory_heap_max_size: 1G
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 1G
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_dbms_security_procedures_allowlist: apoc.*
+    volumes:
       - neo4j_data:/data
       - ./neo4j/init-cypher.sh:/docker-entrypoint-initdb.d/init-cypher.sh:ro
     ports:
@@ -195,6 +266,7 @@ services:
       - MARKETPLACE_URL=http://minder-marketplace:8002
     env_file:
       - .env
+    volumes:
       - ../../src/plugins:/app/plugins:ro
       - plugins_data:/app/plugins-data
     ports:
@@ -221,8 +293,10 @@ services:
     image: minder/plugin-state-manager:latest
     container_name: minder-plugin-state-manager
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      # Database
+      # Database overrides
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=minder
@@ -255,6 +329,7 @@ services:
         condition: service_healthy
       plugin-registry:
         condition: service_healthy
+    volumes:
       - ../../config/default_plugins.yml:/app/config/default_plugins.yml:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
@@ -332,6 +407,7 @@ services:
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
       - models_data:/app/models
       - models_cache:/app/model-cache
     ports:
@@ -386,20 +462,19 @@ services:
     image: telegraf:1.38.3
     container_name: minder-telegraf
     restart: unless-stopped
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # InfluxDB connection
-      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN}
+      - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-my-super-secret-auth-token}
       - HOSTNAME=minder-server
       - INSTANCE=production
       # Service credentials
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      # Telegraf configuration
-      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
-      # System metrics access
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       influxdb:
         condition: service_healthy
@@ -428,6 +503,7 @@ services:
     image: prom/prometheus:v2.48.0
     container_name: minder-prometheus
     restart: unless-stopped
+    volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
@@ -454,6 +530,7 @@ services:
     image: prom/alertmanager:v0.26.0
     container_name: minder-alertmanager
     restart: unless-stopped
+    volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
     ports:
@@ -541,6 +618,56 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - minder-network
+
+  # Marketplace - Plugin Marketplace and Licensing
+  marketplace:
+    build:
+      context: ../../
+      dockerfile: services/marketplace/Dockerfile
+    image: minder/marketplace:latest
+    container_name: minder-marketplace
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Database (override from .env)
+      - MARKETPLACE_DATABASE_HOST=postgres
+      - MARKETPLACE_DATABASE_PORT=5432
+      - MARKETPLACE_DATABASE_USER=minder
+      - MARKETPLACE_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
+      - MARKETPLACE_DATABASE_NAME=minder_marketplace
+
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+      # Services
+      - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
+
+      # Security
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=HS256
+
+      # Application
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      plugin-registry:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -660,6 +787,12 @@ services:
 # ============================================================================
 
 volumes:
+  # Security volumes
+  traefik_letsencrypt:
+    driver: local
+  traefik_logs:
+    driver: local
+  # Database volumes
   postgres_data:
     driver: local
   redis_data:
@@ -703,7 +836,5 @@ volumes:
 
 networks:
   minder-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
+    external: true
+    name: docker_minder-network

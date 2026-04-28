@@ -1,104 +1,164 @@
-# 💻 Development Guide
+# Development Documentation
 
-Comprehensive guide for developers working on the Minder Platform.
+Welcome to the Minder Platform development documentation. This section covers everything you need to know about contributing to and extending the platform.
 
----
-
-## 📖 Documentation Structure
-
-### Core Guides
-- **[Plugin Development](PLUGIN_DEVELOPMENT.md)** - How to create custom plugins
-- **[Code Style Guide](CODE_STYLE_GUIDE.md)** - Coding conventions and standards
-- **[Contributing](CONTRIBUTING.md)** - Contribution guidelines and process
-
-### Architecture
-- **[Architecture Overview](../architecture/README.md)** - System design
-- **[Plugin System](../architecture/plugin-system.md)** - Plugin architecture details
-
-### Testing
-- **[Test Guide](../test-reports/README.md)** - Testing procedures
-
----
-
-## 🚀 Getting Started
+## Quick Start
 
 ### Prerequisites
-- Docker 24.0+
-- Docker Compose 2.20+
 - Python 3.11+
-- Git 2.30+
+- Docker 20.10+
+- Docker Compose 2.20+
+- Git
+- VS Code or PyCharm (recommended)
 
-### Setup
+### Setup Development Environment
 ```bash
-git clone https://github.com/wish-maker/minder.git
+# Clone repository
+git clone https://github.com/your-org/minder.git
 cd minder
-./install.sh
+
+# Start services
+./setup.sh
+
+# Run tests
+pytest tests/unit/ -v
 ```
 
----
+## Development Guides
 
-## 📝 Plugin Development
+### [Development Guide](development.md)
+**Essential** - Complete development workflow.
 
-**[Plugin Development Guide](PLUGIN_DEVELOPMENT.md)** covers:
-- Plugin structure and requirements
-- Module interface implementation
-- Data collection and analysis
-- Plugin configuration
-- Testing and deployment
+Covers:
+- Local development setup
+- Service development
+- Testing workflow
+- Code quality tools
+- Git workflow
+- Best practices
 
----
+### [Code Style Guide](code-style.md)
+**Reference** - Coding standards and conventions.
 
-## 🎯 Contribution Workflow
+Covers:
+- PEP 8 compliance
+- Type hints
+- Documentation standards
+- Naming conventions
+- Code organization
 
-1. **Fork and Clone**
-   ```bash
-   git clone https://github.com/your-username/minder.git
-   cd minder
-   ```
+### [Testing Guide](testing.md)
+**Essential** - Testing practices and strategies.
 
-2. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+Covers:
+- Unit testing
+- Integration testing
+- Test coverage
+- Performance testing
+- CI/CD
 
-3. **Make Changes**
-   - Follow [Code Style Guide](CODE_STYLE_GUIDE.md)
-   - Write tests for new features
-   - Update documentation
+### [Plugin Development](plugin-development.md)
+**Advanced** - Building custom plugins.
 
-4. **Test Locally**
-   ```bash
-   docker compose up -d
-   docker compose logs -f
-   ```
+Covers:
+- Plugin architecture
+- Plugin lifecycle
+- API hooks
+- Deployment
+- Examples
 
-5. **Commit and Push**
-   ```bash
-   git add .
-   git commit -m "feat: description of changes"
-   git push origin your-branch
-   ```
+## Architecture
 
-6. **Create Pull Request**
-   - Follow [Contributing Guidelines](CONTRIBUTING.md)
-   - Reference related issues
+### System Architecture
+See [Architecture Documentation](../architecture/) for:
+- High-level design
+- Microservices architecture
+- Service communication
+- Data flow
 
----
+### API Reference
+See [API Documentation](../api/) for:
+- Endpoint documentation
+- Request/response formats
+- Authentication
+- Examples
 
-## 📚 Related Documentation
+## Development Workflow
 
-- **[Architecture](../architecture/README.md)** - System design and components
-- **[API Reference](../api/README.md)** - API documentation
-- **[Deployment](../deployment/README.md)** - Production deployment
+### 1. Feature Development
+```bash
+# Create feature branch
+git checkout -b feature/new-feature
 
----
+# Make changes
+# ... code changes ...
 
-## 🤝 Getting Help
+# Test changes
+pytest tests/unit/ -v
 
-- **GitHub Issues:** https://github.com/wish-maker/minder/issues
-- **Discord:** (to be added)
-- **Documentation:** /root/minder/docs/
+# Commit changes
+git add .
+git commit -m "Add new feature"
+```
 
----
+### 2. Service Development
+See [Development Guide](development.md#service-development) for:
+- Adding new services
+- Service templates
+- Best practices
 
-**Last Updated:** 2026-04-19
+### 3. Testing
+```bash
+# Unit tests
+pytest tests/unit/ -v
+
+# Integration tests
+pytest tests/integration/ -v
+
+# With coverage
+pytest tests/ --cov=src --cov-report=html
+```
+
+### 4. Code Quality
+```bash
+# Type checking
+mypy src/
+
+# Linting
+ruff check src/
+
+# Format code
+ruff format src/
+```
+
+## Project Structure
+
+```
+minder/
+├── services/           # Microservices
+│   ├── api-gateway/
+│   ├── plugin-registry/
+│   └── ...
+├── src/shared/        # Shared utilities
+├── tests/             # Test suite
+└── scripts/           # Utility scripts
+```
+
+See [Project Structure](../architecture/project-structure.md) for details.
+
+## Contributing
+
+We welcome contributions! Please:
+
+1. Read [CONTRIBUTING.md](../../CONTRIBUTING.md)
+2. Check [Code Style Guide](code-style.md)
+3. Write tests for new features
+4. Update documentation
+5. Submit pull request
+
+## Getting Help
+
+- 📖 [Architecture Docs](../architecture/)
+- 🔌 [API Reference](../api/)
+- 🐛 [Troubleshooting](../troubleshooting/)
+- 💬 [GitHub Discussions](https://github.com/your-org/minder/discussions)

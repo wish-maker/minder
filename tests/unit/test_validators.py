@@ -451,8 +451,6 @@ class TestValidatorPerformance:
     # is not defined in conftest.py. To enable performance tests,
     # add a benchmark fixture to conftest.py.
 
-    @pytest.mark.skip(reason="Benchmark fixture not available - add benchmark fixture to conftest.py")
-    @pytest.mark.slow
     def test_plugin_name_validation_performance(self, benchmark):
         """Test plugin name validation performance"""
         def validate():
@@ -474,7 +472,7 @@ class TestValidatorPerformance:
     def test_sanitization_performance(self, benchmark):
         """Test sanitization performance"""
         def sanitize():
-            sanitize_user_input("<script>alert('xss')</script>test")
+            sanitize_user_input("<script>alert('xss')</script>Hello World")
 
         benchmark(sanitize)
 

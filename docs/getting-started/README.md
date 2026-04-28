@@ -1,148 +1,82 @@
-# 🚀 Getting Started
+# Getting Started with Minder Platform
 
-Welcome to Minder! This guide will help you get started quickly.
+Welcome to Minder Platform! This section helps you get up and running quickly.
 
----
+## Guides
 
-## 📖 Quick Start Guide
+### [Quick Start](quick-start.md)
+**5 minutes** - Get Minder Platform running in minutes with a single command.
 
-**[Quick Start](QUICK_START.md)** - Get Minder running in under 5 minutes
+Perfect for:
+- First-time users
+- Quick evaluation
+- Local development setup
 
-### Installation Steps
+### [Installation Guide](installation.md)
+**15 minutes** - Detailed installation with all configuration options.
 
+Covers:
+- System requirements
+- Prerequisites
+- Step-by-step installation
+- Environment configuration
+- Verification steps
+
+## What You'll Need
+
+**Minimum Requirements:**
+- Docker 20.10+
+- Docker Compose 2.20+
+- 8GB RAM (16GB recommended)
+- 20GB free disk space
+
+**Recommended for Production:**
+- 16GB+ RAM
+- 4 CPU cores
+- 100GB+ SSD storage
+- Stable internet connection
+
+## Installation Methods
+
+### Method 1: Automated (Recommended)
 ```bash
-# 1. Clone repository
-git clone https://github.com/wish-maker/minder.git
+git clone https://github.com/your-org/minder.git
 cd minder
-
-# 2. Run installation
-./install.sh
-
-# 3. Access services
-# API Gateway: http://localhost:8000
-# API Docs: http://localhost:8000/docs
-# Grafana: http://localhost:3000
+./setup.sh
 ```
 
----
+### Method 2: Manual
+See [Installation Guide](installation.md) for detailed manual setup.
 
-## 🎯 What is Minder?
+## Next Steps
 
-Minder is a **Modular RAG platform** with:
+After installation:
 
-- **Plugin System**: 5 built-in plugins (crypto, news, network, weather, TEFAS)
-- **Microservices**: 20 containers with API Gateway pattern
-- **Monitoring**: Prometheus + Grafana stack
-- **Security**: JWT authentication and rate limiting
-- **Databases**: PostgreSQL, InfluxDB, Qdrant, Redis
+1. **Verify Setup**: Check service health
+   ```bash
+   ./scripts/health-check.sh
+   ```
 
----
+2. **Configure Security**: Change default passwords
+   - See [Authentication Guide](../guides/authentication.md)
 
-## 📋 Prerequisites
+3. **Explore APIs**: Test the endpoints
+   - API Gateway: http://localhost:8000
+   - Plugin Registry: http://localhost:8001
 
-### Minimum Requirements
-- **Docker** 20.10+
-- **Docker Compose** 2.0+
-- **8GB RAM** minimum
-- **20GB disk space**
+4. **Read Documentation**: Explore other guides
+   - [Development](../development/)
+   - [Deployment](../deployment/)
 
-### Recommended Requirements
-- **Docker** 24.0+
-- **Docker Compose** 2.20+
-- **16GB RAM** (recommended)
-- **50GB SSD**
+## Troubleshooting
 
----
+Having issues? Check:
 
-## 🌐 Access Points
+- [Common Issues](../troubleshooting/common-issues.md)
+- [Installation Troubleshooting](../troubleshooting/common-issues.md#installation)
 
-After installation, access these services:
+## Getting Help
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| **API Gateway** | http://localhost:8000 | Main API entry point |
-| **API Documentation** | http://localhost:8000/docs | Interactive API docs |
-| **Plugin Registry** | http://localhost:8001 | Plugin management |
-| **Grafana Dashboard** | http://localhost:3000 | Monitoring |
-| **Prometheus** | http://localhost:9090 | Metrics explorer |
-
----
-
-## 🔐 Getting Started
-
-### 1. Get an API Token
-
-```bash
-curl -X POST http://localhost:8000/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"your_password"}'
-```
-
-Response:
-```json
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "token_type": "bearer",
-  "expires_in": 3600
-}
-```
-
-### 2. Use the Token
-
-```bash
-TOKEN="your_access_token_here"
-
-# Collect data from plugin
-curl -X POST http://localhost:8000/v1/plugins/crypto/collect \
-  -H "Authorization: Bearer $TOKEN"
-
-# Check plugin status
-curl -s http://localhost:8001/v1/plugins | jq '.'
-```
-
----
-
-## 📚 Next Steps
-
-### For Users
-- **[API Reference](../api/README.md)** - Complete API documentation
-- **[Available Plugins](../architecture/plugin-system.md)** - Plugin list and usage
-
-### For Developers
-- **[Plugin Development](../development/PLUGIN_DEVELOPMENT.md)** - Create plugins
-- **[Code Standards](../development/CODE_STYLE_GUIDE.md)** - Coding conventions
-
-### For Operators
-- **[Deployment Guide](../deployment/README.md)** - Production deployment
-- **[Monitoring](../deployment/monitoring.md)** - Monitoring setup
-
----
-
-## 🐛 Troubleshooting
-
-**[Troubleshooting Guide](../troubleshooting/README.md)** - Common problems and solutions
-
----
-
-## 📞 Support
-
-- **GitHub Issues:** https://github.com/wish-maker/minder/issues
-- **Documentation:** /root/minder/docs/
-- **Status Dashboard:** http://localhost:3000 (Grafana)
-
----
-
-## 🎉 You're Ready!
-
-Now that you have Minder running, you can:
-
-1. Explore the API at http://localhost:8000/docs
-2. Check monitoring at http://localhost:3000
-3. Read the [API Reference](../api/README.md)
-4. Start using the plugins
-
-**Need Help?** Check the [Troubleshooting Guide](../troubleshooting/README.md)
-
----
-
-**Last Updated:** 2026-04-19
+- 📧 Email: support@minder-platform.com
+- 🐛 Issues: [GitHub Issues](https://github.com/your-org/minder/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/your-org/minder/discussions)

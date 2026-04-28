@@ -1,38 +1,31 @@
-# Minder Platform - Authelia Users Database
-# Default password: "ChangeMe123!" for all users
+# Authelia Users Database
+# https://www.authelia.com/configuration/authentication/file/
 
 users:
+  # Default Admin User
   admin:
-    displayname: "Minder Administrator"
+    disabled: false
+    displayname: Admin User
+    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
     email: admin@minder.local
-    username: admin
-    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
     groups:
       - admins
-      - api_users
-      - ai_users
-      - ui_users
+      - developers
 
-  api_user:
-    displayname: "API Service User"
-    email: api_user@minder.local
-    username: api_user
-    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
+  # Developer User
+  developer:
+    disabled: false
+    displayname: Developer User
+    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
+    email: developer@minder.local
     groups:
-      - api_users
+      - developers
 
-  ai_user:
-    displayname: "AI Service User"
-    email: ai_user@minder.local
-    username: ai_user
-    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
+  # Regular User
+  user:
+    disabled: false
+    displayname: Regular User
+    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
+    email: user@minder.local
     groups:
-      - ai_users
-
-  ui_user:
-    displayname: "Web UI User"
-    email: ui_user@minder.local
-    username: ui_user
-    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
-    groups:
-      - ui_users
+      - users
