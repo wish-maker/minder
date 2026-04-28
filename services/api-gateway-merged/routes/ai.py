@@ -4,14 +4,18 @@ Provides OpenAI-compatible API for tool calling
 """
 
 import logging
+import sys
 from datetime import datetime
 from typing import Dict, Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
-from config import settings
+# Add parent directory to path for imports
+sys.path.insert(0, '/app')
+from config import get_settings
 
+settings = get_settings()
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/ai", tags=["ai"])
 

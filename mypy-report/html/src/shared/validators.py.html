@@ -386,7 +386,7 @@
 <span class="line-precise" title="No Anys on this line!">import re</span>
 <span class="line-precise" title="No Anys on this line!">from typing import List, Optional</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">from pydantic import BaseModel, EmailStr, Field, HttpUrl, validator</span>
+<span class="line-precise" title="No Anys on this line!">from pydantic import BaseModel, EmailStr, Field, HttpUrl, validator</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">class ValidationError(Exception):</span>
@@ -634,25 +634,31 @@ Omitted Generics (x1)">def validate_pagination(page: int, page_size: int, max_pa
 <span class="line-empty" title="No Anys on this line!"># Pydantic models for common validations</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class PaginationParams(BaseModel):</span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x2)">class PaginationParams(BaseModel):</span>
 <span class="line-empty" title="No Anys on this line!">    """Pagination parameters"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    page: int = Field(ge=1, default=1, description="Page number (1-based)")</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    page_size: int = Field(ge=1, le=100, default=20, description="Items per page")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    page: int = Field(ge=1, default=1, description="Page number (1-based)")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    page_size: int = Field(ge=1, le=100, default=20, description="Items per page")</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class SortParams(BaseModel):</span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x2)">class SortParams(BaseModel):</span>
 <span class="line-empty" title="No Anys on this line!">    """Sort parameters"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    sort_by: Optional[str] = Field(None, description="Field to sort by")</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    sort_order: Optional[str] = Field("asc", description="Sort order (asc or desc)")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    sort_by: Optional[str] = Field(None, description="Field to sort by")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    sort_order: Optional[str] = Field("asc", description="Sort order (asc or desc)")</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    @validator("sort_order")</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x4)">    @validator("sort_order")</span>
 <span class="line-any" title="No Anys on this line!">    def validate_sort_order(cls, v):</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x5)">        if v and v.lower() not in ("asc", "desc"):</span>
@@ -662,35 +668,45 @@ Unannotated (x1)">            raise ValueError('sort_order must be "asc" or "des
 Unannotated (x4)">        return v.lower() if v else "asc"</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class SearchParams(BaseModel):</span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x2)">class SearchParams(BaseModel):</span>
 <span class="line-empty" title="No Anys on this line!">    """Search parameters"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    query: str = Field(..., min_length=1, max_length=100, description="Search query")</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    page: int = Field(ge=1, default=1)</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    page_size: int = Field(ge=1, le=100, default=20)</span>
+Explicit (x22)
+Omitted Generics (x5)">    query: str = Field(..., min_length=1, max_length=100, description="Search query")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    page: int = Field(ge=1, default=1)</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    page_size: int = Field(ge=1, le=100, default=20)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class PluginValidationRequest(BaseModel):</span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x2)">class PluginValidationRequest(BaseModel):</span>
 <span class="line-empty" title="No Anys on this line!">    """Plugin validation request"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    name: str = Field(..., min_length=3, max_length=50, description="Plugin name")</span>
+Explicit (x22)
+Omitted Generics (x5)">    name: str = Field(..., min_length=3, max_length=50, description="Plugin name")</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    version: str = Field(</span>
+Explicit (x22)
+Omitted Generics (x5)">    version: str = Field(</span>
 <span class="line-precise" title="No Anys on this line!">        ..., pattern=r"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$", description="Plugin version"</span>
 <span class="line-empty" title="No Anys on this line!">    )</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    description: Optional[str] = Field(None, max_length=1000, description="Plugin description")</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">    author_email: Optional[EmailStr] = Field(None, description="Author email")</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">    homepage_url: Optional[HttpUrl] = Field(None, description="Plugin homepage URL")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    description: Optional[str] = Field(None, max_length=1000, description="Plugin description")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    author_email: Optional[EmailStr] = Field(None, description="Author email")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    homepage_url: Optional[HttpUrl] = Field(None, description="Plugin homepage URL")</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    @validator("name")</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x4)">    @validator("name")</span>
 <span class="line-any" title="No Anys on this line!">    def validate_plugin_name(cls, v):</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x2)">        if not re.match(r"^[a-zA-Z0-9_-]+$", v):</span>
@@ -702,15 +718,19 @@ Unannotated (x1)">            raise ValueError(</span>
 Unannotated (x1)">        return v</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class ValidationErrorResponse(BaseModel):</span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x2)">class ValidationErrorResponse(BaseModel):</span>
 <span class="line-empty" title="No Anys on this line!">    """Validation error response"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    error: str = Field(..., description="Error message")</span>
+Explicit (x22)
+Omitted Generics (x5)">    error: str = Field(..., description="Error message")</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x21)
+Omitted Generics (x5)">    field: Optional[str] = Field(None, description="Field that caused the error")</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    field: Optional[str] = Field(None, description="Field that caused the error")</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    code: str = Field(..., description="Error code")</span>
+Explicit (x22)
+Omitted Generics (x5)">    code: str = Field(..., description="Error code")</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"># Common validation decorators</span>

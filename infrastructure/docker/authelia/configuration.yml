@@ -1,0 +1,73 @@
+# Minder Platform - Authelia Minimal Configuration
+log:
+  level: info
+
+identity_validation:
+  reset_password:
+    jwt_secret: "UNXsEmWsBqTtq1GEWfK3gfF6SAMyLjT62fbPkLYDa1Hac6CTsTmE3kEc37nWAvpi"
+
+theme: dark
+
+# Session Configuration
+session:
+  name: "minder_session"
+  secret: "UNXsEmWsBqTtq1GEWfK3gfF6SAMyLjT62fbPkLYDa1Hac6CTsTmE3kEc37nWAvpi"
+  expiration: 3600
+  inactivity: 300
+  remember_me: 2592000
+  cookies:
+    - name: "minder_session"
+      domain: "localhost.minder.local"
+      expiration: 3600
+      inactivity: 300
+      remember_me: 2592000
+      authelia_url: "https://localhost.minder.local"
+
+# Regulation
+regulation:
+  max_retries: 3
+  find_time: 120
+  ban_time: 900
+
+# Storage
+storage:
+  encryption_key: "UNXsEmWsBqTtq1GEWfK3gfF6SAMyLjT62fbPkLYDa1Hac6CTsTmE3kEc37nWAvpi"
+  local:
+    path: /config/db/sqlite.db
+
+# Authentication Backend
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+    watch: true
+    search:
+      email: true
+
+# Access Control - Simple rules
+access_control:
+  default_policy: one_factor
+  rules:
+    # Public endpoints
+    - domain: "localhost.minder.local"
+      resources:
+        - "^/health$"
+        - "^/docs$"
+        - "^/openapi.json$"
+      policy: bypass
+
+    # Admin only
+    - domain: "localhost.minder.local"
+      resources:
+        - "^/metrics$"
+      policy: one_factor
+      subject:
+        - ["group:admins"]
+
+# Notifier
+notifier:
+  filesystem:
+    filename: /config/notifications.txt
+
+# NTP
+ntp:
+  version: 4

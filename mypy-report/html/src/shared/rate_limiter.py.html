@@ -364,21 +364,38 @@
 <span id="L354" class="lineno"><a class="lineno" href="#L354">354</a></span>
 <span id="L355" class="lineno"><a class="lineno" href="#L355">355</a></span>
 <span id="L356" class="lineno"><a class="lineno" href="#L356">356</a></span>
+<span id="L357" class="lineno"><a class="lineno" href="#L357">357</a></span>
+<span id="L358" class="lineno"><a class="lineno" href="#L358">358</a></span>
+<span id="L359" class="lineno"><a class="lineno" href="#L359">359</a></span>
+<span id="L360" class="lineno"><a class="lineno" href="#L360">360</a></span>
+<span id="L361" class="lineno"><a class="lineno" href="#L361">361</a></span>
+<span id="L362" class="lineno"><a class="lineno" href="#L362">362</a></span>
+<span id="L363" class="lineno"><a class="lineno" href="#L363">363</a></span>
+<span id="L364" class="lineno"><a class="lineno" href="#L364">364</a></span>
+<span id="L365" class="lineno"><a class="lineno" href="#L365">365</a></span>
+<span id="L366" class="lineno"><a class="lineno" href="#L366">366</a></span>
+<span id="L367" class="lineno"><a class="lineno" href="#L367">367</a></span>
+<span id="L368" class="lineno"><a class="lineno" href="#L368">368</a></span>
+<span id="L369" class="lineno"><a class="lineno" href="#L369">369</a></span>
+<span id="L370" class="lineno"><a class="lineno" href="#L370">370</a></span>
+<span id="L371" class="lineno"><a class="lineno" href="#L371">371</a></span>
+<span id="L372" class="lineno"><a class="lineno" href="#L372">372</a></span>
+<span id="L373" class="lineno"><a class="lineno" href="#L373">373</a></span>
+<span id="L374" class="lineno"><a class="lineno" href="#L374">374</a></span>
 </pre></td>
 <td class="table-code"><pre><span class="line-empty" title="No Anys on this line!">"""</span>
 <span class="line-empty" title="No Anys on this line!">Rate limiting middleware for Minder services.</span>
 <span class="line-empty" title="No Anys on this line!">Redis-based rate limiting with configurable limits.</span>
 <span class="line-empty" title="No Anys on this line!">"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">import asyncio</span>
-<span class="line-precise" title="No Anys on this line!">import json</span>
 <span class="line-precise" title="No Anys on this line!">import logging</span>
 <span class="line-precise" title="No Anys on this line!">import time</span>
+<span class="line-precise" title="No Anys on this line!">from dataclasses import dataclass</span>
 <span class="line-precise" title="No Anys on this line!">from functools import wraps</span>
 <span class="line-precise" title="No Anys on this line!">from typing import Any, Callable, Dict, Optional</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">from fastapi import HTTPException, Request, Response</span>
-<span class="line-any" title="No Anys on this line!">from redis.asyncio import Redis</span>
+<span class="line-precise" title="No Anys on this line!">from fastapi import HTTPException, Request, Response</span>
+<span class="line-precise" title="No Anys on this line!">from redis.asyncio import Redis</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">logger = logging.getLogger("minder.rate_limiter")</span>
 <span class="line-empty" title="No Anys on this line!"></span>
@@ -386,8 +403,7 @@
 <span class="line-precise" title="No Anys on this line!">class RateLimiter:</span>
 <span class="line-empty" title="No Anys on this line!">    """Redis-based rate limiter"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">    def __init__(self, redis_client: Redis, default_limit: int = 100, default_window: int = 60):</span>
+<span class="line-precise" title="No Anys on this line!">    def __init__(self, redis_client: Redis, default_limit: int = 100, default_window: int = 60):</span>
 <span class="line-empty" title="No Anys on this line!">        """</span>
 <span class="line-empty" title="No Anys on this line!">        Initialize rate limiter.</span>
 <span class="line-empty" title="No Anys on this line!"></span>
@@ -396,8 +412,7 @@ Unimported (x1)">    def __init__(self, redis_client: Redis, default_limit: int 
 <span class="line-empty" title="No Anys on this line!">            default_limit: Default request limit per window</span>
 <span class="line-empty" title="No Anys on this line!">            default_window: Default time window in seconds</span>
 <span class="line-empty" title="No Anys on this line!">        """</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">        self.redis = redis_client</span>
+<span class="line-precise" title="No Anys on this line!">        self.redis = redis_client</span>
 <span class="line-precise" title="No Anys on this line!">        self.default_limit = default_limit</span>
 <span class="line-precise" title="No Anys on this line!">        self.default_window = default_window</span>
 <span class="line-empty" title="No Anys on this line!"></span>
@@ -427,52 +442,47 @@ Explicit (x1)">    async def is_allowed(</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">        try:</span>
 <span class="line-empty" title="No Anys on this line!">            # Use Redis pipeline for atomic operations</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x4)">            async with self.redis.pipeline() as pipe:</span>
+<span class="line-precise" title="No Anys on this line!">            async with self.redis.pipeline() as pipe:</span>
 <span class="line-empty" title="No Anys on this line!">                # Remove old entries outside the window</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">                pipe.zremrangebyscore(redis_key, 0, window_start)</span>
+<span class="line-precise" title="No Anys on this line!">                pipe.zremrangebyscore(redis_key, 0, window_start)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">                # Count current requests</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">                pipe.zcard(redis_key)</span>
+<span class="line-precise" title="No Anys on this line!">                pipe.zcard(redis_key)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">                # Add current request</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">                pipe.zadd(redis_key, {str(current_time): current_time})</span>
+<span class="line-precise" title="No Anys on this line!">                pipe.zadd(redis_key, {str(current_time): current_time})</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">                # Set expiration</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">                pipe.expire(redis_key, window)</span>
+<span class="line-precise" title="No Anys on this line!">                pipe.expire(redis_key, window)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x3)">                results = await pipe.execute()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x4)">                results = await pipe.execute()</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">                current_count = results[1]</span>
+Explicit (x3)">                current_count = results[1]</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">                # Calculate info</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x4)
+Explicit (x4)
 Omitted Generics (x23)">                remaining = max(0, limit - current_count)</span>
 <span class="line-precise" title="No Anys on this line!">                reset_time = window_start + window</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x3)">                is_allowed = current_count &lt; limit</span>
+Explicit (x3)">                is_allowed = current_count &lt; limit</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-imprecise" title="Any Types on this line: 
-Unimported (x1)">                info = {</span>
+Explicit (x1)">                info = {</span>
 <span class="line-precise" title="No Anys on this line!">                    "limit": limit,</span>
 <span class="line-precise" title="No Anys on this line!">                    "window": window,</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x1)">                    "remaining": remaining,</span>
+Explicit (x1)">                    "remaining": remaining,</span>
 <span class="line-precise" title="No Anys on this line!">                    "reset_time": reset_time,</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x1)">                    "current_count": current_count,</span>
+Explicit (x1)">                    "current_count": current_count,</span>
 <span class="line-empty" title="No Anys on this line!">                }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x2)">                return is_allowed, info</span>
+Explicit (x2)">                return is_allowed, info</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
 <span class="line-precise" title="No Anys on this line!">            logger.error(f"Rate limit check failed: {e}")</span>
@@ -496,29 +506,24 @@ Explicit (x1)">    async def get_rate_limit_info(self, key: str) -&gt; Dict[str,
 <span class="line-precise" title="No Anys on this line!">            current_time = int(time.time())</span>
 <span class="line-precise" title="No Anys on this line!">            window_start = current_time - self.default_window</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x4)">            current_count = await self.redis.zcount(redis_key, window_start, current_time)</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x4)
+<span class="line-precise" title="No Anys on this line!">            current_count = await self.redis.zcount(redis_key, window_start, current_time)</span>
+<span class="line-precise" title="Any Types on this line: 
 Omitted Generics (x23)">            remaining = max(0, self.default_limit - current_count)</span>
 <span class="line-precise" title="No Anys on this line!">            reset_time = current_time + self.default_window - (current_time % self.default_window)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">            return {</span>
 <span class="line-precise" title="No Anys on this line!">                "limit": self.default_limit,</span>
 <span class="line-precise" title="No Anys on this line!">                "window": self.default_window,</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">                "remaining": remaining,</span>
+<span class="line-precise" title="No Anys on this line!">                "remaining": remaining,</span>
 <span class="line-precise" title="No Anys on this line!">                "reset_time": reset_time,</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">                "current_count": current_count,</span>
+<span class="line-precise" title="No Anys on this line!">                "current_count": current_count,</span>
 <span class="line-empty" title="No Anys on this line!">            }</span>
 <span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
 <span class="line-precise" title="No Anys on this line!">            logger.error(f"Failed to get rate limit info: {e}")</span>
 <span class="line-empty" title="No Anys on this line!">            return {}</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">def get_client_identifier(request: Request) -&gt; str:</span>
+<span class="line-precise" title="No Anys on this line!">def get_client_identifier(request: Request) -&gt; str:</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
 <span class="line-empty" title="No Anys on this line!">    Get client identifier from request.</span>
 <span class="line-empty" title="No Anys on this line!"></span>
@@ -530,19 +535,16 @@ Unimported (x1)">def get_client_identifier(request: Request) -&gt; str:</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
 <span class="line-empty" title="No Anys on this line!">    # Try to get user ID from authentication</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x6)">    if hasattr(request.state, "user") and request.state.user:</span>
+Explicit (x2)">    if hasattr(request.state, "user") and request.state.user:</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x5)">        return f"user:{request.state.user.get('id', 'unknown')}"</span>
+Explicit (x3)">        return f"user:{request.state.user.get('id', 'unknown')}"</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">    # Fallback to IP address</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x6)">    client_host = request.client.host if request.client else "unknown"</span>
+<span class="line-precise" title="No Anys on this line!">    client_host = request.client.host if request.client else "unknown"</span>
+<span class="line-precise" title="No Anys on this line!">    return f"ip:{client_host}"</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-imprecise" title="Any Types on this line: 
-Unimported (x1)">    return f"ip:{client_host}"</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)
 Explicit (x1)">async def add_rate_limit_headers(response: Response, info: Dict[str, Any]) -&gt; None:</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
 <span class="line-empty" title="No Anys on this line!">    Add rate limit headers to response.</span>
@@ -553,20 +555,16 @@ Explicit (x1)">async def add_rate_limit_headers(response: Response, info: Dict[s
 <span class="line-empty" title="No Anys on this line!">    """</span>
 <span class="line-any" title="Any Types on this line: 
 Explicit (x6)
-Omitted Generics (x2)
-Unimported (x2)">    response.headers["X-RateLimit-Limit"] = str(info.get("limit", ""))</span>
+Omitted Generics (x2)">    response.headers["X-RateLimit-Limit"] = str(info.get("limit", ""))</span>
 <span class="line-any" title="Any Types on this line: 
 Explicit (x6)
-Omitted Generics (x2)
-Unimported (x2)">    response.headers["X-RateLimit-Remaining"] = str(info.get("remaining", ""))</span>
+Omitted Generics (x2)">    response.headers["X-RateLimit-Remaining"] = str(info.get("remaining", ""))</span>
 <span class="line-any" title="Any Types on this line: 
 Explicit (x6)
-Omitted Generics (x2)
-Unimported (x2)">    response.headers["X-RateLimit-Reset"] = str(info.get("reset_time", ""))</span>
+Omitted Generics (x2)">    response.headers["X-RateLimit-Reset"] = str(info.get("reset_time", ""))</span>
 <span class="line-any" title="Any Types on this line: 
 Explicit (x6)
-Omitted Generics (x2)
-Unimported (x2)">    response.headers["X-RateLimit-Window"] = str(info.get("window", ""))</span>
+Omitted Generics (x2)">    response.headers["X-RateLimit-Window"] = str(info.get("window", ""))</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
@@ -596,32 +594,31 @@ Unannotated (x4)">            request = args[0] if args else None</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x2)
-Unimported (x1)">            if not isinstance(request, Request):</span>
+Explicit (x1)">            if not isinstance(request, Request):</span>
 <span class="line-empty" title="No Anys on this line!">                # Not a request handler, just call the function</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x4)">                return await func(*args, **kwargs)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">            # Get or create rate limiter from app state</span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x4)">            if not hasattr(request.app.state, "rate_limiter"):</span>
+Unannotated (x3)">            if not hasattr(request.app.state, "rate_limiter"):</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x2)">                logger.warning("Rate limiter not configured, skipping rate limit check")</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x4)">                return await func(*args, **kwargs)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x4)">            rate_limiter: RateLimiter = request.app.state.rate_limiter</span>
+Unannotated (x3)">            rate_limiter: RateLimiter = request.app.state.rate_limiter</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">            # Generate rate limit key</span>
 <span class="line-precise" title="Any Types on this line: 
 Explicit (x3)">            if key_func:</span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
+Unannotated (x2)
 Explicit (x3)">                key = key_func(request)</span>
 <span class="line-empty" title="No Anys on this line!">            else:</span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Unimported (x1)">                key = get_client_identifier(request)</span>
+Unannotated (x2)">                key = get_client_identifier(request)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">            # Check rate limit</span>
 <span class="line-any" title="Any Types on this line: 
@@ -634,10 +631,9 @@ Unannotated (x1)">            response_obj = None</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x5)">                result = await func(*args, **kwargs)</span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x4)
-Unimported (x1)">                response_obj = result if isinstance(result, Response) else None</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">            except Exception as e:</span>
+Unannotated (x3)
+Explicit (x1)">                response_obj = result if isinstance(result, Response) else None</span>
+<span class="line-precise" title="No Anys on this line!">            except Exception:</span>
 <span class="line-empty" title="No Anys on this line!">                raise</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">            # Get response object if not already created</span>
@@ -650,14 +646,13 @@ Unannotated (x1)">            if response_obj is None:</span>
 <span class="line-empty" title="No Anys on this line!">            else:</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x3)
-Explicit (x1)
-Unimported (x1)">                await add_rate_limit_headers(response_obj, info)</span>
+Explicit (x1)">                await add_rate_limit_headers(response_obj, info)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x1)">            if not is_allowed:</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x1)
-Unimported (x1)">                raise HTTPException(</span>
+Explicit (x1)">                raise HTTPException(</span>
 <span class="line-any" title="No Anys on this line!">                    status_code=429,</span>
 <span class="line-any" title="Any Types on this line: 
 Unannotated (x7)">                    detail=f"Rate limit exceeded. Try again after {info.get('reset_time', 0)}",</span>
@@ -684,8 +679,7 @@ Unannotated (x1)">        return wrapper</span>
 Unannotated (x2)">    return decorator</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">async def setup_rate_limiter(</span>
+<span class="line-precise" title="No Anys on this line!">async def setup_rate_limiter(</span>
 <span class="line-precise" title="No Anys on this line!">    redis_client: Redis, default_limit: int = 100, default_window: int = 60</span>
 <span class="line-empty" title="No Anys on this line!">) -&gt; RateLimiter:</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
@@ -703,8 +697,7 @@ Unimported (x1)">async def setup_rate_limiter(</span>
 <span class="line-empty" title="No Anys on this line!">        rate_limiter = await setup_rate_limiter(redis, limit=100, window=60)</span>
 <span class="line-empty" title="No Anys on this line!">        app.state.rate_limiter = rate_limiter</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    rate_limiter = RateLimiter(redis_client, default_limit, default_window)</span>
+<span class="line-precise" title="No Anys on this line!">    rate_limiter = RateLimiter(redis_client, default_limit, default_window)</span>
 <span class="line-precise" title="No Anys on this line!">    logger.info(f"Rate limiter initialized: {default_limit} requests per {default_window} seconds")</span>
 <span class="line-precise" title="No Anys on this line!">    return rate_limiter</span>
 <span class="line-empty" title="No Anys on this line!"></span>
@@ -762,17 +755,14 @@ Omitted Generics (x2)">    return presets.get(operation, RateLimitPresets.PUBLIC
 <span class="line-precise" title="No Anys on this line!">class IPWhitelist:</span>
 <span class="line-empty" title="No Anys on this line!">    """IP whitelist manager"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">    def __init__(self, redis_client: Redis):</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">        self.redis = redis_client</span>
+<span class="line-precise" title="No Anys on this line!">    def __init__(self, redis_client: Redis):</span>
+<span class="line-precise" title="No Anys on this line!">        self.redis = redis_client</span>
 <span class="line-precise" title="No Anys on this line!">        self.whitelist_key = "ip_whitelist"</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">    async def add_ip(self, ip: str, reason: str = "") -&gt; bool:</span>
 <span class="line-empty" title="No Anys on this line!">        """Add IP to whitelist"""</span>
 <span class="line-empty" title="No Anys on this line!">        try:</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">            await self.redis.sadd(self.whitelist_key, ip)</span>
+<span class="line-precise" title="No Anys on this line!">            await self.redis.sadd(self.whitelist_key, ip)  # type: ignore[call-arg]</span>
 <span class="line-precise" title="No Anys on this line!">            logger.info(f"Added IP to whitelist: {ip} ({reason})")</span>
 <span class="line-precise" title="No Anys on this line!">            return True</span>
 <span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
@@ -782,8 +772,7 @@ Unimported (x3)">            await self.redis.sadd(self.whitelist_key, ip)</span
 <span class="line-precise" title="No Anys on this line!">    async def remove_ip(self, ip: str) -&gt; bool:</span>
 <span class="line-empty" title="No Anys on this line!">        """Remove IP from whitelist"""</span>
 <span class="line-empty" title="No Anys on this line!">        try:</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x3)">            await self.redis.srem(self.whitelist_key, ip)</span>
+<span class="line-precise" title="No Anys on this line!">            await self.redis.srem(self.whitelist_key, ip)  # type: ignore[call-arg]</span>
 <span class="line-precise" title="No Anys on this line!">            logger.info(f"Removed IP from whitelist: {ip}")</span>
 <span class="line-precise" title="No Anys on this line!">            return True</span>
 <span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
@@ -793,13 +782,32 @@ Unimported (x3)">            await self.redis.srem(self.whitelist_key, ip)</span
 <span class="line-precise" title="No Anys on this line!">    async def is_whitelisted(self, ip: str) -&gt; bool:</span>
 <span class="line-empty" title="No Anys on this line!">        """Check if IP is whitelisted"""</span>
 <span class="line-empty" title="No Anys on this line!">        try:</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x4)">            result = await self.redis.sismember(self.whitelist_key, ip)</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">            return bool(result)</span>
+<span class="line-precise" title="No Anys on this line!">            result = await self.redis.sismember(self.whitelist_key, ip)  # type: ignore[call-arg, arg-type]</span>
+<span class="line-precise" title="No Anys on this line!">            return bool(result)</span>
 <span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
 <span class="line-precise" title="No Anys on this line!">            logger.error(f"Failed to check IP whitelist: {e}")</span>
 <span class="line-precise" title="No Anys on this line!">            return False</span>
+<span class="line-unanalyzed" title="No Anys on this line!">            return False</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x4)">@dataclass</span>
+<span class="line-precise" title="No Anys on this line!">class RateLimitInfo:</span>
+<span class="line-empty" title="No Anys on this line!">    """Rate limit information"""</span>
+<span class="line-precise" title="No Anys on this line!">    limit: int</span>
+<span class="line-precise" title="No Anys on this line!">    remaining: int</span>
+<span class="line-precise" title="No Anys on this line!">    reset_time: int</span>
+<span class="line-precise" title="No Anys on this line!">    window: int</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x1)">    def to_dict(self) -&gt; Dict[str, Any]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Convert to dictionary"""</span>
+<span class="line-empty" title="No Anys on this line!">        return {</span>
+<span class="line-precise" title="No Anys on this line!">            "limit": self.limit,</span>
+<span class="line-precise" title="No Anys on this line!">            "remaining": self.remaining,</span>
+<span class="line-precise" title="No Anys on this line!">            "reset_time": self.reset_time,</span>
+<span class="line-precise" title="No Anys on this line!">            "window": self.window,</span>
+<span class="line-empty" title="No Anys on this line!">        }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">class RateLimitExceeded(Exception):</span>

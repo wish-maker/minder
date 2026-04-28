@@ -16,6 +16,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: minder
       POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
+    volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
@@ -34,6 +35,7 @@ services:
     container_name: minder-redis
     restart: unless-stopped
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
       - redis_data:/data
     ports:
       - "6379:6379"
@@ -50,6 +52,7 @@ services:
     image: ollama/ollama:latest
     container_name: minder-ollama
     restart: unless-stopped
+    volumes:
       - ollama_data:/root/.ollama
     ports:
       - "11434:11434"
@@ -68,6 +71,7 @@ services:
     image: qdrant/qdrant:v1.17.1
     container_name: minder-qdrant
     restart: unless-stopped
+    volumes:
       - qdrant_data:/qdrant/storage
     ports:
       - "6333:6333"  # REST API
@@ -90,6 +94,7 @@ services:
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_memory_heap_initial_size: 512m
       NEO4J_dbms_memory_heap_max_size: 1G
+    volumes:
       - neo4j_data:/data
       - ./neo4j/init-cypher.sh:/docker-entrypoint-initdb.d/init-cypher.sh:ro
     ports:
@@ -195,6 +200,7 @@ services:
       - MARKETPLACE_URL=http://minder-marketplace:8002
     env_file:
       - .env
+    volumes:
       - ../../src/plugins:/app/plugins:ro
       - plugins_data:/app/plugins-data
     ports:
@@ -332,6 +338,7 @@ services:
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
       - models_data:/app/models
       - models_cache:/app/model-cache
     ports:
@@ -368,6 +375,7 @@ services:
       # Logging
       - INFLUXDB_LOG_LEVEL=info
       - INFLUXDB_LOG_FORMAT=auto
+    volumes:
       - influxdb_data:/var/lib/influxdb2
       - influxdb_config:/etc/influxdb
     ports:
@@ -394,6 +402,7 @@ services:
       # Service credentials
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+    volumes:
       # Telegraf configuration
       - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
       # System metrics access
@@ -428,6 +437,7 @@ services:
     image: prom/prometheus:v2.48.0
     container_name: minder-prometheus
     restart: unless-stopped
+    volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
@@ -454,6 +464,7 @@ services:
     image: prom/alertmanager:v0.26.0
     container_name: minder-alertmanager
     restart: unless-stopped
+    volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager_data:/alertmanager
     ports:
@@ -474,6 +485,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
@@ -528,6 +540,7 @@ services:
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
       - openwebui_data:/app/backend/data
       - ./openwebui/functions.json:/app/config/functions.json:ro
     ports:
@@ -567,6 +580,7 @@ services:
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
       - model_fine_tuning_data:/app/training-data
       - fine_tuned_models:/app/models
     ports:

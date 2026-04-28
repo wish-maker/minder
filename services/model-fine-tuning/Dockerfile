@@ -19,7 +19,8 @@ RUN mkdir -p /app/training-data /app/models
 COPY services/model-fine-tuning/requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || \
+    pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt
 
 # Copy application code
 COPY services/model-fine-tuning/main.py .

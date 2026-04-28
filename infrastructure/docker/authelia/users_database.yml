@@ -1,0 +1,38 @@
+# Minder Platform - Authelia Users Database
+# Default password: "ChangeMe123!" for all users
+
+users:
+  admin:
+    displayname: "Minder Administrator"
+    email: admin@minder.local
+    username: admin
+    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
+    groups:
+      - admins
+      - api_users
+      - ai_users
+      - ui_users
+
+  api_user:
+    displayname: "API Service User"
+    email: api_user@minder.local
+    username: api_user
+    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
+    groups:
+      - api_users
+
+  ai_user:
+    displayname: "AI Service User"
+    email: ai_user@minder.local
+    username: ai_user
+    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
+    groups:
+      - ai_users
+
+  ui_user:
+    displayname: "Web UI User"
+    email: ui_user@minder.local
+    username: ui_user
+    password: "$argon2id$v=19$m=65536,t=3,p=4$Ab64rgMoy2TeVqOfYKAKzg$f5rnMlvN6DFkg1Z+h33hNLriZJRIhGYLCJZZhyzFWPM"  # ChangeMe123!
+    groups:
+      - ui_users

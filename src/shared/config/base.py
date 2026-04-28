@@ -37,7 +37,7 @@ class BaseConfig:
 
         # Check config file
         keys = key.split(".")
-        value = self.config_data
+        value: Any = self.config_data
         for k in keys:
             if isinstance(value, dict):
                 value = value.get(k)

@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  # Infrastructure
+  postgres:
+    image: postgres:16
+    container_name: minder-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: minder
+      POSTGRES_PASSWORD: Gq3gHOd9z9UvTJycJgWbzOnXvFyjloHe
+      POSTGRES_DB: minder
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: minder-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass 3t5Vl1TElFS4H5TEdpnob7IFzs2JLKF2
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: minder-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+  # Refactored Application Services
+  api-gateway-merged:
+    build:
+      context: ../../
+      dockerfile: services/api-gateway-merged/Dockerfile
+    image: minder/api-gateway-merged:latest
+    container_name: minder-api-gateway-merged
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://minder:Gq3gHOd9z9UvTJycJgWbzOnXvFyjloHe@postgres:5432/minder
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=3t5Vl1TElFS4H5TEdpnob7IFzs2JLKF2
+      - JWT_SECRET=UNXsEmWsBqTtq1GEWfK3gfF6SAMyLjT62fbPkLYDa1Hac6CTsTmE3kEc37nWAvpi
+      - JWT_EXPIRATION_MINUTES=60
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ai-services-unified:
+    build:
+      context: ../../
+      dockerfile: services/ai-services-unified/Dockerfile
+    image: minder/ai-services-unified:latest
+    container_name: minder-ai-services-unified
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://minder:Gq3gHOd9z9UvTJycJgWbzOnXvFyjloHe@postgres:5432/minder
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=3t5Vl1TElFS4H5TEdpnob7IFzs2JLKF2
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # External Services
+  ollama:
+    image: ollama/ollama:latest
+    container_name: minder-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: minder-openwebui
+    restart: unless-stopped
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ollama
+
+volumes:
+  ollama_data:
+    driver: local
+
+networks:
+  default:
+    name: minder-network

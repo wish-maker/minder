@@ -547,9 +547,6 @@
 <span id="L537" class="lineno"><a class="lineno" href="#L537">537</a></span>
 <span id="L538" class="lineno"><a class="lineno" href="#L538">538</a></span>
 <span id="L539" class="lineno"><a class="lineno" href="#L539">539</a></span>
-<span id="L540" class="lineno"><a class="lineno" href="#L540">540</a></span>
-<span id="L541" class="lineno"><a class="lineno" href="#L541">541</a></span>
-<span id="L542" class="lineno"><a class="lineno" href="#L542">542</a></span>
 </pre></td>
 <td class="table-code"><pre><span class="line-empty" title="No Anys on this line!">"""</span>
 <span class="line-empty" title="No Anys on this line!">Retry logic with exponential backoff for Minder services.</span>
@@ -562,7 +559,7 @@
 <span class="line-precise" title="No Anys on this line!">from functools import wraps</span>
 <span class="line-precise" title="No Anys on this line!">from typing import Any, Callable, Optional, Tuple, Type</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">import aiohttp</span>
+<span class="line-precise" title="No Anys on this line!">import aiohttp</span>
 <span class="line-any" title="No Anys on this line!">from asyncpg import PostgresError</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">logger = logging.getLogger("minder.retry_logic")</span>
@@ -784,8 +781,7 @@ Omitted Generics (x23)">    return float(min(delay, max_delay))</span>
 <span class="line-empty" title="No Anys on this line!">        True if error is transient</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
 <span class="line-empty" title="No Anys on this line!">    # Network errors</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">    if isinstance(exception, aiohttp.ClientError):</span>
+<span class="line-precise" title="No Anys on this line!">    if isinstance(exception, aiohttp.ClientError):</span>
 <span class="line-precise" title="No Anys on this line!">        return True</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">    # Database connection errors</span>
@@ -858,7 +854,6 @@ Explicit (x1)">async def retry(</span>
 <span class="line-any" title="Any Types on this line: 
 Omitted Generics (x4)">        return await operation()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">    last_exception = None</span>
 <span class="line-precise" title="No Anys on this line!">    total_delay = 0.0</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">    for attempt in range(1, max_attempts + 1):</span>
@@ -882,8 +877,6 @@ Omitted Generics (x5)">                result = await operation()</span>
 Omitted Generics (x1)">            return result</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
-<span class="line-precise" title="No Anys on this line!">            last_exception = e</span>
-<span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">            # Check if exception is retryable</span>
 <span class="line-precise" title="No Anys on this line!">            if retry_on:</span>
 <span class="line-precise" title="No Anys on this line!">                if not isinstance(e, retry_on):</span>
@@ -1023,8 +1016,7 @@ Unimported (x1)">        "retry_on": (ConnectionError, TimeoutError, PostgresErr
 <span class="line-precise" title="No Anys on this line!">        "strategy": RetryStrategy.EXPONENTIAL,</span>
 <span class="line-precise" title="No Anys on this line!">        "base_delay": 1.0,</span>
 <span class="line-precise" title="No Anys on this line!">        "max_delay": 10.0,</span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x2)">        "retry_on": (aiohttp.ClientError, TimeoutError, ConnectionError),</span>
+<span class="line-precise" title="No Anys on this line!">        "retry_on": (aiohttp.ClientError, TimeoutError, ConnectionError),</span>
 <span class="line-empty" title="No Anys on this line!">    }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">    # Heavy operations</span>

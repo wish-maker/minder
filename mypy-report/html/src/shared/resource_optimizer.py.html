@@ -4,9 +4,9 @@
 <link rel="stylesheet" type="text/css" href="../../../mypy-html.css">
 </head>
 <body>
-<h2>src.shared.error_handler</h2>
+<h2>src.shared.resource_optimizer</h2>
 <table>
-<caption>src/shared/error_handler.py</caption>
+<caption>src/shared/resource_optimizer.py</caption>
 <tbody><tr>
 <td class="table-lines"><pre><span id="L1" class="lineno"><a class="lineno" href="#L1">1</a></span>
 <span id="L2" class="lineno"><a class="lineno" href="#L2">2</a></span>
@@ -485,644 +485,599 @@
 <span id="L475" class="lineno"><a class="lineno" href="#L475">475</a></span>
 <span id="L476" class="lineno"><a class="lineno" href="#L476">476</a></span>
 <span id="L477" class="lineno"><a class="lineno" href="#L477">477</a></span>
-<span id="L478" class="lineno"><a class="lineno" href="#L478">478</a></span>
-<span id="L479" class="lineno"><a class="lineno" href="#L479">479</a></span>
-<span id="L480" class="lineno"><a class="lineno" href="#L480">480</a></span>
-<span id="L481" class="lineno"><a class="lineno" href="#L481">481</a></span>
-<span id="L482" class="lineno"><a class="lineno" href="#L482">482</a></span>
-<span id="L483" class="lineno"><a class="lineno" href="#L483">483</a></span>
-<span id="L484" class="lineno"><a class="lineno" href="#L484">484</a></span>
-<span id="L485" class="lineno"><a class="lineno" href="#L485">485</a></span>
-<span id="L486" class="lineno"><a class="lineno" href="#L486">486</a></span>
-<span id="L487" class="lineno"><a class="lineno" href="#L487">487</a></span>
-<span id="L488" class="lineno"><a class="lineno" href="#L488">488</a></span>
-<span id="L489" class="lineno"><a class="lineno" href="#L489">489</a></span>
-<span id="L490" class="lineno"><a class="lineno" href="#L490">490</a></span>
-<span id="L491" class="lineno"><a class="lineno" href="#L491">491</a></span>
-<span id="L492" class="lineno"><a class="lineno" href="#L492">492</a></span>
-<span id="L493" class="lineno"><a class="lineno" href="#L493">493</a></span>
-<span id="L494" class="lineno"><a class="lineno" href="#L494">494</a></span>
-<span id="L495" class="lineno"><a class="lineno" href="#L495">495</a></span>
-<span id="L496" class="lineno"><a class="lineno" href="#L496">496</a></span>
-<span id="L497" class="lineno"><a class="lineno" href="#L497">497</a></span>
-<span id="L498" class="lineno"><a class="lineno" href="#L498">498</a></span>
 </pre></td>
 <td class="table-code"><pre><span class="line-empty" title="No Anys on this line!">"""</span>
-<span class="line-empty" title="No Anys on this line!">Comprehensive error handling for Minder services.</span>
-<span class="line-empty" title="No Anys on this line!">Standardized error responses and logging.</span>
+<span class="line-empty" title="No Anys on this line!">Hardware Resource Optimization Module</span>
+<span class="line-empty" title="No Anys on this line!">Optimizes CPU, memory, disk I/O, and network resource usage for Minder services.</span>
 <span class="line-empty" title="No Anys on this line!">"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">import asyncio</span>
+<span class="line-any" title="No Anys on this line!">import psutil</span>
 <span class="line-precise" title="No Anys on this line!">import logging</span>
-<span class="line-precise" title="No Anys on this line!">import traceback</span>
-<span class="line-precise" title="No Anys on this line!">from typing import Any, Dict, Optional</span>
+<span class="line-precise" title="No Anys on this line!">from typing import Dict, Optional, Callable, Any</span>
+<span class="line-precise" title="No Anys on this line!">from dataclasses import dataclass</span>
+<span class="line-precise" title="No Anys on this line!">from datetime import datetime, timedelta</span>
+<span class="line-precise" title="No Anys on this line!">from functools import wraps</span>
+<span class="line-precise" title="No Anys on this line!">from concurrent.futures import ThreadPoolExecutor</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">import aiohttp</span>
-<span class="line-any" title="No Anys on this line!">from asyncpg import PostgresConnectionError, PostgresError</span>
-<span class="line-precise" title="No Anys on this line!">from fastapi import HTTPException, Request</span>
-<span class="line-precise" title="No Anys on this line!">from fastapi.responses import JSONResponse</span>
-<span class="line-precise" title="No Anys on this line!">from pydantic import ValidationError as PydanticValidationError</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">logger = logging.getLogger("minder.error_handler")</span>
+<span class="line-precise" title="No Anys on this line!">logger = logging.getLogger("minder.resource_optimizer")</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"># Custom error classes</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x4)">@dataclass</span>
+<span class="line-precise" title="No Anys on this line!">class ResourceUsage:</span>
+<span class="line-empty" title="No Anys on this line!">    """Current resource usage"""</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    cpu_percent: float</span>
+<span class="line-precise" title="No Anys on this line!">    memory_percent: float</span>
+<span class="line-precise" title="No Anys on this line!">    memory_used_mb: float</span>
+<span class="line-precise" title="No Anys on this line!">    memory_available_mb: float</span>
+<span class="line-precise" title="No Anys on this line!">    disk_percent: float</span>
+<span class="line-precise" title="No Anys on this line!">    disk_used_gb: float</span>
+<span class="line-precise" title="No Anys on this line!">    disk_available_gb: float</span>
+<span class="line-precise" title="No Anys on this line!">    network_sent_bytes: int</span>
+<span class="line-precise" title="No Anys on this line!">    network_recv_bytes: int</span>
+<span class="line-precise" title="No Anys on this line!">    timestamp: datetime</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class MinderError(Exception):</span>
-<span class="line-empty" title="No Anys on this line!">    """Base error class for Minder"""</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x4)">@dataclass</span>
+<span class="line-precise" title="No Anys on this line!">class ResourceThresholds:</span>
+<span class="line-empty" title="No Anys on this line!">    """Resource usage thresholds"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">    def __init__(</span>
+<span class="line-precise" title="No Anys on this line!">    cpu_warning: float = 70.0</span>
+<span class="line-precise" title="No Anys on this line!">    cpu_critical: float = 90.0</span>
+<span class="line-precise" title="No Anys on this line!">    memory_warning: float = 75.0</span>
+<span class="line-precise" title="No Anys on this line!">    memory_critical: float = 90.0</span>
+<span class="line-precise" title="No Anys on this line!">    disk_warning: float = 80.0</span>
+<span class="line-precise" title="No Anys on this line!">    disk_critical: float = 90.0</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">class ResourceMonitor:</span>
+<span class="line-empty" title="No Anys on this line!">    """Monitor system resources and trigger alerts"""</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def __init__(self, thresholds: Optional[ResourceThresholds] = None):</span>
+<span class="line-precise" title="No Anys on this line!">        self.thresholds = thresholds or ResourceThresholds()</span>
+<span class="line-precise" title="No Anys on this line!">        self._history: list[ResourceUsage] = []</span>
+<span class="line-precise" title="No Anys on this line!">        self._max_history_size = 1000</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def get_current_usage(self) -&gt; ResourceUsage:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get current resource usage"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        cpu_percent = psutil.cpu_percent(interval=0.1)</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        memory = psutil.virtual_memory()</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        disk = psutil.disk_usage("/")</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        network = psutil.net_io_counters()</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        usage = ResourceUsage(</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x1)">            cpu_percent=cpu_percent,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            memory_percent=memory.percent,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            memory_used_mb=memory.used / (1024 * 1024),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            memory_available_mb=memory.available / (1024 * 1024),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            disk_percent=disk.percent,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            disk_used_gb=disk.used / (1024 * 1024 * 1024),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            disk_available_gb=disk.free / (1024 * 1024 * 1024),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            network_sent_bytes=network.bytes_sent,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            network_recv_bytes=network.bytes_recv,</span>
+<span class="line-precise" title="No Anys on this line!">            timestamp=datetime.now(),</span>
+<span class="line-empty" title="No Anys on this line!">        )</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Store in history</span>
+<span class="line-precise" title="No Anys on this line!">        self._history.append(usage)</span>
+<span class="line-precise" title="No Anys on this line!">        if len(self._history) &gt; self._max_history_size:</span>
+<span class="line-precise" title="No Anys on this line!">            self._history.pop(0)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        return usage</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def check_thresholds(self, usage: Optional[ResourceUsage] = None) -&gt; Dict[str, str]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Check if resource usage exceeds thresholds"""</span>
+<span class="line-precise" title="No Anys on this line!">        usage = usage or self.get_current_usage()</span>
+<span class="line-precise" title="No Anys on this line!">        alerts = {}</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        if usage.cpu_percent &gt;= self.thresholds.cpu_critical:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts["cpu"] = f"CRITICAL: CPU usage at {usage.cpu_percent}%"</span>
+<span class="line-precise" title="No Anys on this line!">        elif usage.cpu_percent &gt;= self.thresholds.cpu_warning:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts["cpu"] = f"WARNING: CPU usage at {usage.cpu_percent}%"</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        if usage.memory_percent &gt;= self.thresholds.memory_critical:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts["memory"] = f"CRITICAL: Memory usage at {usage.memory_percent}%"</span>
+<span class="line-precise" title="No Anys on this line!">        elif usage.memory_percent &gt;= self.thresholds.memory_warning:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts["memory"] = f"WARNING: Memory usage at {usage.memory_percent}%"</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        if usage.disk_percent &gt;= self.thresholds.disk_critical:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts["disk"] = f"CRITICAL: Disk usage at {usage.disk_percent}%"</span>
+<span class="line-precise" title="No Anys on this line!">        elif usage.disk_percent &gt;= self.thresholds.disk_warning:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts["disk"] = f"WARNING: Disk usage at {usage.disk_percent}%"</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        return alerts</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def get_average_usage(self, minutes: int = 5) -&gt; ResourceUsage:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get average resource usage over time period"""</span>
+<span class="line-precise" title="No Anys on this line!">        cutoff_time = datetime.now() - timedelta(minutes=minutes)</span>
+<span class="line-precise" title="No Anys on this line!">        recent = [u for u in self._history if u.timestamp &gt;= cutoff_time]</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        if not recent:</span>
+<span class="line-precise" title="No Anys on this line!">            return self.get_current_usage()</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x6)
+Explicit (x8)">        avg_cpu = sum(u.cpu_percent for u in recent) / len(recent)</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x6)
+Explicit (x8)">        avg_memory = sum(u.memory_percent for u in recent) / len(recent)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Return current usage with averaged CPU and memory</span>
+<span class="line-precise" title="No Anys on this line!">        current = recent[-1]</span>
+<span class="line-precise" title="No Anys on this line!">        return ResourceUsage(</span>
+<span class="line-precise" title="No Anys on this line!">            cpu_percent=avg_cpu,</span>
+<span class="line-precise" title="No Anys on this line!">            memory_percent=avg_memory,</span>
+<span class="line-precise" title="No Anys on this line!">            memory_used_mb=current.memory_used_mb,</span>
+<span class="line-precise" title="No Anys on this line!">            memory_available_mb=current.memory_available_mb,</span>
+<span class="line-precise" title="No Anys on this line!">            disk_percent=current.disk_percent,</span>
+<span class="line-precise" title="No Anys on this line!">            disk_used_gb=current.disk_used_gb,</span>
+<span class="line-precise" title="No Anys on this line!">            disk_available_gb=current.disk_available_gb,</span>
+<span class="line-precise" title="No Anys on this line!">            network_sent_bytes=current.network_sent_bytes,</span>
+<span class="line-precise" title="No Anys on this line!">            network_recv_bytes=current.network_recv_bytes,</span>
+<span class="line-precise" title="No Anys on this line!">            timestamp=datetime.now(),</span>
+<span class="line-empty" title="No Anys on this line!">        )</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">class ConnectionPoolOptimizer:</span>
+<span class="line-empty" title="No Anys on this line!">    """Optimize database and connection pool usage"""</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def __init__(</span>
 <span class="line-empty" title="No Anys on this line!">        self,</span>
-<span class="line-empty" title="No Anys on this line!">        message: str,</span>
-<span class="line-precise" title="No Anys on this line!">        code: str = "MINDER_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">        status_code: int = 500,</span>
-<span class="line-precise" title="No Anys on this line!">        details: Optional[Dict[str, Any]] = None,</span>
+<span class="line-precise" title="No Anys on this line!">        min_connections: int = 5,</span>
+<span class="line-precise" title="No Anys on this line!">        max_connections: int = 20,</span>
+<span class="line-precise" title="No Anys on this line!">        target_utilization: float = 0.7,</span>
 <span class="line-empty" title="No Anys on this line!">    ):</span>
-<span class="line-precise" title="No Anys on this line!">        self.message = message</span>
-<span class="line-precise" title="No Anys on this line!">        self.code = code</span>
-<span class="line-precise" title="No Anys on this line!">        self.status_code = status_code</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x3)">        self.details = details or {}</span>
-<span class="line-precise" title="No Anys on this line!">        super().__init__(message)</span>
+<span class="line-precise" title="No Anys on this line!">        self.min_connections = min_connections</span>
+<span class="line-precise" title="No Anys on this line!">        self.max_connections = max_connections</span>
+<span class="line-precise" title="No Anys on this line!">        self.target_utilization = target_utilization</span>
+<span class="line-precise" title="No Anys on this line!">        self._current_connections = min_connections</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">    def to_dict(self) -&gt; Dict[str, Any]:</span>
-<span class="line-empty" title="No Anys on this line!">        """Convert error to dictionary"""</span>
+<span class="line-precise" title="No Anys on this line!">    def calculate_optimal_pool_size(</span>
+<span class="line-precise" title="No Anys on this line!">        self, concurrent_requests: int, avg_request_time_ms: float = 100.0</span>
+<span class="line-empty" title="No Anys on this line!">    ) -&gt; int:</span>
+<span class="line-empty" title="No Anys on this line!">        """</span>
+<span class="line-empty" title="No Anys on this line!">        Calculate optimal connection pool size.</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        Formula: pool_size = concurrent_requests * (1 + (wait_time / service_time))</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        Args:</span>
+<span class="line-empty" title="No Anys on this line!">            concurrent_requests: Number of concurrent requests</span>
+<span class="line-empty" title="No Anys on this line!">            avg_request_time_ms: Average request processing time in ms</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        Returns:</span>
+<span class="line-empty" title="No Anys on this line!">            Optimal pool size</span>
+<span class="line-empty" title="No Anys on this line!">        """</span>
+<span class="line-empty" title="No Anys on this line!">        # Estimate wait time (assume 20% of request time)</span>
+<span class="line-precise" title="No Anys on this line!">        wait_time_ms = avg_request_time_ms * 0.2</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Little's Law</span>
+<span class="line-precise" title="No Anys on this line!">        optimal_size = concurrent_requests * (1 + (wait_time_ms / avg_request_time_ms))</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Clamp to min/max</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x46)">        optimal_size = max(self.min_connections, min(optimal_size, self.max_connections))</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        return int(optimal_size)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def should_increase_pool(self, utilization: float, queue_length: int) -&gt; bool:</span>
+<span class="line-empty" title="No Anys on this line!">        """Check if pool size should be increased"""</span>
+<span class="line-precise" title="No Anys on this line!">        return utilization &gt; self.target_utilization and queue_length &gt; 0 and self._current_connections &lt; self.max_connections</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def should_decrease_pool(self, utilization: float, queue_length: int) -&gt; bool:</span>
+<span class="line-empty" title="No Anys on this line!">        """Check if pool size should be decreased"""</span>
+<span class="line-precise" title="No Anys on this line!">        return utilization &lt; self.target_utilization - 0.2 and queue_length == 0 and self._current_connections &gt; self.min_connections</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">class MemoryOptimizer:</span>
+<span class="line-empty" title="No Anys on this line!">    """Optimize memory usage"""</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def get_memory_usage_by_type() -&gt; Dict[str, float]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get memory usage breakdown by type"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        memory_info = psutil.virtual_memory()</span>
+<span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">        return {</span>
-<span class="line-precise" title="No Anys on this line!">            "message": self.message,</span>
-<span class="line-precise" title="No Anys on this line!">            "code": self.code,</span>
-<span class="line-precise" title="No Anys on this line!">            "status_code": self.status_code,</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">            "details": self.details,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "total_gb": memory_info.total / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "available_gb": memory_info.available / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "used_gb": memory_info.used / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "free_gb": memory_info.free / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "cached_gb": memory_info.cached / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "buffers_gb": memory_info.buffers / (1024**3),</span>
 <span class="line-empty" title="No Anys on this line!">        }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def optimize_caches(cache_sizes: Dict[str, int]) -&gt; Dict[str, int]:</span>
+<span class="line-empty" title="No Anys on this line!">        """</span>
+<span class="line-empty" title="No Anys on this line!">        Optimize cache sizes based on available memory.</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class AuthenticationError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Authentication failed"""</span>
+<span class="line-empty" title="No Anys on this line!">        Args:</span>
+<span class="line-empty" title="No Anys on this line!">            cache_sizes: Current cache sizes</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, message: str = "Authentication failed", details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        super().__init__(message=message, code="AUTH_FAILED", status_code=401, details=details)</span>
+<span class="line-empty" title="No Anys on this line!">        Returns:</span>
+<span class="line-empty" title="No Anys on this line!">            Optimized cache sizes</span>
+<span class="line-empty" title="No Anys on this line!">        """</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        memory_info = psutil.virtual_memory()</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        available_memory_gb = memory_info.available / (1024**3)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Reserve 20% of available memory for other processes</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        allocatable_memory_gb = available_memory_gb * 0.8</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        allocatable_memory_mb = allocatable_memory_gb * 1024</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class AuthorizationError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Authorization failed"""</span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x6)
+Explicit (x8)">        total_current = sum(cache_sizes.values())</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, message: str = "Permission denied", details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="No Anys on this line!">        super().__init__(</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            message=message, code="PERMISSION_DENIED", status_code=403, details=details</span>
-<span class="line-empty" title="No Anys on this line!">        )</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">        if total_current &gt; allocatable_memory_mb:</span>
+<span class="line-empty" title="No Anys on this line!">            # Scale down proportionally</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            scale_factor = allocatable_memory_mb / total_current</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            optimized = {k: int(v * scale_factor) for k, v in cache_sizes.items()}</span>
+<span class="line-precise" title="No Anys on this line!">            return optimized</span>
 <span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        return cache_sizes</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class ResourceNotFoundError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Resource not found"""</span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def check_memory_pressure() -&gt; str:</span>
+<span class="line-empty" title="No Anys on this line!">        """Check if system is under memory pressure"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        memory_info = psutil.virtual_memory()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, resource_type: str, resource_id: str, details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="No Anys on this line!">        super().__init__(</span>
-<span class="line-precise" title="No Anys on this line!">            message=f"{resource_type} not found: {resource_id}",</span>
-<span class="line-precise" title="No Anys on this line!">            code="RESOURCE_NOT_FOUND",</span>
-<span class="line-precise" title="No Anys on this line!">            status_code=404,</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details=details,</span>
-<span class="line-empty" title="No Anys on this line!">        )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class InputValidationError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Input validation failed"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, message: str, field: Optional[str] = None, details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        if details is None:</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details = {}</span>
-<span class="line-precise" title="No Anys on this line!">        if field:</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details["field"] = field</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        super().__init__(message=message, code="VALIDATION_ERROR", status_code=422, details=details)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class RateLimitExceededError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Rate limit exceeded"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, limit: int, window: int, reset_time: int, details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        if details is None:</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details = {}</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x11)">        details.update({"limit": limit, "window": window, "reset_time": reset_time})</span>
-<span class="line-imprecise" title="No Anys on this line!">        super().__init__(</span>
-<span class="line-precise" title="No Anys on this line!">            message=f"Rate limit exceeded: {limit} requests per {window} seconds",</span>
-<span class="line-precise" title="No Anys on this line!">            code="RATE_LIMIT_EXCEEDED",</span>
-<span class="line-precise" title="No Anys on this line!">            status_code=429,</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details=details,</span>
-<span class="line-empty" title="No Anys on this line!">        )</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        if memory_info.percent &gt;= 90:</span>
+<span class="line-precise" title="No Anys on this line!">            return "critical"</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        elif memory_info.percent &gt;= 75:</span>
+<span class="line-precise" title="No Anys on this line!">            return "warning"</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        elif memory_info.percent &gt;= 50:</span>
+<span class="line-precise" title="No Anys on this line!">            return "moderate"</span>
+<span class="line-empty" title="No Anys on this line!">        else:</span>
+<span class="line-precise" title="No Anys on this line!">            return "normal"</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class ServiceUnavailableError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Service temporarily unavailable"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, service: str, details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="No Anys on this line!">        super().__init__(</span>
-<span class="line-precise" title="No Anys on this line!">            message=f"Service unavailable: {service}",</span>
-<span class="line-precise" title="No Anys on this line!">            code="SERVICE_UNAVAILABLE",</span>
-<span class="line-precise" title="No Anys on this line!">            status_code=503,</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details=details,</span>
-<span class="line-empty" title="No Anys on this line!">        )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class DatabaseError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """Database operation failed"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(self, message: str = "Database operation failed", details: Optional[Dict] = None):</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        super().__init__(message=message, code="DATABASE_ERROR", status_code=500, details=details)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class ExternalServiceError(MinderError):</span>
-<span class="line-empty" title="No Anys on this line!">    """External API call failed"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">    def __init__(</span>
-<span class="line-empty" title="No Anys on this line!">        self,</span>
-<span class="line-empty" title="No Anys on this line!">        service: str,</span>
-<span class="line-precise" title="No Anys on this line!">        message: str = "External service call failed",</span>
-<span class="line-precise" title="No Anys on this line!">        details: Optional[Dict] = None,</span>
-<span class="line-empty" title="No Anys on this line!">    ):</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        if details is None:</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            details = {}</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">        details["service"] = service</span>
-<span class="line-imprecise" title="No Anys on this line!">        super().__init__(</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Omitted Generics (x2)">            message=message, code="EXTERNAL_SERVICE_ERROR", status_code=502, details=details</span>
-<span class="line-empty" title="No Anys on this line!">        )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"># Error response model</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class ErrorResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Standardized error response"""</span>
+<span class="line-precise" title="No Anys on this line!">class CPUOptimizer:</span>
+<span class="line-empty" title="No Anys on this line!">    """Optimize CPU usage"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
 <span class="line-imprecise" title="Any Types on this line: 
-Explicit (x2)">    def create(</span>
-<span class="line-empty" title="No Anys on this line!">        error_code: str,</span>
-<span class="line-empty" title="No Anys on this line!">        message: str,</span>
-<span class="line-empty" title="No Anys on this line!">        status_code: int,</span>
-<span class="line-precise" title="No Anys on this line!">        details: Optional[Dict[str, Any]] = None,</span>
-<span class="line-precise" title="No Anys on this line!">        request_id: Optional[str] = None,</span>
-<span class="line-empty" title="No Anys on this line!">    ) -&gt; Dict[str, Any]:</span>
+Explicit (x1)">    def get_cpu_info() -&gt; Dict[str, Any]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get CPU information"""</span>
+<span class="line-empty" title="No Anys on this line!">        return {</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "physical_cores": psutil.cpu_count(logical=False),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "logical_cores": psutil.cpu_count(logical=True),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "current_usage_percent": psutil.cpu_percent(interval=0.1),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x7)">            "frequency_mhz": psutil.cpu_freq().current if psutil.cpu_freq() else None,</span>
+<span class="line-empty" title="No Anys on this line!">        }</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def get_cpu_times() -&gt; Dict[str, float]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get CPU time breakdown"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        cpu_times = psutil.cpu_times()</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        return {</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "user_seconds": cpu_times.user,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "system_seconds": cpu_times.system,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "idle_seconds": cpu_times.idle,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "iowait_seconds": cpu_times.iowait if hasattr(cpu_times, "iowait") else 0.0,</span>
+<span class="line-empty" title="No Anys on this line!">        }</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def optimize_thread_pool_size(io_bound: bool = False, cpu_count: Optional[int] = None) -&gt; int:</span>
 <span class="line-empty" title="No Anys on this line!">        """</span>
-<span class="line-empty" title="No Anys on this line!">        Create standardized error response.</span>
+<span class="line-empty" title="No Anys on this line!">        Calculate optimal thread pool size.</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">        Args:</span>
-<span class="line-empty" title="No Anys on this line!">            error_code: Application-specific error code</span>
-<span class="line-empty" title="No Anys on this line!">            message: Human-readable error message</span>
-<span class="line-empty" title="No Anys on this line!">            status_code: HTTP status code</span>
-<span class="line-empty" title="No Anys on this line!">            details: Additional error details</span>
-<span class="line-empty" title="No Anys on this line!">            request_id: Request correlation ID</span>
+<span class="line-empty" title="No Anys on this line!">            io_bound: If True, use larger pool for I/O-bound tasks</span>
+<span class="line-empty" title="No Anys on this line!">            cpu_count: Override CPU count</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">        Returns:</span>
-<span class="line-empty" title="No Anys on this line!">            Dictionary with error information</span>
+<span class="line-empty" title="No Anys on this line!">            Optimal thread pool size</span>
 <span class="line-empty" title="No Anys on this line!">        """</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">        response: Dict[str, Any] = {"error": {"code": error_code, "message": message, "status_code": status_code}}</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">        if details:</span>
 <span class="line-any" title="Any Types on this line: 
-Explicit (x3)">            response["error"]["details"] = details</span>
+Unimported (x4)">        cpu_count = cpu_count or psutil.cpu_count(logical=True)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">        if request_id:</span>
+<span class="line-precise" title="No Anys on this line!">        if io_bound:</span>
+<span class="line-empty" title="No Anys on this line!">            # I/O-bound tasks: pool size = number of cores * 2</span>
 <span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">            response["request_id"] = request_id</span>
-<span class="line-empty" title="No Anys on this line!"></span>
+Unimported (x2)">            return cpu_count * 2</span>
+<span class="line-empty" title="No Anys on this line!">        else:</span>
+<span class="line-empty" title="No Anys on this line!">            # CPU-bound tasks: pool size = number of cores + 1</span>
 <span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">        return response</span>
+Unimported (x2)">            return cpu_count + 1</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"># Exception handlers</span>
+<span class="line-precise" title="No Anys on this line!">class DiskOptimizer:</span>
+<span class="line-empty" title="No Anys on this line!">    """Optimize disk I/O"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">async def minder_exception_handler(request: Request, exc: MinderError) -&gt; JSONResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Handle Minder-specific exceptions"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Get request ID from headers</span>
-<span class="line-precise" title="Any Types on this line: 
-Omitted Generics (x2)">    request_id = request.headers.get("X-Request-ID")</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Create error response</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x4)">    error_data = ErrorResponse.create(</span>
-<span class="line-precise" title="No Anys on this line!">        error_code=exc.code,</span>
-<span class="line-precise" title="No Anys on this line!">        message=exc.message,</span>
-<span class="line-precise" title="No Anys on this line!">        status_code=exc.status_code,</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">        details=exc.details,</span>
-<span class="line-precise" title="No Anys on this line!">        request_id=request_id,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Log error</span>
-<span class="line-precise" title="No Anys on this line!">    logger.error(</span>
-<span class="line-precise" title="No Anys on this line!">        f"MinderError: {exc.code} - {exc.message}",</span>
-<span class="line-empty" title="No Anys on this line!">        extra={</span>
-<span class="line-precise" title="No Anys on this line!">            "error_code": exc.code,</span>
-<span class="line-precise" title="No Anys on this line!">            "status_code": exc.status_code,</span>
-<span class="line-precise" title="No Anys on this line!">            "request_id": request_id,</span>
-<span class="line-precise" title="No Anys on this line!">            "path": request.url.path,</span>
-<span class="line-precise" title="No Anys on this line!">            "method": request.method,</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x1)">            "details": exc.details,</span>
-<span class="line-empty" title="No Anys on this line!">        },</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def get_disk_usage(path: str = "/") -&gt; Dict[str, float]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get disk usage"""</span>
 <span class="line-any" title="Any Types on this line: 
-Explicit (x2)">    return JSONResponse(status_code=exc.status_code, content=error_data)</span>
+Unimported (x4)">        disk = psutil.disk_usage(path)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        return {</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "total_gb": disk.total / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "used_gb": disk.used / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            "free_gb": disk.free / (1024**3),</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "percent": disk.percent,</span>
+<span class="line-empty" title="No Anys on this line!">        }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">async def http_exception_handler(request: Request, exc: HTTPException) -&gt; JSONResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Handle FastAPI HTTP exceptions"""</span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def get_disk_io_stats() -&gt; Dict[str, float]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get disk I/O statistics"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        disk_io = psutil.disk_io_counters()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="Any Types on this line: 
-Omitted Generics (x2)">    request_id = request.headers.get("X-Request-ID")</span>
+<span class="line-empty" title="No Anys on this line!">        return {</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "read_bytes": disk_io.read_bytes,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "write_bytes": disk_io.write_bytes,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "read_count": disk_io.read_count,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "write_count": disk_io.write_count,</span>
+<span class="line-empty" title="No Anys on this line!">        }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x4)">    error_data = ErrorResponse.create(</span>
-<span class="line-precise" title="No Anys on this line!">        error_code=f"HTTP_{exc.status_code}",</span>
-<span class="line-precise" title="No Anys on this line!">        message=exc.detail,</span>
-<span class="line-precise" title="No Anys on this line!">        status_code=exc.status_code,</span>
-<span class="line-precise" title="No Anys on this line!">        request_id=request_id,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Log HTTP errors</span>
-<span class="line-precise" title="No Anys on this line!">    logger.warning(</span>
-<span class="line-precise" title="No Anys on this line!">        f"HTTPException: {exc.status_code} - {exc.detail}",</span>
-<span class="line-empty" title="No Anys on this line!">        extra={</span>
-<span class="line-precise" title="No Anys on this line!">            "status_code": exc.status_code,</span>
-<span class="line-precise" title="No Anys on this line!">            "request_id": request_id,</span>
-<span class="line-precise" title="No Anys on this line!">            "path": request.url.path,</span>
-<span class="line-precise" title="No Anys on this line!">            "method": request.method,</span>
-<span class="line-empty" title="No Anys on this line!">        },</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def check_disk_space(path: str = "/", warning_threshold: float = 80.0) -&gt; str:</span>
+<span class="line-empty" title="No Anys on this line!">        """Check disk space status"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        disk = psutil.disk_usage(path)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Explicit (x2)">    return JSONResponse(status_code=exc.status_code, content=error_data)</span>
+Unimported (x3)">        if disk.percent &gt;= 90:</span>
+<span class="line-precise" title="No Anys on this line!">            return "critical"</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        elif disk.percent &gt;= warning_threshold:</span>
+<span class="line-precise" title="No Anys on this line!">            return "warning"</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">        elif disk.percent &gt;= 50:</span>
+<span class="line-precise" title="No Anys on this line!">            return "moderate"</span>
+<span class="line-empty" title="No Anys on this line!">        else:</span>
+<span class="line-precise" title="No Anys on this line!">            return "normal"</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">async def validation_exception_handler(</span>
-<span class="line-empty" title="No Anys on this line!">    request: Request, exc: PydanticValidationError</span>
-<span class="line-empty" title="No Anys on this line!">) -&gt; JSONResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Handle Pydantic validation errors"""</span>
+<span class="line-precise" title="No Anys on this line!">class NetworkOptimizer:</span>
+<span class="line-empty" title="No Anys on this line!">    """Optimize network usage"""</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="Any Types on this line: 
-Omitted Generics (x2)">    request_id = request.headers.get("X-Request-ID")</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Extract field errors</span>
-<span class="line-precise" title="No Anys on this line!">    errors = []</span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
 <span class="line-imprecise" title="Any Types on this line: 
-Explicit (x6)">    for error in exc.errors():</span>
-<span class="line-precise" title="No Anys on this line!">        errors.append(</span>
-<span class="line-empty" title="No Anys on this line!">            {</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x2)">                "field": ".".join(str(loc) for loc in error["loc"]),</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x2)">                "message": error["msg"],</span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x2)">                "type": error["type"],</span>
-<span class="line-empty" title="No Anys on this line!">            }</span>
-<span class="line-empty" title="No Anys on this line!">        )</span>
+Explicit (x1)">    def get_network_stats() -&gt; Dict[str, Any]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get network statistics"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        network = psutil.net_io_counters()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x4)">    error_data = ErrorResponse.create(</span>
-<span class="line-precise" title="No Anys on this line!">        error_code="VALIDATION_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">        message="Input validation failed",</span>
-<span class="line-precise" title="No Anys on this line!">        status_code=422,</span>
-<span class="line-precise" title="No Anys on this line!">        details={"fields": errors},</span>
-<span class="line-precise" title="No Anys on this line!">        request_id=request_id,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
+<span class="line-empty" title="No Anys on this line!">        return {</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "bytes_sent": network.bytes_sent,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "bytes_recv": network.bytes_recv,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "packets_sent": network.packets_sent,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "packets_recv": network.packets_recv,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "errors_in": network.errin,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "errors_out": network.errout,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "drops_in": network.dropin,</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">            "drops_out": network.dropout,</span>
+<span class="line-empty" title="No Anys on this line!">        }</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Log validation errors</span>
-<span class="line-precise" title="No Anys on this line!">    logger.warning(</span>
-<span class="line-precise" title="No Anys on this line!">        f"ValidationError: {len(errors)} field(s) failed validation",</span>
-<span class="line-empty" title="No Anys on this line!">        extra={</span>
-<span class="line-precise" title="No Anys on this line!">            "error_code": "VALIDATION_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">            "request_id": request_id,</span>
-<span class="line-precise" title="No Anys on this line!">            "path": request.url.path,</span>
-<span class="line-precise" title="No Anys on this line!">            "method": request.method,</span>
-<span class="line-precise" title="No Anys on this line!">            "validation_errors": errors,</span>
-<span class="line-empty" title="No Anys on this line!">        },</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
+<span class="line-empty" title="No Anys on this line!">    @staticmethod</span>
+<span class="line-precise" title="No Anys on this line!">    def get_network_connections() -&gt; Dict[str, int]:</span>
+<span class="line-empty" title="No Anys on this line!">        """Get network connection counts"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x4)">        connections = psutil.net_connections(kind="inet")</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        status_counts: Dict[str, int] = {}</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x2)">        for conn in connections:</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x3)">            status = conn.status</span>
+<span class="line-any" title="Any Types on this line: 
+Omitted Generics (x2)
+Unimported (x2)">            status_counts[status] = status_counts.get(status, 0) + 1</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        return status_counts</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">class AdaptiveExecutor:</span>
+<span class="line-empty" title="No Anys on this line!">    """Adaptive executor that adjusts based on system load"""</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    def __init__(</span>
+<span class="line-empty" title="No Anys on this line!">        self,</span>
+<span class="line-precise" title="No Anys on this line!">        max_workers: Optional[int] = None,</span>
+<span class="line-precise" title="No Anys on this line!">        min_workers: int = 2,</span>
+<span class="line-precise" title="No Anys on this line!">        monitor: Optional[ResourceMonitor] = None,</span>
+<span class="line-empty" title="No Anys on this line!">    ):</span>
+<span class="line-any" title="Any Types on this line: 
+Unimported (x5)">        self.max_workers = max_workers or psutil.cpu_count(logical=True)</span>
+<span class="line-precise" title="No Anys on this line!">        self.min_workers = min_workers</span>
+<span class="line-precise" title="No Anys on this line!">        self.monitor = monitor or ResourceMonitor()</span>
+<span class="line-precise" title="No Anys on this line!">        self._executor: Optional[ThreadPoolExecutor] = None</span>
+<span class="line-precise" title="No Anys on this line!">        self._current_workers = min_workers</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Explicit (x2)">    return JSONResponse(status_code=422, content=error_data)</span>
+Omitted Generics (x3)
+Unannotated (x2)
+Explicit (x1)">    async def execute(self, func: Callable, *args, **kwargs) -&gt; Any:</span>
+<span class="line-empty" title="No Anys on this line!">        """Execute function with adaptive worker count"""</span>
+<span class="line-empty" title="No Anys on this line!">        # Get current resource usage</span>
+<span class="line-precise" title="No Anys on this line!">        usage = self.monitor.get_current_usage()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unimported (x1)">async def postgres_exception_handler(request: Request, exc: PostgresError) -&gt; JSONResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Handle PostgreSQL errors"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="Any Types on this line: 
-Omitted Generics (x2)">    request_id = request.headers.get("X-Request-ID")</span>
-<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Adjust worker count based on CPU usage</span>
+<span class="line-precise" title="No Anys on this line!">        if usage.cpu_percent &gt; 80:</span>
+<span class="line-empty" title="No Anys on this line!">            # Reduce workers under high CPU load</span>
+<span class="line-precise" title="No Anys on this line!">            target_workers = self.min_workers</span>
+<span class="line-precise" title="No Anys on this line!">        elif usage.cpu_percent &lt; 50:</span>
+<span class="line-empty" title="No Anys on this line!">            # Increase workers under low CPU load</span>
 <span class="line-imprecise" title="Any Types on this line: 
-Explicit (x4)">    error_data = ErrorResponse.create(</span>
-<span class="line-precise" title="No Anys on this line!">        error_code="DATABASE_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">        message="Database operation failed",</span>
-<span class="line-precise" title="No Anys on this line!">        status_code=500,</span>
-<span class="line-any" title="Any Types on this line: 
 Unimported (x2)
-Explicit (x13)
-Omitted Generics (x2)">        details={"detail": str(exc), "hint": getattr(exc, "hint", None)},</span>
-<span class="line-precise" title="No Anys on this line!">        request_id=request_id,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
+Omitted Generics (x23)">            target_workers = min(self.max_workers, self._current_workers + 2)</span>
+<span class="line-empty" title="No Anys on this line!">        else:</span>
+<span class="line-empty" title="No Anys on this line!">            # Maintain current workers</span>
+<span class="line-precise" title="No Anys on this line!">            target_workers = self._current_workers</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Log database errors</span>
-<span class="line-precise" title="No Anys on this line!">    logger.error(</span>
+<span class="line-empty" title="No Anys on this line!">        # Update executor if needed</span>
+<span class="line-precise" title="No Anys on this line!">        if target_workers != self._current_workers:</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x1)">        f"PostgresError: {str(exc)}",</span>
-<span class="line-empty" title="No Anys on this line!">        extra={</span>
-<span class="line-precise" title="No Anys on this line!">            "error_code": "DATABASE_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">            "request_id": request_id,</span>
-<span class="line-precise" title="No Anys on this line!">            "path": request.url.path,</span>
-<span class="line-precise" title="No Anys on this line!">            "method": request.method,</span>
+Unannotated (x2)">            self._resize_executor(target_workers)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">        # Execute function</span>
+<span class="line-precise" title="No Anys on this line!">        loop = asyncio.get_event_loop()</span>
 <span class="line-any" title="Any Types on this line: 
-Unimported (x1)">            "postgres_detail": str(exc),</span>
-<span class="line-empty" title="No Anys on this line!">        },</span>
-<span class="line-precise" title="No Anys on this line!">        exc_info=True,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
+Explicit (x3)
+Unannotated (x4)
+Omitted Generics (x3)">        return await loop.run_in_executor(self._executor, func, *args, **kwargs)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Explicit (x2)">    return JSONResponse(status_code=500, content=error_data)</span>
+Unannotated (x1)">    def _resize_executor(self, target_workers: int):</span>
+<span class="line-empty" title="No Anys on this line!">        """Resize executor to target worker count"""</span>
+<span class="line-precise" title="No Anys on this line!">        if self._executor:</span>
+<span class="line-precise" title="No Anys on this line!">            self._executor.shutdown(wait=False)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">async def aiohttp_exception_handler(request: Request, exc: aiohttp.ClientError) -&gt; JSONResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Handle aiohttp client errors (external service calls)"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        self._current_workers = target_workers</span>
 <span class="line-precise" title="Any Types on this line: 
-Omitted Generics (x2)">    request_id = request.headers.get("X-Request-ID")</span>
+Omitted Generics (x4)">        self._executor = ThreadPoolExecutor(max_workers=target_workers)</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x4)">    error_data = ErrorResponse.create(</span>
-<span class="line-precise" title="No Anys on this line!">        error_code="EXTERNAL_SERVICE_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">        message="External service call failed",</span>
-<span class="line-precise" title="No Anys on this line!">        status_code=502,</span>
-<span class="line-precise" title="No Anys on this line!">        details={"detail": str(exc)},</span>
-<span class="line-precise" title="No Anys on this line!">        request_id=request_id,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
+<span class="line-any" title="No Anys on this line!">    async def shutdown(self):</span>
+<span class="line-empty" title="No Anys on this line!">        """Shutdown executor"""</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x1)">        if self._executor:</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x3)">            self._executor.shutdown(wait=True)</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x1)">            self._executor = None</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Log external service errors</span>
-<span class="line-precise" title="No Anys on this line!">    logger.error(</span>
-<span class="line-precise" title="No Anys on this line!">        f"ExternalServiceError: {str(exc)}",</span>
-<span class="line-empty" title="No Anys on this line!">        extra={</span>
-<span class="line-precise" title="No Anys on this line!">            "error_code": "EXTERNAL_SERVICE_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">            "request_id": request_id,</span>
-<span class="line-precise" title="No Anys on this line!">            "path": request.url.path,</span>
-<span class="line-precise" title="No Anys on this line!">            "method": request.method,</span>
-<span class="line-precise" title="No Anys on this line!">            "aiohttp_error": str(exc),</span>
-<span class="line-empty" title="No Anys on this line!">        },</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="Any Types on this line: 
-Explicit (x2)">    return JSONResponse(status_code=502, content=error_data)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">async def generic_exception_handler(request: Request, exc: Exception) -&gt; JSONResponse:</span>
-<span class="line-empty" title="No Anys on this line!">    """Handle all other exceptions"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="Any Types on this line: 
-Omitted Generics (x2)">    request_id = request.headers.get("X-Request-ID")</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Get traceback</span>
-<span class="line-precise" title="Any Types on this line: 
-Explicit (x2)">    tb_str = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-imprecise" title="Any Types on this line: 
-Explicit (x4)">    error_data = ErrorResponse.create(</span>
-<span class="line-precise" title="No Anys on this line!">        error_code="INTERNAL_SERVER_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">        message="An unexpected error occurred",</span>
-<span class="line-precise" title="No Anys on this line!">        status_code=500,</span>
-<span class="line-precise" title="No Anys on this line!">        request_id=request_id,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Log unexpected errors</span>
-<span class="line-precise" title="No Anys on this line!">    logger.error(</span>
-<span class="line-precise" title="Any Types on this line: 
-Explicit (x2)">        f"UnexpectedError: {type(exc).__name__} - {str(exc)}",</span>
-<span class="line-empty" title="No Anys on this line!">        extra={</span>
-<span class="line-precise" title="No Anys on this line!">            "error_code": "INTERNAL_SERVER_ERROR",</span>
-<span class="line-precise" title="No Anys on this line!">            "request_id": request_id,</span>
-<span class="line-precise" title="No Anys on this line!">            "path": request.url.path,</span>
-<span class="line-precise" title="No Anys on this line!">            "method": request.method,</span>
-<span class="line-precise" title="Any Types on this line: 
-Explicit (x2)">            "exception_type": type(exc).__name__,</span>
-<span class="line-precise" title="No Anys on this line!">            "traceback": tb_str,</span>
-<span class="line-empty" title="No Anys on this line!">        },</span>
-<span class="line-precise" title="No Anys on this line!">        exc_info=True,</span>
-<span class="line-empty" title="No Anys on this line!">    )</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Don't include traceback in production response</span>
-<span class="line-any" title="Any Types on this line: 
-Explicit (x2)">    return JSONResponse(status_code=500, content=error_data)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"># Middleware setup</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">def setup_error_handlers(app):</span>
+Unannotated (x1)">def resource_limit_check(</span>
+<span class="line-precise" title="No Anys on this line!">    cpu_limit: float = 80.0,</span>
+<span class="line-precise" title="No Anys on this line!">    memory_limit: float = 80.0,</span>
+<span class="line-empty" title="No Anys on this line!">):</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
-<span class="line-empty" title="No Anys on this line!">    Setup all exception handlers for FastAPI app.</span>
+<span class="line-empty" title="No Anys on this line!">    Decorator to check resource limits before executing function.</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-empty" title="No Anys on this line!">    Args:</span>
-<span class="line-empty" title="No Anys on this line!">        app: FastAPI application instance</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    Example:</span>
-<span class="line-empty" title="No Anys on this line!">        from fastapi import FastAPI</span>
-<span class="line-empty" title="No Anys on this line!">        app = FastAPI()</span>
-<span class="line-empty" title="No Anys on this line!">        setup_error_handlers(app)</span>
-<span class="line-empty" title="No Anys on this line!">    """</span>
-<span class="line-empty" title="No Anys on this line!">    # Minder-specific exceptions</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Explicit (x1)">    app.add_exception_handler(MinderError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(AuthenticationError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(AuthorizationError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(ResourceNotFoundError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(InputValidationError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(RateLimitExceededError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(ServiceUnavailableError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(DatabaseError, minder_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Omitted Generics (x2)">    app.add_exception_handler(ExternalServiceError, minder_exception_handler)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Framework exceptions</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Explicit (x1)">    app.add_exception_handler(HTTPException, http_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)">    app.add_exception_handler(PydanticValidationError, validation_exception_handler)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Database exceptions</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Unimported (x2)">    app.add_exception_handler(PostgresError, postgres_exception_handler)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Unimported (x2)">    app.add_exception_handler(PostgresConnectionError, postgres_exception_handler)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # External service exceptions</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)">    app.add_exception_handler(aiohttp.ClientError, aiohttp_exception_handler)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    # Generic exception handler (must be last)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)">    app.add_exception_handler(Exception, generic_exception_handler)</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x2)">    logger.info("Error handlers registered")</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"># Error logging decorator</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">def log_errors(func):</span>
-<span class="line-empty" title="No Anys on this line!">    """</span>
-<span class="line-empty" title="No Anys on this line!">    Decorator to log errors from functions.</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    Example:</span>
-<span class="line-empty" title="No Anys on this line!">        @log_errors</span>
-<span class="line-empty" title="No Anys on this line!">        async def my_function():</span>
-<span class="line-empty" title="No Anys on this line!">            pass</span>
-<span class="line-empty" title="No Anys on this line!">    """</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">    async def wrapper(*args, **kwargs):</span>
-<span class="line-empty" title="No Anys on this line!">        try:</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x4)">            return await func(*args, **kwargs)</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">        except Exception as e:</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x2)">            logger.error(</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x10)">                f"Error in {func.__name__}: {str(e)}",</span>
-<span class="line-empty" title="No Anys on this line!">                extra={</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x2)">                    "function": func.__name__,</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x3)
-Explicit (x2)">                    "exception_type": type(e).__name__,</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">                    "args": args,</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">                    "kwargs": kwargs,</span>
-<span class="line-empty" title="No Anys on this line!">                },</span>
-<span class="line-any" title="No Anys on this line!">                exc_info=True,</span>
-<span class="line-empty" title="No Anys on this line!">            )</span>
-<span class="line-empty" title="No Anys on this line!">            raise</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="Any Types on this line: 
-Unannotated (x3)">    return wrapper</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"># Error context manager</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">class ErrorHandler:</span>
-<span class="line-empty" title="No Anys on this line!">    """Context manager for handling errors"""</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="No Anys on this line!">    def __init__(self, operation: str, reraise: bool = False):</span>
-<span class="line-empty" title="No Anys on this line!">        """</span>
-<span class="line-empty" title="No Anys on this line!">        Initialize error handler.</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">        Args:</span>
-<span class="line-empty" title="No Anys on this line!">            operation: Description of operation being performed</span>
-<span class="line-empty" title="No Anys on this line!">            reraise: Whether to reraise exception after logging</span>
-<span class="line-empty" title="No Anys on this line!">        """</span>
-<span class="line-precise" title="No Anys on this line!">        self.operation = operation</span>
-<span class="line-precise" title="No Anys on this line!">        self.reraise = reraise</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">    async def __aenter__(self):</span>
-<span class="line-precise" title="No Anys on this line!">        return self</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="No Anys on this line!">    async def __aexit__(self, exc_type, exc_val, exc_tb):</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">        if exc_type is not None:</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x2)">            logger.error(</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x9)">                f"Error in operation '{self.operation}': {str(exc_val)}",</span>
-<span class="line-empty" title="No Anys on this line!">                extra={</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">                    "operation": self.operation,</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x2)">                    "exception_type": exc_type.__name__,</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x2)">                    "exception_value": str(exc_val),</span>
-<span class="line-empty" title="No Anys on this line!">                },</span>
-<span class="line-any" title="No Anys on this line!">                exc_info=True,</span>
-<span class="line-empty" title="No Anys on this line!">            )</span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">            return not self.reraise</span>
-<span class="line-any" title="No Anys on this line!">        return False</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">def safe_execute(operation: str, reraise: bool = False):</span>
-<span class="line-empty" title="No Anys on this line!">    """</span>
-<span class="line-empty" title="No Anys on this line!">    Decorator for safe execution with error handling.</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    Args:</span>
-<span class="line-empty" title="No Anys on this line!">        operation: Description of operation</span>
-<span class="line-empty" title="No Anys on this line!">        reraise: Whether to reraise exception</span>
-<span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-empty" title="No Anys on this line!">    Example:</span>
-<span class="line-empty" title="No Anys on this line!">        @safe_execute("database operation")</span>
-<span class="line-empty" title="No Anys on this line!">        async def my_function():</span>
-<span class="line-empty" title="No Anys on this line!">            pass</span>
+<span class="line-empty" title="No Anys on this line!">        cpu_limit: Maximum CPU usage percentage</span>
+<span class="line-empty" title="No Anys on this line!">        memory_limit: Maximum memory usage percentage</span>
 <span class="line-empty" title="No Anys on this line!">    """</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-any" title="No Anys on this line!">    def decorator(func):</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x2)
+Omitted Generics (x5)">        @wraps(func)</span>
 <span class="line-any" title="No Anys on this line!">        async def wrapper(*args, **kwargs):</span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x1)">            with ErrorHandler(operation, reraise):</span>
+Unannotated (x2)">            monitor = ResourceMonitor()</span>
 <span class="line-any" title="Any Types on this line: 
-Unannotated (x4)">                return await func(*args, **kwargs)</span>
+Unannotated (x4)">            usage = monitor.get_current_usage()</span>
 <span class="line-empty" title="No Anys on this line!"></span>
-<span class="line-precise" title="Any Types on this line: 
-Unannotated (x3)">        return wrapper</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x3)">            if usage.cpu_percent &gt; cpu_limit:</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x10)">                logger.warning(f"CPU usage {usage.cpu_percent}% exceeds limit {cpu_limit}%")</span>
+<span class="line-empty" title="No Anys on this line!">                # Could queue the request or return error</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x3)">            if usage.memory_percent &gt; memory_limit:</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x2)">                logger.warning(</span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x8)">                    f"Memory usage {usage.memory_percent}% exceeds limit {memory_limit}%"</span>
+<span class="line-empty" title="No Anys on this line!">                )</span>
+<span class="line-empty" title="No Anys on this line!">                # Could queue the request or return error</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x4)">            return await func(*args, **kwargs)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-any" title="Any Types on this line: 
+Unannotated (x1)">        return wrapper</span>
 <span class="line-empty" title="No Anys on this line!"></span>
 <span class="line-precise" title="Any Types on this line: 
 Unannotated (x2)">    return decorator</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-imprecise" title="Any Types on this line: 
+Unannotated (x1)">async def optimize_resources_continuously(</span>
+<span class="line-precise" title="No Anys on this line!">    check_interval: int = 60,</span>
+<span class="line-precise" title="No Anys on this line!">    thresholds: Optional[ResourceThresholds] = None,</span>
+<span class="line-precise" title="No Anys on this line!">    alert_callback: Optional[Callable[[Dict[str, str]], None]] = None,</span>
+<span class="line-empty" title="No Anys on this line!">):</span>
+<span class="line-empty" title="No Anys on this line!">    """</span>
+<span class="line-empty" title="No Anys on this line!">    Continuously monitor and optimize resources.</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-empty" title="No Anys on this line!">    Args:</span>
+<span class="line-empty" title="No Anys on this line!">        check_interval: Check interval in seconds</span>
+<span class="line-empty" title="No Anys on this line!">        thresholds: Resource thresholds</span>
+<span class="line-empty" title="No Anys on this line!">        alert_callback: Callback for alerts</span>
+<span class="line-empty" title="No Anys on this line!">    """</span>
+<span class="line-precise" title="No Anys on this line!">    monitor = ResourceMonitor(thresholds)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">    while True:</span>
+<span class="line-empty" title="No Anys on this line!">        try:</span>
+<span class="line-precise" title="No Anys on this line!">            alerts = monitor.check_thresholds()</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">            if alerts and alert_callback:</span>
+<span class="line-precise" title="Any Types on this line: 
+Explicit (x5)
+Omitted Generics (x5)">                if asyncio.iscoroutinefunction(alert_callback):</span>
+<span class="line-imprecise" title="Any Types on this line: 
+Explicit (x6)">                    await alert_callback(alerts)</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">            logger.debug(f"Resource check: {monitor.get_current_usage()}")</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="No Anys on this line!">        except Exception as e:</span>
+<span class="line-precise" title="No Anys on this line!">            logger.error(f"Error monitoring resources: {e}")</span>
+<span class="line-empty" title="No Anys on this line!"></span>
+<span class="line-precise" title="Any Types on this line: 
+Omitted Generics (x2)">        await asyncio.sleep(check_interval)</span>
 </pre></td>
 </tr></tbody>
 </table>
