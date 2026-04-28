@@ -1,12 +1,20 @@
 """
-Shared database utilities for Minder Platform
+Database optimization package for Minder.
 """
 
-from .asyncpg_pool import DatabasePoolManager, create_plugin_pool, db_pool_manager, get_plugin_pool
+from .models import QueryPlan, IndexRecommendation, SlowQuery, TableStatistics
+from .database_optimizer import DatabaseOptimizer
+from .query_optimizer import QueryOptimizer
+from .index_manager import IndexManager
+from .connection_pool import ConnectionPoolOptimizer
 
 __all__ = [
-    "DatabasePoolManager",
-    "db_pool_manager",
-    "create_plugin_pool",
-    "get_plugin_pool",
+    "QueryPlan",
+    "IndexRecommendation",
+    "SlowQuery",
+    "TableStatistics",
+    "DatabaseOptimizer",
+    "QueryOptimizer",
+    "IndexManager",
+    "ConnectionPoolOptimizer",
 ]
