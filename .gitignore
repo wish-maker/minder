@@ -55,6 +55,11 @@ site/
 
 # Environments
 .env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.test
 .venv
 env/
 venv/
@@ -78,9 +83,20 @@ Thumbs.db
 *.db
 *.sqlite3
 *.bak
+*.backup
+*_backup
 *.tmp
 *.old
 *.save
+
+# MyPy Reports
+mypy-report/
+mypy-report.html
+
+# Temporary files
+.remember/tmp/
+tmp/
+temp/
 
 # Node.js
 node_modules/
