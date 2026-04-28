@@ -1,9 +1,14 @@
 """
-Minder Plugins Package
-Modüler plugin sistemi
+Plugin system for Minder.
+Provides plugin discovery, installation, and lifecycle management.
 """
 
-# Note: PluginStore is disabled (not yet implemented)
-# from .store import PluginStore
+from .plugin_loader import PluginLoader
+from .plugin_manager import PluginManager
+from .plugin_registry import PluginRegistry
 
-__all__ = []
+__all__ = [
+    "PluginLoader",
+    "PluginManager",
+    "PluginRegistry",
+]

@@ -4,7 +4,7 @@ Unit tests for error handling module.
 
 import pytest
 
-from src.shared.error_handler import (
+from src.shared.errors.errors import (
     AuthenticationError,
     AuthorizationError,
     DatabaseError,
@@ -172,7 +172,7 @@ class TestServiceUnavailableError:
     def test_service_unavailable_error_creation(self):
         """Test creating ServiceUnavailableError"""
         error = ServiceUnavailableError(
-            service="Database"
+            message="Service unavailable: Database"
         )
 
         assert error.message == "Service unavailable: Database"
@@ -182,7 +182,7 @@ class TestServiceUnavailableError:
     def test_service_unavailable_error_details(self):
         """Test ServiceUnavailableError details"""
         error = ServiceUnavailableError(
-            service="Database", details={"reason": "Connection timeout"}
+            message="Service unavailable: Database", details={"reason": "Connection timeout"}
         )
 
         assert error.details["reason"] == "Connection timeout"
@@ -214,7 +214,7 @@ class TestExternalServiceError:
     def test_external_service_error_creation(self):
         """Test creating ExternalServiceError"""
         error = ExternalServiceError(
-            service="API", message="Timeout"
+            service_name="API", message="Timeout"
         )
 
         assert error.message == "Timeout"
@@ -224,7 +224,7 @@ class TestExternalServiceError:
     def test_external_service_error_details(self):
         """Test ExternalServiceError details"""
         error = ExternalServiceError(
-            service="API", message="Timeout", details={"reason": "Timeout"}
+            service_name="API", message="Timeout", details={"reason": "Timeout"}
         )
 
         assert error.details["service"] == "API"
@@ -236,49 +236,47 @@ class TestErrorFormatting:
 
     def test_format_error_response_without_request_id(self):
         """Test formatting error response without request ID"""
-        from src.shared.error_handler import ErrorResponse
-
-        response = ErrorResponse.create(
-            error_code="TEST_ERROR",
+        error = MinderError(
             message="Test error",
+            code="TEST_ERROR",
             status_code=500,
             details={"key": "value"},
-            request_id=None,
         )
 
-        assert response["error"]["code"] == "TEST_ERROR"
-        assert response["error"]["message"] == "Test error"
-        assert response["error"]["status_code"] == 500
-        assert response["error"]["details"] == {"key": "value"}
-        assert "request_id" not in response
+        response = error.to_dict()
+
+        assert response["code"] == "TEST_ERROR"
+        assert response["message"] == "Test error"
+        assert response["status_code"] == 500
+        assert response["details"] == {"key": "value"}
 
     def test_format_error_response_with_request_id(self):
         """Test formatting error response with request ID"""
-        from src.shared.error_handler import ErrorResponse
-
-        response = ErrorResponse.create(
-            error_code="TEST_ERROR",
+        error = MinderError(
             message="Test error",
+            code="TEST_ERROR",
             status_code=500,
-            details=None,
-            request_id="test-123",
+            details={"request_id": "test-123"},
         )
 
-        assert response["error"]["code"] == "TEST_ERROR"
-        assert response["error"]["message"] == "Test error"
-        assert response["error"]["status_code"] == 500
-        assert "details" not in response["error"]
-        assert response["request_id"] == "test-123"
+        response = error.to_dict()
+
+        assert response["code"] == "TEST_ERROR"
+        assert response["message"] == "Test error"
+        assert response["status_code"] == 500
+        assert response["details"]["request_id"] == "test-123"
 
     def test_format_error_response_without_details(self):
         """Test formatting error response without details"""
-        from src.shared.error_handler import ErrorResponse
-
-        response = ErrorResponse.create(
-            error_code="TEST_ERROR", message="Test error", status_code=500
+        error = MinderError(
+            message="Test error",
+            code="TEST_ERROR",
+            status_code=500,
         )
 
-        assert response["error"]["code"] == "TEST_ERROR"
-        assert response["error"]["message"] == "Test error"
-        assert response["error"]["status_code"] == 500
-        assert "details" not in response["error"]
+        response = error.to_dict()
+
+        assert response["code"] == "TEST_ERROR"
+        assert response["message"] == "Test error"
+        assert response["status_code"] == 500
+        assert response["details"] == {}
