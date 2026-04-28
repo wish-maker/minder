@@ -22,7 +22,7 @@ from src.shared.validators import (
     SortParams,
     SearchParams,
     PluginValidationRequest,
-    ValidationError as MinderValidationError
+    ValidationError as MinderValidationError,
 )
 
 
@@ -31,14 +31,7 @@ class TestValidatePluginName:
 
     def test_valid_plugin_names(self):
         """Test valid plugin names"""
-        valid_names = [
-            "my-plugin",
-            "my_plugin",
-            "myplugin",
-            "MyPlugin",
-            "plugin-123",
-            "plugin_v1"
-        ]
+        valid_names = ["my-plugin", "my_plugin", "myplugin", "MyPlugin", "plugin-123", "plugin_v1"]
 
         for name in valid_names:
             result = validate_plugin_name(name)
@@ -80,7 +73,7 @@ class TestValidateEmail:
             "user.name@example.com",
             "user+tag@example.com",
             "user123@example.co.uk",
-            "user-name@example-domain.com"
+            "user-name@example-domain.com",
         ]
 
         for email in valid_emails:
@@ -114,7 +107,7 @@ class TestValidateUrl:
             "https://example.com",
             "https://example.com/path",
             "https://example.com:8080",
-            "https://user:pass@example.com"
+            "https://user:pass@example.com",
         ]
 
         for url in valid_urls:
@@ -150,7 +143,7 @@ class TestValidateDescription:
             "",
             "A test plugin",
             "This is a longer description with multiple words and punctuation.",
-            "a" * 1000  # Exactly max length
+            "a" * 1000,  # Exactly max length
         ]
 
         for desc in valid_descriptions:
@@ -179,15 +172,7 @@ class TestValidatePluginVersion:
 
     def test_valid_versions(self):
         """Test valid semantic versions"""
-        valid_versions = [
-            "1.0.0",
-            "2.1.3",
-            "10.20.30",
-            "1.0.0-alpha",
-            "1.0.0-beta.1",
-            "1.0.0-rc.1",
-            "2.0.0-dev"
-        ]
+        valid_versions = ["1.0.0", "2.1.3", "10.20.30", "1.0.0-alpha", "1.0.0-beta.1", "1.0.0-rc.1", "2.0.0-dev"]
 
         for version in valid_versions:
             result = validate_plugin_version(version)
@@ -202,7 +187,7 @@ class TestValidatePluginVersion:
             "v1.0.0",  # Leading v
             "1.0.0.0",  # Too many parts
             "1.x.0",  # Non-numeric
-            "a.b.c"  # All letters
+            "a.b.c",  # All letters
         ]
 
         for version in invalid_versions:
@@ -221,7 +206,7 @@ class TestValidateQueryString:
             "test-query",
             "test_query",
             "search for something",
-            "a" * 100  # Exactly max length
+            "a" * 100,  # Exactly max length
         ]
 
         for query in valid_queries:
@@ -252,12 +237,7 @@ class TestValidatePagination:
 
     def test_valid_pagination(self):
         """Test valid pagination parameters"""
-        valid_cases = [
-            (1, 10),
-            (1, 100),
-            (10, 20),
-            (100, 50)
-        ]
+        valid_cases = [(1, 10), (1, 100), (10, 20), (100, 50)]
 
         for page, page_size in valid_cases:
             result_page, result_size = validate_pagination(page, page_size)
@@ -416,7 +396,7 @@ class TestPydanticModels:
             version="1.0.0",
             description="Test plugin",
             author_email="test@example.com",
-            homepage_url="https://example.com"
+            homepage_url="https://example.com",
         )
         assert request.name == "test-plugin"
         assert request.version == "1.0.0"
@@ -424,23 +404,13 @@ class TestPydanticModels:
     def test_plugin_validation_request_validation(self):
         """Test PluginValidationRequest validation"""
         with pytest.raises(PydanticValidationError):
-            PluginValidationRequest(
-                name="test plugin!",  # Invalid name
-                version="1.0.0"
-            )
+            PluginValidationRequest(name="test plugin!", version="1.0.0")  # Invalid name
 
         with pytest.raises(PydanticValidationError):
-            PluginValidationRequest(
-                name="test-plugin",
-                version="1.0"  # Invalid version
-            )
+            PluginValidationRequest(name="test-plugin", version="1.0")  # Invalid version
 
         with pytest.raises(PydanticValidationError):
-            PluginValidationRequest(
-                name="test-plugin",
-                version="1.0.0",
-                author_email="invalid-email"  # Invalid email
-            )
+            PluginValidationRequest(name="test-plugin", version="1.0.0", author_email="invalid-email")  # Invalid email
 
 
 # Performance tests
@@ -453,6 +423,7 @@ class TestValidatorPerformance:
 
     def test_plugin_name_validation_performance(self, benchmark):
         """Test plugin name validation performance"""
+
         def validate():
             validate_plugin_name("test-plugin-123")
 
@@ -462,6 +433,7 @@ class TestValidatorPerformance:
     @pytest.mark.slow
     def test_email_validation_performance(self, benchmark):
         """Test email validation performance"""
+
         def validate():
             validate_email("test@example.com")
 
@@ -471,6 +443,7 @@ class TestValidatorPerformance:
     @pytest.mark.slow
     def test_sanitization_performance(self, benchmark):
         """Test sanitization performance"""
+
         def sanitize():
             sanitize_user_input("<script>alert('xss')</script>Hello World")
 

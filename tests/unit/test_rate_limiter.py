@@ -32,6 +32,7 @@ def mock_redis():
 def rate_limiter(mock_redis):
     """Create RateLimiter instance"""
     from src.shared.rate_limiter import RateLimiter
+
     return RateLimiter(redis_client=mock_redis)
 
 
@@ -90,9 +91,7 @@ class TestRateLimiter:
         mock_pipeline = create_mock_pipeline(zcard_result=3)
         mock_redis.pipeline = Mock(return_value=mock_pipeline)
 
-        is_allowed, info = await rate_limiter.is_allowed(
-            "custom-key", limit=10, window=60
-        )
+        is_allowed, info = await rate_limiter.is_allowed("custom-key", limit=10, window=60)
 
         assert is_allowed
         assert info["remaining"] == 7  # 10 - 3 = 7 remaining
@@ -234,9 +233,7 @@ class TestRateLimitDecorator:
 
         from fastapi import HTTPException
 
-        with patch.object(
-            rate_limiter, "is_rate_limited", return_value=True
-        ), pytest.raises(HTTPException) as exc_info:
+        with patch.object(rate_limiter, "is_rate_limited", return_value=True), pytest.raises(HTTPException) as exc_info:
             await test_func(mock_request)
 
         assert exc_info.value.status_code == 429
