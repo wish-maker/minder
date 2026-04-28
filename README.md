@@ -110,11 +110,11 @@ cd minder
 ## 📖 Documentation
 
 ### Getting Started
-- **[Quick Start Guide](QUICKSTART.md)** - Complete deployment guide
+- **[Quick Start Guide](docs/getting-started/QUICKSTART.md)** - Complete deployment guide
 - **[Getting Started](docs/getting-started/README.md)** - Setup and configuration
-- **[Version Guide](VERSION_GUIDE.md)** - Manual version control guide
-- **[Library Versions](LIBRARY_LATEST_VERSIONS.md)** - Latest stable library versions
-- **[Version Strategy](VERSION_STRATEGY.md)** - Version management strategy
+- **[Version Guide](docs/VERSION_GUIDE.md)** - Manual version control guide
+- **[Library Versions](docs/LIBRARY_LATEST_VERSIONS.md)** - Latest stable library versions
+- **[Version Strategy](docs/VERSION_STRATEGY.md)** - Version management strategy
 
 ### Deployment
 - **[Deployment Guide](docs/deployment/README.md)** - Production deployment
