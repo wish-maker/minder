@@ -15,6 +15,24 @@ from redis.asyncio import Redis
 logger = logging.getLogger("minder.rate_limiter")
 
 
+@dataclass
+class RateLimitInfo:
+    """Rate limit information"""
+    limit: int
+    remaining: int
+    reset_time: int
+    window: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "limit": self.limit,
+            "remaining": self.remaining,
+            "reset_time": self.reset_time,
+            "window": self.window,
+        }
+
+
 class RateLimiter:
     """Redis-based rate limiter"""
 
@@ -94,36 +112,104 @@ class RateLimiter:
             # Fail open: allow request if Redis is down
             return True, {"limit": limit, "remaining": limit, "window": window}
 
-    async def get_rate_limit_info(self, key: str) -> Dict[str, Any]:
+    async def get_rate_limit_info(self, key: str, limit: Optional[int] = None, window: Optional[int] = None) -> RateLimitInfo:
         """
         Get current rate limit info.
 
         Args:
             key: Unique key for rate limiting
+            limit: Custom limit (uses default if None)
+            window: Custom window (uses default if None)
 
         Returns:
-            Dictionary with rate limit info
+            RateLimitInfo object with rate limit info
         """
         redis_key = f"rate_limit:{key}"
+        limit_val = limit or self.default_limit
+        window_val = window or self.default_window
 
         try:
             current_time = int(time.time())
-            window_start = current_time - self.default_window
+            window_start = current_time - window_val
 
             current_count = await self.redis.zcount(redis_key, window_start, current_time)
-            remaining = max(0, self.default_limit - current_count)
-            reset_time = current_time + self.default_window - (current_time % self.default_window)
+            remaining = max(0, limit_val - current_count)
+            reset_time = current_time + window_val - (current_time % window_val)
 
-            return {
-                "limit": self.default_limit,
-                "window": self.default_window,
-                "remaining": remaining,
-                "reset_time": reset_time,
-                "current_count": current_count,
-            }
+            return RateLimitInfo(
+                limit=limit_val,
+                window=window_val,
+                remaining=remaining,
+                reset_time=reset_time,
+            )
         except Exception as e:
             logger.error(f"Failed to get rate limit info: {e}")
-            return {}
+            return RateLimitInfo(
+                limit=limit_val,
+                window=window_val,
+                remaining=limit_val,
+                reset_time=current_time + window_val,
+            )
+
+    async def add_to_whitelist(self, key: str, reason: str = "") -> bool:
+        """
+        Add key to whitelist.
+
+        Args:
+            key: Key to whitelist (IP or user ID)
+            reason: Reason for whitelisting
+
+        Returns:
+            True if successful
+        """
+        try:
+            whitelist_key = f"whitelist:{key}"
+            await self.redis.sadd(whitelist_key, key)
+            if reason:
+                await self.redis.set(f"whitelist:reason:{key}", reason)
+            logger.info(f"Added key to whitelist: {key} ({reason})")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to add key to whitelist: {e}")
+            return False
+
+    async def remove_from_whitelist(self, key: str) -> bool:
+        """
+        Remove key from whitelist.
+
+        Args:
+            key: Key to remove from whitelist
+
+        Returns:
+            True if successful
+        """
+        try:
+            whitelist_key = f"whitelist:{key}"
+            await self.redis.srem(whitelist_key, key)
+            await self.redis.delete(f"whitelist:reason:{key}")
+            logger.info(f"Removed key from whitelist: {key}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove key from whitelist: {e}")
+            return False
+
+    async def is_whitelisted(self, key: str) -> bool:
+        """
+        Check if key is whitelisted.
+
+        Args:
+            key: Key to check
+
+        Returns:
+            True if whitelisted
+        """
+        try:
+            whitelist_key = f"whitelist:{key}"
+            result = await self.redis.sismember(whitelist_key, key)
+            return bool(result)
+        except Exception as e:
+            logger.error(f"Failed to check whitelist: {e}")
+            return False
 
 
 def get_client_identifier(request: Request) -> str:
@@ -145,18 +231,18 @@ def get_client_identifier(request: Request) -> str:
     return f"ip:{client_host}"
 
 
-async def add_rate_limit_headers(response: Response, info: Dict[str, Any]) -> None:
+async def add_rate_limit_headers(response: Response, info: RateLimitInfo) -> None:
     """
     Add rate limit headers to response.
 
     Args:
         response: FastAPI response
-        info: Rate limit info dictionary
+        info: RateLimitInfo object
     """
-    response.headers["X-RateLimit-Limit"] = str(info.get("limit", ""))
-    response.headers["X-RateLimit-Remaining"] = str(info.get("remaining", ""))
-    response.headers["X-RateLimit-Reset"] = str(info.get("reset_time", ""))
-    response.headers["X-RateLimit-Window"] = str(info.get("window", ""))
+    response.headers["X-RateLimit-Limit"] = str(info.limit)
+    response.headers["X-RateLimit-Remaining"] = str(info.remaining)
+    response.headers["X-RateLimit-Reset"] = str(info.reset_time)
+    response.headers["X-RateLimit-Window"] = str(info.window)
 
 
 def rate_limit(limit: int = 100, window: int = 60, key_func: Optional[Callable[..., Any]] = None):
@@ -344,24 +430,6 @@ class IPWhitelist:
             logger.error(f"Failed to check IP whitelist: {e}")
             return False
             return False
-
-
-@dataclass
-class RateLimitInfo:
-    """Rate limit information"""
-    limit: int
-    remaining: int
-    reset_time: int
-    window: int
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary"""
-        return {
-            "limit": self.limit,
-            "remaining": self.remaining,
-            "reset_time": self.reset_time,
-            "window": self.window,
-        }
 
 
 class RateLimitExceeded(Exception):
