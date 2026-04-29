@@ -3,13 +3,11 @@ End-to-End (E2E) tests for service integration.
 Tests communication between all microservices.
 """
 
-import pytest
-import asyncio
 import sys
 from pathlib import Path
-from typing import Dict, Any
-from httpx import AsyncClient
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
+
+import pytest
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent.parent
@@ -25,7 +23,6 @@ async def gateway_client(gateway_test_client):
 @pytest.fixture
 async def mock_redis():
     """Mock Redis for testing"""
-    from unittest.mock import AsyncMock
     redis = AsyncMock()
     redis.get = AsyncMock(return_value=None)
     redis.set = AsyncMock(return_value=True)
@@ -38,7 +35,6 @@ async def mock_redis():
 @pytest.fixture
 async def mock_postgres():
     """Mock PostgreSQL for testing"""
-    from unittest.mock import AsyncMock
     pg = AsyncMock()
     pg.fetch = AsyncMock(return_value=[])
     pg.fetchrow = AsyncMock(return_value=None)
@@ -113,13 +109,7 @@ class TestDataFlow:
         3. Plugin State Manager tracks
         4. Notification sent
         """
-        install_response = gateway_client.post(
-            "/v1/plugins/install",
-            json={
-                "name": "test-plugin",
-                "version": "1.0.0"
-            }
-        )
+        install_response = gateway_client.post("/v1/plugins/install", json={"name": "test-plugin", "version": "1.0.0"})
 
         # Accept various status codes depending on implementation
         assert install_response.status_code in [200, 201, 404, 501, 503]
@@ -137,10 +127,8 @@ class TestDataFlow:
         """
         upload_response = gateway_client.post(
             "/v1/rag/documents/upload",
-            files={
-                "file": ("test.txt", b"Test document content", "text/plain")
-            },
-            data={"title": "Test Document"}
+            files={"file": ("test.txt", b"Test document content", "text/plain")},
+            data={"title": "Test Document"},
         )
 
         # Accept various status codes
@@ -247,7 +235,9 @@ class TestLoadBalancing:
 
         # If load balancing is implemented, we should see multiple server IDs
         # For now, just verify the requests succeeded
-        assert all(response.status_code in [200, 503] for response in [gateway_client.get("/health") for _ in range(20)])
+        assert all(
+            response.status_code in [200, 503] for response in [gateway_client.get("/health") for _ in range(20)]
+        )
 
 
 class TestCaching:
@@ -262,19 +252,11 @@ class TestCaching:
         2. Cache hits are fast
         3. Cache invalidation works
         """
-        import time
-
         # Make first request
-        start1 = time.time()
         response1 = gateway_client.get("/v1/plugins")
-        end1 = time.time()
-        time1 = end1 - start1
 
         # Make second request (should be from cache)
-        start2 = time.time()
         response2 = gateway_client.get("/v1/plugins")
-        end2 = time.time()
-        time2 = end2 - start2
 
         # Verify responses are similar
         assert response1.status_code == response2.status_code
@@ -321,10 +303,7 @@ class TestMessageQueues:
         3. Status updates are provided
         """
         # Submit a long-running task
-        task_response = gateway_client.post(
-            "/v1/rag/tasks",
-            json={"type": "bulk_index", "documents": []}
-        )
+        task_response = gateway_client.post("/v1/rag/tasks", json={"type": "bulk_index", "documents": []})
 
         # Accept various status codes
         assert task_response.status_code in [201, 202, 501, 503]

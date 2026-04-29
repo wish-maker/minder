@@ -36,9 +36,7 @@ def validate_plugin_name(name: str) -> str:
 
     # Only alphanumeric, hyphens, and underscores
     if not re.match(r"^[a-zA-Z0-9_-]+$", name):
-        raise ValidationError(
-            "Plugin name can only contain letters, numbers, hyphens, and underscores"
-        )
+        raise ValidationError("Plugin name can only contain letters, numbers, hyphens, and underscores")
 
     return name
 
@@ -286,9 +284,7 @@ class PluginValidationRequest(BaseModel):
     """Plugin validation request"""
 
     name: str = Field(..., min_length=3, max_length=50, description="Plugin name")
-    version: str = Field(
-        ..., pattern=r"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$", description="Plugin version"
-    )
+    version: str = Field(..., pattern=r"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$", description="Plugin version")
     description: Optional[str] = Field(None, max_length=1000, description="Plugin description")
     author_email: Optional[EmailStr] = Field(None, description="Author email")
     homepage_url: Optional[HttpUrl] = Field(None, description="Plugin homepage URL")
@@ -297,9 +293,7 @@ class PluginValidationRequest(BaseModel):
     @classmethod
     def validate_plugin_name(cls, v):
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-            raise ValueError(
-                "Plugin name can only contain letters, numbers, hyphens, and underscores"
-            )
+            raise ValueError("Plugin name can only contain letters, numbers, hyphens, and underscores")
         return v
 
 

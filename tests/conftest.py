@@ -4,21 +4,22 @@ Provides fixtures and utilities for unit, integration, and E2E tests.
 """
 
 import asyncio
-import os
-import pytest
-import pytest_asyncio
-from pathlib import Path
-from typing import AsyncGenerator, Generator
-from unittest.mock import Mock, AsyncMock, patch
-import asyncpg
-from redis.asyncio import Redis
-from httpx import AsyncClient, ASGITransport
-from fastapi.testclient import TestClient
 import importlib.util
+import os
+import sys
 
 # Import FastAPI apps (optional, try-except for unit tests)
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from pathlib import Path
+from unittest.mock import AsyncMock
+
+import asyncpg
+import pytest
+import pytest_asyncio
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from redis.asyncio import Redis
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 try:
     # Add project root to path for imports
@@ -31,10 +32,7 @@ try:
         if module_name is None:
             module_name = service_path.name.replace("-", "_")
 
-        spec = importlib.util.spec_from_file_location(
-            module_name,
-            service_path / "main.py"
-        )
+        spec = importlib.util.spec_from_file_location(module_name, service_path / "main.py")
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
@@ -59,7 +57,7 @@ except Exception as e:
 
 
 # Test configuration
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
 
 
 # Database fixtures
@@ -72,12 +70,7 @@ def test_database_url():
 @pytest_asyncio.fixture(scope="function")
 async def test_db_pool(test_database_url):
     """Create test database connection pool"""
-    pool = await asyncpg.create_pool(
-        test_database_url,
-        min_size=1,
-        max_size=5,
-        command_timeout=60
-    )
+    pool = await asyncpg.create_pool(test_database_url, min_size=1, max_size=5, command_timeout=60)
 
     yield pool
 
@@ -224,18 +217,14 @@ def sample_plugin_data():
         "description": "Test plugin",
         "author": "Test Author",
         "license": "MIT",
-        "repository": "https://github.com/test/test-plugin"
+        "repository": "https://github.com/test/test-plugin",
     }
 
 
 @pytest.fixture(scope="function")
 def sample_user_data():
     """Sample user data"""
-    return {
-        "username": "testuser",
-        "email": "test@example.com",
-        "password": "TestPassword123!"
-    }
+    return {"username": "testuser", "email": "test@example.com", "password": "TestPassword123!"}
 
 
 @pytest.fixture(scope="function")
@@ -245,69 +234,45 @@ def sample_plugin_manifest():
         "name": "test-plugin",
         "version": "1.0.0",
         "description": "Test plugin description",
-        "author": {
-            "name": "Test Author",
-            "email": "test@example.com"
-        },
+        "author": {"name": "Test Author", "email": "test@example.com"},
         "license": "MIT",
         "repository": "https://github.com/test/test-plugin",
         "dependencies": [],
         "capabilities": ["data_collection", "ai_tools"],
-        "configuration": {
-            "database": {
-                "schema": "test_plugin"
-            },
-            "api": {
-                "base_url": "http://localhost:8001"
-            }
-        }
+        "configuration": {"database": {"schema": "test_plugin"}, "api": {"base_url": "http://localhost:8001"}},
     }
 
 
 @pytest.fixture(scope="function")
 def sample_rag_query():
     """Sample RAG query"""
-    return {
-        "query": "What is the purpose of this plugin?",
-        "context": ["plugin context"],
-        "max_results": 5
-    }
+    return {"query": "What is the purpose of this plugin?", "context": ["plugin context"], "max_results": 5}
 
 
 @pytest.fixture(scope="function")
 def sample_tts_request():
     """Sample TTS request"""
-    return {
-        "text": "Hello, this is a test",
-        "language": "en",
-        "voice": "default"
-    }
+    return {"text": "Hello, this is a test", "language": "en", "voice": "default"}
 
 
 # Test utilities
 @pytest.fixture(scope="function")
 def assert_response():
     """Utility for asserting HTTP responses"""
-    def _assert(
-        response,
-        status_code: int = None,
-        has_error: bool = False,
-        error_code: str = None
-    ):
+
+    def _assert(response, status_code: int = None, has_error: bool = False, error_code: str = None):
         if status_code is not None:
-            assert response.status_code == status_code, \
-                f"Expected status {status_code}, got {response.status_code}"
+            assert response.status_code == status_code, f"Expected status {status_code}, got {response.status_code}"
 
         if has_error:
-            assert "error" in response.json() or "detail" in response.json(), \
-                "Expected error in response"
+            assert "error" in response.json() or "detail" in response.json(), "Expected error in response"
 
             if error_code:
                 json_response = response.json()
                 error_obj = json_response.get("error", json_response)
-                assert error_obj.get("code") == error_code or \
-                       json_response.get("detail") == error_code, \
-                       f"Expected error code {error_code}"
+                assert (
+                    error_obj.get("code") == error_code or json_response.get("detail") == error_code
+                ), f"Expected error code {error_code}"
 
     return _assert
 
@@ -323,6 +288,7 @@ def clean_redis_after(test_redis):
 def time_tracker():
     """Utility for tracking execution time"""
     import time
+
     times = {}
 
     def _track(name: str):
@@ -339,6 +305,7 @@ def time_tracker():
 async def wait_for_condition(condition, timeout: float = 5.0, poll_interval: float = 0.1):
     """Wait for a condition to become true"""
     import time
+
     start = time.time()
 
     while time.time() - start < timeout:
@@ -353,11 +320,7 @@ async def wait_for_condition(condition, timeout: float = 5.0, poll_interval: flo
 @pytest.fixture(scope="function")
 def performance_tracker():
     """Track performance metrics"""
-    metrics = {
-        "response_times": [],
-        "memory_usage": [],
-        "cpu_usage": []
-    }
+    metrics = {"response_times": [], "memory_usage": [], "cpu_usage": []}
 
     def record_response_time(time_ms: float):
         metrics["response_times"].append(time_ms)
@@ -367,6 +330,7 @@ def performance_tracker():
 
     def get_stats():
         import statistics
+
         if not metrics["response_times"]:
             return {}
 
@@ -374,31 +338,31 @@ def performance_tracker():
             "avg_response_time": statistics.mean(metrics["response_times"]),
             "min_response_time": min(metrics["response_times"]),
             "max_response_time": max(metrics["response_times"]),
-            "p95_response_time": statistics.quantiles(metrics["response_times"], n=20)[18] if len(metrics["response_times"]) > 19 else max(metrics["response_times"]),
-            "avg_memory": statistics.mean(metrics["memory_usage"]) if metrics["memory_usage"] else 0
+            "p95_response_time": (
+                statistics.quantiles(metrics["response_times"], n=20)[18]
+                if len(metrics["response_times"]) > 19
+                else max(metrics["response_times"])
+            ),
+            "avg_memory": statistics.mean(metrics["memory_usage"]) if metrics["memory_usage"] else 0,
         }
 
-    yield {
-        "record_response": record_response_time,
-        "record_memory": record_memory_usage,
-        "get_stats": get_stats
-    }
+    yield {"record_response": record_response_time, "record_memory": record_memory_usage, "get_stats": get_stats}
 
 
 # Load testing fixtures
 @pytest.fixture(scope="function")
 async def load_tester():
     """Load testing utility"""
+
     async def run_load_test(
         endpoint: str,
         method: str = "GET",
         concurrent_users: int = 10,
         requests_per_user: int = 10,
-        delay_between_requests: float = 0.1
+        delay_between_requests: float = 0.1,
     ):
         """Run load test"""
         import time
-        from concurrent.futures import ThreadPoolExecutor
 
         async def make_request(client, url):
             start = time.time()
@@ -411,18 +375,15 @@ async def load_tester():
                 return {
                     "success": response.status_code < 400,
                     "status_code": response.status_code,
-                    "response_time_ms": elapsed
+                    "response_time_ms": elapsed,
                 }
             except Exception as e:
                 elapsed = (time.time() - start) * 1000
-                return {
-                    "success": False,
-                    "error": str(e),
-                    "response_time_ms": elapsed
-                }
+                return {"success": False, "error": str(e), "response_time_ms": elapsed}
 
         # Create test client
         from httpx import AsyncClient
+
         async with AsyncClient(base_url="http://test") as client:
             results = []
             total_requests = concurrent_users * requests_per_user
@@ -442,6 +403,7 @@ async def load_tester():
             if successful:
                 response_times = [r["response_time_ms"] for r in successful]
                 import statistics
+
                 stats = {
                     "total_requests": total_requests,
                     "successful": len(successful),
@@ -450,14 +412,18 @@ async def load_tester():
                     "avg_response_time_ms": statistics.mean(response_times),
                     "min_response_time_ms": min(response_times),
                     "max_response_time_ms": max(response_times),
-                    "p95_response_time_ms": statistics.quantiles(response_times, n=20)[18] if len(response_times) > 19 else max(response_times)
+                    "p95_response_time_ms": (
+                        statistics.quantiles(response_times, n=20)[18]
+                        if len(response_times) > 19
+                        else max(response_times)
+                    ),
                 }
             else:
                 stats = {
                     "total_requests": total_requests,
                     "successful": 0,
                     "failed": total_requests,
-                    "success_rate": 0.0
+                    "success_rate": 0.0,
                 }
 
             return stats
@@ -469,23 +435,22 @@ async def load_tester():
 @pytest.fixture(scope="function")
 async def security_tester():
     """Security testing utility"""
+
     async def test_sql_injection(test_client, endpoint: str, payloads: list):
         """Test SQL injection payloads"""
         results = []
         for payload in payloads:
             try:
                 response = await test_client.get(f"{endpoint}?query={payload}")
-                results.append({
-                    "payload": payload,
-                    "status_code": response.status_code,
-                    "vulnerable": "syntax error" not in response.text.lower() and response.status_code != 500
-                })
+                results.append(
+                    {
+                        "payload": payload,
+                        "status_code": response.status_code,
+                        "vulnerable": "syntax error" not in response.text.lower() and response.status_code != 500,
+                    }
+                )
             except Exception as e:
-                results.append({
-                    "payload": payload,
-                    "error": str(e),
-                    "vulnerable": False
-                })
+                results.append({"payload": payload, "error": str(e), "vulnerable": False})
         return results
 
     async def test_xss(test_client, endpoint: str, payloads: list):
@@ -494,43 +459,22 @@ async def security_tester():
         for payload in payloads:
             try:
                 response = await test_client.get(f"{endpoint}?input={payload}")
-                results.append({
-                    "payload": payload,
-                    "status_code": response.status_code,
-                    "reflected": payload in response.text
-                })
+                results.append(
+                    {"payload": payload, "status_code": response.status_code, "reflected": payload in response.text}
+                )
             except Exception as e:
-                results.append({
-                    "payload": payload,
-                    "error": str(e),
-                    "reflected": False
-                })
+                results.append({"payload": payload, "error": str(e), "reflected": False})
         return results
 
-    return {
-        "test_sql_injection": test_sql_injection,
-        "test_xss": test_xss
-    }
+    return {"test_sql_injection": test_sql_injection, "test_xss": test_xss}
 
 
 # Pytest configuration
 def pytest_configure(config):
     """Configure pytest"""
-    config.addinivalue_line(
-        "markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')"
-    )
-    config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests"
-    )
-    config.addinivalue_line(
-        "markers", "e2e: marks tests as end-to-end tests"
-    )
-    config.addinivalue_line(
-        "markers", "load: marks tests as load tests"
-    )
-    config.addinivalue_line(
-        "markers", "security: marks tests as security tests"
-    )
-    config.addinivalue_line(
-        "markers", "unit: marks tests as unit tests"
-    )
+    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+    config.addinivalue_line("markers", "integration: marks tests as integration tests")
+    config.addinivalue_line("markers", "e2e: marks tests as end-to-end tests")
+    config.addinivalue_line("markers", "load: marks tests as load tests")
+    config.addinivalue_line("markers", "security: marks tests as security tests")
+    config.addinivalue_line("markers", "unit: marks tests as unit tests")

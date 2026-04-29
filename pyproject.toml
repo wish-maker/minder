@@ -107,6 +107,9 @@ force_grid_wrap = 0
 use_parentheses = true
 ensure_newline_before_comments = true
 
+[tool.bandit]
+skips = ["B101"]  # Skip B101 (assert_used) for test files
+
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true

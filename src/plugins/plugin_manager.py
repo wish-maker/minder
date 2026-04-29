@@ -3,16 +3,13 @@ Plugin manager for Minder.
 Handles plugin lifecycle (install, activate, deactivate, remove).
 """
 
-import asyncio
-import json
 import logging
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Any
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-import httpx
 import asyncpg
+import httpx
 
 from .plugin_loader import PluginLoader
 from .plugin_registry import PluginRegistry
@@ -232,6 +229,7 @@ class PluginManager:
             plugin_dir = self.plugin_dir / plugin_id
             if plugin_dir.exists():
                 import shutil
+
                 shutil.rmtree(plugin_dir)
                 logger.info(f"Removed plugin directory: {plugin_dir}")
 
@@ -289,9 +287,7 @@ class PluginManager:
             logger.error(f"Error getting plugin status {plugin_id}: {e}")
             return None
 
-    async def list_plugins(
-        self, status: Optional[str] = None, active_only: bool = False
-    ) -> List[Dict[str, Any]]:
+    async def list_plugins(self, status: Optional[str] = None, active_only: bool = False) -> List[Dict[str, Any]]:
         """
         List all plugins.
 
@@ -373,9 +369,7 @@ class PluginManager:
                 "error": str(e),
             }
 
-    async def validate_plugin(
-        self, plugin_id: str, manifest_file: Optional[Path] = None
-    ) -> Dict[str, Any]:
+    async def validate_plugin(self, plugin_id: str, manifest_file: Optional[Path] = None) -> Dict[str, Any]:
         """
         Validate plugin.
 
