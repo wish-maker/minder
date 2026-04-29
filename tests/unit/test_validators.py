@@ -414,43 +414,6 @@ class TestPydanticModels:
 
 
 # Performance tests
-class TestValidatorPerformance:
-    """Test validator performance"""
-
-    # NOTE: These tests are skipped because the benchmark fixture
-    # is not defined in conftest.py. To enable performance tests,
-    # add a benchmark fixture to conftest.py.
-
-    def test_plugin_name_validation_performance(self, benchmark):
-        """Test plugin name validation performance"""
-
-        def validate():
-            validate_plugin_name("test-plugin-123")
-
-        benchmark(validate)
-
-    @pytest.mark.skip(reason="Benchmark fixture not available - add benchmark fixture to conftest.py")
-    @pytest.mark.slow
-    def test_email_validation_performance(self, benchmark):
-        """Test email validation performance"""
-
-        def validate():
-            validate_email("test@example.com")
-
-        benchmark(validate)
-
-    @pytest.mark.skip(reason="Benchmark fixture not available - add benchmark fixture to conftest.py")
-    @pytest.mark.slow
-    def test_sanitization_performance(self, benchmark):
-        """Test sanitization performance"""
-
-        def sanitize():
-            sanitize_user_input("<script>alert('xss')</script>Hello World")
-
-        benchmark(sanitize)
-
-
-# Edge case tests
 class TestValidatorEdgeCases:
     """Test validator edge cases"""
 

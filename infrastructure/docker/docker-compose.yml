@@ -98,6 +98,8 @@ services:
     image: redis:7-alpine
     container_name: minder-redis
     restart: unless-stopped
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
@@ -444,6 +446,7 @@ services:
       # Logging
       - INFLUXDB_LOG_LEVEL=info
       - INFLUXDB_LOG_FORMAT=auto
+    volumes:
       - influxdb_data:/var/lib/influxdb2
       - influxdb_config:/etc/influxdb
     ports:
@@ -551,6 +554,7 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
       - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
@@ -605,6 +609,7 @@ services:
 
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
       - openwebui_data:/app/backend/data
       - ./openwebui/functions.json:/app/config/functions.json:ro
     ports:
@@ -694,6 +699,7 @@ services:
       # Application
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - ENVIRONMENT=${ENVIRONMENT:-development}
+    volumes:
       - model_fine_tuning_data:/app/training-data
       - fine_tuned_models:/app/models
     ports:

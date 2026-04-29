@@ -137,7 +137,11 @@ async def chat_completions(request: Request):
         async with httpx.AsyncClient() as client:
             response = await client.post(ollama_url, json=body, timeout=120.0)
             response.raise_for_status()
+            # Parse JSON response properly
             return response.json()
     except httpx.HTTPError as e:
         logger.error(f"Chat completion failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Chat completion failed: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error in chat completion: {e}")
         raise HTTPException(status_code=500, detail=f"Chat completion failed: {str(e)}")

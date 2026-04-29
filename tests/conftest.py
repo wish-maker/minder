@@ -7,26 +7,49 @@ import asyncio
 import os
 import pytest
 import pytest_asyncio
+from pathlib import Path
 from typing import AsyncGenerator, Generator
 from unittest.mock import Mock, AsyncMock, patch
 import asyncpg
 from redis.asyncio import Redis
 from httpx import AsyncClient, ASGITransport
 from fastapi.testclient import TestClient
+import importlib.util
 
 # Import FastAPI apps (optional, try-except for unit tests)
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 try:
-    from services.api_gateway.main import app as gateway_app
-    from services.plugin_registry.main import app as registry_app
-    from services.marketplace.main import app as marketplace_app
-    from services.rag_pipeline.main import app as rag_app
-    from services.model_management.main import app as model_app
-    from services.tts_stt_service.main import app as tts_app
-except ImportError:
+    # Add project root to path for imports
+    project_root = Path(__file__).parent.parent
+    sys.path.insert(0, str(project_root))
+
+    # Import from services with correct module names
+    def load_service_module(service_path, module_name=None):
+        """Load service module dynamically"""
+        if module_name is None:
+            module_name = service_path.name.replace("-", "_")
+
+        spec = importlib.util.spec_from_file_location(
+            module_name,
+            service_path / "main.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    services_base = project_root / "services"
+    gateway_app = load_service_module(services_base / "api-gateway", "services.api_gateway.main")
+    registry_app = load_service_module(services_base / "plugin-registry", "services.plugin_registry.main")
+    marketplace_app = load_service_module(services_base / "marketplace", "services.marketplace.main")
+    rag_app = load_service_module(services_base / "rag-pipeline", "services.rag_pipeline.main")
+    model_app = load_service_module(services_base / "model-management", "services.model_management.main")
+    tts_app = load_service_module(services_base / "tts-stt-service", "services.tts_stt_service.main")
+except Exception as e:
     # Services not available for unit tests
+    print(f"Warning: Could not load service modules: {e}")
     gateway_app = None
     registry_app = None
     marketplace_app = None

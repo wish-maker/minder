@@ -5,19 +5,21 @@ Tests communication between all microservices.
 
 import pytest
 import asyncio
+import sys
+from pathlib import Path
 from typing import Dict, Any
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, patch
 
+# Add project root to Python path
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
 
 @pytest.fixture
-async def gateway_client():
-    """API Gateway client"""
-    from services.api_gateway.main import app
-    from fastapi.testclient import TestClient
-
-    with TestClient(app) as client:
-        yield client
+async def gateway_client(gateway_test_client):
+    """API Gateway client - uses conftest fixture"""
+    return gateway_test_client
 
 
 @pytest.fixture

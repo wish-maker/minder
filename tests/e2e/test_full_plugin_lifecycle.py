@@ -5,18 +5,16 @@ Tests the complete user journey from plugin discovery to execution.
 
 import pytest
 import asyncio
+import sys
+from pathlib import Path
 from typing import Dict, Any
 from httpx import AsyncClient
 
 # Test fixtures
 @pytest.fixture
-async def gateway_client():
-    """API Gateway client for E2E tests"""
-    from services.api_gateway.main import app
-    from fastapi.testclient import TestClient
-
-    with TestClient(app) as client:
-        yield client
+async def gateway_client(gateway_test_client):
+    """API Gateway client for E2E tests - uses conftest fixture"""
+    return gateway_test_client
 
 
 @pytest.fixture

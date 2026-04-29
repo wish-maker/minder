@@ -29,7 +29,11 @@ def test_list_modules():
                 status_icon = "✅" if status == "healthy" else "❌"
                 print(f"      {status_icon} {plugin['name']}: {status}")
 
-        return data
+        # Verify response structure
+        assert "count" in data or "total" in data, "Response missing count/total field"
+        assert isinstance(data.get("plugins", []), list), "Plugins field is not a list"
+        assert len(data.get("plugins", [])) >= 0, "Plugins list is invalid"
+
     except requests.exceptions.ConnectionError:
         pytest.skip("API server not running on localhost:8000")
     except requests.exceptions.HTTPError as e:

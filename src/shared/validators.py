@@ -6,7 +6,7 @@ Provides comprehensive validation functions for user inputs.
 import re
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, Field, HttpUrl, validator
+from pydantic import BaseModel, EmailStr, Field, HttpUrl, field_validator
 
 
 class ValidationError(Exception):
@@ -266,7 +266,8 @@ class SortParams(BaseModel):
     sort_by: Optional[str] = Field(None, description="Field to sort by")
     sort_order: Optional[str] = Field("asc", description="Sort order (asc or desc)")
 
-    @validator("sort_order")
+    @field_validator("sort_order")
+    @classmethod
     def validate_sort_order(cls, v):
         if v and v.lower() not in ("asc", "desc"):
             raise ValueError('sort_order must be "asc" or "desc"')
@@ -292,7 +293,8 @@ class PluginValidationRequest(BaseModel):
     author_email: Optional[EmailStr] = Field(None, description="Author email")
     homepage_url: Optional[HttpUrl] = Field(None, description="Plugin homepage URL")
 
-    @validator("name")
+    @field_validator("name")
+    @classmethod
     def validate_plugin_name(cls, v):
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError(

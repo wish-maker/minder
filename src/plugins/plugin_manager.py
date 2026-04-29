@@ -50,7 +50,7 @@ class PluginManager:
     async def install_plugin(
         self,
         plugin_id: str,
-        plugin_url: Optional[str] = None
+        plugin_url: Optional[str] = None,
         plugin_file: Optional[bytes] = None,
     ) -> Dict[str, Any]:
         """
