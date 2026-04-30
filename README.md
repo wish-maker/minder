@@ -96,7 +96,7 @@ curl http://localhost:9093/-/healthy  # Alertmanager
 
 | Service | Port | Status | Description |
 |---------|------|--------|-------------|
-| **Traefik** | 80, 443, 8081 | ⚠️ Unhealthy | Reverse proxy and load balancer |
+| **Traefik** | 80, 443, 8081 | ✅ Healthy | Reverse proxy and load balancer |
 | **Authelia** | 9091 | ✅ Healthy | SSO, 2FA (TOTP, WebAuthn), access control |
 
 ### Core APIs (6)
