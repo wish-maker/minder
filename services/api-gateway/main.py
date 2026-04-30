@@ -7,6 +7,7 @@ Handles authentication, rate limiting, request routing, and logging
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Dict
 
@@ -27,6 +28,24 @@ from config import settings
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.api-gateway")
 
+
+# Lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup/shutdown events"""
+    # Startup
+    logger.info("API Gateway starting...")
+    logger.info(f"Environment: {settings.ENVIRONMENT}")
+    logger.info(f"Service Registry: {SERVICE_REGISTRY}")
+
+    yield
+
+    # Shutdown
+    logger.info("API Gateway shutting down...")
+    await http_client.aclose()
+    redis_client.close()
+
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Minder API Gateway",
@@ -34,6 +53,7 @@ app = FastAPI(
     version="2.1.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Include AI integration router
@@ -44,9 +64,7 @@ app.include_router(ai_router)
 # ============================================================================
 
 # HTTP request metrics
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -250,9 +268,7 @@ async def health_check():
                 if response.status_code == 200:
                     health_status["checks"][service_name] = "healthy"
                 else:
-                    health_status["checks"][
-                        service_name
-                    ] = f"unhealthy: HTTP {response.status_code}"
+                    health_status["checks"][service_name] = f"unhealthy: HTTP {response.status_code}"
                     if service_name in critical_services:
                         critical_unhealthy = True
                     else:
@@ -282,9 +298,7 @@ async def health_check():
     elif optional_unhealthy:
         # Only degraded if optional services are unhealthy
         health_status["status"] = "degraded"
-        health_status["message"] = (
-            f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
-        )
+        health_status["message"] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
         status_code = 200  # Degraded is still functional, return 200
     else:
         health_status["status"] = "healthy"
@@ -512,26 +526,6 @@ async def proxy_to_model_management(path: str, request: Request):
 
 
 # ============================================================================
-# Startup/Shutdown Events
-# ============================================================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize connections on startup"""
-    logger.info("API Gateway starting...")
-    logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"Service Registry: {SERVICE_REGISTRY}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    logger.info("API Gateway shutting down...")
-    await http_client.aclose()
-    redis_client.close()
-
-
 # ============================================================================
 # Main
 # ============================================================================

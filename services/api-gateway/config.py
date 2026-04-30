@@ -3,7 +3,7 @@ API Gateway Configuration
 Loads settings from environment variables with sensible defaults
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -37,10 +37,7 @@ class Settings(BaseSettings):
     # Phase Configuration (for health check)
     MINDER_PHASE: int = 1  # Current deployment phase
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-        extra = "allow"
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="allow")
 
 
 # Global settings instance
