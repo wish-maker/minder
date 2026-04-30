@@ -27,7 +27,7 @@ Covers:
 - Health checks
 
 ### Hardware Optimization
-See [HARDWARE_OPTIMIZATION.md](HARDWARE_OPTIMIZATION.md) for:
+See [Hardware Optimization Guide](hardware-optimization.md) for:
 - Performance tuning
 - Resource optimization
 - Scaling strategies
@@ -39,7 +39,7 @@ See [HARDWARE_OPTIMIZATION.md](HARDWARE_OPTIMIZATION.md) for:
 ```bash
 git clone https://github.com/wish-maker/minder.git
 cd minder
-./deploy.sh
+./setup.sh
 ```
 
 ### Method 2: Manual
