@@ -187,5 +187,5 @@ docker volume rm minder_postgres_data minder_redis_data minder_qdrant_data
 ## Support
 
 For issues and questions:
-- GitHub Issues: https://github.com/your-org/minder/issues
+- GitHub Issues: https://github.com/wish-maker/minder/issues
 - Documentation: See docs/ folder

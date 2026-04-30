@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Minder API Gateway",
     description="Central API Gateway for Minder Platform",
-    version="2.1.0",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -210,7 +210,7 @@ async def health_check():
         "service": "api-gateway",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.1.0",
+        "version": app.version,
         "environment": settings.ENVIRONMENT,
         "phase": settings.MINDER_PHASE,
         "checks": {},

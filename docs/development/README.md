@@ -14,7 +14,7 @@ Welcome to the Minder Platform development documentation. This section covers ev
 ### Setup Development Environment
 ```bash
 # Clone repository
-git clone https://github.com/your-org/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 
 # Start services
@@ -161,4 +161,4 @@ We welcome contributions! Please:
 - 📖 [Architecture Docs](../architecture/)
 - 🔌 [API Reference](../api/)
 - 🐛 [Troubleshooting](../troubleshooting/)
-- 💬 [GitHub Discussions](https://github.com/your-org/minder/discussions)
+- 💬 [GitHub Discussions](https://github.com/wish-maker/minder/discussions)

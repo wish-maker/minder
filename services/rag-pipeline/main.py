@@ -55,7 +55,7 @@ EMBEDDING_DIMENSIONS = {
 app = FastAPI(
     title="Minder RAG Pipeline",
     description="Production RAG Pipeline with Ollama integration",
-    version="3.0.0",
+    version="1.0.0",
 )
 
 
@@ -376,7 +376,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "3.0.0",
+        "version": app.version,
         "knowledge_bases": len(knowledge_bases),
         "rag_pipelines": len(rag_pipelines),
         "ollama_available": OLLAMA_AVAILABLE,
@@ -635,7 +635,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder RAG Pipeline",
-        "version": "3.0.0",
+        "version": app.version,
         "status": "operational",
         "ollama_available": OLLAMA_AVAILABLE,
     }

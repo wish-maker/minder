@@ -581,7 +581,7 @@ kill -9 <PID>
 
 ### Getting Help
 
-- GitHub Issues: https://github.com/your-org/minder/issues
+- GitHub Issues: https://github.com/wish-maker/minder/issues
 - Slack Channel: #minder-dev
 - Email: dev@minder-platform.com
 

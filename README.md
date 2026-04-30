@@ -466,8 +466,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support
 
 - 📧 Email: support@minder-platform.com
-- 🐛 Issues: [GitHub Issues](https://github.com/your-org/minder/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/your-org/minder/discussions)
+- 🐛 Issues: [GitHub Issues](https://github.com/wish-maker/minder/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/wish-maker/minder/discussions)
 - 📖 Documentation: [Full Docs](https://docs.minder-platform.com)
 
 ---

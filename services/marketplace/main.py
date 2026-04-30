@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Minder Plugin Marketplace",
     description="Plugin marketplace and licensing system",
-    version="2.1.0",
+    version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan,
@@ -62,7 +62,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "marketplace",
-        "version": "2.1.0",
+        "version": app.version,
         "environment": settings.ENVIRONMENT,
     }
 
@@ -73,7 +73,7 @@ async def root():
     """Root endpoint"""
     return {
         "service": "Minder Plugin Marketplace",
-        "version": "2.1.0",
+        "version": app.version,
         "docs": "/docs",
         "health": "/health",
     }

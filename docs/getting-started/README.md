@@ -40,7 +40,7 @@ Covers:
 
 ### Method 1: Automated (Recommended)
 ```bash
-git clone https://github.com/your-org/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 ./setup.sh
 ```
@@ -78,5 +78,5 @@ Having issues? Check:
 ## Getting Help
 
 - 📧 Email: support@minder-platform.com
-- 🐛 Issues: [GitHub Issues](https://github.com/your-org/minder/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/your-org/minder/discussions)
+- 🐛 Issues: [GitHub Issues](https://github.com/wish-maker/minder/issues)
+- 💬 Discussions: [GitHub Discussions](https://github.com/wish-maker/minder/discussions)

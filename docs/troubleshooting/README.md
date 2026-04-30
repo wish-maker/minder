@@ -217,8 +217,8 @@ Solution:
 ### Community Support
 
 - 📚 [Documentation Index](../)
-- 💬 [GitHub Discussions](https://github.com/your-org/minder/discussions)
-- 🐛 [GitHub Issues](https://github.com/your-org/minder/issues)
+- 💬 [GitHub Discussions](https://github.com/wish-maker/minder/discussions)
+- 🐛 [GitHub Issues](https://github.com/wish-maker/minder/issues)
 
 ### Professional Support
 

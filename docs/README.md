@@ -53,7 +53,7 @@ docs/
 
 Found a documentation issue? Please:
 
-1. Check for existing issues in [GitHub Issues](https://github.com/your-org/minder/issues)
+1. Check for existing issues in [GitHub Issues](https://github.com/wish-maker/minder/issues)
 2. Create a new issue with the `documentation` label
 3. Or submit a pull request with your improvements
 
@@ -62,5 +62,5 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.
 ## Additional Resources
 
 - [Project README](../README.md) - Main project README
-- [GitHub Repository](https://github.com/your-org/minder) - Source code
-- [Issue Tracker](https://github.com/your-org/minder/issues) - Bug reports
+- [GitHub Repository](https://github.com/wish-maker/minder) - Source code
+- [Issue Tracker](https://github.com/wish-maker/minder/issues) - Bug reports

@@ -427,8 +427,8 @@ show_troubleshooting() {
 
     echo -e "${BOLD}Get More Help:${NC}"
     echo "  📚 Documentation: docs/"
-    echo "  🐛 Report Issues: https://github.com/your-org/minder/issues"
-    echo "  💬 Discussions: https://github.com/your-org/minder/discussions"
+    echo "  🐛 Report Issues: https://github.com/wish-maker/minder/issues"
+    echo "  💬 Discussions: https://github.com/wish-maker/minder/discussions"
     echo ""
 
     read -p "Press Enter to continue..."

@@ -46,7 +46,7 @@ MODELS_OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 app = FastAPI(
     title="Minder Model Fine-Tuning Service",
     description="Production ML model fine-tuning with Ollama",
-    version="2.1.0",
+    version="1.0.0",
 )
 
 # ============================================================================

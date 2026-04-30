@@ -37,7 +37,7 @@ See [HARDWARE_OPTIMIZATION.md](HARDWARE_OPTIMIZATION.md) for:
 
 ### Method 1: Automated (Recommended)
 ```bash
-git clone https://github.com/your-org/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 ./deploy.sh
 ```
