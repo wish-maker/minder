@@ -15,7 +15,7 @@ from models.plugin_state import LicenseTier, PluginState
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_PLUGINS_CONFIG = os.getenv("DEFAULT_PLUGINS_CONFIG", "/config/default_plugins.yml")
+DEFAULT_PLUGINS_CONFIG = os.getenv("DEFAULT_PLUGINS_CONFIG", "/app/src/core/config/default_plugins.yml")
 
 
 async def load_default_plugins_config() -> Dict:

@@ -398,6 +398,7 @@ minder/
 │   └── model-management/
 ├── src/
 │   ├── core/                # Core interfaces and utilities
+│   │   └── config/          # Configuration files
 │   ├── plugins/             # 5 data collection plugins
 │   │   ├── crypto/          # Cryptocurrency data
 │   │   ├── network/         # Network monitoring
