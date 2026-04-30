@@ -9,8 +9,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://www.docker.com/)
-[![Tests: 118](https://img.shields.io/badge/tests-118%20passing-green.svg)](https://github.com/wish-maker/minder)
-[![Coverage: 93%](https://img.shields.io/badge/coverage-93%25-brightgreen.svg)](https://github.com/wish-maker/minder)
+[![Tests: 115](https://img.shields.io/badge/tests-115%20passing-green.svg)](https://github.com/wish-maker/minder)
+[![Coverage: 98%](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](https://github.com/wish-maker/minder)
 
 [Quick Start](#quick-start) • [Features](#features) • [Architecture](#architecture) • [Documentation](#documentation)
 
@@ -32,7 +32,7 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 
 **Current Status:**
 - 📦 **24 Services** running (21/24 healthy, 87.5% success rate)
-- 🧪 **118 Tests** passing (93% coverage)
+- 🧪 **115 Tests** passing (98% coverage)
 - 💾 **7.7GB RAM** usage in containers
 - ⚡ **~8 min** cold start time
 
