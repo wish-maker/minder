@@ -57,6 +57,11 @@ dist/
 .installed.cfg
 *.egg
 MANIFEST
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
 
 # Type Checkers & Linters
 .mypy_cache/

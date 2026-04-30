@@ -32,6 +32,9 @@ try:
         if module_name is None:
             module_name = service_path.name.replace("-", "_")
 
+        # Add service directory to sys.path for relative imports
+        sys.path.insert(0, str(service_path))
+
         spec = importlib.util.spec_from_file_location(module_name, service_path / "main.py")
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
@@ -39,21 +42,54 @@ try:
         return module
 
     services_base = project_root / "services"
-    gateway_app = load_service_module(services_base / "api-gateway", "services.api_gateway.main")
-    registry_app = load_service_module(services_base / "plugin-registry", "services.plugin_registry.main")
-    marketplace_app = load_service_module(services_base / "marketplace", "services.marketplace.main")
-    rag_app = load_service_module(services_base / "rag-pipeline", "services.rag_pipeline.main")
-    model_app = load_service_module(services_base / "model-management", "services.model_management.main")
-    tts_app = load_service_module(services_base / "tts-stt-service", "services.tts_stt_service.main")
-except Exception as e:
-    # Services not available for unit tests
-    print(f"Warning: Could not load service modules: {e}")
+
+    # Load services individually to avoid one failure blocking all
     gateway_app = None
     registry_app = None
     marketplace_app = None
     rag_app = None
     model_app = None
     tts_app = None
+
+    try:
+        gateway_app = load_service_module(services_base / "api-gateway", "services.api_gateway.main")
+        print("✅ Loaded API Gateway")
+    except Exception as e:
+        print(f"❌ Failed to load API Gateway: {e}")
+
+    try:
+        registry_app = load_service_module(services_base / "plugin-registry", "services.plugin_registry.main")
+        print("✅ Loaded Plugin Registry")
+    except Exception as e:
+        print(f"❌ Failed to load Plugin Registry: {e}")
+
+    try:
+        marketplace_app = load_service_module(services_base / "marketplace", "services.marketplace.main")
+        print("✅ Loaded Marketplace")
+    except Exception as e:
+        print(f"❌ Failed to load Marketplace: {e}")
+
+    try:
+        rag_app = load_service_module(services_base / "rag-pipeline", "services.rag_pipeline.main")
+        print("✅ Loaded RAG Pipeline")
+    except Exception as e:
+        print(f"❌ Failed to load RAG Pipeline: {e}")
+
+    try:
+        model_app = load_service_module(services_base / "model-management", "services.model_management.main")
+        print("✅ Loaded Model Management")
+    except Exception as e:
+        print(f"❌ Failed to load Model Management: {e}")
+
+    try:
+        tts_app = load_service_module(services_base / "tts-stt-service", "services.tts_stt_service.main")
+        print("✅ Loaded TTS-STT Service")
+    except Exception as e:
+        print(f"❌ Failed to load TTS-STT Service: {e}")
+
+except Exception as e:
+    # Catch any unexpected errors
+    print(f"Warning: Unexpected error loading service modules: {e}")
 
 
 # Test configuration
@@ -134,7 +170,8 @@ async def test_client():
 @pytest.fixture(scope="function")
 def gateway_test_client():
     """Create gateway test client"""
-    return TestClient(gateway_app)
+    # Access the FastAPI app from the module
+    return TestClient(gateway_app.app) if gateway_app else TestClient(None)
 
 
 @pytest.fixture(scope="function")
