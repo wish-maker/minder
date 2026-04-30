@@ -397,7 +397,14 @@ minder/
 │   ├── ai-services/
 │   └── model-management/
 ├── src/
-│   └── shared/               # Shared utilities
+│   ├── core/                # Core interfaces and utilities
+│   ├── plugins/             # 5 data collection plugins
+│   │   ├── crypto/          # Cryptocurrency data
+│   │   ├── network/         # Network monitoring
+│   │   ├── news/            # News aggregation
+│   │   ├── tefas/           # Turkish funds (with migration SQL)
+│   │   └── weather/         # Weather data
+│   └── shared/              # Shared utilities
 │       ├── rate_limiter.py
 │       ├── validators.py
 │       └── database.py
