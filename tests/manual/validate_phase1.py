@@ -20,7 +20,7 @@ print("=" * 70)
 print("\n[1/6] Verifying file structure...")
 required_files = [
     "/root/minder/config/tefas_config.yml",
-    "/root/minder/docs/references/tefas-borsapy-migration.sql",
+    "/root/minder/src/plugins/tefas/tefas-borsapy-migration.sql",
     "/root/minder/plugins/tefas/unified_data_api.py",
     "/root/minder/plugins/tefas/collectors/__init__.py",
     "/root/minder/test_unified_api.py",
@@ -83,7 +83,7 @@ except Exception as e:
 # Test 4: Validate SQL migration script
 print("\n[4/6] Validating SQL migration script...")
 try:
-    with open("/root/minder/docs/references/tefas-borsapy-migration.sql", "r") as f:
+    with open("/root/minder/src/plugins/tefas/tefas-borsapy-migration.sql", "r") as f:
         sql_content = f.read()
 
     # Check for key tables
