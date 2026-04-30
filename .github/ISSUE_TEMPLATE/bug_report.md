@@ -32,7 +32,7 @@ assignees: ''
 - OS: [e.g., Ubuntu 22.04, macOS 14.0]
 - Python Version: [e.g., Python 3.11.5]
 - Docker Version: [e.g., Docker 24.0.0]
-- Minder Version: [e.g., v2.1.0]
+- Minder Version: [e.g., v1.0.0]
 
 **Configuration:**
 - Any custom configurations?

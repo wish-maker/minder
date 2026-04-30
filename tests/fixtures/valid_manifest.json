@@ -8,7 +8,7 @@
   "categories": ["testing"],
   "tags": ["test", "sample"],
   "compatibility": {
-    "minder_core": ">=2.0.0"
+    "minder_core": ">=1.0.0"
   },
   "github": {
     "repo": "https://github.com/minder-plugins/test.git",

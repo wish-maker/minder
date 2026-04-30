@@ -63,7 +63,7 @@ class NewsModule(BaseModule):
             name="news",
             version="1.0.0",  # Stable - production ready
             description="News aggregation and sentiment analysis",
-            author="FundMind AI",
+            author="Minder",
             dependencies=[],
             capabilities=[
                 "news_aggregation",
@@ -120,9 +120,7 @@ class NewsModule(BaseModule):
                             except Exception as e:
                                 logger.error(f"Error storing article: {e}")
 
-                        logger.info(
-                            f"✓ Collected {len(articles)} articles from {feed_config['name']}"
-                        )
+                        logger.info(f"✓ Collected {len(articles)} articles from {feed_config['name']}")
 
                     except Exception as e:
                         errors += 1
@@ -149,17 +147,13 @@ class NewsModule(BaseModule):
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    feed_config["url"], timeout=aiohttp.ClientTimeout(total=30)
-                ) as response:
+                async with session.get(feed_config["url"], timeout=aiohttp.ClientTimeout(total=30)) as response:
                     if response.status == 200:
                         rss_content = await response.text()
                         articles = self._parse_rss_xml(rss_content, feed_config["source"])
                         logger.info(f"✓ Parsed {len(articles)} articles from {feed_config['name']}")
                     else:
-                        logger.warning(
-                            f"RSS feed returned status {response.status} for {feed_config['name']}"
-                        )
+                        logger.warning(f"RSS feed returned status {response.status} for {feed_config['name']}")
                         # Don't use sample data - return empty list
                         articles = []
 
@@ -281,21 +275,15 @@ class NewsModule(BaseModule):
                         url = link_elem.get("hre", "")
 
                     # Extract description
-                    desc_elem = item.find("description") or item.find(
-                        "{http://purl.org/rss/1.0/}description"
-                    )
+                    desc_elem = item.find("description") or item.find("{http://purl.org/rss/1.0/}description")
                     summary = ""
                     if desc_elem is not None:
                         summary = unescape(desc_elem.text) if desc_elem.text else ""
 
                     # Extract pub date
-                    date_elem = item.find("pubDate") or item.find(
-                        "{http://purl.org/rss/1.0/}pubDate"
-                    )
+                    date_elem = item.find("pubDate") or item.find("{http://purl.org/rss/1.0/}pubDate")
                     published_date = None
-                    pub_date_str = (
-                        date_elem.text if date_elem is not None and date_elem.text else ""
-                    )
+                    pub_date_str = date_elem.text if date_elem is not None and date_elem.text else ""
 
                     # Parse date with multiple formats
                     if pub_date_str:
@@ -304,9 +292,7 @@ class NewsModule(BaseModule):
                             "%Y-%m-%dT%H:%M:%S%z",
                         ]:
                             try:
-                                published_date = datetime.strptime(
-                                    pub_date_str.split("+")[0].strip(), fmt
-                                )
+                                published_date = datetime.strptime(pub_date_str.split("+")[0].strip(), fmt)
                                 break
                             except BaseException:
                                 pass
@@ -362,31 +348,27 @@ class NewsModule(BaseModule):
         try:
             async with self.pool.acquire() as conn:
                 # Get recent articles
-                result = await conn.fetchrow("""
+                result = await conn.fetchrow(
+                    """
                     SELECT COUNT(*) as total,
                            AVG(sentiment_score) as avg_sentiment,
                            SUM(CASE WHEN sentiment_score > 0.2 THEN 1 ELSE 0 END) as positive,
                            SUM(CASE WHEN sentiment_score < -0.2 THEN 1 ELSE 0 END) as negative
                     FROM news_articles
                     WHERE timestamp >= NOW() - INTERVAL '24 hours'
-                """)
+                """
+                )
 
                 if result and result["total"]:
                     return {
                         "metrics": {
                             "total_articles": result["total"],
-                            "avg_sentiment": (
-                                float(result["avg_sentiment"]) if result["avg_sentiment"] else 0
-                            ),
+                            "avg_sentiment": (float(result["avg_sentiment"]) if result["avg_sentiment"] else 0),
                             "positive_pct": (
-                                int((result["positive"] / result["total"]) * 100)
-                                if result["total"] > 0
-                                else 0
+                                int((result["positive"] / result["total"]) * 100) if result["total"] > 0 else 0
                             ),
                             "negative_pct": (
-                                int((result["negative"] / result["total"]) * 100)
-                                if result["total"] > 0
-                                else 0
+                                int((result["negative"] / result["total"]) * 100) if result["total"] > 0 else 0
                             ),
                         },
                         "patterns": [
@@ -435,14 +417,10 @@ class NewsModule(BaseModule):
             "collections": 5,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

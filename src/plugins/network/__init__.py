@@ -2,7 +2,7 @@
 Network Plugin - Ağ Performans İzleme
 
 Version: 1.0.0 (Stable)
-Author: FundMind AI
+Author: Minder
 License: MIT
 
 Description:

@@ -2,7 +2,7 @@
 Weather Plugin - Hava Durumu Analizi
 
 Version: 1.0.0 (Stable)
-Author: FundMind AI
+Author: Minder
 License: MIT
 
 Description:

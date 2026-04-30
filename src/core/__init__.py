@@ -3,8 +3,8 @@ Minder Core Module
 Microkernel architecture for modular RAG platform
 """
 
-__version__ = "2.0.0"
-__author__ = "FundMind AI"
+__version__ = "1.0.0"
+__author__ = "Minder"
 
 from .event_bus import Event, EventBus, EventType
 

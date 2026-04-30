@@ -202,6 +202,79 @@ start_services() {
     log_success "All services started ✓"
 }
 
+download_ollama_models() {
+    log_info "Downloading Ollama models for AI functionality..."
+
+    # Wait for Ollama to be ready
+    log_info "Waiting for Ollama to start..."
+    MAX_WAIT=90
+    WAIT_TIME=0
+    while [ $WAIT_TIME -lt $MAX_WAIT ]; do
+        if docker exec minder-ollama ollama list &> /dev/null; then
+            log_success "Ollama is ready ✓"
+            break
+        fi
+        sleep 2
+        WAIT_TIME=$((WAIT_TIME + 2))
+        echo -n "."
+    done
+
+    if [ $WAIT_TIME -ge $MAX_WAIT ]; then
+        log_error "Ollama failed to start within expected time"
+        log_warning "Continuing anyway - models will be downloaded automatically in background"
+        return 0
+    fi
+
+    # Check if automatic pull is enabled
+    AUTOMATIC_PULL=$(grep OLLAMA_AUTOMATIC_PULL infrastructure/docker/.env 2>/dev/null | cut -d= -f2 || echo "true")
+
+    if [ "$AUTOMATIC_PULL" != "true" ]; then
+        log_info "OLLAMA_AUTOMATIC_PULL is disabled"
+        log_info "Models will need to be downloaded manually"
+        return 0
+    fi
+
+    # Get models from environment or use defaults
+    MODEL_LIST=$(grep OLLAMA_MODELS infrastructure/docker/.env 2>/dev/null | cut -d= -f2 || echo "llama3.2,nomic-embed-text")
+
+    # Convert comma-separated to array
+    IFS=',' read -ra MODELS <<< "$MODEL_LIST"
+
+    log_info "Models to download: ${MODELS[*]}"
+
+    SUCCESS_COUNT=0
+    for model in "${MODELS[@]}"; do
+        # Trim whitespace
+        model=$(echo "$model" | xargs)
+
+        log_info "Downloading model: $model..."
+
+        # Pull model with timeout
+        if timeout 300 docker exec minder-ollama ollama pull "$model" > /dev/null 2>&1; then
+            log_success "Model $model downloaded successfully ✓"
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        else
+            log_warning "Failed to download model $model (may have timed out)"
+        fi
+    done
+
+    # Verify and display results
+    log_info "Verifying installed models..."
+    sleep 2
+
+    MODEL_COUNT=$(docker exec minder-ollama ollama list 2>/dev/null | grep -c "^NAME" || echo "0")
+
+    if [ "$MODEL_COUNT" -gt 0 ]; then
+        log_success "Successfully installed $MODEL_COUNT model(s) ✓"
+        echo ""
+        docker exec minder-ollama ollama list
+    else
+        log_warning "No models found. AI features may not work properly."
+        log_info "You can download models manually later:"
+        log_info "  docker exec minder-ollama ollama pull llama3.2"
+    fi
+}
+
 wait_for_services() {
     log_info "Waiting for services to be healthy..."
 
@@ -404,6 +477,7 @@ main() {
     initialize_database
     start_services
     wait_for_services
+    download_ollama_models
     run_health_checks
     print_success_message
 

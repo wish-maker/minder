@@ -21,7 +21,7 @@ print("=" * 70)
 print("\n[1/7] Verifying Phase 1 Foundation...")
 phase1_files = [
     "config/tefas_config.yml",
-    "migrations/001_create_borsapy_tables.sql",
+    "docs/references/tefas-borsapy-migration.sql",
     "plugins/tefas/unified_data_api.py",
     "plugins/tefas/collectors/__init__.py",
 ]
@@ -159,7 +159,7 @@ print("  Phase 4: ✅ Module Integration (v3.0)")
 print("  Phase 5: ✅ End-to-end Testing")
 print("\nFiles Created/Modified:")
 print("  • config/tefas_config.yml")
-print("  • migrations/001_create_borsapy_tables.sql")
+print("  • docs/references/tefas-borsapy-migration.sql")
 print("  • plugins/tefas/unified_data_api.py (758 lines)")
 print("  • plugins/tefas/collectors/risk_metrics_collector.py (330 lines)")
 print("  • plugins/tefas/collectors/allocation_collector.py (277 lines)")

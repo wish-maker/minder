@@ -184,7 +184,7 @@ class CryptoModule(BaseModule):
             name="crypto",
             version="1.0.0",  # Stable - production ready
             description="Cryptocurrency market analysis",
-            author="FundMind AI",
+            author="Minder",
             dependencies=[],
             capabilities=[
                 "price_tracking",
@@ -494,13 +494,15 @@ class CryptoModule(BaseModule):
         try:
             async with self.pool.acquire() as conn:
                 # Get latest prices from time-series table
-                results = await conn.fetch("""
+                results = await conn.fetch(
+                    """
                     SELECT symbol, name, price, change_24h_pct
                     FROM crypto_data_history
                     WHERE timestamp >= NOW() - INTERVAL '1 hour'
                     ORDER BY timestamp DESC
                     LIMIT 10
-                    """)
+                    """
+                )
 
                 if results:
                     metrics = {}
@@ -549,14 +551,10 @@ class CryptoModule(BaseModule):
             "collections": 1,
         }
 
-    async def get_correlations(
-        self, other_module: str, correlation_type: str = "auto"
-    ) -> List[Dict[str, Any]]:
+    async def get_correlations(self, other_module: str, correlation_type: str = "auto") -> List[Dict[str, Any]]:
         return []
 
-    async def get_anomalies(
-        self, severity: str = "medium", limit: int = 100
-    ) -> List[Dict[str, Any]]:
+    async def get_anomalies(self, severity: str = "medium", limit: int = 100) -> List[Dict[str, Any]]:
         return []
 
     async def query(self, query: str) -> Dict[str, Any]:

@@ -1,48 +1,38 @@
 # ============================================================================
-# Minder Platform - .gitignore
-# ============================================================================
-# Version: 2.0
-# Last Updated: 2026-04-29
-# Purpose: Prevent committing sensitive, personal, and generated files
+# Minder Platform - Professional .gitignore
 # ============================================================================
 
 # ============================================================================
-# 🟢 COMMIT EDİLEBİLİR (Proje Konfigürasyonu)
-# ============================================================================
-# Aşağıdaki dizinler ekip işbirliği için gereklidir:
-#
-# ✅ .github/          → CI/CD workflows, issue & PR templates
-# ✅ .dockerignore      → Docker konfigürasyonu
-# ✅ .gitignore        → Git ignore kuralları (bu dosya)
-# ✅ .pre-commit-config.yaml → Pre-commit hooks
-# ✅ *.example         → Environment template files
-#
-# Bu dizinler ignore edilmez, team çalışması için gereklidir!
-
-# ============================================================================
-# 🔴 NEVER COMMIT (Critical Security & Personal Data)
+# 🔒 CRITICAL SECURITY (Never Commit)
 # ============================================================================
 
-# Claude Code & AI Systems (Personal Settings)
-.claude/
-.claude/**/*
-.claude/settings.local.json
+# Environment Files
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.marketplace
 
-# Serena AI Assistant (Memory & Cache)
-.serena/
-.serena/**/*
-.serena/project.local.yml
-.serena/cache/
-.serena/memories/
+# SSL Certificates & Keys
+*.key
+*.pem
+*.crt
+*.cer
+secrets/
+credentials/
+*.credentials
 
-# System Memory & Logs
-.remember/
-.remember/**/*
-.remember/logs/
-.remember/tmp/
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+*.backup
+*_backup
 
 # ============================================================================
-# 🟡 AUTO-GENERATED (Build & Cache Directories)
+# 🟢 AUTO-GENERATED FILES (Build & Cache)
 # ============================================================================
 
 # Python
@@ -56,91 +46,41 @@ dist/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
-
-# Type Checkers & Linters
-.mypy_cache/
-.dmypy.json
-dmypy.json
-*.typed.md
-.ruff_cache/
-.pytest_cache/
 htmlcov/
 .tox/
-.nox/
 .coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.coverag
-htmlcov/
+*.cover
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
 
-# Node.js / Next.js
+# Node.js
 node_modules/
 .next/
 out/
 build/
 .swc/
-.cache/
-.pnp.*
-.pnp.js
 
 # ============================================================================
-# 🔒 SECRETS & SENSITIVE FILES (Never Commit!)
+# 🤖 AI SYSTEM FILES (Personal Settings)
 # ============================================================================
 
-# Environment Files (CRITICAL!)
-.env
-.env.local
-.env.development
-.env.production
-.env.staging
-.env.test
-.env.marketplace
-*.key
-*.pem
-*.crt
-secrets/
-credentials/
-*.credentials
+.claude/
+.claude/**/*
+.claude/settings.local.json
 
-# SSL Certificates (NEVER COMMIT!)
-*.pem
-*.key
-*.crt
-ssl/*.pem
-ssl/*.key
-nginx/ssl/*
-infrastructure/docker/nginx/ssl/*
-infrastructure/nginx/ssl/*
+.serena/
+.serena/**/*
+.serena/project.local.yml
 
-# ============================================================================
-# 💾 DATABASE & DATA FILES
-# ============================================================================
-
-*.db
-*.sqlite3
-*.sql
-*.sqlite
-*.bak
-*.backup
-*_backup
-
-# Docker volumes (don't commit data)
-*.volume
-.volumes/
-
-# Monitoring Data
-grafana/data/
-prometheus/data/
-influxdb/data/
-alertmanager/data/
+.remember/
+.remember/**/*
+.remember/logs/
+.remember/tmp/
 
 # ============================================================================
 # 📝 LOGS & TEMPORARY FILES
@@ -155,10 +95,9 @@ alertmanager/data/
 *.pid.lock
 tmp/
 temp/
-.remember/tmp/
 
 # ============================================================================
-# 🖥️  IDE & EDITOR SETTINGS (Personal Preferences)
+# 🖥️ IDE & EDITOR SETTINGS
 # ============================================================================
 
 .vscode/
@@ -170,8 +109,6 @@ temp/
 .pydevproject
 .settings/
 *.sublime-project
-*.sublime-workspace
-*.code-workspace
 
 # ============================================================================
 # 📚 DOCUMENTATION BUILD
@@ -180,49 +117,9 @@ temp/
 docs/_build/
 docs/.doctrees/
 site/
-docs/_build/
-docs/.doctrees/
 
 # ============================================================================
-# 🐧 OS-SPECIFIC FILES
-# ============================================================================
-
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-Desktop.ini
-
-# ============================================================================
-# 📦 PACKAGE MANAGERS
-# ============================================================================
-
-# Node.js
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Python
-pip-log.txt
-pip-delete-this-directory.txt
-
-# ============================================================================
-# 🧪 TESTING & COVERAGE
-# ============================================================================
-
-test-results/
-test-reports/
-*.test.log
-pytest-reports/
-.tox/
-.nox/
-
-# ============================================================================
-# 🗂️  ARCHIVE & OLD FILES
+# 🗂️ ARCHIVE & OLD FILES
 # ============================================================================
 
 .archive/
@@ -231,56 +128,40 @@ pytest-reports/
 *~
 
 # ============================================================================
-# 🎨 PROJECT SPECIFIC
+# 🐧 OS-SPECIFIC FILES
 # ============================================================================
 
-# MyPy Reports
-mypy-report/
-mypy-report.html
-
-# PyInstaller
-*.manifest
-*.spec
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+Desktop.ini
 
 # ============================================================================
-# 📋 MISC (Various Generated Files)
+# 🎯 PROJECT SPECIFIC
 # ============================================================================
 
-.history
-*.rej
-*.patch
-.diff
-*.tgz
-*.tar.gz
-.zip
-.rar
-*.session
-*.cache
-*.session
-*.swp
+# Monitoring Data
+grafana/data/
+prometheus/data/
+influxdb/data/
+alertmanager/data/
+
+# Docker volumes (don't commit data)
+*.volume
+.volumes/
+
+# Test Results
+test-results/
+test-reports/
+*.test.log
 
 # ============================================================================
-# 🎯 BEST PRACTICE REMINDERS
+# ✅ TEAM COLLABORATION (Keep These!)
 # ============================================================================
-#
-# ✅ DO COMMIT:
-#   - .github/ (CI/CD, templates)
-#   - *.example (template files)
-#   - Dockerfile, docker-compose.yml
-#   - Source code
-#   - Documentation (docs/)
-#   - Configuration templates
-#
-# ❌ NEVER COMMIT:
-#   - .env files (use .env.example instead)
-#   - SSL certificates (*.pem, *.key)
-#   - Database files (*.db, *.sqlite3)
-#   - Cache directories (node_modules/, __pycache__/, .next/)
-#   - Personal settings (.claude/, .vscode/, .idea/)
-#   - AI system memory (.serena/, .remember/)
-#   - Log files (*.log)
-#   - Build artifacts (dist/, build/, .next/)
-#
-# 💡 TIP: Before committing, run: git status
-#    If you see sensitive files: git rm --cached <file>
-# ============================================================================
+# .github/          → CI/CD workflows
+# *.example         → Template files
+# docs/             → Documentation
+# infrastructure/    → Docker configuration
+# tests/            → Test suite
+# services/         → Source code

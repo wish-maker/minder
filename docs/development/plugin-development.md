@@ -1,7 +1,7 @@
 # Minder Plugin Development Guide
 
-> **Last Updated:** 2026-04-29
-> **Platform Version:** 2.1.0
+> **Last Updated:** 2026-04-30
+> **Platform Version:** 1.0.0
 > **Plugin Interface:** v2 (simplified)
 > **Active Plugins:** 5 (crypto, network, news, tefas, weather)
 
@@ -227,7 +227,7 @@ class WeatherPlugin(BaseModule):
     def register(self):
         return {
             "name": "weather",
-            "version": "2.0.0",
+            "version": "1.0.0",
             "description": "Weather data collection",
             "capabilities": ["fetch", "cache"],
             "data_sources": ["weather-api"],
@@ -1088,4 +1088,4 @@ class NewPlugin(BaseModule):
 ---
 
 **Last Updated:** 2026-04-22
-**Platform Version:** 2.0.0
+**Platform Version:** 1.0.0

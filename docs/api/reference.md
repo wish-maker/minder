@@ -1,9 +1,9 @@
 # Minder Platform - API Documentation
 
-**Version:** 2.1.0
-**Last Updated:** 2026-04-29
+**Version:** 1.0.0
+**Last Updated:** 2026-04-30
 **Base URL:** `http://localhost:8000`
-**Services:** 24 microservices (21 healthy)
+**Services:** 23 microservices (21 healthy, 2 starting)
 
 ---
 
@@ -26,8 +26,10 @@ Client → Traefik (80/443) → Authelia (9091 SSO/2FA) → API Gateway (8000)
 **Current Status:**
 - ✅ All core APIs (8000-8007) healthy and responding
 - ✅ Authelia authentication operational
-- ⚠️ Traefik dashboard (8081) - proxy working, dashboard unhealthy
-- 🧪 118 API tests passing
+- ✅ Traefik reverse proxy fully functional
+- ✅ Redis master authentication fixed
+- ✅ Automatic AI model downloads enabled
+- 🧪 115 API tests passing (98% coverage, 2 skipped)
 
 ---
 
@@ -92,7 +94,7 @@ Check API Gateway health and dependency status.
   "service": "api-gateway",
   "status": "degraded",
   "timestamp": "2026-04-23T13:00:00.000000",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "environment": "development",
   "phase": 1,
   "checks": {
@@ -137,7 +139,7 @@ Retrieve list of all loaded plugins with their status.
       "status": "registered",
       "health_status": "healthy",
       "description": "Cryptocurrency data collection and analysis",
-      "author": "FundMind AI",
+      "author": "Minder",
       "capabilities": [
         "crypto_data_collection",
         "price_analysis",
@@ -150,7 +152,7 @@ Retrieve list of all loaded plugins with their status.
       "status": "registered",
       "health_status": "healthy",
       "description": "Network performance monitoring and security analysis",
-      "author": "FundMind AI",
+      "author": "Minder",
       "capabilities": [
         "network_monitoring",
         "performance_tracking",
@@ -200,7 +202,7 @@ Retrieve detailed information about a specific plugin.
   "status": "registered",
   "health_status": "healthy",
   "description": "Cryptocurrency data collection and analysis",
-  "author": "FundMind AI",
+  "author": "Minder",
   "capabilities": [
     "crypto_data_collection",
     "price_analysis",
@@ -372,7 +374,7 @@ http://localhost:8001
   "service": "plugin-registry",
   "status": "healthy",
   "timestamp": "2026-04-23T13:00:00.000000",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "environment": "development",
   "plugins_loaded": 5,
   "services_registered": 0
@@ -678,23 +680,22 @@ console.log(`Collected ${result.records_collected} records`);
 
 ## Changelog
 
-### Version 2.1.0 (2026-04-29)
-- ✅ Added security layer (Traefik + Authelia SSO/2FA)
-- ✅ Expanded to 24 services (21 healthy, 87.5% success rate)
-- ✅ Improved test coverage to 93% (118 tests passing)
-- ✅ Added real startup timeline (~8 minutes)
-- ✅ Updated all documentation to match real project status
 
-### Version 2.0.0 (2026-04-23)
-- ✅ Added P2-015 resolution (container naming fix)
-- ✅ Improved health check responses
-- ✅ Added comprehensive API documentation
-- ✅ Standardized error response format
-
-### Version 1.0.0 (2026-04-15)
+### Version 1.0.0 (2026-04-30)
 - Initial release
 - Basic CRUD operations for plugins
 - Health check endpoints
+- Added security layer (Traefik + Authelia SSO/2FA)
+- Expanded to 23 services (21 healthy, 91% success rate)
+- Improved test coverage to 98% (115 tests passing, 2 skipped)
+- Added automatic AI model downloads (llama3.2 + nomic-embed-text)
+- Added realistic startup timeline (~9 minutes)
+- Updated all documentation to match real project status
+- Added Redis master authentication fix
+- Improved health check responses
+- Added comprehensive API documentation
+- Standardized error response format
+- Professional project cleanup (765MB, zero cache files)
 
 ---
 

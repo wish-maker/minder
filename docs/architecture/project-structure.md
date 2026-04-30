@@ -22,7 +22,7 @@ minder/                              # Project root
 │
 ├── infrastructure/                 # Infrastructure configuration
 │   └── docker/
-│       ├── docker-compose.yml      # Main compose file (24 services)
+│       ├── docker-compose.yml      # Main compose file (23 services)
 │       ├── .env.example           # Environment template
 │       ├── .env                   # Actual environment (gitignored)
 │       ├── postgres-init.sql      # Database initialization
@@ -51,7 +51,7 @@ minder/                              # Project root
 │       └── security.py           # Security helpers
 │
 ├── tests/                        # Test suite
-│   ├── unit/                    # Unit tests (118 tests)
+│   ├── unit/                    # Unit tests (115 tests, 98% coverage)
 │   ├── integration/             # Integration tests
 │   └── fixtures/                # Test data
 │

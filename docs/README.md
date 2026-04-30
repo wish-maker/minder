@@ -7,10 +7,12 @@ Welcome to the Minder Platform documentation. This guide helps you get started w
 ### 🚀 Getting Started
 - [Quick Start Guide](getting-started/quick-start.md) - 5-minute setup
 - [Installation Guide](getting-started/installation.md) - Detailed installation instructions
+- [AI Setup Guide](getting-started/ai-setup.md) - Automatic AI model configuration
 
 ### 📚 User Guides
 - [Authentication & Security](guides/authentication.md) - SSO, 2FA, access control
 - [Security Setup Guide](guides/security-setup.md) - Hardening your deployment
+- [AI Setup Guide](getting-started/ai-setup.md) - Automatic AI model configuration
 
 ### 🔧 Development
 - [Development Guide](development/development.md) - Development workflow
@@ -32,6 +34,7 @@ Welcome to the Minder Platform documentation. This guide helps you get started w
 ### 🐛 Troubleshooting
 - [Common Issues](troubleshooting/common-issues.md) - Frequently asked questions
 - [Emergency Procedures](troubleshooting/emergency-procedures.md) - Crisis management
+- [Recent Improvements](references/RECENT_IMPROVEMENTS.md) - Latest platform enhancements
 
 ## Documentation Structure
 

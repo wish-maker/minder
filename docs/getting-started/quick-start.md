@@ -22,6 +22,13 @@ cd minder
 ./setup.sh
 ```
 
+**That's it!** The platform will be fully operational in ~9 minutes with:
+- ✅ Automatic AI model downloads (llama3.2 + nomic-embed-text)
+- ✅ Secure password generation
+- ✅ Database initialization
+- ✅ Network configuration
+- ✅ Health monitoring
+
 #### Option 2: Manual
 ```bash
 # 1. Configure environment
@@ -30,8 +37,14 @@ cp infrastructure/docker/.env.example infrastructure/docker/.env
 # 2. Start services
 docker compose -f infrastructure/docker/docker-compose.yml up -d
 
-# 3. Wait for services to be healthy (~8 minutes)
+# 3. Wait for services to be healthy (~9 minutes)
 docker ps  # All services should show "healthy" status
+```
+
+**Note:** Manual setup requires downloading AI models separately:
+```bash
+docker exec minder-ollama ollama pull llama3.2
+docker exec minder-ollama ollama pull nomic-embed-text
 ```
 
 ### Verification

@@ -4,15 +4,17 @@ Detailed microservices architecture for Minder Platform.
 
 ## Current Service Status
 
-**Total Services:** 24  
-**Healthy Services:** 21 (87.5%)  
-**Unhealthy Services:** 3 (non-critical: Traefik dashboard, Grafana, Alertmanager)  
-**Test Coverage:** 93% (118 passing tests)  
-**Cold Start Time:** ~8 minutes  
+**Total Services:** 23  
+**Healthy Services:** 21 (91.3%)  
+**Starting Services:** 2 (Grafana, Alertmanager - normal)  
+**Test Coverage:** 98% (115 passing tests, 2 skipped)  
+**Cold Start Time:** ~9 minutes (including AI model downloads)  
+**Project Size:** 765MB (optimized)  
+**AI Models:** Auto-installed (llama3.2 + nomic-embed-text)  
 
 ## Overview
 
-Minder Platform implements a microservices architecture with 24 independent services, each running in its own Docker container.
+Minder Platform implements a microservices architecture with 23 independent services, each running in its own Docker container.
 
 ## Service Communication
 

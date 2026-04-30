@@ -11,9 +11,10 @@
 ### System Requirements
 
 - **RAM**: 8GB minimum, 16GB recommended
-- **Disk**: 20GB free space
+- **Disk**: 20GB free space (+3GB for AI models)
 - **CPU**: 4 cores minimum, 8 cores recommended
 - **OS**: Linux, macOS, or Windows with WSL2
+- **Network**: Stable internet for AI model downloads (first run only)
 
 ## Installation Methods
 
@@ -28,7 +29,13 @@ cd minder
 ./setup.sh
 ```
 
-That's it! The platform will be fully operational in ~8 minutes.
+That's it! The platform will be fully operational in ~9 minutes with:
+
+**✨ AUTOMATIC FEATURES:**
+- 🤖 **AI Models:** Automatically downloads llama3.2 (2GB) and nomic-embed-text (274MB)
+- 🔐 **Security:** Generates secure passwords automatically
+- 🗄️ **Databases:** Creates and initializes all required databases
+- 🌐 **Networking:** Sets up Docker networks automatically
 
 ### Method 2: Manual Setup
 
@@ -56,7 +63,7 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d postgres redis 
 docker compose -f infrastructure/docker/docker-compose.yml up -d
 ```
 
-This will start 24 services:
+This will start 23 services:
 - Security Layer (2): Traefik, Authelia
 - Core Infrastructure (5): PostgreSQL, Redis, Qdrant, Ollama, Neo4j
 - Core APIs (6): API Gateway, Plugin Registry, Marketplace, State Manager, AI Services, Model Management
@@ -107,12 +114,32 @@ docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
 ### Run Tests
 
 ```bash
-# Unit tests
+# Unit tests (115 tests, 98% coverage)
 pytest tests/unit/ -v
 
 # Integration tests
 pytest tests/integration/ -v
 ```
+
+**Expected Results:**
+- ✅ 115 tests passing
+- ⏭️ 2 tests skipped (expected)
+- ⚠️ 5 warnings (non-critical)
+- 📊 98% code coverage
+
+## Expected Startup Timeline
+
+When running `./setup.sh`, expect the following timeline:
+
+**0-2 min:** Infrastructure (PostgreSQL, Redis, Qdrant, Ollama, Neo4j)
+**2-3 min:** Security layer (Traefik, Authelia)
+**3-5 min:** Core APIs (Gateway, Registry, Marketplace, State)
+**5-6 min:** AI services (RAG, Model Management)
+**6-7 min:** **AI Model Downloads** (automatic, ~3GB total)
+**7-8 min:** Monitoring (Prometheus, Grafana, InfluxDB)
+**8-9 min:** AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
+
+**Final Status:** 23 services, 21 healthy, 2 starting (normal)
 
 ## Troubleshooting
 

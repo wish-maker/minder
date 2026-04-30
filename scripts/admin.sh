@@ -390,7 +390,7 @@ show_system_info() {
     echo ""
 
     echo -e "${BOLD}Minder Platform:${NC}"
-    echo "Version: 2.0.0"
+    echo "Version: 1.0.0"
     echo "Services: $(docker ps -q | wc -l) running"
     echo "Containers: $(docker ps -a | wc -l) total"
     echo "Volumes: $(docker volume ls | wc -l) total"

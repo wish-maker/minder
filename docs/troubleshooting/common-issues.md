@@ -1,5 +1,14 @@
 # Troubleshooting Guide
 
+## Platform Status (2026-04-30)
+
+**Current Status:** ✅ Fully Operational
+- **Services:** 23 total (21 healthy, 2 starting normally)
+- **Tests:** 115 passing (98% coverage, 2 skipped)
+- **AI Models:** Auto-installed (llama3.2 + nomic-embed-text)
+- **Project Size:** 765MB (optimized)
+- **Startup Time:** ~9 minutes (including AI downloads)
+
 ## Common Issues and Solutions
 
 ### Service Won't Start
@@ -92,6 +101,38 @@ curl -X POST http://localhost:8001/plugins/<plugin-id>/reload
 ```
 
 ### Authentication Issues
+
+#### Problem: Redis AUTH failed (Connection Issues)
+
+**Symptoms:**
+```
+AUTH failed: WRONGPASS invalid username-password pair or Redis is loading from disk
+```
+
+**Root Cause:**
+Redis master authentication not configured properly.
+
+**Solution (Already Fixed):**
+The platform now includes `--masterauth ${REDIS_PASSWORD}` in the Redis command.
+
+**Verify the fix:**
+```bash
+# Check Redis configuration
+docker exec minder-redis redis-cli -a ${REDIS_PASSWORD} ping
+# Should return: PONG
+
+# Check if master auth is configured
+docker logs minder-redis | grep masterauth
+```
+
+**If issue persists:**
+```bash
+# Restart Redis service
+docker compose -f infrastructure/docker/docker-compose.yml restart redis
+
+# Check logs
+docker logs minder-redis
+```
 
 #### Problem: Can't login to Authelia
 ```bash

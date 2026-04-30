@@ -244,7 +244,7 @@ Capabilities:
 - Tax optimization analysis
 - Portfolio allocation tracking
 
-Author: FundMind AI
+Author: Minder
 Version: 1.0.0
 """
 ```

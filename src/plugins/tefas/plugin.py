@@ -154,7 +154,7 @@ class TefasModule(BaseModule):
             name="tefas",
             version="1.0.0",
             description="Türkiye yatırım fonları analizi (borsapy 0.8.7 + tefas-crawler integrated)",
-            author="FundMind AI",
+            author="Minder",
             dependencies=[],  # tefas-crawler and borsapy are pip packages, not Minder plugins
             capabilities=[
                 "fund_data_collection",

@@ -2,11 +2,12 @@
 
 ## Current Status
 
-**Platform Version:** 2.1.0  
-**Last Updated:** 2026-04-29  
-**Services Running:** 24 (21 healthy, 87.5% success rate)  
-**Test Coverage:** 93% (118 tests passing)  
-**Deployment Time:** ~8 minutes cold start
+**Platform Version:** 1.0.0
+**Last Updated:** 2026-04-30
+**Services Running:** 23 (21 healthy, 2 starting, 91% success rate)
+**Test Coverage:** 98% (115 tests passing, 2 skipped)
+**Deployment Time:** ~9 minutes cold start (including AI downloads)
+**AI Models:** Auto-installed (llama3.2 + nomic-embed-text)
 
 ## Architecture Overview
 

@@ -6,10 +6,11 @@ Welcome to the Minder Platform architecture documentation. This section covers t
 
 Minder Platform is a production-ready microservices platform for AI plugin management, featuring:
 
-- **24 microservices** (21 healthy, 87.5% success rate) - Independent, scalable services
-- **Enterprise security** - SSO, 2FA, role-based access control
+- **23 microservices** (21 healthy, 91% success rate) - Independent, scalable services
+- **Enterprise security** - SSO, 2FA, role-based access control  
 - **AI capabilities** - RAG pipeline, embeddings, LLM integration
 - **Comprehensive monitoring** - Prometheus, Grafana, InfluxDB, Alertmanager
+- **Automatic AI setup** - Zero-configuration model downloads
 
 ## Architecture Guides
 
