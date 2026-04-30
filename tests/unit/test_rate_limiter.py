@@ -2,7 +2,7 @@
 Unit tests for rate limiting module.
 """
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 
@@ -196,16 +196,9 @@ class TestRateLimitExceeded:
 class TestRateLimitDecorator:
     """Test rate_limit decorator"""
 
-    # NOTE: These tests are skipped because the decorator implementation
-    # has changed and the old is_rate_limited method doesn't exist.
-    # The decorator now uses is_allowed() method directly.
-    # These tests need to be rewritten to match the current implementation.
-
-    @pytest.mark.skip(reason="Decorator implementation changed - is_rate_limited method doesn't exist")
     @pytest.mark.asyncio
     async def test_rate_limit_decorator_allowed(self, mock_redis):
         """Test rate limit decorator when request is allowed"""
-        mock_redis.incr.return_value = 1
 
         @rate_limit(limit=10, window=60)
         async def test_func(request):
@@ -213,16 +206,27 @@ class TestRateLimitDecorator:
 
         from fastapi import Request
 
+        # Create mock app with rate limiter
+        mock_limiter = AsyncMock()
+        mock_limiter.is_allowed = AsyncMock(return_value=(True, {"remaining": 9, "reset_time": 1234567890}))
+
+        mock_app = MagicMock()
+        mock_app.state.rate_limiter = mock_limiter
+
+        # Create mock request
         mock_request = MagicMock(spec=Request)
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = {}
+        mock_request.app = mock_app
+        mock_request.app.state = mock_app.state
 
-        with patch.object(rate_limiter, "is_rate_limited", return_value=False):
-            result = await test_func(mock_request)
+        # Execute
+        result = await test_func(mock_request)
 
-            assert result == {"message": "Hello"}
+        # Assert
+        assert result == {"message": "Hello"}
+        mock_limiter.is_allowed.assert_called_once()
 
-    @pytest.mark.skip(reason="Decorator implementation changed - is_rate_limited method doesn't exist")
     @pytest.mark.asyncio
     async def test_rate_limit_decorator_exceeded(self, mock_redis):
         """Test rate limit decorator when limit is exceeded"""
@@ -231,18 +235,29 @@ class TestRateLimitDecorator:
         async def test_func(request):
             return {"message": "Hello"}
 
-        from fastapi import Request
+        from fastapi import HTTPException, Request
 
+        # Create mock app with rate limiter
+        mock_limiter = AsyncMock()
+        mock_limiter.is_allowed = AsyncMock(return_value=(False, {"remaining": 0, "reset_time": 1234567890}))
+
+        mock_app = MagicMock()
+        mock_app.state.rate_limiter = mock_limiter
+
+        # Create mock request
         mock_request = MagicMock(spec=Request)
         mock_request.client.host = "127.0.0.1"
         mock_request.headers = {}
+        mock_request.app = mock_app
+        mock_request.app.state = mock_app.state
 
-        from fastapi import HTTPException
-
-        with patch.object(rate_limiter, "is_rate_limited", return_value=True), pytest.raises(HTTPException) as exc_info:
+        # Execute and assert exception
+        with pytest.raises(HTTPException) as exc_info:
             await test_func(mock_request)
 
+        # Assert
         assert exc_info.value.status_code == 429
+        mock_limiter.is_allowed.assert_called_once()
 
 
 class TestRateLimitInfo:

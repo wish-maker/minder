@@ -41,17 +41,33 @@ def test_list_modules():
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Plugin enable/disable endpoints not implemented in API Gateway")
+@pytest.mark.integration
 def test_enable_plugin():
-    """Test enabling a plugin - SKIPPED (endpoint not implemented)"""
-    pass
+    """Test enabling a plugin - INTEGRATION TEST (endpoint not implemented yet)"""
+    print("\n🔧 Testing plugin enable...")
+    try:
+        # TODO: Implement this endpoint in API Gateway
+        # POST /v1/plugins/{plugin_id}/enable
+        print("   ℹ️  This test requires API Gateway endpoint implementation")
+        pytest.skip("Plugin enable endpoint not implemented in API Gateway")
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+        pytest.fail(f"Plugin enable test failed: {e}")
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Plugin enable/disable endpoints not implemented in API Gateway")
+@pytest.mark.integration
 def test_disable_plugin():
-    """Test disabling a plugin - SKIPPED (endpoint not implemented)"""
-    pass
+    """Test disabling a plugin - INTEGRATION TEST (endpoint not implemented yet)"""
+    print("\n🔧 Testing plugin disable...")
+    try:
+        # TODO: Implement this endpoint in API Gateway
+        # POST /v1/plugins/{plugin_id}/disable
+        print("   ℹ️  This test requires API Gateway endpoint implementation")
+        pytest.skip("Plugin disable endpoint not implemented in API Gateway")
+    except Exception as e:
+        print(f"   ❌ Error: {e}")
+        pytest.fail(f"Plugin disable test failed: {e}")
 
 
 def main():
