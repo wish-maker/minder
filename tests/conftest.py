@@ -196,6 +196,28 @@ def mock_redis_client():
 
 
 @pytest.fixture(scope="function")
+def mock_redis_client_with_pipeline():
+    """Mock Redis client with properly configured pipeline"""
+    from unittest.mock import AsyncMock, Mock
+
+    def create_mock_pipeline(zcard_result=0):
+        """Helper to create a properly configured mock pipeline"""
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.zremrangebyscore = AsyncMock(return_value=0)
+        mock_pipeline.zcard = AsyncMock(return_value=zcard_result)
+        mock_pipeline.zadd = AsyncMock(return_value=1)
+        mock_pipeline.expire = AsyncMock(return_value=True)
+        mock_pipeline.execute = AsyncMock(return_value=[0, zcard_result, 1, True])
+        return mock_pipeline
+
+    redis = AsyncMock(spec=Redis)
+    redis.pipeline = Mock(return_value=create_mock_pipeline(0))
+    return redis
+
+
+@pytest.fixture(scope="function")
 def mock_http_client():
     """Mock HTTP client"""
     return AsyncMock()
