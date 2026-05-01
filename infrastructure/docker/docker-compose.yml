@@ -448,7 +448,6 @@ services:
     command:
     - --config
     - /etc/telegraf/telegraf.conf
-    - --non-strict-env-handling
     healthcheck:
       test:
       - CMD
@@ -530,7 +529,7 @@ services:
     profiles:
     - monitoring
   openwebui:
-    image: ghcr.io/open-webui/open-webui:git-69d0a16
+    image: ghcr.io/open-webui/open-webui:latest
     container_name: minder-openwebui
     restart: on-failure
     environment:

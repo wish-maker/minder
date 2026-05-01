@@ -254,7 +254,8 @@ start_services() {
 
     # Start monitoring stack
     log_info "Starting monitoring stack (InfluxDB, Telegraf, Prometheus, Grafana)..."
-    docker compose -f infrastructure/docker/docker-compose.yml up -d influxdb telegraf prometheus grafana alertmanager
+    docker compose -f infrastructure/docker/docker-compose.yml up -d influxdb telegraf
+    docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring up -d prometheus grafana alertmanager
 
     # Wait for monitoring services
     sleep 20
@@ -265,7 +266,7 @@ start_services() {
 
     # Start metrics exporters
     log_info "Starting metrics exporters..."
-    docker compose -f infrastructure/docker/docker-compose.yml up -d postgres-exporter redis-exporter
+    docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring up -d postgres-exporter redis-exporter
 
     log_success "All services started ✓"
 }
