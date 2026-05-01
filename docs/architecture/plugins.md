@@ -1,7 +1,7 @@
 # Minder Plugin Architecture
 
 ## Overview
-Minder artık tam **plugin tabanlı** bir sistem! Her yerde tutarlı "plugins" terminolojisi.
+Minder is now a fully **plugin-based** system! Consistent "plugins" terminology everywhere.
 
 ## Architecture
 
@@ -64,7 +64,7 @@ GET /plugins
       "status": "ready",
       "metadata": {
         "version": "1.0.0",
-        "description": "TEFAS Türkiye yatırım fonları analizi",
+        "description": "TEFAS Turkey investment fund analysis",
         "capabilities": ["real_time_data", "historical_analysis"]
       }
     }
@@ -139,11 +139,11 @@ results = await kernel.run_plugin_pipeline(plugin_name)
 
 ## File Naming
 
-Plugin dosyaları iki uzantıyı destekler:
-- `{plugin_name}_plugin.py` (tercih edilen)
-- `{plugin_name}_module.py` (geriye dönük uyumluluk)
+Plugin files support two extensions:
+- `{plugin_name}_plugin.py` (preferred)
+- `{plugin_name}_module.py` (backward compatibility)
 
-Örnek:
+Example:
 - `plugins/fund/fund_plugin.py` ✅
 - `plugins/fund/fund_module.py` ✅
 - `plugins/tefas/tefas_plugin.py` ✅
@@ -152,24 +152,24 @@ Plugin dosyaları iki uzantıyı destekler:
 ## Benefits
 
 ### 1. **Consistency**
-- Her yerde aynı terim: "plugins"
-- Dizin adı → Config → API → Kod (hepsi tutarlı)
-- Karışıklık yok
+- Same term everywhere: "plugins"
+- Directory name → Config → API → Code (all consistent)
+- No confusion
 
 ### 2. **Clarity**
-- "Plugin" = eklenebilir, modüler component
-- Daha açıklayıcı ve standart
-- Endüstri standardı (WordPress, VS Code, Chrome)
+- "Plugin" = pluggable, modular component
+- More descriptive and standard
+- Industry standard (WordPress, VS Code, Chrome)
 
 ### 3. **Backward Compatibility**
-- Hem `_plugin.py` hem `_module.py` uzantıları desteklenir
-- Eski plugin'ler çalışmaya devam eder
-- Yavaş geçiş imkanı
+- Both `_plugin.py` and `_module.py` extensions supported
+- Old plugins continue to work
+- Gradual migration possible
 
 ### 4. **Better UX**
-- API endpoint'leri daha anlaşılır: `/plugins` vs `/modules`
-- Log mesajları daha net: "Loading plugin" vs "Loading module"
-- Dokümantasyon tutarlı
+- API endpoints more understandable: `/plugins` vs `/modules`
+- Log messages clearer: "Loading plugin" vs "Loading module"
+- Consistent documentation
 
 ## Current Plugins
 

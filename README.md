@@ -173,16 +173,16 @@ curl http://localhost:9093/-/healthy  # Alertmanager
 
 ### GitHub Actions
 
-Minder platformu aşağıdaki GitHub Actions workflows'larını kullanıyor:
+The Minder platform uses the following GitHub Actions workflows:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| **Test Suite** | Push, PR, Manuel | Unit tests, Integration tests, E2E tests, Code quality |
-| **Security Scan** | Push, PR, Haftalık | CodeQL, Bandit, Safety, Trivy, Secrets scan, License compliance |
-| **Docker Image Auto-Update** | Haftalık (Pazartesi 09:00 UTC), Manuel | Docker imajlarını en son sürüme güncelleme, PR oluşturma |
+| **Test Suite** | Push, PR, Manual | Unit tests, Integration tests, E2E tests, Code quality |
+| **Security Scan** | Push, PR, Weekly | CodeQL, Bandit, Safety, Trivy, Secrets scan, License compliance |
+| **Docker Image Auto-Update** | Weekly (Monday 09:00 UTC), Manual | Update Docker images to latest version, create PR |
 | **CI/CD Pipeline** | Push, PR | Build, Test, Deploy (staging/production) |
 
-### Güvenlik Özellikleri
+### Security Features
 
 - ✅ **Traefik Reverse Proxy** - SSL/TLS, Load balancing
 - ✅ **Authelia SSO** - Single Sign-On + 2FA (TOTP, WebAuthn)
@@ -194,10 +194,10 @@ Minder platformu aşağıdaki GitHub Actions workflows'larını kullanıyor:
 - ✅ **Secrets Scanning** - TruffleHog
 - ✅ **License Compliance** - pip-licenses
 
-### Güvenlik Testleri
+### Security Tests
 
 ```bash
-# Manuel güvenlik taraması
+# Manual security scan
 cd /root/minder
 
 # Bandit scan
@@ -215,13 +215,13 @@ trufflehog . --only-verified
 
 ### Docker Auto-Update
 
-Proje otomatik olarak Docker imajlarını en son sürüme güncellemek için GitHub Action kullanıyor:
+The project uses GitHub Action to automatically update Docker images to the latest version:
 
-- **Trigger:** Her hafta pazartesi 09:00 UTC
-- **Action:** Docker imajlarını kontrol et, güncelleme PR'ı oluştur
-- **Manual:** `workflow_dispatch` ile manuel tetiklenebilir
+- **Trigger:** Every Monday 09:00 UTC
+- **Action:** Check Docker images, create update PR
+- **Manual:** Can be triggered manually with `workflow_dispatch`
 
-**Örnek PR:**
+**Example PR:**
 ```bash
 # Manual trigger:
 github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
