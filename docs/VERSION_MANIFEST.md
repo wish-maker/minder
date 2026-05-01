@@ -70,7 +70,7 @@
 
 ## 🔍 Version Audit History
 
-### 2026-05-01 - v1.0.0 Release
+### 2026-05-01 - v1.0.0 Release (Service Startup Fixes)
 
 **Critical Fixes:**
 - ✅ Qdrant: v1.18.0 → v1.17.1 (v1.18.0 never released)
@@ -79,6 +79,13 @@
 - ✅ Python: 3.11 → 3.12 (15% performance gain)
 - ✅ HTTPX: 0.27.0 → 0.25.2 (ollama compatibility fix)
 - ✅ Ollama: 0.1.0 → 0.1.7 (httpx compatibility)
+
+**Service Startup Issues Resolved:**
+- ✅ Telegraf: Removed invalid `--non-strict-env-handling` flag
+- ✅ OpenWebUI: Updated image from git-69d0a16 to latest
+- ✅ Monitoring Stack: Added `--profile monitoring` for Prometheus, Grafana, Alertmanager
+- ✅ Metrics Exporters: Added `--profile monitoring` for Postgres/Redis exporters
+- ✅ All 23 services now running successfully (22 healthy)
 
 **Standardization:**
 - ✅ All Python services now use FastAPI 0.115.0
