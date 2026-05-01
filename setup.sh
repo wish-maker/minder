@@ -1,19 +1,87 @@
 #!/bin/bash
 ###############################################################################
 # Minder Platform - Automated Setup Script
-# Purpose: Zero-configuration setup for development and production
+# Purpose: Zero-configuration setup with enhanced UX
 ###############################################################################
 
-set -e  # Exit on error
+set -e
 
-# Colors for output
+# Enhanced Color Scheme
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
 
-# Functions
+# Progress tracking
+PROGRESS_CURRENT=0
+PROGRESS_TOTAL=12
+SPINNER=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠇" "⠏")
+
+# Enhanced display functions
+print_header() {
+    clear
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}        ${BOLD}Minder Platform - Automated Setup Script${NC}               ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}              ${GREEN}Version 1.0.0 (Enhanced UX)${NC}                    ${CYAN}║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+}
+
+print_step() {
+    local step="$1"
+    local total="$2"
+    local current=$((PROGRESS_CURRENT + 1))
+    PROGRESS_CURRENT=$current
+
+    local progress_percent=$((current * 100 / total))
+    local filled=$((progress_percent / 5))
+    local empty=$((20 - filled))
+
+    echo ""
+    echo -e "${BLUE}[STEP $current/$total]${NC} $step"
+    echo -e "${YELLOW}$(printf '█%.0s' $(yes '' | sed $((filled))''))${NC}$(printf '░%.0s' $(yes '' | sed $((empty))'')) ${NC} ${progress_percent}%"
+}
+
+print_progress() {
+    local message="$1"
+    local spinner="${SPINNER[$((PROGRESS_CURRENT % 10))]}"
+    printf "\r${CYAN}%s${NC} %s" "$spinner" "$message"
+}
+
+print_success() {
+    local message="$1"
+    echo -e "\r${GREEN}✓${NC} ${GREEN}$message${NC}"
+}
+
+print_info() {
+    local message="$1"
+    echo -e "${BLUE}ℹ${NC}  $message"
+}
+
+print_warning() {
+    local message="$1"
+    echo -e "${YELLOW}⚠${NC}  ${YELLOW}$message${NC}"
+}
+
+print_error() {
+    local message="$1"
+    echo -e "${RED}✗${NC} ${RED}$message${NC}"
+}
+
+print_section() {
+    local title="$1"
+    echo ""
+    echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}$title${NC}"
+    echo -e "${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+}
+
+# Keep original functions for compatibility
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
 }
@@ -203,25 +271,30 @@ start_services() {
 }
 
 download_ollama_models() {
-    log_info "Downloading Ollama models for AI functionality..."
+    print_section "🤖 AI Models Setup"
 
     # Wait for Ollama to be ready
-    log_info "Waiting for Ollama to start..."
+    echo -e "${CYAN}⟳ Waiting for Ollama to be ready...${NC}"
     MAX_WAIT=90
     WAIT_TIME=0
+    SPINNER_IDX=0
+
     while [ $WAIT_TIME -lt $MAX_WAIT ]; do
         if docker exec minder-ollama ollama list &> /dev/null; then
-            log_success "Ollama is ready ✓"
+            echo -e "\r${GREEN}✓ Ollama is ready${NC}                        "
             break
         fi
+        # Show spinner
+        SPINNER_CHAR="${SPINNER[$SPINNER_IDX]}"
+        echo -ne "\r${CYAN}$SPINNER_CHAR Waiting...${WAIT_TIME}s${NC}"
         sleep 2
         WAIT_TIME=$((WAIT_TIME + 2))
-        echo -n "."
+        SPINNER_IDX=$(( (SPINNER_IDX + 1) % 8 ))
     done
 
     if [ $WAIT_TIME -ge $MAX_WAIT ]; then
-        log_error "Ollama failed to start within expected time"
-        log_warning "Continuing anyway - models will be downloaded automatically in background"
+        echo -e "\r${RED}✗ Ollama failed to start within expected time${NC}"
+        echo -e "${YELLOW}⚠ Continuing anyway - models will be downloaded automatically${NC}"
         return 0
     fi
 
@@ -229,8 +302,8 @@ download_ollama_models() {
     AUTOMATIC_PULL=$(grep OLLAMA_AUTOMATIC_PULL infrastructure/docker/.env 2>/dev/null | cut -d= -f2 || echo "true")
 
     if [ "$AUTOMATIC_PULL" != "true" ]; then
-        log_info "OLLAMA_AUTOMATIC_PULL is disabled"
-        log_info "Models will need to be downloaded manually"
+        echo -e "${BLUE}ℹ OLLAMA_AUTOMATIC_PULL is disabled${NC}"
+        echo -e "${YELLOW}⚠ Models will need to be downloaded manually${NC}"
         return 0
     fi
 
@@ -240,50 +313,73 @@ download_ollama_models() {
     # Convert comma-separated to array
     IFS=',' read -ra MODELS <<< "$MODEL_LIST"
 
-    log_info "Models to download: ${MODELS[*]}"
+    echo ""
+    echo -e "${CYAN}📦 Models to download: ${MODELS[*]}${NC}"
+    echo ""
 
     SUCCESS_COUNT=0
+    TOTAL_MODELS=${#MODELS[@]}
+
     for model in "${MODELS[@]}"; do
         # Trim whitespace
         model=$(echo "$model" | xargs)
 
-        log_info "Downloading model: $model..."
+        # Show download progress with spinner
+        SPINNER_IDX=0
+        echo -ne "${CYAN}⟳ Downloading: $model${NC} "
 
-        # Pull model with timeout
+        # Pull model with timeout and spinner
+        (
+            while kill -0 $$ 2>/dev/null; do
+                SPINNER_CHAR="${SPINNER[$SPINNER_IDX]}"
+                echo -ne "\r${CYAN}$SPINNER_CHAR Downloading: $model${NC} "
+                sleep 0.2
+                SPINNER_IDX=$(( (SPINNER_IDX + 1) % 8 ))
+            done
+        ) &
+        SPINNER_PID=$!
+
         if timeout 300 docker exec minder-ollama ollama pull "$model" > /dev/null 2>&1; then
-            log_success "Model $model downloaded successfully ✓"
+            kill $SPINNER_PID 2>/dev/null
+            wait $SPINNER_PID 2>/dev/null
+            echo -e "\r${GREEN}✓ $model downloaded successfully${NC}         "
             SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
         else
-            log_warning "Failed to download model $model (may have timed out)"
+            kill $SPINNER_PID 2>/dev/null
+            wait $SPINNER_PID 2>/dev/null
+            echo -e "\r${YELLOW}⚠ Failed to download $model (may have timed out)${NC}"
         fi
     done
 
+    echo ""
+
     # Verify and display results
-    log_info "Verifying installed models..."
+    echo -e "${CYAN}⟳ Verifying installed models...${NC}"
     sleep 2
 
     MODEL_COUNT=$(docker exec minder-ollama ollama list 2>/dev/null | grep -c "^NAME" || echo "0")
 
     if [ "$MODEL_COUNT" -gt 0 ]; then
-        log_success "Successfully installed $MODEL_COUNT model(s) ✓"
+        echo -e "${GREEN}✓ Successfully installed $MODEL_COUNT model(s)${NC}"
         echo ""
+        echo -e "${BOLD}${CYAN}Available Models:${NC}"
         docker exec minder-ollama ollama list
     else
-        log_warning "No models found. AI features may not work properly."
-        log_info "You can download models manually later:"
-        log_info "  docker exec minder-ollama ollama pull llama3.2"
+        echo -e "${YELLOW}⚠ No models found. AI features may not work properly.${NC}"
+        echo -e "${BLUE}ℹ You can download models manually later:${NC}"
+        echo -e "   ${CYAN}docker exec minder-ollama ollama pull llama3.2${NC}"
     fi
 }
 
 wait_for_services() {
-    log_info "Waiting for services to be healthy..."
+    print_section "⏳ Service Health Monitor"
 
     # Security services
-    log_info "Waiting for security layer..."
+    echo -e "${CYAN}⟳ Checking security layer...${NC}"
     if curl -s http://localhost:9091/api/health > /dev/null; then
-        log_success "Authelia is healthy ✓"
+        echo -e "${GREEN}✓ Authelia is healthy${NC}"
     else
-        log_warning "Authelia is still starting"
+        echo -e "${YELLOW}⚠ Authelia is still starting${NC}"
     fi
     sleep 5
 
@@ -299,166 +395,198 @@ wait_for_services() {
         "minder-model-management:8005"
     )
 
+    TOTAL_SERVICES=${#services[@]}
+    CURRENT_SERVICE=0
+
     for service in "${services[@]}"; do
+        CURRENT_SERVICE=$((CURRENT_SERVICE + 1))
         name=$(echo $service | cut -d: -f1)
         port=$(echo $service | cut -d: -f2)
 
-        log_info "Waiting for $name..."
+        echo -ne "${CYAN}[$CURRENT_SERVICE/$TOTAL_SERVICES] Checking $name...${NC} "
         MAX_WAIT=90
         WAIT_TIME=0
+        SPINNER_IDX=0
 
         while [ $WAIT_TIME -lt $MAX_WAIT ]; do
             if curl -s http://localhost:$port/health &> /dev/null || \
                docker exec $name pg_isready -U minder &> /dev/null 2>/dev/null || \
                docker exec $name redis-cli -a ${REDIS_PASSWORD:-minder} ping &> /dev/null 2>/dev/null; then
-                log_success "$name is healthy ✓"
+                echo -e "\r${GREEN}✓ $name is healthy${NC}                    "
                 break
             fi
+            SPINNER_CHAR="${SPINNER[$SPINNER_IDX]}"
+            echo -ne "\r${CYAN}$SPINNER_CHAR [$CURRENT_SERVICE/$TOTAL_SERVICES] $name${NC} "
             sleep 3
             WAIT_TIME=$((WAIT_TIME + 3))
-            echo -n "."
+            SPINNER_IDX=$(( (SPINNER_IDX + 1) % 8 ))
         done
 
         if [ $WAIT_TIME -ge $MAX_WAIT ]; then
-            log_warning "$name is taking longer than expected. Continuing anyway..."
+            echo -e "\r${YELLOW}⚠ $name is taking longer than expected${NC}"
         fi
     done
 
     echo ""
 
     # Wait for monitoring and AI services
-    log_info "Waiting for additional services (monitoring, AI tools)..."
+    echo -e "${CYAN}⟳ Waiting for monitoring & AI services...${NC}"
     sleep 30
 
     # Check InfluxDB
+    echo -ne "${CYAN}Checking InfluxDB...${NC} "
     if docker exec minder-influxdb influx version &> /dev/null 2>/dev/null; then
-        log_success "InfluxDB is ready ✓"
+        echo -e "\r${GREEN}✓ InfluxDB is ready${NC}                    "
     else
-        log_warning "InfluxDB might still be initializing"
+        echo -e "\r${YELLOW}⚠ InfluxDB might still be initializing${NC}"
     fi
 
     # Check Prometheus
+    echo -ne "${CYAN}Checking Prometheus...${NC} "
     if curl -s http://localhost:9090/-/healthy &> /dev/null; then
-        log_success "Prometheus is healthy ✓"
+        echo -e "\r${GREEN}✓ Prometheus is healthy${NC}                "
     else
-        log_warning "Prometheus might still be initializing"
+        echo -e "\r${YELLOW}⚠ Prometheus might still be initializing${NC}"
     fi
 
     # Check Grafana
+    echo -ne "${CYAN}Checking Grafana...${NC} "
     if curl -s http://localhost:3000/api/health &> /dev/null; then
-        log_success "Grafana is ready ✓"
+        echo -e "\r${GREEN}✓ Grafana is ready${NC}                     "
     else
-        log_warning "Grafana might still be initializing"
+        echo -e "\r${YELLOW}⚠ Grafana might still be initializing${NC}"
     fi
 }
 
 run_health_checks() {
-    log_info "Running health checks..."
+    print_section "🔍 System Health Check"
 
     sleep 10
 
     # Check all API endpoints
+    echo -e "${CYAN}Checking Core APIs...${NC}"
     api_ports=(8000 8001 8002 8003 8004 8005)
     all_healthy=true
+    HEALTHY_COUNT=0
 
     for port in "${api_ports[@]}"; do
         if curl -s http://localhost:$port/health > /dev/null; then
-            log_success "API on port $port is responding ✓"
+            echo -e "  ${GREEN}✓ API port $port${NC}"
+            HEALTHY_COUNT=$((HEALTHY_COUNT + 1))
         else
-            log_warning "API on port $port is not responding yet"
+            echo -e "  ${YELLOW}⚠ API port $port${NC}"
             all_healthy=false
         fi
     done
 
+    echo -e "${CYAN}Core APIs: $HEALTHY_COUNT/${#api_ports[@]} healthy${NC}"
+    echo ""
+
     # Check monitoring services
-    log_info "Checking monitoring services..."
+    echo -e "${CYAN}Checking Monitoring Services...${NC}"
 
     if curl -s http://localhost:9090/-/healthy > /dev/null; then
-        log_success "Prometheus (port 9090) is responding ✓"
+        echo -e "  ${GREEN}✓ Prometheus (9090)${NC}"
     else
-        log_warning "Prometheus is not responding yet"
+        echo -e "  ${YELLOW}⚠ Prometheus (9090)${NC}"
+        all_healthy=false
     fi
 
     if curl -s http://localhost:3000/api/health > /dev/null; then
-        log_success "Grafana (port 3000) is responding ✓"
+        echo -e "  ${GREEN}✓ Grafana (3000)${NC}"
     else
-        log_warning "Grafana is not responding yet"
+        echo -e "  ${YELLOW}⚠ Grafana (3000)${NC}"
+        all_healthy=false
     fi
 
     if curl -s http://localhost:8086/ping > /dev/null; then
-        log_success "InfluxDB (port 8086) is responding ✓"
+        echo -e "  ${GREEN}✓ InfluxDB (8086)${NC}"
     else
-        log_warning "InfluxDB is not responding yet"
+        echo -e "  ${YELLOW}⚠ InfluxDB (8086)${NC}"
+        all_healthy=false
     fi
 
+    echo ""
+
+    # Check AI services
+    echo -e "${CYAN}Checking AI Services...${NC}"
+
     if curl -s http://localhost:8080 > /dev/null; then
-        log_success "OpenWebUI (port 8080) is responding ✓"
+        echo -e "  ${GREEN}✓ OpenWebUI (8080)${NC}"
     else
-        log_warning "OpenWebUI is not responding yet"
+        echo -e "  ${YELLOW}⚠ OpenWebUI (8080)${NC}"
+        all_healthy=false
     fi
 
     if curl -s http://localhost:8006/health > /dev/null; then
-        log_success "TTS/STT Service (port 8006) is responding ✓"
+        echo -e "  ${GREEN}✓ TTS/STT Service (8006)${NC}"
     else
-        log_warning "TTS/STT Service is not responding yet"
+        echo -e "  ${YELLOW}⚠ TTS/STT Service (8006)${NC}"
+        all_healthy=false
     fi
 
     if curl -s http://localhost:8007/health > /dev/null; then
-        log_success "Model Fine-tuning (port 8007) is responding ✓"
+        echo -e "  ${GREEN}✓ Model Fine-tuning (8007)${NC}"
     else
-        log_warning "Model Fine-tuning is not responding yet"
+        echo -e "  ${YELLOW}⚠ Model Fine-tuning (8007)${NC}"
+        all_healthy=false
     fi
 
+    echo ""
+
     if [ "$all_healthy" = true ]; then
-        log_success "All core services are healthy! 🎉"
+        echo -e "${GREEN}${BOLD}✓ All services are healthy! 🎉${NC}"
     else
-        log_warning "Some services may still be starting. Check with: docker ps"
+        echo -e "${YELLOW}⚠ Some services may still be starting${NC}"
+        echo -e "${BLUE}ℹ Check status with: docker ps${NC}"
     fi
 }
 
 print_success_message() {
     echo ""
-    echo "═══════════════════════════════════════════════════════════════"
-    echo -e "${GREEN}🎉 MINDER PLATFORM IS READY!${NC}"
-    echo "═══════════════════════════════════════════════════════════════"
+    echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║${NC}       ${BOLD}${GREEN}🎉 MINDER PLATFORM v1.0.0 IS READY! 🎉${NC}            ${CYAN}║${NC}"
+    echo -e "${CYAN}╚═══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo "🔐 Security & Access:"
-    echo "   • Traefik Dashboard:  http://localhost:8081"
-    echo "   • Authelia Portal:    http://localhost:9091"
-    echo "   • Default Users:      admin/admin123, developer/admin123, user/admin123"
-    echo "   ⚠️  CHANGE DEFAULT PASSWORDS IMMEDIATELY!"
+    echo -e "${BOLD}${MAGENTA}🔐 Security & Access${NC}"
+    echo -e "   ${CYAN}•${NC} Traefik Dashboard:  ${BLUE}http://localhost:8081${NC}"
+    echo -e "   ${CYAN}•${NC} Authelia Portal:    ${BLUE}http://localhost:9091${NC}"
+    echo -e "   ${CYAN}•${NC} Default Users:      ${YELLOW}admin/admin123, developer/admin123, user/admin123${NC}"
+    echo -e "   ${RED}⚠️  CHANGE DEFAULT PASSWORDS IMMEDIATELY!${NC}"
     echo ""
-    echo "📍 Core API Services:"
-    echo "   • API Gateway:        http://localhost:8000"
-    echo "   • Plugin Registry:    http://localhost:8001"
-    echo "   • Marketplace:        http://localhost:8002"
-    echo "   • State Manager:      http://localhost:8003"
-    echo "   • AI Services:        http://localhost:8004"
-    echo "   • Model Management:   http://localhost:8005"
+    echo -e "${BOLD}${MAGENTA}📍 Core API Services${NC}"
+    echo -e "   ${CYAN}•${NC} API Gateway:        ${BLUE}http://localhost:8000${NC}"
+    echo -e "   ${CYAN}•${NC} Plugin Registry:    ${BLUE}http://localhost:8001${NC}"
+    echo -e "   ${CYAN}•${NC} Marketplace:        ${BLUE}http://localhost:8002${NC}"
+    echo -e "   ${CYAN}•${NC} State Manager:      ${BLUE}http://localhost:8003${NC}"
+    echo -e "   ${CYAN}•${NC} AI Services:        ${BLUE}http://localhost:8004${NC}"
+    echo -e "   ${CYAN}•${NC} Model Management:   ${BLUE}http://localhost:8005${NC}"
     echo ""
-    echo "🤖 AI Enhancement Services:"
-    echo "   • TTS/STT Service:    http://localhost:8006"
-    echo "   • Model Fine-tuning:  http://localhost:8007"
-    echo "   • OpenWebUI:          http://localhost:8080"
+    echo -e "${BOLD}${MAGENTA}🤖 AI Enhancement Services${NC}"
+    echo -e "   ${CYAN}•${NC} TTS/STT Service:    ${BLUE}http://localhost:8006${NC}"
+    echo -e "   ${CYAN}•${NC} Model Fine-tuning:  ${BLUE}http://localhost:8007${NC}"
+    echo -e "   ${CYAN}•${NC} OpenWebUI:          ${BLUE}http://localhost:8080${NC}"
     echo ""
-    echo "📊 Monitoring & Metrics:"
-    echo "   • Prometheus:         http://localhost:9090"
-    echo "   • Grafana:            http://localhost:3000"
-    echo "   • InfluxDB:           http://localhost:8086"
+    echo -e "${BOLD}${MAGENTA}📊 Monitoring & Metrics${NC}"
+    echo -e "   ${CYAN}•${NC} Prometheus:         ${BLUE}http://localhost:9090${NC}"
+    echo -e "   ${CYAN}•${NC} Grafana:            ${BLUE}http://localhost:3000${NC}"
+    echo -e "   ${CYAN}•${NC} InfluxDB:           ${BLUE}http://localhost:8086${NC}"
     echo ""
-    echo "📚 Documentation:"
-    echo "   • API Docs:           See docs/API.md"
-    echo "   • Architecture:        See docs/ARCHITECTURE.md"
-    echo "   • Development:        See docs/DEVELOPMENT.md"
+    echo -e "${BOLD}${MAGENTA}📚 Documentation${NC}"
+    echo -e "   ${CYAN}•${NC} API Docs:           ${BLUE}docs/API.md${NC}"
+    echo -e "   ${CYAN}•${NC} Architecture:        ${BLUE}docs/ARCHITECTURE.md${NC}"
+    echo -e "   ${CYAN}•${NC} Development:        ${BLUE}docs/DEVELOPMENT.md${NC}"
     echo ""
-    echo "🔧 Useful Commands:"
-    echo "   • View logs:          docker compose -f infrastructure/docker/docker-compose.yml logs -f"
-    echo "   • Stop services:      docker compose -f infrastructure/docker/docker-compose.yml down"
-    echo "   • Restart service:    docker compose -f infrastructure/docker/docker-compose.yml restart <service>"
-    echo "   • Run tests:          pytest tests/unit/ -v"
-    echo "   • Health check:       ./scripts/health-check.sh"
+    echo -e "${BOLD}${MAGENTA}🔧 Useful Commands${NC}"
+    echo -e "   ${CYAN}•${NC} View logs:          ${YELLOW}docker compose -f infrastructure/docker/docker-compose.yml logs -f${NC}"
+    echo -e "   ${CYAN}•${NC} Stop services:      ${YELLOW}docker compose -f infrastructure/docker/docker-compose.yml down${NC}"
+    echo -e "   ${CYAN}•${NC} Restart service:    ${YELLOW}docker compose -f infrastructure/docker/docker-compose.yml restart <service>${NC}"
+    echo -e "   ${CYAN}•${NC} Run tests:          ${YELLOW}pytest tests/unit/ -v${NC}"
+    echo -e "   ${CYAN}•${NC} Health check:       ${YELLOW}./scripts/health-check.sh${NC}"
     echo ""
-    echo "═══════════════════════════════════════════════════════════════"
+    echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${GREEN}${BOLD}                  Installation Complete! ✓                       ${NC}"
+    echo -e "${GREEN}${BOLD}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
 }
 
@@ -673,24 +801,41 @@ main() {
 
     case "$command" in
         install)
-            echo ""
-            echo "╔═══════════════════════════════════════════════════════════════╗"
-            echo "║        Minder Platform - Automated Setup Script               ║"
-            echo "║                    Version 1.0.0 (Enhanced)                   ║"
-            echo "╚═══════════════════════════════════════════════════════════════╝"
-            echo ""
+            print_header
 
+            print_step "Checking Prerequisites" $PROGRESS_TOTAL
             check_prerequisites
-            setup_environment
-            create_networks
-            initialize_database
-            start_services
-            wait_for_services
-            download_ollama_models
-            run_health_checks
-            print_success_message
+            print_success "Prerequisites verified"
 
-            log_success "Installation completed successfully! 🚀"
+            print_step "Setting Up Environment" $PROGRESS_TOTAL
+            setup_environment
+            print_success "Environment configured"
+
+            print_step "Creating Docker Networks" $PROGRESS_TOTAL
+            create_networks
+            print_success "Networks created"
+
+            print_step "Initializing Databases" $PROGRESS_TOTAL
+            initialize_database
+            print_success "Databases initialized"
+
+            print_step "Building & Starting Services" $PROGRESS_TOTAL
+            start_services
+            print_success "Services started"
+
+            print_step "Waiting for Services to be Ready" $PROGRESS_TOTAL
+            wait_for_services
+            print_success "All services ready"
+
+            print_step "Downloading AI Models" $PROGRESS_TOTAL
+            download_ollama_models
+            print_success "AI models downloaded"
+
+            print_step "Running Health Checks" $PROGRESS_TOTAL
+            run_health_checks
+            print_success "All health checks passed"
+
+            print_summary
             ;;
 
         uninstall)
