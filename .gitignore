@@ -156,6 +156,10 @@ test-results/
 test-reports/
 *.test.log
 
+# AI Agent Working Directories
+docs/superpowers/
+docs/superpowers/**/*
+
 # ============================================================================
 # ✅ TEAM COLLABORATION (Keep These!)
 # ============================================================================
