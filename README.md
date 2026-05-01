@@ -232,8 +232,8 @@ github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
 1. Check latest tags from Docker Hub API
 2. Compare current version with new version
 3. Update Docker Compose file
-4. Auto-update branch oluştur
-5. Pull Request aç (otomatik)
+4. Create auto-update branch
+5. Open Pull Request (automatic)
 
 ### Monitoring & Alerting
 

@@ -224,10 +224,10 @@ requests.post("http://localhost:8000/plugins/weather/enable")
 5. **Method names**: `*_module_*()` → `*_plugin_*()`
 
 ### What Stayed the Same
-1. **BaseModule interface**: Aynı
-2. **Plugin structure**: Aynı
-3. **Capabilities**: Aynı
-4. **Functionality**: Aynı
+1. **BaseModule interface**: Same
+2. **Plugin structure**: Same
+3. **Capabilities**: Same
+4. **Functionality**: Same
 
 ### Migration Checklist
 - [x] Rename `modules/` → `plugins/`
@@ -240,12 +240,12 @@ requests.post("http://localhost:8000/plugins/weather/enable")
 
 ## Conclusion
 
-Minder artık **tam tutarlı plugin sistemi**!
+Minder now has a **fully consistent plugin system**!
 
-✅ Dizin: `plugins/`
+✅ Directory: `plugins/`
 ✅ Config: `plugins:`
 ✅ API: `/plugins`
-✅ Kod: `PluginRegistry`, `load_all_plugins()`
-✅ Terminoloji: Her yerde "plugins"
+✅ Code: `PluginRegistry`, `load_all_plugins()`
+✅ Terminology: "plugins" everywhere
 
-Daha net, daha standart, daha anlaşılır! 🚀
+Clearer, more standard, more understandable! 🚀
