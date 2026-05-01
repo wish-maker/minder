@@ -223,15 +223,15 @@ Proje otomatik olarak Docker imajlarını en son sürüme güncellemek için Git
 
 **Örnek PR:**
 ```bash
-# Manuel tetiklemek için:
+# Manual trigger:
 github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
-# "Run workflow" butonuna tıkla
+# Click "Run workflow" button
 ```
 
-**Docker Güncelleme Adımları:**
-1. Docker Hub API'den en son tag'ları kontrol et
-2. Mevcut sürümü yeni sürümle karşılaştır
-3. Docker Compose dosyasını güncelle
+**Docker Update Steps:**
+1. Check latest tags from Docker Hub API
+2. Compare current version with new version
+3. Update Docker Compose file
 4. Auto-update branch oluştur
 5. Pull Request aç (otomatik)
 
