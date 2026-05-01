@@ -1,5 +1,5 @@
 """
-Comprehensive test configuration for Minder services.
+Conprehensive test configuration for Minder services.
 Provides fixtures and utilities for unit, integration, and E2E tests.
 """
 
@@ -7,10 +7,8 @@ import asyncio
 import importlib.util
 import os
 import sys
-
-# Import FastAPI apps (optional, try-except for unit tests)
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import asyncpg
 import pytest
@@ -155,6 +153,56 @@ def redis_client(redis_url):
         return None
 
 
+@pytest.fixture(scope="function")
+def redis_client_mock():
+    """Mock Redis client for integration tests (avoid DNS issues)"""
+    mock_client = MagicMock()
+    mock_client.get.return_value = None
+    mock_client.set.return_value = True
+    mock_client.delete.return_value = True
+    mock_client.exists.return_value = False
+    mock_client.pipeline.return_value = MagicMock()
+
+    return mock_client
+
+
+# Auto-use fixture to mock Redis globally for integration tests
+@pytest.fixture(scope="session", autouse=True)
+def patch_redis_globally():
+    """Auto-use fixture to patch Redis globally for integration tests"""
+    # Create mock Redis client
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+    mock_redis.set.return_value = True
+    mock_redis.delete.return_value = True
+    mock_redis.exists.return_value = False
+    mock_redis.pipeline.return_value = MagicMock()
+    mock_redis.close.return_value = None
+
+    # Patch Redis globally to avoid DNS issues
+    with patch('redis.from_url', return_value=mock_redis):
+        yield
+
+
+@pytest.fixture(scope="function")
+def mock_redis_pipeline():
+    """Mock Redis pipeline for tests"""
+
+    def create_mock_pipeline(zcard_result=0):
+        """Helper to create a properly configured mock pipeline"""
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.zremrangebyscore = AsyncMock(return_value=0)
+        mock_pipeline.zcard = AsyncMock(return_value=zcard_result)
+        mock_pipeline.zadd = AsyncMock(return_value=1)
+        mock_pipeline.expire = AsyncMock(return_value=True)
+        mock_pipeline.execute = AsyncMock(return_value=[0, zcard_result, 1, True])
+        return mock_pipeline
+
+    return create_mock_pipeline
+
+
 @pytest_asyncio.fixture(scope="function")
 async def test_redis(redis_url):
     """Create test Redis client"""
@@ -182,38 +230,8 @@ async def test_client():
 @pytest.fixture(scope="function")
 def gateway_test_client():
     """Create gateway test client"""
-    # Access the FastAPI app from the module
+    # Access to FastAPI app from the module
     return TestClient(gateway_app.app) if gateway_app else TestClient(None)
-
-
-@pytest.fixture(scope="function")
-def registry_test_client():
-    """Create registry test client"""
-    return TestClient(registry_app)
-
-
-@pytest.fixture(scope="function")
-def marketplace_test_client():
-    """Create marketplace test client"""
-    return TestClient(marketplace_app)
-
-
-@pytest.fixture(scope="function")
-def rag_test_client():
-    """Create RAG test client"""
-    return TestClient(rag_app)
-
-
-@pytest.fixture(scope="function")
-def model_test_client():
-    """Create model management test client"""
-    return TestClient(model_app)
-
-
-@pytest.fixture(scope="function")
-def tts_test_client():
-    """Create TTS/STT test client"""
-    return TestClient(tts_app)
 
 
 # Auth fixtures
@@ -239,26 +257,31 @@ def mock_postgres_pool():
 
 
 @pytest.fixture(scope="function")
+def mock_redis():
+    """Mock Redis"""
+    return AsyncMock()
+
+
+@pytest.fixture(scope="function")
 def mock_redis_client():
     """Mock Redis client"""
-    return AsyncMock(spec=Redis)
+    return AsyncMock()
 
 
 @pytest.fixture(scope="function")
 def mock_redis_client_with_pipeline():
     """Mock Redis client with properly configured pipeline"""
+
     from unittest.mock import AsyncMock, Mock
 
     def create_mock_pipeline(zcard_result=0):
         """Helper to create a properly configured mock pipeline"""
-        mock_pipeline = AsyncMock()
-        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
-        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
-        mock_pipeline.zremrangebyscore = AsyncMock(return_value=0)
-        mock_pipeline.zcard = AsyncMock(return_value=zcard_result)
-        mock_pipeline.zadd = AsyncMock(return_value=1)
-        mock_pipeline.expire = AsyncMock(return_value=True)
-        mock_pipeline.execute = AsyncMock(return_value=[0, zcard_result, 1, True])
+        mock_pipeline = Mock()
+        mock_pipeline.zremrangebyscore = Mock(return_value=0)
+        mock_pipeline.zcard = Mock(return_value=zcard_result)
+        mock_pipeline.zadd = Mock(return_value=1)
+        mock_pipeline.expire = Mock(return_value=True)
+        mock_pipeline.execute = Mock(return_value=[0, zcard_result, 1, True])
         return mock_pipeline
 
     redis = AsyncMock(spec=Redis)
@@ -348,204 +371,91 @@ def assert_response():
     return _assert
 
 
+# API Gateway specific fixtures
 @pytest.fixture(scope="function")
-def clean_redis_after(test_redis):
-    """Clean Redis after test"""
-    yield
-    asyncio.run(test_redis.flushdb())
+def gateway_test_client_no_redis():
+    """Create test client without Redis dependency (for testing without rate limiting)"""
+    # Access to FastAPI app from the module
+    if gateway_app:
+        with unittest.mock.patch("services.api-gateway.main.redis_client", return_value=None):
+            return TestClient(gateway_app.app)
+    else:
+        return TestClient(None)
+
+
+# E2E test specific fixtures
+@pytest.fixture(scope="session")
+def e2e_test_env():
+    """E2E test environment variables"""
+    return {
+        "TEST_REDIS_URL": "redis://localhost:6379/15",
+        "TEST_DATABASE_URL": "postgresql://test:test@localhost:5432/minder_test",
+        "JWT_SECRET": "test-secret-for-jwt-tokens",
+        "ENVIRONMENT": "test",
+    }
+
+
+@pytest.fixture(scope="session")
+def e2e_test_users():
+    """E2E test users"""
+    return {
+        "test_user": {
+            "username": "testuser",
+            "password": "testpass123",
+            "email": "test@example.com",
+        },
+        "test_admin": {
+            "username": "admin",
+            "password": "adminpass123",
+            "email": "admin@example.com",
+        },
+    }
+
+
+# Plugin test fixtures
+@pytest.fixture(scope="function")
+def mock_plugin_registry():
+    """Mock plugin registry"""
+    registry = AsyncMock()
+    registry.get_all_plugins = AsyncMock(return_value=[])
+    registry.get_plugin = AsyncMock(return_value=None)
+    registry.register_plugin = AsyncMock(return_value=True)
+    registry.unregister_plugin = AsyncMock(return_value=True)
+    return registry
 
 
 @pytest.fixture(scope="function")
-def time_tracker():
-    """Utility for tracking execution time"""
-    import time
-
-    times = {}
-
-    def _track(name: str):
-        times[name] = time.time()
-
-    def _elapsed(name: str) -> float:
-        return time.time() - times.get(name, 0)
-
-    yield {"track": _track, "elapsed": _elapsed}
-
-
-# Async test utilities
-@pytest_asyncio.fixture(scope="function")
-async def wait_for_condition(condition, timeout: float = 5.0, poll_interval: float = 0.1):
-    """Wait for a condition to become true"""
-    import time
-
-    start = time.time()
-
-    while time.time() - start < timeout:
-        if await condition():
-            return True
-        await asyncio.sleep(poll_interval)
-
-    raise TimeoutError(f"Condition not met within {timeout}s")
-
-
-# Performance testing fixtures
-@pytest.fixture(scope="function")
-def performance_tracker():
-    """Track performance metrics"""
-    metrics = {"response_times": [], "memory_usage": [], "cpu_usage": []}
-
-    def record_response_time(time_ms: float):
-        metrics["response_times"].append(time_ms)
-
-    def record_memory_usage(mb: float):
-        metrics["memory_usage"].append(mb)
-
-    def get_stats():
-        import statistics
-
-        if not metrics["response_times"]:
-            return {}
-
-        return {
-            "avg_response_time": statistics.mean(metrics["response_times"]),
-            "min_response_time": min(metrics["response_times"]),
-            "max_response_time": max(metrics["response_times"]),
-            "p95_response_time": (
-                statistics.quantiles(metrics["response_times"], n=20)[18]
-                if len(metrics["response_times"]) > 19
-                else max(metrics["response_times"])
-            ),
-            "avg_memory": statistics.mean(metrics["memory_usage"]) if metrics["memory_usage"] else 0,
-        }
-
-    yield {"record_response": record_response_time, "record_memory": record_memory_usage, "get_stats": get_stats}
-
-
-# Load testing fixtures
-@pytest.fixture(scope="function")
-async def load_tester():
-    """Load testing utility"""
-
-    async def run_load_test(
-        endpoint: str,
-        method: str = "GET",
-        concurrent_users: int = 10,
-        requests_per_user: int = 10,
-        delay_between_requests: float = 0.1,
-    ):
-        """Run load test"""
-        import time
-
-        async def make_request(client, url):
-            start = time.time()
-            try:
-                if method == "GET":
-                    response = await client.get(url)
-                else:
-                    response = await client.post(url)
-                elapsed = (time.time() - start) * 1000
-                return {
-                    "success": response.status_code < 400,
-                    "status_code": response.status_code,
-                    "response_time_ms": elapsed,
-                }
-            except Exception as e:
-                elapsed = (time.time() - start) * 1000
-                return {"success": False, "error": str(e), "response_time_ms": elapsed}
-
-        # Create test client
-        from httpx import AsyncClient
-
-        async with AsyncClient(base_url="http://test") as client:
-            results = []
-            total_requests = concurrent_users * requests_per_user
-
-            for i in range(concurrent_users):
-                for j in range(requests_per_user):
-                    result = await make_request(client, endpoint)
-                    results.append(result)
-
-                    if delay_between_requests > 0:
-                        await asyncio.sleep(delay_between_requests)
-
-            # Calculate stats
-            successful = [r for r in results if r["success"]]
-            failed = [r for r in results if not r["success"]]
-
-            if successful:
-                response_times = [r["response_time_ms"] for r in successful]
-                import statistics
-
-                stats = {
-                    "total_requests": total_requests,
-                    "successful": len(successful),
-                    "failed": len(failed),
-                    "success_rate": len(successful) / total_requests * 100,
-                    "avg_response_time_ms": statistics.mean(response_times),
-                    "min_response_time_ms": min(response_times),
-                    "max_response_time_ms": max(response_times),
-                    "p95_response_time_ms": (
-                        statistics.quantiles(response_times, n=20)[18]
-                        if len(response_times) > 19
-                        else max(response_times)
-                    ),
-                }
-            else:
-                stats = {
-                    "total_requests": total_requests,
-                    "successful": 0,
-                    "failed": total_requests,
-                    "success_rate": 0.0,
-                }
-
-            return stats
-
-    return run_load_test
-
-
-# Security testing fixtures
-@pytest.fixture(scope="function")
-async def security_tester():
-    """Security testing utility"""
-
-    async def test_sql_injection(test_client, endpoint: str, payloads: list):
-        """Test SQL injection payloads"""
-        results = []
-        for payload in payloads:
-            try:
-                response = await test_client.get(f"{endpoint}?query={payload}")
-                results.append(
-                    {
-                        "payload": payload,
-                        "status_code": response.status_code,
-                        "vulnerable": "syntax error" not in response.text.lower() and response.status_code != 500,
-                    }
-                )
-            except Exception as e:
-                results.append({"payload": payload, "error": str(e), "vulnerable": False})
-        return results
-
-    async def test_xss(test_client, endpoint: str, payloads: list):
-        """Test XSS payloads"""
-        results = []
-        for payload in payloads:
-            try:
-                response = await test_client.get(f"{endpoint}?input={payload}")
-                results.append(
-                    {"payload": payload, "status_code": response.status_code, "reflected": payload in response.text}
-                )
-            except Exception as e:
-                results.append({"payload": payload, "error": str(e), "reflected": False})
-        return results
-
-    return {"test_sql_injection": test_sql_injection, "test_xss": test_xss}
-
-
-# Pytest configuration
-def pytest_configure(config):
-    """Configure pytest"""
-    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
-    config.addinivalue_line("markers", "integration: marks tests as integration tests")
-    config.addinivalue_line("markers", "e2e: marks tests as end-to-end tests")
-    config.addinivalue_line("markers", "load: marks tests as load tests")
-    config.addinivalue_line("markers", "security: marks tests as security tests")
-    config.addinivalue_line("markers", "unit: marks tests as unit tests")
+def sample_plugin_list():
+    """Sample plugin list"""
+    return [
+        {
+            "name": "tefas",
+            "version": "1.0.0",
+            "description": "Türkiye yatırım fonları analizi (borsapy 0.8.7 + tefas-crawler integrated)",
+            "author": "Minder",
+            "status": "enabled",
+            "enabled": True,
+            "dependencies": [],
+            "capabilities": ["fund_data_collection", "historical_analysis", "fund_discovery", "kap_integration", "risk_metrics", "tax_rates", "fund_comparison", "technical_analysis", "fund_screening"],
+            "data_sources": ["TEFAS (via tefas-crawler)", "TEFAS (via borsapy 0.8.7)", "KAP"],
+            "databases": ["postgresql", "influxdb"],
+            "registered_at": "2026-05-01T06:41:40.555350",
+            "health_status": "healthy",
+            "last_health_check": "2026-05-01T09:07:23.594303"
+        },
+        {
+            "name": "weather",
+            "version": "1.0.0",
+            "description": "Weather data aggregation and analysis",
+            "author": "Minder",
+            "status": "enabled",
+            "enabled": True,
+            "dependencies": [],
+            "capabilities": ["weather_data_collection", "forecast_analysis", "seasonal_pattern_detection"],
+            "data_sources": ["Open-Meteo API"],
+            "databases": ["postgresql", "influxdb"],
+            "registered_at": "2026-05-01T06:41:37.654885",
+            "health_status": "healthy",
+            "last_health_check": "2026-05-01T09:07:23.559549"
+        },
+    ]

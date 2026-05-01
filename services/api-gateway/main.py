@@ -173,25 +173,30 @@ if settings.RATE_LIMIT_ENABLED:
         # Get identifier (JWT token subject or IP address)
         identifier = get_remote_address(request)
 
-        # Check rate limit in Redis
-        key = f"ratelimit:{identifier}"
-        current = redis_client.get(key)
+        # Check rate limit in Redis (with error handling)
+        try:
+            key = f"ratelimit:{identifier}"
+            current = redis_client.get(key)
 
-        if current is None:
-            # First request in window
-            redis_client.setex(key, 60, 1)
-        else:
-            count = int(current)
-            if count >= settings.RATE_LIMIT_PER_MINUTE:
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "error": "Rate limit exceeded",
-                        "limit": settings.RATE_LIMIT_PER_MINUTE,
-                        "window": "60 seconds",
-                    },
-                )
-            redis_client.incr(key)
+            if current is None:
+                # First request in window
+                redis_client.setex(key, 60, 1)
+            else:
+                count = int(current)
+                if count >= settings.RATE_LIMIT_PER_MINUTE:
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "error": "Rate limit exceeded",
+                            "limit": settings.RATE_LIMIT_PER_MINUTE,
+                            "window": "60 seconds",
+                        },
+                    )
+                redis_client.incr(key)
+        except Exception as e:
+            # Redis unavailable, bypass rate limiting (fail open)
+            logger.warning(f"Rate limiting unavailable: {e}")
+            pass
 
         return await call_next(request)
 
