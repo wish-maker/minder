@@ -6,6 +6,7 @@ Tests endpoint integration, auth, rate limiting, and error handling.
 import pytest
 import requests
 
+
 class TestAPIGatewayIntegration:
     """Simple integration tests for API Gateway"""
 
@@ -33,6 +34,7 @@ class TestAPIGatewayIntegration:
         """Test plugin detail endpoint"""
         response = requests.get("http://localhost:8000/v1/plugins/crypto")
         assert response.status_code in [200, 401, 404]
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

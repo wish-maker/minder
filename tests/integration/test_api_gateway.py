@@ -5,9 +5,8 @@ Tests endpoint integration, auth, rate limiting, and error handling.
 
 import pytest
 import pytest_asyncio
-from fastapi.testclient import TestClient
-
 from conftest import gateway_test_client, test_headers
+from fastapi.testclient import TestClient
 
 
 class TestAPIGatewayIntegration:
@@ -169,6 +168,7 @@ class TestAPIGatewayPerformance:
     @pytest.mark.slow
     def test_response_time(self, gateway_test_client, benchmark):
         """Test response time"""
+
         def request():
             gateway_test_client.get("/v1/plugins")
 
@@ -179,10 +179,7 @@ class TestAPIGatewayPerformance:
     async def test_load_capacity(self, gateway_test_client, load_tester):
         """Test load capacity"""
         stats = await load_tester(
-            endpoint="/v1/plugins",
-            concurrent_users=50,
-            requests_per_user=10,
-            delay_between_requests=0.01
+            endpoint="/v1/plugins", concurrent_users=50, requests_per_user=10, delay_between_requests=0.01
         )
 
         assert stats["total_requests"] == 500
@@ -223,11 +220,7 @@ class TestAPIGatewaySecurity:
 
     def test_sql_injection_prevention(self, gateway_test_client, security_tester):
         """Test SQL injection prevention"""
-        payloads = [
-            "1' OR '1'='1",
-            "1; DROP TABLE plugins--",
-            "1 UNION SELECT * FROM users"
-        ]
+        payloads = ["1' OR '1'='1", "1; DROP TABLE plugins--", "1 UNION SELECT * FROM users"]
 
         for payload in payloads:
             response = gateway_test_client.get(f"/v1/plugins/{payload}")
@@ -236,11 +229,7 @@ class TestAPIGatewaySecurity:
 
     def test_xss_prevention(self, gateway_test_client, security_tester):
         """Test XSS prevention"""
-        payloads = [
-            "<script>alert('xss')</script>",
-            "<img src=x onerror=alert('xss')>",
-            "javascript:alert('xss')"
-        ]
+        payloads = ["<script>alert('xss')</script>", "<img src=x onerror=alert('xss')>", "javascript:alert('xss')"]
 
         for payload in payloads:
             response = gateway_test_client.get(f"/v1/plugins?query={payload}")
@@ -281,7 +270,7 @@ class TestAPIGatewayE2E:
             ("/registry/v1/plugins", "Plugin Registry"),
             ("/marketplace/v1/plugins", "Marketplace"),
             ("/rag/v1/query", "RAG Pipeline"),
-            ("/models/v1/models", "Model Management")
+            ("/models/v1/models", "Model Management"),
         ]
 
         for path, service_name in services:
