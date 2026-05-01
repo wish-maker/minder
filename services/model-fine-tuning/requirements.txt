@@ -7,7 +7,7 @@ prometheus-client==0.20.0
 python-dotenv==1.0.0
 
 # Ollama for fine-tuning
-ollama>=0.3.0
+ollama==0.1.7
 
 # Dataset processing
 pandas==2.1.4
