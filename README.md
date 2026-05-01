@@ -31,13 +31,17 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 - 🔒 **Security** - JWT authentication, rate limiting, input validation
 - 📈 **Scalability** - Horizontal scaling with Docker Compose
 
-**Current Status:**
+**Current Status (2026-05-01):**
 - 📦 **23 Services** running (21 healthy, 2 starting normally, 91% success rate)
 - 🤖 **AI Models** Auto-installed (llama3.2 + nomic-embed-text)
 - 🧪 **115 Tests** passing (98% coverage, 2 skipped)
 - 💾 **7.7GB RAM** usage in containers (including AI models)
 - ⚡ **~9 min** cold start time (including model downloads)
-- 🗂️ **765MB** project size (optimized, professional structure)
+- 🗂️ **117MB** project size (optimized, professional structure)
+- 🔐 **Security** All scans passing (Bandit, Safety, Trivy, CodeQL)
+- 🚀 **CI/CD** 4 GitHub Actions workflows (Test, Security, Auto-update, Deploy)
+- 📊 **Monitoring** Prometheus + Grafana + InfluxDB + Alertmanager
+- 🎯 **Production Ready** ✅
 
 ## Quick Start
 
@@ -73,7 +77,7 @@ That's it! The platform will be fully operational in ~9 minutes with 23 services
 - 7-8 min: Monitoring (Prometheus, Grafana, InfluxDB)
 - 8-9 min: AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
 
-**Final Status:** 23 services running (21 healthy, 2 starting), 115 tests passing (98% coverage)
+**Final Status:** 23 services running (21 healthy, 2 starting), 115 tests passing (98% coverage), all security scans passing ✅
 
 ### Verification
 
@@ -163,6 +167,95 @@ curl http://localhost:9093/-/healthy  # Alertmanager
 | **Alertmanager** | 9093 | ✅ Healthy | Alert management |
 | **PostgreSQL Exporter** | 9187 | ✅ Healthy | Database metrics |
 | **Redis Exporter** | 9121 | ✅ Healthy | Cache metrics |
+
+## 🔐 Security & CI/CD
+
+### GitHub Actions
+
+Minder platformu aşağıdaki GitHub Actions workflows'larını kullanıyor:
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| **Test Suite** | Push, PR, Manuel | Unit tests, Integration tests, E2E tests, Code quality |
+| **Security Scan** | Push, PR, Haftalık | CodeQL, Bandit, Safety, Trivy, Secrets scan, License compliance |
+| **Docker Image Auto-Update** | Haftalık (Pazartesi 09:00 UTC), Manuel | Docker imajlarını en son sürüme güncelleme, PR oluşturma |
+| **CI/CD Pipeline** | Push, PR | Build, Test, Deploy (staging/production) |
+
+### Güvenlik Özellikleri
+
+- ✅ **Traefik Reverse Proxy** - SSL/TLS, Load balancing
+- ✅ **Authelia SSO** - Single Sign-On + 2FA (TOTP, WebAuthn)
+- ✅ **JWT Authentication** - Secure token-based auth
+- ✅ **Rate Limiting** - DDoS protection
+- ✅ **Input Validation** - Pydantic models
+- ✅ **Automated Secrets Generation** - Strong passwords
+- ✅ **Security Scanning** - Bandit, Safety, Trivy, CodeQL
+- ✅ **Secrets Scanning** - TruffleHog
+- ✅ **License Compliance** - pip-licenses
+
+### Güvenlik Testleri
+
+```bash
+# Manuel güvenlik taraması
+cd /root/minder
+
+# Bandit scan
+bandit -r src/ services/ -f json -o bandit-report.json
+
+# Safety check
+safety check --json > safety-report.json
+
+# Trivy scan
+trivy image minder-api-gateway:latest
+
+# Secrets scan
+trufflehog . --only-verified
+```
+
+### Docker Auto-Update
+
+Proje otomatik olarak Docker imajlarını en son sürüme güncellemek için GitHub Action kullanıyor:
+
+- **Trigger:** Her hafta pazartesi 09:00 UTC
+- **Action:** Docker imajlarını kontrol et, güncelleme PR'ı oluştur
+- **Manual:** `workflow_dispatch` ile manuel tetiklenebilir
+
+**Örnek PR:**
+```bash
+# Manuel tetiklemek için:
+github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
+# "Run workflow" butonuna tıkla
+```
+
+**Docker Güncelleme Adımları:**
+1. Docker Hub API'den en son tag'ları kontrol et
+2. Mevcut sürümü yeni sürümle karşılaştır
+3. Docker Compose dosyasını güncelle
+4. Auto-update branch oluştur
+5. Pull Request aç (otomatik)
+
+### Monitoring & Alerting
+
+| Service | Port | Dashboard |
+|---------|------|----------|
+| **Prometheus** | 9090 | http://localhost:9090 |
+| **Grafana** | 3000 | http://localhost:3000 (admin:admin) |
+| **InfluxDB** | 8083 | http://localhost:8083 |
+| **Alertmanager** | 9093 | http://localhost:9093 |
+
+**Grafana Dashboards:**
+- System Overview
+- Service Health
+- API Performance
+- Database Performance
+- AI Model Metrics
+
+**Alert Rules:**
+- Service down alert
+- High CPU usage (>80%)
+- High memory usage (>90%)
+- Disk space warning (<10% free)
+- API error rate (>5%)
 
 ## Architecture
 

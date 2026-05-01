@@ -52,37 +52,37 @@ try:
     tts_app = None
 
     try:
-        gateway_app = load_service_module(services_base / "api-gateway", "services.api_gateway.main")
+        gateway_app = load_service_module(services_base / "api-gateway", "api_gateway.main")
         print("✅ Loaded API Gateway")
     except Exception as e:
         print(f"❌ Failed to load API Gateway: {e}")
 
     try:
-        registry_app = load_service_module(services_base / "plugin-registry", "services.plugin_registry.main")
+        registry_app = load_service_module(services_base / "plugin-registry", "plugin_registry.main")
         print("✅ Loaded Plugin Registry")
     except Exception as e:
         print(f"❌ Failed to load Plugin Registry: {e}")
 
     try:
-        marketplace_app = load_service_module(services_base / "marketplace", "services.marketplace.main")
+        marketplace_app = load_service_module(services_base / "marketplace", "marketplace.main")
         print("✅ Loaded Marketplace")
     except Exception as e:
         print(f"❌ Failed to load Marketplace: {e}")
 
     try:
-        rag_app = load_service_module(services_base / "rag-pipeline", "services.rag_pipeline.main")
+        rag_app = load_service_module(services_base / "rag-pipeline", "rag_pipeline.main")
         print("✅ Loaded RAG Pipeline")
     except Exception as e:
         print(f"❌ Failed to load RAG Pipeline: {e}")
 
     try:
-        model_app = load_service_module(services_base / "model-management", "services.model_management.main")
+        model_app = load_service_module(services_base / "model-management", "model_management.main")
         print("✅ Loaded Model Management")
     except Exception as e:
         print(f"❌ Failed to load Model Management: {e}")
 
     try:
-        tts_app = load_service_module(services_base / "tts-stt-service", "services.tts_stt_service.main")
+        tts_app = load_service_module(services_base / "tts-stt-service", "tts_stt_service.main")
         print("✅ Loaded TTS-STT Service")
     except Exception as e:
         print(f"❌ Failed to load TTS-STT Service: {e}")

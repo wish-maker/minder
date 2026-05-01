@@ -1,0 +1,273 @@
+name: Docker Image Auto-Update
+
+on:
+  schedule:
+    # Her hafta pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
+    - cron: '0 9 * * 1'
+  workflow_dispatch:  # Manuel tetikleme için
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  check-updates:
+    name: Check for Docker Image Updates
+    runs-on: ubuntu-latest
+
+    outputs:
+      updates-available: ${{ steps.check.outputs.updates-available }}
+      services: ${{ steps.check.outputs.services }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check for updates
+        id: check
+        run: |
+          pip install requests pyyaml
+
+          python3 << 'EOF'
+          import requests
+          import yaml
+          import os
+          from datetime import datetime
+
+          # Docker Compose dosyasını oku
+          with open('infrastructure/docker/docker-compose.yml', 'r') as f:
+              compose = yaml.safe_load(f)
+
+          services = {}
+          updates_available = False
+
+          # Her servisi kontrol et
+          for service_name, service_config in compose['services'].items():
+              if 'image' in service_config:
+                  image = service_config['image']
+
+                  # Image'ı parçala (name:tag)
+                  if ':' in image:
+                      image_name, current_tag = image.rsplit(':', 1)
+                  else:
+                      image_name = image
+                      current_tag = 'latest'
+
+                  try:
+                      # Docker Hub API'den en son tag'ı al
+                      if '/' not in image_name:
+                          # Official image
+                          api_url = f"https://hub.docker.com/v2/repositories/library/{image_name}/tags/latest"
+                      else:
+                          # User image
+                          parts = image_name.split('/')
+                          api_url = f"https://hub.docker.com/v2/repositories/{parts[1]}/tags/latest"
+
+                      response = requests.get(api_url, timeout=10)
+                      if response.status_code == 200:
+                          data = response.json()
+                          latest_tag = data['name']
+
+                          # Güncelleme kontrolü
+                          if current_tag != latest_tag and current_tag != 'latest':
+                              services[service_name] = {
+                                  'image': image_name,
+                                  'current': current_tag,
+                                  'latest': latest_tag
+                              }
+                              updates_available = True
+
+                              print(f"⚠️  {service_name}: {current_tag} -> {latest_tag}")
+
+                  except Exception as e:
+                      print(f"⚠️  {service_name}: Kontrol başarısız - {e}")
+
+          # Çıktıları kaydet
+          if services:
+              print(f"\n✅ {len(services)} servis için güncelleme mevcut!")
+
+              # JSON çıktısı oluştur
+              import json
+              with open('updates.json', 'w') as f:
+                  json.dump(services, f, indent=2)
+
+              # GitHub output
+              services_json = json.dumps(services)
+              services_str = json.dumps(services)
+              print(f"services={services_str}")
+              print(f"updates-available=true")
+          else:
+              print(f"\n✅ Tüm servisler güncel!")
+
+              import json
+              with open('updates.json', 'w') as f:
+                  json.dump({}, f, indent=2)
+
+              print("services={}")
+              print("updates-available=false")
+          EOF
+
+      - name: Upload updates report
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-updates
+          path: updates.json
+          retention-days: 7
+
+      - name: Comment on PR/Issue if updates available
+        if: steps.check.outputs.updates-available == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const updates = JSON.parse(fs.readFileSync('updates.json', 'utf8'));
+
+            let message = '## 🔔 Docker Image Güncellemeleri Mevcut\n\n';
+            message += 'Aşağıdaki Docker imajları için güncellemeler mevcut:\n\n';
+
+            for (const [service, info] of Object.entries(updates)) {
+              message += `- **${service}**: \`${info.current}\` → \`${info.latest}\`\n`;
+            }
+
+            message += '\n⚠️ **Lütfen güncelleyin:**\n';
+            message += '```bash\n';
+            message += 'docker compose -f infrastructure/docker/docker-compose.yml pull\n';
+            message += 'docker compose -f infrastructure/docker/docker-compose.yml up -d\n';
+            message += '```\n';
+
+            // Issue aç veya PR'a comment
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🔔 Docker Image Güncellemeleri',
+              body: message,
+              labels: ['dependencies', 'docker']
+            });
+
+  auto-update-branch:
+    name: Create Auto-Update PR
+    runs-on: ubuntu-latest
+    needs: check-updates
+    if: needs.check-updates.outputs.updates-available == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download updates report
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-updates
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create auto-update branch
+        run: |
+          git checkout -b auto/docker-image-update-$(date +%Y%m%d)
+
+      - name: Update Docker images
+        run: |
+          pip install pyyaml
+
+          python3 << 'EOF'
+          import yaml
+          import json
+
+          # Updates dosyasını oku
+          with open('updates.json', 'r') as f:
+              updates = json.load(f)
+
+          # Docker Compose dosyasını oku
+          with open('infrastructure/docker/docker-compose.yml', 'r') as f:
+              compose = yaml.safe_load(f)
+
+          # Servisleri güncelle
+          for service_name, info in updates.items():
+              if service_name in compose['services']:
+                  old_image = compose['services'][service_name]['image']
+                  new_image = f"{info['image']}:{info['latest']}"
+                  compose['services'][service_name]['image'] = new_image
+                  print(f"✅ {service_name}: {old_image} -> {new_image}")
+
+          # Güncellenmiş Docker Compose dosyasını yaz
+          with open('infrastructure/docker/docker-compose.yml', 'w') as f:
+              yaml.dump(compose, f, default_flow_style=False, sort_keys=False)
+
+          print(f"\n✅ {len(updates)} servis güncellendi!")
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add infrastructure/docker/docker-compose.yml
+          git commit -m "chore: update Docker images to latest versions
+
+          This PR automatically updates Docker images to their latest versions.
+          Please review the changes and merge if everything looks correct."
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "🔄 Docker Image Güncellemeleri (Otomatik)" \
+            --body "Bu PR otomatik olarak oluşturulmuş Docker image güncellemelerini içerir.
+
+            ## Güncellenen Servisler
+
+            $(python3 << 'PYEOF'
+          import json
+          with open('updates.json', 'r') as f:
+              updates = json.load(f)
+          for service, info in updates.items():
+              print(f"- **{service}**: \`${info['current']}\` → \`${info['latest']}\`")
+          PYEOF
+          )
+
+            ## ⚠️ Test Etmek İçin
+
+            Güncellemeleri test etmek için:
+            \`\`\`bash
+            docker compose -f infrastructure/docker/docker-compose.yml pull
+            docker compose -f infrastructure/docker/docker-compose.yml up -d
+            ./scripts/health-check.sh
+            \`\`\`
+
+            ## 📋 Checklist
+
+            - [ ] Tüm servisler başlatılıyor
+            - [ ] Health check geçiyor
+            - [ ] Entegrasyon testleri başarılı
+            - [ ] Manuel test yapıldı
+
+            ---
+            *Bu PR GitHub Actions tarafından otomatik olarak oluşturuldu.*" \
+            --base main \
+            --label "dependencies" \
+            --label "docker" \
+            --label "automated"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify on completion
+    runs-on: ubuntu-latest
+    needs: [check-updates, auto-update-branch]
+    if: always()
+
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.check-updates.outputs.updates-available }}" == "true" ]; then
+              echo "✅ Güncelleme PR'ı oluşturuldu!"
+          else
+              echo "✅ Tüm servisler güncel, güncelleme gerekmiyor."
+          fi

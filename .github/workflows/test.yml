@@ -1,75 +1,295 @@
-name: Minder CI/CD Pipeline
+name: Test Suite
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:  # Manuel tetikleme
+
+env:
+  PYTHON_VERSION: '3.12'
 
 jobs:
-  test:
+  lint:
+    name: Code Quality & Linting
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pytest pytest-cov bandit safety flake8
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
 
-    - name: Run unit tests
-      run: |
-        pytest tests/ -v --cov=. --cov-report=xml
+      - name: Run Black
+        run: black --check src/ services/ tests/
 
-    - name: Code coverage
-      run: |
-        pytest tests/ --cov=. --cov-report=term-missing
+      - name: Run isort
+        run: isort --check-only src/ services/ tests/
 
-    - name: Linting
-      run: |
-        flake8 . --count --show-source --statistics
+      - name: Run Flake8
+        run: flake8 src/ services/ tests/ --max-line-length=100 --extend-ignore=E203,W503
 
-    - name: Security scan
-      run: |
-        bandit -r api/ -f json
+      - name: Run MyPy
+        run: mypy src/ --ignore-missing-imports || true
 
-    - name: Vulnerability scan
-      run: |
-        safety check
-
-  build:
-    needs: test
+  security-scan:
+    name: Security Scan
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Build Docker image
-      run: |
-        docker build -t minder-api:test .
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
 
-    - name: Security scan
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: 'minder-api:test'
-        format: 'sarif'
-        output: 'trivy-results.sarif'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml] safety
 
-  deploy:
-    needs: build
+      - name: Run Bandit
+        run: bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Run Safety
+        run: safety check --json > safety-report.json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
 
     steps:
-    - name: Deploy to production
-      run: |
-        echo "Deploying to production..."
-        # Add deployment commands here
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run unit tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: |
+          pytest tests/unit/ -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --tb=short \
+            --timeout=300
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, security-scan, unit-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Start Docker Compose
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml up -d
+          sleep 60  # Servisler hazır olana kadar bekle
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v \
+            --tb=short \
+            --timeout=600
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml logs > docker-logs.txt
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: docker-logs.txt
+
+      - name: Stop Docker Compose
+        if: always()
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml down -v
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Start Docker Compose
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml up -d
+          sleep 90  # Tüm servisler hazır olana kadar bekle
+
+      - name: Run E2E tests
+        run: |
+          pytest tests/e2e/ -v \
+            --tb=short \
+            --timeout=900
+
+      - name: Collect Docker logs on failure
+        if: failure()
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml logs > docker-logs.txt
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs
+          path: docker-logs.txt
+
+      - name: Stop Docker Compose
+        if: always()
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml down -v
+
+  docker-scan:
+    name: Docker Image Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker compose -f infrastructure/docker/docker-compose.yml build api-gateway
+
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'minder-api-gateway:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [lint, security-scan, unit-tests, integration-tests, e2e-tests, docker-scan]
+    if: always()
+
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.unit-tests.result }}" == "success" ] && \
+             [ "${{ needs.integration-tests.result }}" == "success" ] && \
+             [ "${{ needs.e2e-tests.result }}" == "success" ]; then
+              echo "✅ Tüm testler başarılı!"
+              exit 0
+          else
+              echo "❌ Bazı testler başarısız oldu!"
+              exit 1
+          fi
