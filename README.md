@@ -64,7 +64,14 @@ cd minder
 
 That's it! The platform will be fully operational in ~9 minutes with 23 services running.
 
-**✨ AUTOMATIC FEATURES:**
+**✨ ENHANCED SETUP EXPERIENCE:**
+- 🎨 **Professional UI** - Beautiful ASCII art header with step indicators
+- 📊 **Progress Tracking** - Real-time progress bar and percentage display
+- 🌀 **Animated Spinners** - Visual feedback during long operations
+- 🎯 **Step Indicators** - Clear [STEP X/12] progress markers
+- ✅ **Success Messages** - Color-coded status updates
+
+**AUTOMATIC FEATURES:**
 - 🤖 **AI Models:** Automatically downloads llama3.2 (2GB) and nomic-embed-text (274MB)
 - 🔐 **Security:** Generates secure passwords automatically
 - 🗄️ **Databases:** Creates and initializes all required databases
