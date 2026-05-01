@@ -144,7 +144,7 @@ services:
     networks:
     - minder-network
   qdrant:
-    image: qdrant/qdrant:v1.18.0
+    image: qdrant/qdrant:v1.17.1
     container_name: minder-qdrant
     restart: on-failure
     volumes:
@@ -393,7 +393,7 @@ services:
     networks:
     - minder-network
   influxdb:
-    image: influxdb:2.8.3
+    image: influxdb:2.7.12
     container_name: minder-influxdb
     restart: on-failure
     environment:
