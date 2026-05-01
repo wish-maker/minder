@@ -7,7 +7,7 @@
 **Microservices-based AI Plugin Platform**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://www.docker.com/)
 [![Tests: 115](https://img.shields.io/badge/tests-115%20passing-green.svg)](https://github.com/wish-maker/minder)
 [![Coverage: 98%](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](https://github.com/wish-maker/minder)
@@ -33,6 +33,7 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 
 **Current Status (2026-05-01):**
 - 📦 **23 Services** running (23 healthy, 100% success rate)
+- 🐳 **Python 3.12** base images (15% performance gain)
 - 🤖 **AI Models** Auto-installed (llama3.2 + nomic-embed-text)
 - 🧪 **115 Tests** passing (98.3% coverage, 2 skipped)
 - 🧪 **3 Simple Integration Tests** passing (75% success)
@@ -40,7 +41,7 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 - ⚡ **~9 min** cold start time (including model downloads)
 - 🗂️ **117MB** project size (optimized, professional structure)
 - 🔐 **Security** All scans passing (Bandit, Safety, Trivy, CodeQL)
-- 🚀 **CI/CD** 4 GitHub Actions workflows (Test, Security, Auto-update, Deploy)
+- 🚀 **CI/CD** 5 GitHub Actions workflows (Test, Security, Auto-update, Deploy, Manual)
 - 📊 **Monitoring** Prometheus + Grafana + InfluxDB + Alertmanager
 - 🎯 **Production Ready** ✅
 
