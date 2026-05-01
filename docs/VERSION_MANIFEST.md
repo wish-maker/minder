@@ -48,7 +48,7 @@
 | **Uvicorn** | 0.30.0 | ASGI Server |
 | **Pydantic** | 2.9.0 | Data Validation |
 | **Pydantic Settings** | 2.6.0 | Configuration |
-| **HTTPX** | 0.27.0 | HTTP Client |
+| **HTTPX** | 0.25.2 | HTTP Client |
 
 ### AI/ML Dependencies
 
