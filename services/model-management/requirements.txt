@@ -4,7 +4,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 httpx==0.25.2
 transformers==4.35.0
-torch==2.2.0
+torch==2.11.0
 accelerate==0.25.0
 peft==0.7.1
 bitsandbytes==0.41.0

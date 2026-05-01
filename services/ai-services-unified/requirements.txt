@@ -15,4 +15,4 @@ ollama==0.1.7
 numpy==1.26.3
 sentence-transformers==2.2.2
 transformers==4.35.0
-torch==2.2.0
+torch==2.11.0
