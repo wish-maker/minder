@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from tests.conftest import gateway_test_client, test_headers
+from conftest import gateway_test_client, test_headers
 
 
 class TestAPIGatewayIntegration:

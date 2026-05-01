@@ -142,6 +142,16 @@ def redis_url():
     """Get test Redis URL"""
     return os.getenv("TEST_REDIS_URL", "redis://localhost:6379/15")
 
+@pytest.fixture(scope="function")
+def redis_client(redis_url):
+    """Create Redis client for tests"""
+    try:
+        import redis
+        return redis.from_url(redis_url, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+    except Exception as e:
+        print(f"Warning: Redis client not available: {e}")
+        return None
+
 
 @pytest_asyncio.fixture(scope="function")
 async def test_redis(redis_url):
