@@ -141,6 +141,18 @@ Desktop.ini
 # 🎯 PROJECT SPECIFIC
 # ============================================================================
 
+# System Backups (contains database dumps & credentials)
+backups/
+backups/**/*
+*.backup
+*.sql
+*.dump
+
+# Environment Configuration (contains secrets)
+infrastructure/docker/.env
+infrastructure/docker/.env.local
+infrastructure/**/.env
+
 # Monitoring Data
 grafana/data/
 prometheus/data/

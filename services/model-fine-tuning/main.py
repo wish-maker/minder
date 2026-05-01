@@ -53,13 +53,9 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-training_jobs_total = Counter(
-    "training_jobs_total", "Total training jobs", ["status"]
-)  # started, completed, failed
+training_jobs_total = Counter("training_jobs_total", "Total training jobs", ["status"])  # started, completed, failed
 
-training_duration_seconds = Histogram(
-    "training_duration_seconds", "Training job duration", ["base_model"]
-)
+training_duration_seconds = Histogram("training_duration_seconds", "Training job duration", ["base_model"])
 
 models_fine_tuned_total = Gauge("models_fine_tuned_total", "Total number of fine-tuned models")
 
@@ -261,7 +257,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.1.0",
+        "version": "1.0.0",
         "training_jobs": len(training_jobs),
         "datasets": len(datasets),
         "ollama_available": OLLAMA_AVAILABLE,
@@ -387,9 +383,7 @@ async def create_training_job(request: TrainingJobCreate, background_tasks: Back
 
     # Validate dataset
     if not dataset["validation_passed"]:
-        raise HTTPException(
-            status_code=400, detail=f"Dataset validation failed: {', '.join(dataset['errors'])}"
-        )
+        raise HTTPException(status_code=400, detail=f"Dataset validation failed: {', '.join(dataset['errors'])}")
 
     job_id = str(uuid.uuid4())
 
@@ -527,7 +521,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder Model Fine-Tuning Service",
-        "version": "2.1.0",
+        "version": "1.0.0",
         "status": "operational",
         "ollama_available": OLLAMA_AVAILABLE,
     }
@@ -550,4 +544,4 @@ async def startup_event():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8007)
+    uvicorn.run(app, host="0.0.0.0", port=8007)  # nosec B104

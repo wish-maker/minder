@@ -1,0 +1,107 @@
+name: Auto-Update Docker Images
+
+on:
+  schedule:
+    # Her ayın 1'i 09:00 UTC - Aylık güncelleme
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+jobs:
+  auto-update:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "actions@github.com"
+      
+      - name: Check for latest versions
+        id: check_versions
+        run: |
+          # Python ile versiyon kontrolü
+          python3 << 'PYEOF'
+          import requests
+          import subprocess
+          
+          # Mevcut versiyonları oku
+          with open('setup.sh', 'r') as f:
+              content = f.read()
+          
+          # Versiyonları çıkar
+          import re
+          versions = {}
+          
+          # Postgres
+          match = re.search(r'postgres:([0-9]+)', content)
+          if match: versions['postgres'] = match.group(1)
+          
+          # Grafana
+          match = re.search(r'grafana:([0-9]+\.[0-9]+\.[0-9]+)', content)
+          if match: versions['grafana'] = match.group(1)
+          
+          # Diğer servisler...
+          print(f"Current versions: {versions}")
+          
+          # Güncel versiyonları kontrol et
+          updates = {}
+          
+          # Docker Hub kontrolü
+          try:
+              resp = requests.get('https://hub.docker.com/v2/repositories/postgres/tags/latest?pagesize=1')
+              if resp.status_code == 200:
+                  latest = resp.json().get('name', '')
+                  if latest and latest != versions.get('postgres'):
+                      updates['postgres'] = latest
+          except:
+              pass
+          
+          # Sonuçları yaz
+          if updates:
+              print(f"UPDATE_NEEDED=true")
+              for service, version in updates.items():
+                  print(f"{service}={version}")
+          else:
+              print("UPDATE_NEEDED=false")
+          PYEOF
+      
+      - name: Update files if needed
+        if: env.UPDATE_NEEDED == 'true'
+        run: |
+          echo "Updating setup.sh and docker-compose.yml..."
+          
+          # setup.sh güncelle
+          sed -i 's/postgres:16/postgres:17/' setup.sh
+          
+          # docker-compose.yml güncelle  
+          sed -i 's/postgres:16/postgres:17/' infrastructure/docker/docker-compose.yml
+          
+          echo "Files updated"
+      
+      - name: Create Pull Request
+        if: env.UPDATE_NEEDED == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: "chore: update Docker dependencies ($(date +%Y-%m-%d))"
+          body: |
+            Automated dependency update
+            
+            **Changes:**
+            - Updated PostgreSQL 16 → 17
+            - Updated setup.sh and docker-compose.yml
+            
+            **Testing:**
+            ```bash
+            ./setup.sh restart
+            ./setup.sh health
+            ```
+          branch: auto-dependency-update
+          branch-suffix: timestamp
+          draft: false

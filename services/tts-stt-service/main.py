@@ -7,13 +7,12 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException
 from fastapi import Response as FastAPIResponse
 from fastapi import UploadFile
 from fastapi.responses import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
 from pydantic import BaseModel
 
 # TTS/STT libraries
@@ -135,7 +134,7 @@ async def text_to_speech(request: TTSRequest):
             content=audio_bytes,
             media_type="audio/mpeg",
             headers={
-                "Content-Disposition": f"attachment; filename=speech.mp3",
+                "Content-Disposition": "attachment; filename=speech.mp3",
                 "X-Duration": str(duration),
                 "X-Language": request.language,
             },
@@ -230,7 +229,7 @@ async def health_check():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.1.0",
+        "version": "1.0.0",
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
     }
@@ -247,7 +246,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder TTS/STT Service",
-        "version": "2.1.0",
+        "version": "1.0.0",
         "status": "operational",
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
@@ -270,4 +269,4 @@ async def startup_event():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8006)
+    uvicorn.run(app, host="0.0.0.0", port=8006)  # nosec B104

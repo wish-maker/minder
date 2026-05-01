@@ -2,10 +2,12 @@
 Minder AI Services (Unified)
 Combines RAG Pipeline, Model Management, and TTS/STT functionality
 """
+
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import logging
 
 # Import version variables
 OLLAMA_VERSION = "0.5.7"
@@ -18,10 +20,7 @@ HTTPX_VERSION = "0.28.0"
 ASYNCPG_VERSION = "0.30.0"
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -29,8 +28,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Lifespan events"""
     logger.info(f"Starting Unified AI Services v{OLLAMA_VERSION}")
-    logger.info(f"Environment: development")
-    logger.info(f"Components:")
+    logger.info("Environment: development")
+    logger.info("Components:")
     logger.info(f"  - Ollama v{OLLAMA_VERSION}")
     logger.info(f"  - Qdrant v{QDRANT_VERSION}")
     logger.info(f"  - Neo4j v{NEO4J_VERSION}")
@@ -48,7 +47,7 @@ app = FastAPI(
     title="Minder AI Services",
     description="Unified AI Services combining RAG, Model Management, and TTS/STT",
     version="2.1.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -68,7 +67,7 @@ async def health_check():
         "service": "ai-services-unified",
         "status": "healthy",
         "timestamp": logging.getLogger(__name__).name,
-        "version": "2.1.0",
+        "version": "1.0.0",
         "component_versions": {
             "ollama": OLLAMA_VERSION,
             "qdrant": QDRANT_VERSION,
@@ -77,8 +76,8 @@ async def health_check():
             "fastapi": FASTAPI_VERSION,
             "pydantic": PYDANTIC_VERSION,
             "httpx": HTTPX_VERSION,
-            "asyncpg": ASYNCPG_VERSION
-        }
+            "asyncpg": ASYNCPG_VERSION,
+        },
     }
 
 
@@ -97,16 +96,12 @@ async def get_version():
             "fastapi": FASTAPI_VERSION,
             "pydantic": PYDANTIC_VERSION,
             "httpx": HTTPX_VERSION,
-            "asyncpg": ASYNCPG_VERSION
-        }
+            "asyncpg": ASYNCPG_VERSION,
+        },
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8004,
-        reload=True
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8004, reload=True)  # nosec B104

@@ -1,11 +1,11 @@
-# Traefik Static Configuration
+# Traefik v3 Static Configuration
 global:
   checkNewVersion: true
   sendAnonymousUsage: false
 
 api:
   dashboard: true
-  insecure: false  # Dashboard only accessible via Traefik itself
+  insecure: false
 
 entryPoints:
   web:
@@ -44,7 +44,6 @@ certificatesResolvers:
       storage: /letsencrypt/acme.json
       httpChallenge:
         entryPoint: web
-      tlsChallenge: true
 
 log:
   level: INFO

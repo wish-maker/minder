@@ -4,7 +4,7 @@
 
 ### Required Software
 
-- **Docker** 20.10+ 
+- **Docker** 20.10+
 - **Docker Compose** 2.20+
 - **Git** (for development)
 
@@ -19,6 +19,8 @@
 ## Installation Methods
 
 ### Method 1: Automated Setup (Recommended)
+
+The `setup.sh` script now provides a complete lifecycle management system for the Minder platform.
 
 ```bash
 # Clone the repository
@@ -91,11 +93,101 @@ curl http://localhost:9090/-/healthy  # Prometheus
 curl http://localhost:3000/api/health  # Grafana
 ```
 
+## Lifecycle Management
+
+The `setup.sh` script provides comprehensive lifecycle management capabilities:
+
+### Available Commands
+
+```bash
+# Installation
+./setup.sh                           # Install (default)
+./setup.sh install                   # Explicit install
+
+# Service Management
+./setup.sh start                    # Start all services
+./setup.sh stop                     # Stop all services
+./setup.sh restart                  # Restart all services
+
+# Status & Monitoring
+./setup.sh status                   # Show detailed service status
+./setup.sh health                   # Run health checks
+./setup.sh logs                     # View service logs
+./setup.sh logs <service>           # View specific service logs
+
+# Updates & Maintenance
+./setup.sh check-updates            # Check for Docker image updates
+./setup.sh update                   # Update Docker images
+./setup.sh backup                   # Backup configuration and data
+
+# Uninstallation
+./setup.sh uninstall               # Remove all services and data
+./setup.sh uninstall --keep-data   # Remove services but keep data
+
+# Help
+./setup.sh --help                   # Show all available commands
+```
+
+### Service Status
+
+The `status` command provides a comprehensive overview:
+
+```bash
+./setup.sh status
+```
+
+Output includes:
+- Running containers with health status
+- Port mappings
+- Resource usage (CPU, memory)
+- Volume information
+- Network status
+
+### Update Management
+
+The platform supports automated Docker image updates:
+
+```bash
+# Check for available updates
+./setup.sh check-updates
+
+# Update all images
+./setup.sh update
+```
+
+The update process:
+1. Checks official Docker images for newer versions
+2. Pulls latest images from Docker Hub
+3. Rebuilds custom Minder images
+4. Prompts for service restart
+
+### Backup & Recovery
+
+Automated backup functionality:
+
+```bash
+# Create backup
+./setup.sh backup
+
+# Backup includes:
+# - Environment configuration (.env file)
+# - All databases (PostgreSQL dump)
+# - Service configurations
+```
+
+Backups are stored in `backups/minder-backup-YYYYMMDD-HHMMSS/` with:
+- `env.backup` - Environment configuration
+- `databases.sql` - Complete database dump
+
 ## Verification
 
 ### Check Service Status
 
 ```bash
+# Using lifecycle script
+./setup.sh status
+
+# Or using Docker directly
 docker ps
 ```
 
@@ -104,10 +196,12 @@ All services should show "healthy" status.
 ### View Logs
 
 ```bash
-# All services
-docker compose -f infrastructure/docker/docker-compose.yml logs -f
+# Using lifecycle script (recommended)
+./setup.sh logs                     # All services
+./setup.sh logs api-gateway         # Specific service
 
-# Specific service
+# Or using Docker Compose directly
+docker compose -f infrastructure/docker/docker-compose.yml logs -f
 docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
 ```
 
@@ -139,7 +233,7 @@ When running `./setup.sh`, expect the following timeline:
 **7-8 min:** Monitoring (Prometheus, Grafana, InfluxDB)
 **8-9 min:** AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
 
-**Final Status:** 23 services, 21 healthy, 2 starting (normal)
+**Final Status:** 23 services, all healthy, ready to use
 
 ## Troubleshooting
 
@@ -162,9 +256,39 @@ If you experience memory issues, increase Docker memory limit:
 ### Database Connection Errors
 
 ```bash
-# Reset database
+# Using lifecycle script
+./setup.sh stop
+./setup.sh start
+
+# Or manual reset
 docker compose -f infrastructure/docker/docker-compose.yml down -v
 docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
+```
+
+### Services Not Starting
+
+```bash
+# Check service status
+./setup.sh status
+
+# View logs for issues
+./setup.sh logs
+
+# Restart specific service
+docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+```
+
+### Docker Image Issues
+
+```bash
+# Check for updates
+./setup.sh check-updates
+
+# Update images
+./setup.sh update
+
+# Force rebuild
+docker compose -f infrastructure/docker/docker-compose.yml build --no-cache <service>
 ```
 
 ## Next Steps
@@ -176,12 +300,25 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
 
 ## Uninstallation
 
-```bash
-# Stop and remove all services
-docker compose -f infrastructure/docker/docker-compose.yml down -v
+### Remove Services (Keep Data)
 
-# Remove volumes (WARNING: Deletes all data)
-docker volume rm minder_postgres_data minder_redis_data minder_qdrant_data
+```bash
+# Using lifecycle script (recommended)
+./setup.sh uninstall --keep-data
+
+# Or manual
+docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down
+```
+
+### Remove Everything (Including Data)
+
+```bash
+# Using lifecycle script (recommended)
+./setup.sh uninstall
+
+# Or manual
+docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down -v
+docker volume rm docker_postgres_data docker_redis_data docker_qdrant_data docker_ollama_data
 ```
 
 ## Support
@@ -189,3 +326,4 @@ docker volume rm minder_postgres_data minder_redis_data minder_qdrant_data
 For issues and questions:
 - GitHub Issues: https://github.com/wish-maker/minder/issues
 - Documentation: See docs/ folder
+- Lifecycle Management: Run `./setup.sh --help`

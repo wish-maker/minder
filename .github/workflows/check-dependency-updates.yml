@@ -1,0 +1,75 @@
+name: Check Docker Image Updates
+
+on:
+  schedule:
+    # Her Pazartesi 09:00 UTC - Haftalık kontrol
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check Docker Hub for updates
+        run: |
+          echo "# Docker Image Updates - $(date +%Y-%m-%d)" > update-report.md
+          echo "" >> update-report.md
+          echo "## Available Updates" >> update-report.md
+          echo "" >> update-report.md
+          
+          # Version kontrol script
+          cat > /tmp/check.sh << 'CHECKEOF'
+          #!/bin/bash
+          images=(
+            "postgres:16|postgres"
+            "redis:7.2-alpine|redis" 
+            "qdrant/qdrant:v1.18.0|qdrant"
+            "neo4j:5.24-community|neo4j"
+            "traefik:v3.1.6|traefik"
+            "grafana:11.4.0|grafana"
+          )
+          
+          updates_found=0
+          
+          for entry in "${images[@]}"; do
+            IFS='|' read -r current repo <<< "$entry"
+            echo "Checking $repo..."
+            
+            # Docker Hub API
+            response=$(curl -s "https://hub.docker.com/v2/repositories/$repo/tags/latest?pagesize=1")
+            
+            if echo "$response" | grep -q "name"; then
+              latest=$(echo "$response" | jq -r '.name' 2>/dev/null || echo "")
+              
+              if [ -n "$latest" ] && [ "$latest" != "$current" ]; then
+                echo "- **$repo**: $current → $latest" >> update-report.md
+                updates_found=$((updates_found + 1))
+              fi
+            fi
+          done
+          
+          echo "Total updates found: $updates_found"
+          CHECKEOF
+          
+          chmod +x /tmp/check.sh
+          /tmp/check.sh
+          
+      - name: Create Issue if updates found
+        if: hashFiles('update-report.md') != ''
+        run: |
+          if grep -q "Available Updates" update-report.md; then
+            gh issue create \
+              --title "🔄 Docker Image Updates Available ($(date +%Y-%m-%d))" \
+              --label "dependencies" \
+              --body-file update-report.md
+          fi
+    
+    - name: Upload report
+      uses: actions/upload-artifact@v4
+      with:
+        name: update-report
+        path: update-report.md

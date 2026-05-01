@@ -462,26 +462,296 @@ print_success_message() {
     echo ""
 }
 
-# Main execution
-main() {
+###############################################################################
+# Lifecycle Management Functions
+###############################################################################
+
+show_help() {
+    cat << EOF
+Minder Platform - Setup & Lifecycle Management Script
+
+USAGE:
+    ./setup.sh [COMMAND]
+
+COMMANDS:
+    (no command)          Install and start all services (default)
+    install                Install and start all services
+    uninstall              Stop and remove all services (removes volumes)
+    uninstall --keep-data  Stop services but keep data volumes
+    stop                   Stop all services
+    start                  Start all services
+    restart                Restart all services
+    status                 Show service status
+    health                 Run health checks
+    logs                   Show service logs
+    check-updates          Check for Docker image updates
+    update                 Update Docker images
+    backup                 Backup configuration and data
+    -h, --help             Show this help message
+
+EXAMPLES:
+    ./setup.sh                           # Install (default)
+    ./setup.sh install                   # Explicit install
+    ./setup.sh uninstall                 # Uninstall (remove data)
+    ./setup.sh uninstall --keep-data     # Uninstall (keep data)
+    ./setup.sh stop                      # Stop services
+    ./setup.sh status                    # Check status
+    ./setup.sh logs                      # View logs
+    ./setup.sh check-updates             # Check for updates
+
+For more information:
+    https://github.com/wish-maker/minder
+
+EOF
+}
+
+show_status() {
     echo ""
-    echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║        Minder Platform - Automated Setup Script               ║"
-    echo "║                    Version 1.0.0                                ║"
-    echo "╚═══════════════════════════════════════════════════════════════╝"
+    echo "═══════════════════════════════════════════════════════════════"
+    echo "                    Minder Platform Status"
+    echo "═══════════════════════════════════════════════════════════════"
     echo ""
 
-    check_prerequisites
-    setup_environment
-    create_networks
-    initialize_database
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAMES|minder-" | head -25
+
+    echo ""
+    echo "Resource Usage:"
+    docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}" | grep -E "NAME|minder-" | head -15
+}
+
+stop_services_cmd() {
+    log_info "Stopping all services..."
+    docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down
+    log_success "All services stopped ✓"
+}
+
+start_services_cmd() {
+    log_info "Starting all services..."
     start_services
     wait_for_services
-    download_ollama_models
     run_health_checks
-    print_success_message
+    log_success "All services started ✓"
+}
 
-    log_success "Setup completed successfully! 🚀"
+restart_services_cmd() {
+    log_info "Restarting all services..."
+    stop_services_cmd
+    sleep 5
+    start_services_cmd
+}
+
+uninstall_system() {
+    local keep_data=false
+
+    if [ "$1" = "--keep-data" ]; then
+        keep_data=true
+    fi
+
+    log_warning "Uninstalling Minder Platform..."
+
+    if [ "$keep_data" = true ]; then
+        log_info "Stopping services (keeping data)..."
+        docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down
+        log_success "Services stopped. Data volumes preserved."
+    else
+        log_warning "This will remove all services AND data volumes!"
+        echo -n "Are you sure? [y/N]: "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            log_info "Stopping and removing all services..."
+            docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down -v
+            log_success "All services and data removed."
+        else
+            log_info "Uninstall cancelled."
+            return 0
+        fi
+    fi
+}
+
+show_logs_cmd() {
+    local service="${1:-}"
+    if [ -n "$service" ]; then
+        docker logs -f --tail 100 "minder-$service"
+    else
+        docker compose -f infrastructure/docker/docker-compose.yml logs -f --tail 50
+    fi
+}
+
+check_updates_cmd() {
+    log_info "Checking for Docker image updates..."
+    echo ""
+
+    local images=(
+        "postgres:16"
+        "redis:7.2-alpine"
+        "qdrant/qdrant:v1.18.0"
+        "neo4j:5.24-community"
+        "ollama/ollama:0.5.7"
+        "prom/prometheus:v2.55.1"
+        "grafana/grafana:11.4.0"
+        "authelia/authelia:4.38.7"
+        "traefik:v3.1.6"
+        "influxdb:2.8.3"
+        "telegraf:1.33.1"
+        "prom/alertmanager:v0.28.1"
+        "prometheuscommunity/postgres-exporter:v0.15.0"
+        "oliver006/redis_exporter:v1.62.0"
+        "ghcr.io/open-webui/open-webui:git-69d0a16"
+    )
+
+    for image in "${images[@]}"; do
+        if docker images | grep -q "${image%:*}"; then
+            local created=$(docker images --format "{{.CreatedAt}}" "$image" | head -1)
+            echo -e "${BLUE}$image${NC} (created: $created)"
+        fi
+    done
+
+    echo ""
+    log_info "Minder custom images:"
+    docker images | grep "minder/" || echo "No custom images found"
+
+    echo ""
+    log_info "To update, run: ./setup.sh update"
+}
+
+update_images_cmd() {
+    log_info "Updating Docker images..."
+
+    local images=(
+        "postgres:16"
+        "redis:7.2-alpine"
+        "qdrant/qdrant:v1.18.0"
+        "neo4j:5.24-community"
+        "ollama/ollama:0.5.7"
+        "prom/prometheus:v2.55.1"
+        "grafana/grafana:11.4.0"
+        "authelia/authelia:4.38.7"
+        "traefik:v3.1.6"
+        "influxdb:2.8.3"
+        "telegraf:1.33.1"
+        "prom/alertmanager:v0.28.1"
+        "prometheuscommunity/postgres-exporter:v0.15.0"
+        "oliver006/redis_exporter:v1.62.0"
+        "ghcr.io/open-webui/open-webui:git-69d0a16"
+    )
+
+    for image in "${images[@]}"; do
+        log_info "Pulling $image..."
+        docker pull "$image" | grep -E "Pulling|Downloaded|Already up to date|Status" || true
+    done
+
+    log_success "Images updated! Rebuild custom images..."
+    docker compose -f infrastructure/docker/docker-compose.yml build --no-cache
+
+    log_success "Update complete! Restart services with: ./setup.sh restart"
+}
+
+backup_system_cmd() {
+    local backup_dir="backups/minder-backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+
+    log_info "Creating backup at: $backup_dir"
+
+    if [ -f infrastructure/docker/.env ]; then
+        cp infrastructure/docker/.env "$backup_dir/env.backup"
+        log_success "Environment configuration backed up ✓"
+    fi
+
+    log_info "Backing up databases..."
+    docker exec minder-postgres pg_dumpall -U minder > "$backup_dir/databases.sql" 2>/dev/null || true
+    log_success "Databases backed up ✓"
+
+    log_success "Backup completed: $backup_dir"
+}
+
+###############################################################################
+# Main execution
+###############################################################################
+
+main() {
+    local command="${1:-install}"
+
+    case "$command" in
+        install)
+            echo ""
+            echo "╔═══════════════════════════════════════════════════════════════╗"
+            echo "║        Minder Platform - Automated Setup Script               ║"
+            echo "║                    Version 1.0.0 (Enhanced)                   ║"
+            echo "╚═══════════════════════════════════════════════════════════════╝"
+            echo ""
+
+            check_prerequisites
+            setup_environment
+            create_networks
+            initialize_database
+            start_services
+            wait_for_services
+            download_ollama_models
+            run_health_checks
+            print_success_message
+
+            log_success "Installation completed successfully! 🚀"
+            ;;
+
+        uninstall)
+            show_help
+            echo ""
+            uninstall_system "$2"
+            ;;
+
+        start)
+            check_prerequisites
+            start_services_cmd
+            ;;
+
+        stop)
+            check_prerequisites
+            stop_services_cmd
+            ;;
+
+        restart)
+            check_prerequisites
+            restart_services_cmd
+            ;;
+
+        status)
+            show_status
+            ;;
+
+        health)
+            check_prerequisites
+            run_health_checks
+            ;;
+
+        logs)
+            check_prerequisites
+            show_logs_cmd "$2"
+            ;;
+
+        check-updates)
+            check_updates_cmd
+            ;;
+
+        update)
+            check_prerequisites
+            update_images_cmd
+            ;;
+
+        backup)
+            backup_system_cmd
+            ;;
+
+        -h|--help)
+            show_help
+            ;;
+
+        *)
+            echo "Unknown command: $command"
+            echo ""
+            show_help
+            exit 1
+            ;;
+    esac
 }
 
 # Run main function

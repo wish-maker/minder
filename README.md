@@ -80,10 +80,41 @@ That's it! The platform will be fully operational in ~9 minutes with 23 services
 
 **Final Status:** 23 services running (23 healthy, 100% healthy), 115 tests passing (98.3% coverage), 3 simple integration tests passing (75% success), all security scans passing ✅
 
+### Lifecycle Management
+
+The `setup.sh` script now provides comprehensive lifecycle management:
+
+```bash
+# Service Management
+./setup.sh start                    # Start all services
+./setup.sh stop                     # Stop all services
+./setup.sh restart                  # Restart all services
+
+# Status & Monitoring
+./setup.sh status                   # Show detailed service status
+./setup.sh health                   # Run health checks
+./setup.sh logs                     # View service logs
+
+# Updates & Maintenance
+./setup.sh check-updates            # Check for Docker image updates
+./setup.sh update                   # Update Docker images
+./setup.sh backup                   # Backup configuration and data
+
+# Uninstallation
+./setup.sh uninstall --keep-data   # Remove services (keep data)
+./setup.sh uninstall                 # Remove everything
+
+# Help
+./setup.sh --help                   # Show all commands
+```
+
 ### Verification
 
 ```bash
 # Check all services (automated)
+./setup.sh status
+
+# Or use health check script
 ./scripts/health-check.sh
 
 # Check security layer
@@ -437,10 +468,12 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d --build api-gat
 ### Viewing Logs
 
 ```bash
-# All services
-docker compose -f infrastructure/docker/docker-compose.yml logs -f
+# Using lifecycle script (recommended)
+./setup.sh logs                     # All services
+./setup.sh logs api-gateway         # Specific service
 
-# Specific service
+# Or using Docker Compose directly
+docker compose -f infrastructure/docker/docker-compose.yml logs -f
 docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
 
 # Last 100 lines
@@ -450,24 +483,52 @@ docker logs minder-api-gateway --tail 100
 ## System Status
 
 ```bash
-# Check container status (should show 23 services)
-docker ps
+# Using lifecycle script (recommended)
+./setup.sh status                   # Detailed status with resource usage
 
 # Check service health
-./scripts/health-check.sh
+./setup.sh health                   # Run all health checks
 
-# Run diagnostics
-./scripts/diagnostics.sh
-
-# View all logs
-./scripts/logs.sh
+# Or check container status
+docker ps                          # Should show 23 services
 ```
 
 **Expected Output:**
-- 23 Minder services running
-- 21 services showing "healthy" status
-- 2 services starting (Grafana, Alertmanager - normal)
+- 23 Minder services running (all healthy)
 - 115 tests passing when running test suite
+- Resource usage (CPU, memory) displayed
+
+## Lifecycle Management
+
+The enhanced `setup.sh` script provides complete lifecycle management:
+
+```bash
+# Installation
+./setup.sh                           # Install all services
+./setup.sh install                   # Explicit install
+
+# Service Control
+./setup.sh start                    # Start all services
+./setup.sh stop                     # Stop all services
+./setup.sh restart                  # Restart all services
+
+# Monitoring
+./setup.sh status                   # Show service status
+./setup.sh health                   # Run health checks
+./setup.sh logs                     # View logs
+
+# Maintenance
+./setup.sh check-updates            # Check for updates
+./setup.sh update                   # Update Docker images
+./setup.sh backup                   # Backup system
+
+# Removal
+./setup.sh uninstall --keep-data   # Remove services, keep data
+./setup.sh uninstall                 # Remove everything
+
+# Help
+./setup.sh --help                   # Show all commands
+```
 
 ## Project Structure
 
@@ -507,7 +568,7 @@ minder/
 │   ├── unit/                  # 115 unit tests (98% coverage)
 │   └── integration/           # Integration tests
 ├── config/                    # Configuration files
-├── setup.sh                   # Automated setup ⭐
+├── setup.sh                   # Lifecycle manager ⭐ (NEW v2.0)
 ├── README.md                  # This file
 └── LICENSE                    # MIT License
 ```
@@ -517,7 +578,12 @@ minder/
 ### Services Not Starting
 
 ```bash
-# Check logs
+# Using lifecycle script (recommended)
+./setup.sh logs                     # Check logs
+./setup.sh restart                  # Restart services
+./setup.sh status                   # Check status
+
+# Or manually
 docker compose -f infrastructure/docker/docker-compose.yml logs
 
 # Restart specific service
@@ -534,6 +600,9 @@ docker compose -f infrastructure/docker/docker-compose.yml down -v
 # Check what's using the port
 lsof -i :8000
 
+# Or use lifecycle script to check status
+./setup.sh status                   # Shows all port mappings
+
 # Change port in docker-compose.yml
 # Example: ports: - "8080:8000"
 ```
@@ -541,10 +610,45 @@ lsof -i :8000
 ### Database Issues
 
 ```bash
-# Reset database
+# Using lifecycle script
+./setup.sh stop
+./setup.sh start
+
+# Or manual reset
 docker compose -f infrastructure/docker/docker-compose.yml down -v
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
+./setup.sh                         # Reinstall from scratch
 ```
+
+### Docker Image Issues
+
+```bash
+# Check for updates
+./setup.sh check-updates
+
+# Update images
+./setup.sh update
+
+# Force rebuild
+docker compose -f infrastructure/docker/docker-compose.yml build --no-cache
+```
+
+### Need to Clean Up?
+
+```bash
+# Using lifecycle script
+./setup.sh uninstall --keep-data   # Keep data
+./setup.sh uninstall                 # Remove everything
+
+# Or manual cleanup
+docker compose -f infrastructure/docker/docker-compose.yml down -v
+docker system prune -a              # Clean unused resources
+```
+
+## Contributing
+
+We welcome contributions! Please see:
+
+1. 📖 [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 
 ## Contributing
 

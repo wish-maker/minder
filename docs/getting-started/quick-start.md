@@ -15,6 +15,9 @@ docker ps
 ### Installation
 
 #### Option 1: Automated (Recommended)
+
+The enhanced `setup.sh` script provides complete lifecycle management:
+
 ```bash
 # Clone and setup
 git clone https://github.com/wish-maker/minder.git
@@ -38,7 +41,7 @@ cp infrastructure/docker/.env.example infrastructure/docker/.env
 docker compose -f infrastructure/docker/docker-compose.yml up -d
 
 # 3. Wait for services to be healthy (~9 minutes)
-docker ps  # All services should show "healthy" status
+./setup.sh status  # Check if all services are healthy
 ```
 
 **Note:** Manual setup requires downloading AI models separately:
@@ -62,6 +65,42 @@ echo "Grafana: $(curl -s http://localhost:3000/api/health > /dev/null && echo 'O
 
 # Check security
 echo "Authelia: $(curl -s http://localhost:9091/api/health | jq -r '.status' 2>/dev/null || echo 'FAIL')"
+```
+
+Or use the built-in health check:
+```bash
+./setup.sh health
+```
+
+### Lifecycle Management
+
+The `setup.sh` script now provides comprehensive management capabilities:
+
+```bash
+# View status
+./setup.sh status
+
+# Start/Stop/Restart services
+./setup.sh stop
+./setup.sh start
+./setup.sh restart
+
+# View logs
+./setup.sh logs                 # All services
+./setup.sh logs api-gateway     # Specific service
+
+# Check for updates
+./setup.sh check-updates
+
+# Update Docker images
+./setup.sh update
+
+# Backup system
+./setup.sh backup
+
+# Uninstall
+./setup.sh uninstall --keep-data   # Keep data
+./setup.sh uninstall                 # Remove everything
 ```
 
 ### First Steps
@@ -95,10 +134,13 @@ echo "Authelia: $(curl -s http://localhost:9091/api/health | jq -r '.status' 2>/
 **Services not starting?**
 ```bash
 # Check logs
-docker compose -f infrastructure/docker/docker-compose.yml logs
+./setup.sh logs
 
-# Restart specific service
-docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+# Check status
+./setup.sh status
+
+# Restart services
+./setup.sh restart
 ```
 
 **Memory issues?**
@@ -110,9 +152,19 @@ docker system df
 docker system prune -a
 ```
 
-## Next Steps
+**Need to update?**
+```bash
+# Check for updates
+./setup.sh check-updates
+
+# Update images
+./setup.sh update
+```
+
+### Next Steps
 
 - 📖 Read [Architecture Overview](../architecture/overview.md)
 - 🔐 Configure [Authentication & Security](../guides/authentication.md)
 - 🔧 See [Development Guide](../development/development.md)
 - 🐛 Check [Troubleshooting Guide](../troubleshooting/common-issues.md)
+- 📚 See all commands: `./setup.sh --help`
