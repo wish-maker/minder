@@ -503,6 +503,14 @@ services:
     - alertmanager_data:/alertmanager
     ports:
     - 9093:9093
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -q --spider http://localhost:9093/-/healthy || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
     - minder-network
     profiles:
@@ -524,6 +532,14 @@ services:
     - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
     ports:
     - 3000:3000
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -f http://localhost:3000/api/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
     - minder-network
     profiles:
