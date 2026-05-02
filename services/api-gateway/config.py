@@ -4,6 +4,7 @@ Loads settings from environment variables with sensible defaults
 """
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -37,7 +38,12 @@ class Settings(BaseSettings):
     # Phase Configuration (for health check)
     MINDER_PHASE: int = 1  # Current deployment phase
 
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True, extra="allow")
+    # Pydantic V2 Configuration
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="allow"
+    )
 
 
 # Global settings instance

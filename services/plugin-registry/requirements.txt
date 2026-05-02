@@ -36,4 +36,5 @@ pyjwt==2.8.0
 # Plugin-specific dependencies (TEFAS, time-series)
 influxdb-client==1.50.0
 tefas-crawler==0.5.0
-borsapy==0.8.7
+# borsapy temporarily removed due to httpx 0.25.2 compatibility
+# borsapy==0.8.7

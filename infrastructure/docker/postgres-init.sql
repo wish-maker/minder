@@ -2,11 +2,35 @@
 -- Created: Automatically by deploy.sh
 
 -- Create additional databases
-CREATE DATABASE IF NOT EXISTS tefas_db;
-CREATE DATABASE IF NOT EXISTS weather_db;
-CREATE DATABASE IF NOT EXISTS news_db;
-CREATE DATABASE IF NOT EXISTS crypto_db;
-CREATE DATABASE IF NOT EXISTS minder_marketplace;
+DO $$ BEGIN
+    CREATE DATABASE tefas_db;
+EXCEPTION
+    WHEN duplicate_database THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE DATABASE weather_db;
+EXCEPTION
+    WHEN duplicate_database THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE DATABASE news_db;
+EXCEPTION
+    WHEN duplicate_database THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE DATABASE crypto_db;
+EXCEPTION
+    WHEN duplicate_database THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE DATABASE minder_marketplace;
+EXCEPTION
+    WHEN duplicate_database THEN NULL;
+END $$;
 
 -- Create extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
