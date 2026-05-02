@@ -170,7 +170,27 @@ healthcheck:
 
 ## Reverse Proxy Configuration
 
-### Nginx Configuration
+### Traefik Configuration (Recommended)
+
+The Minder platform uses **Traefik v3** as its reverse proxy, which provides:
+
+- **Automatic Service Discovery** - Docker integration, no manual config needed
+- **Built-in Load Balancing** - Automatic routing to healthy containers
+- **SSL/TLS Termination** - Automatic certificate management
+- **Health Checks** - Automatic container health monitoring
+- **Middleware Pipeline** - Authentication, rate limiting, headers
+
+**Current Traefik Configuration:**
+```yaml
+# Already configured in infrastructure/docker/docker-compose.yml
+# Traefik Dashboard: http://localhost:8081
+# SSL: Auto-generated or configure via Traefik
+# Service Discovery: Automatic via Docker labels
+```
+
+### Alternative: Manual Nginx (Not Recommended)
+
+If you prefer manual Nginx configuration instead of Traefik:
 
 ```nginx
 upstream minder_api {
@@ -183,7 +203,7 @@ upstream minder_api {
 server {
     listen 80;
     server_name api.example.com;
-    
+
     location / {
         proxy_pass http://minder_api;
         proxy_set_header Host $host;
@@ -196,6 +216,12 @@ server {
 
 ### SSL/TLS Setup
 
+**Option 1: Traefik (Recommended)**
+- Automatic Let's Encrypt integration
+- Certificate auto-renewal
+- No manual configuration needed
+
+**Option 2: Manual Certbot (Alternative)**
 ```bash
 # Install certbot
 apt-get install certbot python3-certbot-nginx
@@ -282,7 +308,12 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d --scale plugin-
 
 ### Load Balancing
 
-Use Nginx or HAProxy:
+**Traefik (Recommended):**
+Traefik automatically handles load balancing across scaled containers using round-robin algorithm.
+
+**Manual Load Balancing (Alternative):**
+If you need manual load balancer configuration:
+
 ```nginx
 upstream api_gateway {
     least_conn;
@@ -290,6 +321,15 @@ upstream api_gateway {
     server minder-api-gateway-2:8000;
     server minder-api-gateway-3:8000;
 }
+```
+
+**HAProxy (Enterprise Alternative):**
+```haproxy
+backend api_gateway
+    balance roundrobin
+    server api-gateway-1:8000 check
+    server api-gateway-2:8000 check
+    server api-gateway-3:8000 check
 ```
 
 ## Rolling Updates
