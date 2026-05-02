@@ -68,9 +68,10 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 This will start 23 services:
 - Security Layer (2): Traefik, Authelia
 - Core Infrastructure (5): PostgreSQL, Redis, Qdrant, Ollama, Neo4j
-- Core APIs (6): API Gateway, Plugin Registry, Marketplace, State Manager, AI Services, Model Management
+- Core APIs (6): API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management
 - AI Enhancement (3): TTS/STT Service, Model Fine-tuning, OpenWebUI
-- Monitoring (7): Prometheus, Grafana, InfluxDB, Telegraf, Alertmanager, Exporters
+- Monitoring Stack (5): InfluxDB, Telegraf, Prometheus, Grafana, Alertmanager
+- Metrics Exporters (2): PostgreSQL Exporter, Redis Exporter
 
 #### Step 4: Verify Installation
 

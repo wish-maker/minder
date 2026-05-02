@@ -32,7 +32,7 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 - 📈 **Scalability** - Horizontal scaling with Docker Compose
 
 **Current Status (2026-05-02 - Production Ready):**
-- 📦 **22 Services** running (22 healthy, 100% success rate)
+- 📦 **23 Services** running (23 healthy, 100% success rate)
 - 🐳 **Python 3.11.2** base images (production stable)
 - 🤖 **AI Models** Auto-installed (llama3.2 + nomic-embed-text)
 - 🧪 **232 Tests** passing (98.7% coverage, 2 failed, 2 skipped)
@@ -65,10 +65,12 @@ cd minder
 That's it! The platform will be fully operational in ~9 minutes with 23 services running.
 
 **📋 Service Breakdown:**
-- ✅ **Core Infrastructure (6)**: Traefik, Authelia, PostgreSQL, Redis, Qdrant, Ollama, Neo4j
-- ✅ **Core Microservices (8)**: API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management, Model Fine-tuning, TTS/STT
-- ✅ **Monitoring Stack (6)**: InfluxDB, Telegraf, Prometheus, Grafana, Alertmanager, Postgres Exporter, Redis Exporter
-- ✅ **AI Services (1)**: OpenWebUI
+- ✅ **Security Layer (2)**: Traefik, Authelia
+- ✅ **Core Infrastructure (5)**: PostgreSQL, Redis, Qdrant, Ollama, Neo4j
+- ✅ **Core Microservices (6)**: API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management
+- ✅ **AI Services (3)**: OpenWebUI, TTS/STT Service, Model Fine-tuning
+- ✅ **Monitoring Stack (5)**: InfluxDB, Telegraf, Prometheus, Grafana, Alertmanager
+- ✅ **Metrics Exporters (2)**: PostgreSQL Exporter, Redis Exporter
 
 **✨ ENHANCED SETUP EXPERIENCE:**
 - 🎨 **Professional UI** - Beautiful ASCII art header with step indicators
@@ -96,31 +98,49 @@ That's it! The platform will be fully operational in ~9 minutes with 23 services
 
 ### Lifecycle Management
 
-The `setup.sh` script now provides comprehensive lifecycle management:
+The `setup.sh` script provides enterprise-grade lifecycle management:
 
 ```bash
-# Service Management
+# Installation & Lifecycle
+./setup.sh                          # Full install (prereqs → env → network → DB → services)
 ./setup.sh start                    # Start all services
 ./setup.sh stop                     # Stop all services
+./setup.sh stop --clean             # Stop + prune dangling images
 ./setup.sh restart                  # Restart all services
 
 # Status & Monitoring
-./setup.sh status                   # Show detailed service status
-./setup.sh health                   # Run health checks
-./setup.sh logs                     # View service logs
+./setup.sh status                   # Live health overview + resource usage
+./setup.sh status --json            # Machine-readable JSON output
+./setup.sh logs [service] [lines]    # Tail logs (all or specific service)
 
-# Updates & Maintenance
-./setup.sh check-updates            # Check for Docker image updates
-./setup.sh update                   # Update Docker images
-./setup.sh backup                   # Backup configuration and data
+# Operations
+./setup.sh shell [service]          # Interactive shell in container
+./setup.sh migrate [target]         # Run Alembic DB migrations
+./setup.sh doctor                   # Deep diagnostics (disk, ports, secrets, images)
+
+# Data Management
+./setup.sh backup                   # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
+./setup.sh restore [archive]        # Restore from backup (interactive if no path)
+
+# Updates
+./setup.sh update                   # Pull latest compatible images + rebuild + restart
+./setup.sh update --check           # Show available updates without applying
 
 # Uninstallation
-./setup.sh uninstall --keep-data   # Remove services (keep data)
-./setup.sh uninstall                 # Remove everything
+./setup.sh uninstall                # Stop services, preserve data volumes
+./setup.sh uninstall --purge        # Stop and DELETE all data (irreversible)
 
 # Help
-./setup.sh --help                   # Show all commands
+./setup.sh --help                   # Show all commands with examples
 ```
+
+**NEW FEATURES (v1.0.0):**
+- 🩺 **Doctor Command** - Comprehensive system diagnostics
+- 🔄 **Smart Updates** - Version resolution with fallback logic
+- 💾 **Advanced Backup** - Multi-database support (PostgreSQL, Neo4j, InfluxDB, Qdrant)
+- 🔧 **Shell Access** - Interactive container debugging
+- 📊 **JSON Output** - Machine-readable health reports
+- 🐍 **Migration Support** - Alembic database schema management
 
 ### Verification
 
