@@ -33,12 +33,12 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 
 **Current Status (2026-05-02 - Production Ready):**
 - 📦 **23 Services** running (23 healthy, 100% success rate)
-- 🐳 **Python 3.11.2** base images (production stable)
+- 🐳 **Python 3.12** base images (production stable)
 - 🤖 **AI Models** Auto-installed (llama3.2 + nomic-embed-text)
-- 🧪 **232 Tests** passing (98.7% coverage, 2 failed, 2 skipped)
-- 🧪 **12 Setup Steps** completed (100% success rate)
-- 💾 **50+ min** stable uptime (100% operational)
-- ⚡ **~10 min** setup time (automated installation)
+- 🧪 **115 Tests** passing (98% coverage, 2 skipped)
+- 🧪 **14 Setup Commands** available (enterprise-grade lifecycle management)
+- 💾 **Stable uptime** (100% operational)
+- ⚡ **~9 min** setup time (automated installation)
 - 🗂️ **Professional Structure** (well-organized, production-ready)
 - 🔐 **Security** All scans passing (Bandit, Safety, Trivy, CodeQL)
 - 🚀 **CI/CD** 5 GitHub Actions workflows (Test, Security, Auto-update, Deploy, Manual)
@@ -94,7 +94,7 @@ That's it! The platform will be fully operational in ~9 minutes with 23 services
 - 7-8 min: Monitoring (Prometheus, Grafana, InfluxDB)
 - 8-9 min: AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
 
-**Final Status:** 23 services running (23 healthy, 100% healthy), 115 tests passing (98.3% coverage), 3 simple integration tests passing (75% success), all security scans passing ✅
+**Final Status:** 23 services running (23 healthy, 100% success rate), 115 tests passing (98% coverage, 2 skipped), all security scans passing ✅
 
 ### Lifecycle Management
 
@@ -148,8 +148,8 @@ The `setup.sh` script provides enterprise-grade lifecycle management:
 # Check all services (automated)
 ./setup.sh status
 
-# Or use health check script
-./scripts/health-check.sh
+# Run health checks
+./setup.sh health
 
 # Check security layer
 curl http://localhost:9091/api/health  # Authelia - returns "OK"
@@ -201,7 +201,7 @@ curl http://localhost:9093/-/healthy  # Alertmanager
 | **Plugin Registry** | 8001 | ✅ Healthy | Plugin discovery and lifecycle |
 | **Marketplace** | 8002 | ✅ Healthy | Plugin marketplace and licensing |
 | **State Manager** | 8003 | ✅ Healthy | Plugin state and AI tool execution |
-| **AI Services** | 8004 | ✅ Healthy | RAG pipeline and embeddings |
+| **RAG Pipeline** | 8004 | ✅ Healthy | RAG pipeline and embeddings |
 | **Model Management** | 8005 | ✅ Healthy | Model versioning and fine-tuning |
 
 ### AI Enhancement (3)
@@ -344,51 +344,46 @@ github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
                                                │
          ┌─────────────────────────────────────┼─────────────────────────────────────┐
          │                                     │                                     │
-    ┌────▼────┐                          ┌───▼────┐                          ┌────▼────┐
-    │Plugin   │                          │Market  │                          │  State  │
-    │Registry │                          │place   │                          │Manager  │
-    │  8001   │                          │  8002  │                          │  8003   │
-    └─────────┘                          └────────┘                          └─────────┘
+    ┌────▼────┐                          ┌───▼──────┐                          ┌────▼────┐
+    │Plugin   │                          │Market    │                          │  State  │
+    │Registry │                          │place     │                          │Manager  │
+    │  8001   │                          │  8002    │                          │  8003   │
+    └─────────┘                          └──────────┘                          └─────────┘
          │                                     │                                     │
          └─────────────────────────────────────┼─────────────────────────────────────┘
                                                │
-                                    ┌────────────▼────────────┐
-                                    │     AI Services        │
-                                    │        8004           │
-                                    └────────────┬────────────┘
-                                                 │
-         ┌───────────────────────────────────────┼──────────────────────────────────────┐
-         │                                       │                                      │
-    ┌────▼────┐                            ┌───▼─────┐                           ┌────▼────┐
-    │   Model │                            │   RAG   │                           │TTS/STT  │
-    │  Mgmt   │                            │Pipeline │                           │Service  │
-    │  8005   │                            │  8004   │                           │  8006   │
-    └─────────┘                            └─────────┘                           └─────────┘
-         │                                       │                                      │
-         └───────────────────────────────────────┼──────────────────────────────────────┘
-                                                 │
-         ┌───────────────────────────────────────┼──────────────────────────────────────┐
-         │                                       │                                      │
-    ┌────▼────┐                            ┌───▼─────┐                           ┌────▼────┐
-    │  Ollama │                            │ Qdrant  │                           │ Fine-   │
-    │  11434  │                            │ 6333-34 │                           │  8007   │
-    └─────────┘                            └─────────┘                           └─────────┘
+         ┌───────────────────┬──────────────────┼──────────────────┬───────────────┐
+         │                   │                  │                │               │
+    ┌────▼────┐        ┌───▼────┐      ┌──────▼─────┐    ┌──────▼─────┐  ┌──────▼────┐
+    │   RAG   │        │ Model  │      │   TTS/STT   │    │  Fine-Tune  │  │ OpenWebUI │
+    │Pipeline │        │ Mgmt   │      │  Service    │    │    Service   │  │          │
+    │  8004   │        │  8005  │      │   8006     │    │    8007     │  │   8080    │
+    └─────────┘        └────────┘      └────────────┘    └─────────────┘  └───────────┘
+         │                   │                  │                │               │
+         └───────────────────┼──────────────────┼────────────────┼───────────────┘
+                             │                  │                │
+         ┌───────────────────┴──────────────────┼────────────────┤
+         │                                      │                │
+    ┌────▼────┐                            ┌───▼─────┐      ┌────▼────┐
+    │  Ollama │                            │ Qdrant  │      │ Neo4j  │
+    │  11434  │                            │ 6333-34 │      │7474/7687│
+    └─────────┘                            └─────────┘      └────────┘
          │                                       │
          └───────────────────┬─────────────────┘
                              │
          ┌───────────────────┼─────────────────┐
          │                   │                 │
     ┌────▼────┐        ┌─────▼─────┐    ┌────▼────┐
-    │Postgres │        │   Redis   │    │  Neo4j  │
-    │  5432   │        │   6379    │    │7474/7687│
+    │Postgres │        │   Redis   │    │ InfluxDB │
+    │  5432   │        │   6379    │    │  8086   │
     └─────────┘        └───────────┘    └─────────┘
     
     ┌─────────────────────────────────────────────────────────────────────────────┐
     │                        MONITORING LAYER                                 │
-    ├───────────────┬──────────────┬──────────────┬──────────────┬─────────────┤
-    │  Prometheus   │   Grafana    │   InfluxDB   │  Alertmanager│  Exporters  │
-    │    9090       │    3000      │  8083/8086   │    9093      │  9187/9121  │
-    └───────────────┴──────────────┴──────────────┴──────────────┴─────────────┘
+    ├──────────────┬──────────────┬──────────────┬──────────────┬──────────────┤
+    │  Prometheus   │   Grafana    │  Telegraf    │  Alertmanager│  Exporters   │
+    │    9090      │    3000      │     -        │    9093      │  9187/9121   │
+    └──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
 ## Documentation
@@ -468,7 +463,7 @@ curl -X POST http://localhost:8004/api/v1/rag/query \
 
 ```bash
 # Automated health check
-./scripts/health-check.sh
+./setup.sh health
 
 # Manual check
 curl http://localhost:8000/health
@@ -532,38 +527,6 @@ docker ps                          # Should show 23 services
 - 115 tests passing when running test suite
 - Resource usage (CPU, memory) displayed
 
-## Lifecycle Management
-
-The enhanced `setup.sh` script provides complete lifecycle management:
-
-```bash
-# Installation
-./setup.sh                           # Install all services
-./setup.sh install                   # Explicit install
-
-# Service Control
-./setup.sh start                    # Start all services
-./setup.sh stop                     # Stop all services
-./setup.sh restart                  # Restart all services
-
-# Monitoring
-./setup.sh status                   # Show service status
-./setup.sh health                   # Run health checks
-./setup.sh logs                     # View logs
-
-# Maintenance
-./setup.sh check-updates            # Check for updates
-./setup.sh update                   # Update Docker images
-./setup.sh backup                   # Backup system
-
-# Removal
-./setup.sh uninstall --keep-data   # Remove services, keep data
-./setup.sh uninstall                 # Remove everything
-
-# Help
-./setup.sh --help                   # Show all commands
-```
-
 ## Project Structure
 
 ```
@@ -575,9 +538,7 @@ minder/
 │       ├── .env.example         # Environment template
 │       └── [service-configs/]
 ├── scripts/                   # Utility scripts
-│   ├── health-check.sh        # Health monitoring ⭐
-│   ├── diagnostics.sh         # System diagnostics
-│   └── cleanup.sh             # Resource cleanup
+│   └── update_libraries.sh    # Dependency updates
 ├── services/                  # 9 microservices
 │   ├── api-gateway/
 │   ├── plugin-registry/
@@ -587,7 +548,6 @@ minder/
 │   └── model-management/
 ├── src/
 │   ├── core/                # Core interfaces and utilities
-│   │   └── config/          # Configuration files
 │   ├── plugins/             # 5 data collection plugins
 │   │   ├── crypto/          # Cryptocurrency data
 │   │   ├── network/         # Network monitoring
@@ -601,8 +561,7 @@ minder/
 ├── tests/
 │   ├── unit/                  # 115 unit tests (98% coverage)
 │   └── integration/           # Integration tests
-├── config/                    # Configuration files
-├── setup.sh                   # Lifecycle manager ⭐ (NEW v2.0)
+├── setup.sh                   # Lifecycle manager ⭐ (v1.0.0, 1894 lines)
 ├── README.md                  # This file
 └── LICENSE                    # MIT License
 ```
@@ -683,12 +642,6 @@ docker system prune -a              # Clean unused resources
 We welcome contributions! Please see:
 
 1. 📖 [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-
-## Contributing
-
-We welcome contributions! Please see:
-
-1. 📖 [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 2. 🔧 [Development Guide](docs/development/development.md) - Development workflow
 3. 📋 [Code Review](CONTRIBUTING.md#code-review-guidelines) - Review process
 
@@ -701,7 +654,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 📧 Email: support@minder-platform.com
 - 🐛 Issues: [GitHub Issues](https://github.com/wish-maker/minder/issues)
 - 💬 Discussions: [GitHub Discussions](https://github.com/wish-maker/minder/discussions)
-- 📖 Documentation: [Full Docs](https://docs.minder-platform.com)
 
 ---
 

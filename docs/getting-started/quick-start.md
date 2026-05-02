@@ -74,33 +74,41 @@ Or use the built-in health check:
 
 ### Lifecycle Management
 
-The `setup.sh` script now provides comprehensive management capabilities:
+The `setup.sh` script provides comprehensive enterprise-grade management:
 
 ```bash
-# View status
-./setup.sh status
+# Installation & Lifecycle
+./setup.sh                          # Full install (prereqs → env → network → DB → services)
+./setup.sh start                    # Start all services
+./setup.sh stop                     # Stop all services
+./setup.sh stop --clean             # Stop + prune dangling images
+./setup.sh restart                  # Restart all services
 
-# Start/Stop/Restart services
-./setup.sh stop
-./setup.sh start
-./setup.sh restart
+# Status & Monitoring
+./setup.sh status                   # Live health overview + resource usage
+./setup.sh status --json            # Machine-readable JSON output
+./setup.sh health                   # Run health checks
+./setup.sh logs [service]           # Tail logs (all or specific service)
 
-# View logs
-./setup.sh logs                 # All services
-./setup.sh logs api-gateway     # Specific service
+# Operations
+./setup.sh shell [service]          # Interactive shell in container
+./setup.sh migrate [target]         # Run Alembic DB migrations
+./setup.sh doctor                   # Deep diagnostics (disk, ports, secrets, images)
 
-# Check for updates
-./setup.sh check-updates
+# Data Management
+./setup.sh backup                   # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
+./setup.sh restore [archive]        # Restore from backup (interactive if no path)
 
-# Update Docker images
-./setup.sh update
+# Updates
+./setup.sh update                   # Pull latest compatible images + rebuild + restart
+./setup.sh update --check           # Show available updates without applying
 
-# Backup system
-./setup.sh backup
+# Uninstallation
+./setup.sh uninstall --keep-data    # Remove services, keep data volumes
+./setup.sh uninstall --purge        # Stop and DELETE all data (irreversible)
 
-# Uninstall
-./setup.sh uninstall --keep-data   # Keep data
-./setup.sh uninstall                 # Remove everything
+# Help
+./setup.sh --help                   # Show all commands with examples
 ```
 
 ### First Steps

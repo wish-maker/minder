@@ -96,7 +96,7 @@ curl http://localhost:3000/api/health  # Grafana
 
 ## Lifecycle Management
 
-The `setup.sh` script provides comprehensive lifecycle management capabilities:
+The `setup.sh` script provides comprehensive enterprise lifecycle management capabilities:
 
 ### Available Commands
 
@@ -108,22 +108,32 @@ The `setup.sh` script provides comprehensive lifecycle management capabilities:
 # Service Management
 ./setup.sh start                    # Start all services
 ./setup.sh stop                     # Stop all services
+./setup.sh stop --clean             # Stop + prune dangling images
 ./setup.sh restart                  # Restart all services
 
 # Status & Monitoring
 ./setup.sh status                   # Show detailed service status
+./setup.sh status --json            # Machine-readable JSON output
 ./setup.sh health                   # Run health checks
 ./setup.sh logs                     # View service logs
 ./setup.sh logs <service>           # View specific service logs
 
+# Operations
+./setup.sh shell <service>          # Interactive shell in container
+./setup.sh migrate <target>         # Run Alembic DB migrations
+./setup.sh doctor                   # Deep diagnostics (disk, ports, secrets, images, versions)
+
+# Data Management
+./setup.sh backup                   # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
+./setup.sh restore <archive>        # Restore from backup (interactive if no path)
+
 # Updates & Maintenance
-./setup.sh check-updates            # Check for Docker image updates
 ./setup.sh update                   # Update Docker images
-./setup.sh backup                   # Backup configuration and data
+./setup.sh update --check           # Show available updates without applying
 
 # Uninstallation
-./setup.sh uninstall               # Remove all services and data
-./setup.sh uninstall --keep-data   # Remove services but keep data
+./setup.sh uninstall --keep-data    # Remove services but keep data
+./setup.sh uninstall --purge        # Stop and DELETE all data (irreversible)
 
 # Help
 ./setup.sh --help                   # Show all available commands

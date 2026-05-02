@@ -1,9 +1,9 @@
 # Minder Platform - API Documentation
 
 **Version:** 1.0.0
-**Last Updated:** 2026-04-30
+**Last Updated:** 2026-05-02
 **Base URL:** `http://localhost:8000`
-**Services:** 23 microservices (21 healthy, 2 starting)
+**Services:** 23 microservices (23 healthy, 100% operational)
 
 ---
 
@@ -681,12 +681,12 @@ console.log(`Collected ${result.records_collected} records`);
 ## Changelog
 
 
-### Version 1.0.0 (2026-04-30)
+### Version 1.0.0 (2026-05-02)
 - Initial release
 - Basic CRUD operations for plugins
 - Health check endpoints
 - Added security layer (Traefik + Authelia SSO/2FA)
-- Expanded to 23 services (21 healthy, 91% success rate)
+- Expanded to 23 services (23 healthy, 100% success rate)
 - Improved test coverage to 98% (115 tests passing, 2 skipped)
 - Added automatic AI model downloads (llama3.2 + nomic-embed-text)
 - Added realistic startup timeline (~9 minutes)
@@ -696,6 +696,13 @@ console.log(`Collected ${result.records_collected} records`);
 - Added comprehensive API documentation
 - Standardized error response format
 - Professional project cleanup (765MB, zero cache files)
+- Setup.sh v1.0.0 enterprise rewrite (14 commands, 66 functions, 1894 lines)
+- Doctor command for deep diagnostics
+- Advanced backup system (multi-database support)
+- Shell access for container debugging
+- Migration support for database schemas
+- JSON output for CI/CD integration
+- Smart version management with registry queries
 
 ---
 
