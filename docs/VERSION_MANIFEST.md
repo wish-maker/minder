@@ -1,7 +1,7 @@
 # Version Manifest - Minder Platform v1.0.0
 
-**Last Updated:** 2026-05-01
-**Platform Version:** 1.0.0
+**Last Updated:** 2026-05-02
+**Platform Version:** 1.0.0 (Production Ready)
 
 ## 📦 Docker Images
 
@@ -85,6 +85,9 @@
 - ✅ OpenWebUI: Updated image from git-69d0a16 to latest
 - ✅ Monitoring Stack: Added `--profile monitoring` for Prometheus, Grafana, Alertmanager
 - ✅ Metrics Exporters: Added `--profile monitoring` for Postgres/Redis exporters
+- ✅ PostgreSQL Init: Fixed SQL syntax for database creation (DO $$ blocks)
+- ✅ Plugin Registry: Removed borsapy due to httpx 0.25.2 compatibility conflict
+- ✅ RAG Pipeline: Fixed ollama version (>=0.3.0 → 0.1.7) for httpx 0.25.2 compatibility
 - ✅ All 23 services now running successfully (22 healthy)
 
 **Standardization:**
