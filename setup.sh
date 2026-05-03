@@ -5,7 +5,7 @@
 #
 # FEATURES:
 #   • Full install / start / stop / restart / status / logs
-#   • Comprehensive backup  (Postgres, Neo4j, InfluxDB, Qdrant, .env)
+#   • Comprehensive backup  (Postgres, Neo4j, InfluxDB, Qdrant, RabbitMQ, .env)
 #   • restore  — restore from a backup directory
 #   • migrate  — run Alembic DB migrations inside running containers
 #   • doctor   — deep diagnostic: disk, ports, secrets, images, version drift
@@ -75,6 +75,7 @@ declare -A SERVICE_PORTS=(
     [influxdb]="8086/ping"
     [traefik]="8081/ping"
     [authelia]="9091/api/health"
+    [rabbitmq]="15672"
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -1048,7 +1049,7 @@ run_health_checks() {
     done
 
     [[ "$json_mode" == false ]] && echo -e "\n${BOLD}Monitoring${NC}"
-    for svc in prometheus grafana influxdb traefik authelia; do
+    for svc in prometheus grafana influxdb traefik authelia rabbitmq; do
         [[ -v "SERVICE_PORTS[$svc]" ]] && _check_endpoint "$svc" "${SERVICE_PORTS[$svc]}"
     done
 
@@ -1260,6 +1261,21 @@ cmd_backup() {
         log_warn "Qdrant not running — skipped"
     fi
 
+    if container_running rabbitmq; then
+        spinner_start "Backing up RabbitMQ definitions…"
+        if run docker exec "$(container_name rabbitmq)" \
+               rabbitmqctl export_definitions /tmp/rabbitmq-defs.json 2>/dev/null && \
+           run docker cp "$(container_name rabbitmq):/tmp/rabbitmq-defs.json" \
+               "${dest}/rabbitmq-definitions.json"; then
+            spinner_stop
+            log_success "RabbitMQ definitions backed up"
+        else
+            spinner_stop; log_warn "RabbitMQ definitions export failed"
+        fi
+    else
+        log_warn "RabbitMQ not running — skipped"
+    fi
+
     spinner_start "Compressing backup archive…"
     local archive="${BACKUP_DIR}/minder-${ts}.tar.gz"
     if tar czf "$archive" -C "$BACKUP_DIR" "minder-${ts}" 2>/dev/null; then
@@ -1361,6 +1377,17 @@ cmd_restore() {
         docker exec "$(container_name qdrant)" \
             tar xzf /tmp/qdrant-backup.tar.gz -C / 2>/dev/null
         spinner_stop; log_success "Qdrant restored"
+    fi
+
+    if [[ -f "${restore_dir}/rabbitmq-definitions.json" ]] && container_running rabbitmq; then
+        spinner_start "Restoring RabbitMQ definitions…"
+        docker cp "${restore_dir}/rabbitmq-definitions.json" "$(container_name rabbitmq):/tmp/rabbitmq-defs.json"
+        if docker exec "$(container_name rabbitmq)" \
+               rabbitmqctl import_definitions /tmp/rabbitmq-defs.json 2>/dev/null; then
+            spinner_stop; log_success "RabbitMQ definitions restored"
+        else
+            spinner_stop; log_warn "RabbitMQ definitions restore had errors"
+        fi
     fi
 
     rm -rf "$tmp_dir"

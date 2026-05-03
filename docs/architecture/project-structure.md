@@ -22,7 +22,7 @@ minder/                              # Project root
 │
 ├── infrastructure/                 # Infrastructure configuration
 │   └── docker/
-│       ├── docker-compose.yml      # Main compose file (23 services)
+│       ├── docker-compose.yml      # Main compose file (24 services)
 │       ├── .env.example           # Environment template
 │       ├── .env                   # Actual environment (gitignored)
 │       ├── postgres-init.sql      # Database initialization

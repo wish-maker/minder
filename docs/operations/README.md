@@ -23,7 +23,7 @@ This guide covers operational tasks for managing the Minder Platform in producti
 - Creates environment configuration
 - Sets up Docker networks
 - Initializes databases
-- Starts all 23 services
+- Starts all 24 services
 - Downloads AI models automatically
 - Verifies health of all services
 
@@ -153,6 +153,80 @@ This guide covers operational tasks for managing the Minder Platform in producti
 - InfluxDB (time-series data)
 - Qdrant (vector database)
 
+### Message Queue (NEW!)
+
+RabbitMQ is now included as the message queue solution for the Minder platform.
+
+#### Start RabbitMQ
+
+```bash
+docker compose -f infrastructure/docker/docker-compose.yml up -d rabbitmq
+```
+
+**Access:**
+- AMQP port: 5672
+- Management UI: http://localhost:15672
+- Default credentials: minder / (set RABBITMQ_PASSWORD in .env)
+
+#### Check RabbitMQ Status
+
+```bash
+docker ps | grep rabbitmq
+curl -u minder:${RABBITMQ_PASSWORD} http://localhost:15672/api/overview
+```
+
+#### Management UI
+
+Access the RabbitMQ Management UI at http://localhost:15672 for:
+- Queue monitoring
+- Message browsing
+- Connection management
+- Policy configuration
+
+#### Usage Examples
+
+See `examples/rabbitmq_example.py` for complete usage examples:
+
+```bash
+# Install dependencies
+pip install -r examples/requirements.txt
+
+# Run examples
+python examples/rabbitmq_example.py
+```
+
+**Integration with Minder services:**
+- API Gateway → Plugin Registry (plugin tasks)
+- Event broadcasting (pub/sub)
+- Dead Letter Queue (error handling)
+
+#### RabbitMQ in Production
+
+**Before deploying to production:**
+1. Set strong RABBITMQ_PASSWORD in .env
+2. Enable clustering for high availability
+3. Configure resource limits (memory, disk)
+4. Set up monitoring (Prometheus exporter)
+5. Define queue policies (max length, TTL)
+
+**Monitoring:**
+```bash
+# Check queue depth
+curl -u minder:${RABBITMQ_PASSWORD} http://localhost:15672/api/queues
+
+# Get message rates
+curl -u minder:${RABBITMQ_PASSWORD} http://localhost:15672/api/queues/%2F/plugin.crypto
+```
+
+**Policies:**
+```bash
+# Set max length on queue
+curl -u minder:${RABBITMQ_PASSWORD} -X PUT \
+  -H "content-type:application/json" \
+  -d '{"max-length": 10000}' \
+  http://localhost:15672/api/policies/%2F/queue-length-policy
+```
+
 ### Data Management
 
 #### Backup (ENHANCED!)
@@ -166,6 +240,7 @@ This guide covers operational tasks for managing the Minder Platform in producti
 - ✅ Neo4j graph data
 - ✅ InfluxDB time-series data
 - ✅ Qdrant vector collections
+- ✅ RabbitMQ queue definitions
 - ✅ Environment configuration (.env file)
 
 **Backup location:**
@@ -175,6 +250,7 @@ backups/minder-backup-YYYYMMDD-HHMMSS/
 ├── neo4j_backup.dump
 ├── influxdb_backup.tar
 ├── qdrant_backup.tar
+├── rabbitmq-definitions.json
 └── env_backup.txt
 ```
 
@@ -200,6 +276,7 @@ backups/minder-backup-YYYYMMDD-HHMMSS/
 - Neo4j data from backup dump
 - InfluxDB data from tar archive
 - Qdrant collections from backup
+- RabbitMQ queue definitions from JSON
 - Environment configuration
 
 **Interactive mode:**

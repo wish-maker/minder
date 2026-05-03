@@ -65,9 +65,9 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d postgres redis 
 docker compose -f infrastructure/docker/docker-compose.yml up -d
 ```
 
-This will start 23 services:
+This will start 24 services:
 - Security Layer (2): Traefik, Authelia
-- Core Infrastructure (5): PostgreSQL, Redis, Qdrant, Ollama, Neo4j
+- Core Infrastructure (6): PostgreSQL, Redis, RabbitMQ, Qdrant, Ollama, Neo4j
 - Core APIs (6): API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management
 - AI Enhancement (3): TTS/STT Service, Model Fine-tuning, OpenWebUI
 - Monitoring Stack (5): InfluxDB, Telegraf, Prometheus, Grafana, Alertmanager
@@ -244,7 +244,7 @@ When running `./setup.sh`, expect the following timeline:
 **7-8 min:** Monitoring (Prometheus, Grafana, InfluxDB)
 **8-9 min:** AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
 
-**Final Status:** 23 services, all healthy, ready to use
+**Final Status:** 24 services, all healthy, ready to use
 
 ## Troubleshooting
 

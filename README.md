@@ -32,7 +32,7 @@ Minder is a production-ready microservices platform for AI plugin management, fe
 - 📈 **Scalability** - Horizontal scaling with Docker Compose
 
 **Current Status (2026-05-02 - Production Ready):**
-- 📦 **23 Services** running (23 healthy, 100% success rate)
+- 📦 **24 Services** running (24 healthy, 100% success rate)
 - 🐳 **Python 3.12** base images (production stable)
 - 🤖 **AI Models** Auto-installed (llama3.2 + nomic-embed-text)
 - 🧪 **115 Tests** passing (98% coverage, 2 skipped)
@@ -212,12 +212,13 @@ curl http://localhost:9093/-/healthy  # Alertmanager
 | **Model Fine-tuning** | 8007 | ✅ Healthy | LLM fine-tuning |
 | **OpenWebUI** | 8080 | ✅ Healthy | Web-based chat interface |
 
-### Infrastructure (5)
+### Infrastructure (6)
 
 | Service | Port | Status | Description |
 |---------|------|--------|-------------|
 | **PostgreSQL 16** | 5432 | ✅ Healthy | Primary database |
 | **Redis 7** | 6379 | ✅ Healthy | Caching and sessions |
+| **RabbitMQ 3** | 5672, 15672 | ✅ Healthy | Message queue (AMQP + Management UI) |
 | **Qdrant** | 6333-6334 | ✅ Healthy | Vector database for embeddings |
 | **Ollama** | 11434 | ✅ Healthy | Local LLM inference + auto model download |
 | **Neo4j** | 7474, 7687 | ✅ Healthy | Graph database for dependencies |
@@ -373,10 +374,10 @@ github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
                              │
          ┌───────────────────┼─────────────────┐
          │                   │                 │
-    ┌────▼────┐        ┌─────▼─────┐    ┌────▼────┐
-    │Postgres │        │   Redis   │    │ InfluxDB │
-    │  5432   │        │   6379    │    │  8086   │
-    └─────────┘        └───────────┘    └─────────┘
+    ┌────▼────┐        ┌─────▼─────┐    ┌────▼────┐    ┌───────┐
+    │Postgres │        │   Redis   │    │RabbitMQ │    │InfluxDB│
+    │  5432   │        │   6379    │    │5672/72  │    │  8086  │
+    └─────────┘        └───────────┘    └─────────┘    └────────┘
     
     ┌─────────────────────────────────────────────────────────────────────────────┐
     │                        MONITORING LAYER                                 │

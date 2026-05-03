@@ -3,7 +3,7 @@
 **Version:** 1.0.0
 **Last Updated:** 2026-05-02
 **Base URL:** `http://localhost:8000`
-**Services:** 23 microservices (23 healthy, 100% operational)
+**Services:** 24 microservices (24 healthy, 100% operational)
 
 ---
 
@@ -686,7 +686,12 @@ console.log(`Collected ${result.records_collected} records`);
 - Basic CRUD operations for plugins
 - Health check endpoints
 - Added security layer (Traefik + Authelia SSO/2FA)
-- Expanded to 23 services (23 healthy, 100% success rate)
+- Expanded to 24 services (24 healthy, 100% success rate)
+- RabbitMQ 3.13-management integrated for async messaging
+- Plugin task distribution via RabbitMQ (API Gateway → Plugin Registry)
+- Event broadcasting with pub/sub pattern
+- Dead Letter Queue (DLQ) for error handling
+- RabbitMQ Management UI at http://localhost:15672
 - Improved test coverage to 98% (115 tests passing, 2 skipped)
 - Added automatic AI model downloads (llama3.2 + nomic-embed-text)
 - Added realistic startup timeline (~9 minutes)
