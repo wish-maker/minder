@@ -37,9 +37,10 @@ def db_session():
     """
     session = MagicMock()
 
-    # In-memory storage for events and snapshots
+    # In-memory storage for events, snapshots, and outbox
     event_storage = []
     snapshot_storage = []
+    outbox_storage = []
 
     def mock_execute(query, params=None):
         """Mock execute that stores and retrieves data"""
@@ -53,6 +54,11 @@ def db_session():
         # INSERT INTO snapshots
         elif "insert into snapshots" in query_str:
             snapshot_storage.append(params)
+            return MockDBResult([])
+
+        # INSERT INTO outbox
+        elif "insert into outbox" in query_str:
+            outbox_storage.append(params)
             return MockDBResult([])
 
         # SELECT from events
@@ -109,6 +115,61 @@ def db_session():
                 rows = []
 
             return MockDBResult(rows)
+
+        # SELECT from outbox
+        elif "select" in query_str and "from outbox" in query_str:
+            # Filter by status
+            filtered_outbox = [o for o in outbox_storage]
+
+            if "where status = 'pending'" in query_str:
+                filtered_outbox = [o for o in outbox_storage if o.get("status") == "pending"]
+            elif "where status = 'failed'" in query_str:
+                filtered_outbox = [o for o in outbox_storage if o.get("status") == "failed"]
+
+            # Sort by created_at
+            filtered_outbox.sort(key=lambda x: x.get("created_at"))
+
+            # Apply limit
+            limit = params.get("limit", 100)
+            filtered_outbox = filtered_outbox[:limit]
+
+            # Convert to row format
+            rows = []
+            for msg in filtered_outbox:
+                rows.append(
+                    (
+                        msg["id"],
+                        msg["event_id"],
+                        msg["event_type"],
+                        msg["payload"],
+                        msg["status"],
+                        msg.get("aggregate_type"),
+                        msg.get("aggregate_id"),
+                        msg.get("created_at"),
+                        msg.get("published_at"),
+                        msg.get("retry_count", 0),
+                        msg.get("error_message"),
+                    )
+                )
+            return MockDBResult(rows)
+
+        # UPDATE outbox
+        elif "update outbox" in query_str:
+            # Find and update message
+            msg_id = params.get("id")
+
+            for msg in outbox_storage:
+                if msg.get("id") == msg_id:
+                    if "set status = 'published'" in query_str:
+                        msg["status"] = "published"
+                        msg["published_at"] = "2024-01-01 00:00:00"
+                    elif "set status = 'failed'" in query_str:
+                        msg["status"] = "failed"
+                        msg["error_message"] = params.get("error_message")
+                        msg["retry_count"] = msg.get("retry_count", 0) + 1
+                    break
+
+            return MockDBResult([])
 
         return MockDBResult([])
 
