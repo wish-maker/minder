@@ -1,55 +1,53 @@
--- Event Store Schema for Event Sourcing
--- This stores ALL domain events in append-only log
+-- infrastructure/postgres/migrations/001_create_event_store.sql
 
--- Enable UUID extension if not exists
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Events table: Append-only event log
-CREATE TABLE IF NOT EXISTS events (
-    -- Primary key
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-
-    -- Event identification
-    event_id UUID NOT NULL UNIQUE,
-    event_type VARCHAR(255) NOT NULL,
-
-    -- Event metadata
-    timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-    correlation_id UUID,
-    causation_id UUID,
-    user_id VARCHAR(255),
-    trace_id VARCHAR(255),
-
-    -- Event payload
-    data JSONB NOT NULL,
-
-    -- Aggregation info (for event replay)
-    aggregate_type VARCHAR(255) NOT NULL,
+-- Events Table (Append-Only Log)
+CREATE TABLE IF NOT EXISTS minder_events (
+    global_offset BIGSERIAL PRIMARY KEY,
     aggregate_id UUID NOT NULL,
-    version BIGINT NOT NULL,
+    aggregate_version INT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    extra_metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
-    -- Metadata
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-
-    -- Constraints
-    CONSTRAINT events_aggregate_version_unique
-        UNIQUE (aggregate_type, aggregate_id, version)
+    UNIQUE (aggregate_id, aggregate_version)
 );
 
--- Indexes for performance
-CREATE INDEX idx_events_event_type ON events(event_type);
-CREATE INDEX idx_events_timestamp ON events(timestamp DESC);
-CREATE INDEX idx_events_aggregate ON events(aggregate_type, aggregate_id);
-CREATE INDEX idx_events_correlation_id ON events(correlation_id) WHERE correlation_id IS NOT NULL;
-CREATE INDEX idx_events_trace_id ON events(trace_id) WHERE trace_id IS NOT NULL;
+-- Indexes for Event Replay
+CREATE INDEX idx_events_replay ON minder_events (aggregate_id, aggregate_version);
+CREATE INDEX idx_events_type ON minder_events (event_type);
+CREATE INDEX idx_events_global_offset ON minder_events (global_offset);
 
--- Comments for documentation
-COMMENT ON TABLE events IS 'Append-only event log for Event Sourcing';
-COMMENT ON COLUMN events.event_id IS 'Unique identifier for this event instance';
-COMMENT ON COLUMN events.event_type IS 'Type name of the event (e.g., PluginRegistered)';
-COMMENT ON COLUMN events.aggregate_type IS 'Type of aggregate (e.g., Plugin, User)';
-COMMENT ON COLUMN events.aggregate_id IS 'Identifier of the aggregate instance';
-COMMENT ON COLUMN events.version IS 'Optimistic locking version for aggregate';
-COMMENT ON COLUMN events.data IS 'Event payload as JSONB';
-COMMENT ON COLUMN events.correlation_id IS 'Links multiple events in a workflow';
-COMMENT ON COLUMN events.causation_id IS 'Links this event to the command that caused it';
+-- Snapshots Table
+CREATE TABLE IF NOT EXISTS minder_snapshots (
+    aggregate_id UUID NOT NULL,
+    last_event_version INT NOT NULL,
+    state JSONB NOT NULL,
+    is_major_version BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (aggregate_id, last_event_version)
+);
+
+-- Index for Snapshot Loading
+CREATE INDEX idx_snapshots_latest ON minder_snapshots (aggregate_id, last_event_version DESC);
+
+-- Index for Retention Policy
+CREATE INDEX idx_snapshots_retention ON minder_snapshots (created_at)
+WHERE (is_major_version IS FALSE);
+
+-- Outbox Table
+CREATE TABLE IF NOT EXISTS minder_outbox (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL,
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    extra_metadata JSONB DEFAULT '{}'::jsonb,
+    status TEXT NOT NULL DEFAULT 'pending',
+    retry_count INT DEFAULT 0,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP WITH TIME ZONE,
+
+    INDEX idx_outbox_pending (status, created_at)
+);
