@@ -37,7 +37,7 @@ CREATE INDEX idx_snapshots_retention ON minder_snapshots (created_at)
 WHERE (is_major_version IS FALSE);
 
 -- Outbox Table
-CREATE TABLE IF NOT EXISTS minder_outbox (
+CREATE TABLE IF NOT EXISTS outbox_events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     event_id UUID NOT NULL,
     event_type TEXT NOT NULL,
@@ -47,7 +47,5 @@ CREATE TABLE IF NOT EXISTS minder_outbox (
     retry_count INT DEFAULT 0,
     error_message TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    processed_at TIMESTAMP WITH TIME ZONE,
-
-    INDEX idx_outbox_pending (status, created_at)
+    processed_at TIMESTAMP WITH TIME ZONE
 );
