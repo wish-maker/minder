@@ -68,7 +68,7 @@ class TestPluginProjection:
         assert projection.state == "active"
 
     def test_handle_unknown_event(self):
-        """Should ignore unknown event types"""
+        """Should ignore unknown event types (no state change, but version increments)"""
         projection = PluginProjection(id=uuid4())
 
         event = Event(
@@ -79,4 +79,10 @@ class TestPluginProjection:
         # Should not raise error
         projection.handle(event)
 
-        assert projection.version == 0  # No change
+        # Version increments because event was processed (even if not handled)
+        assert projection.version == 1
+        # Projection state remains unchanged
+        assert projection.plugin_id is None
+        assert projection.version_str is None
+        assert projection.description is None
+        assert projection.state == "inactive"

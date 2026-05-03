@@ -47,8 +47,8 @@ class PluginProjection(Projection):
         Args:
             event: Event to apply
 
-        Raises:
-            ValueError: If event type is not supported
+        Note:
+            Unknown event types are silently ignored as per projection spec.
         """
         if event.event_type == "PluginRegistered":
             self.plugin_id = event.data["plugin_id"]
@@ -60,7 +60,4 @@ class PluginProjection(Projection):
         elif event.event_type == "PluginStateChanged":
             self.state = event.data["new_state"]
 
-        else:
-            # Raise exception for unknown event types
-            # This prevents version increment in base class
-            raise ValueError(f"Unknown event type: {event.event_type}")
+        # Unknown event types are ignored (no else clause)
