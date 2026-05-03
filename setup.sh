@@ -53,11 +53,11 @@ readonly CONTAINER_PREFIX="minder"
 readonly NETWORK_NAME="docker_minder-network"
 
 readonly -a SECURITY_SERVICES=(traefik authelia)
-readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j)
+readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq)
 readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management)
 readonly -a AI_SERVICES=(openwebui tts-stt-service model-fine-tuning)
 readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager)
-readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter)
+readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter rabbitmq-exporter)
 
 # Port map  service-name → port/path  (used by health checks)
 declare -A SERVICE_PORTS=(
@@ -986,20 +986,24 @@ start_services() {
     compose up -d "${CORE_SERVICES[@]}"
     sleep 8
 
-    log_info "③ Core microservices…"
+    log_info "③ Message broker (RabbitMQ)…"
+    # RabbitMQ is already started in CORE_SERVICES, just wait for it to be healthy
+    wait_healthy "rabbitmq" "$TIMEOUT_SERVICES" || true
+
+    log_info "④ Core microservices…"
     compose up -d "${API_SERVICES[@]}"
     sleep 5
 
-    log_info "④ Monitoring stack…"
+    log_info "⑤ Monitoring stack…"
     compose up -d influxdb telegraf
     compose_monitoring up -d prometheus grafana alertmanager
     sleep 5
 
-    log_info "⑤ AI enhancement services…"
+    log_info "⑥ AI enhancement services…"
     compose up -d "${AI_SERVICES[@]}"
     sleep 5
 
-    log_info "⑥ Metrics exporters…"
+    log_info "⑦ Metrics exporters…"
     compose_monitoring up -d "${EXPORTER_SERVICES[@]}"
 
     log_success "All service groups dispatched"
