@@ -3,7 +3,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 import psycopg2
@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 class ConcurrencyException(Exception):
     """Raised when optimistic concurrency check fails"""
 
-    pass
+    # TODO: Implement connection pooling for better performance
+    # Consider: psycopg2.pool or connection pooler service
 
 
 class EventStoreRepository:
@@ -186,7 +187,7 @@ class EventStoreRepository:
             logger.error(f"Database error in get_stream: {e}")
             raise
 
-    def _serialize_event(self, event: DomainEvent) -> dict:
+    def _serialize_event(self, event: DomainEvent) -> Dict[str, Any]:
         """Serialize event to dictionary"""
         payload = {}
         for key, value in event.__dict__.items():
@@ -202,6 +203,7 @@ class EventStoreRepository:
 
     def _deserialize_event(self, row) -> DomainEvent:
         """Deserialize event from database row"""
-        # Implementation would use event registry
-        # For now, return placeholder
-        pass
+        raise NotImplementedError(
+            "Event deserialization requires Event Registry. "
+            "This will be implemented in Task 4 when we create concrete event classes."
+        )

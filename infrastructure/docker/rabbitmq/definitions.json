@@ -1,0 +1,257 @@
+{
+  "rabbitmq_version": "3.13",
+  "users": [
+    {
+      "name": "minder",
+      "tags": "administrator",
+      "limits": {}
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "minder",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "plugin.tasks",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "minder.events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "plugin.crypto",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "plugin.crypto.dlq",
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.crypto.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.network",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "plugin.network.dlq",
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.network.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.news",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "plugin.news.dlq",
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.news.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.tefas",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "plugin.tefas.dlq",
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.tefas.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.weather",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "plugin.weather.dlq",
+        "x-queue-type": "quorum"
+      }
+    },
+    {
+      "name": "plugin.weather.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "plugin.tasks",
+      "vhost": "/",
+      "destination": "plugin.crypto",
+      "destination_type": "queue",
+      "routing_key": "plugin.crypto",
+      "arguments": {}
+    },
+    {
+      "source": "plugin.tasks",
+      "vhost": "/",
+      "destination": "plugin.network",
+      "destination_type": "queue",
+      "routing_key": "plugin.network",
+      "arguments": {}
+    },
+    {
+      "source": "plugin.tasks",
+      "vhost": "/",
+      "destination": "plugin.news",
+      "destination_type": "queue",
+      "routing_key": "plugin.news",
+      "arguments": {}
+    },
+    {
+      "source": "plugin.tasks",
+      "vhost": "/",
+      "destination": "plugin.tefas",
+      "destination_type": "queue",
+      "routing_key": "plugin.tefas",
+      "arguments": {}
+    },
+    {
+      "source": "plugin.tasks",
+      "vhost": "/",
+      "destination": "plugin.weather",
+      "destination_type": "queue",
+      "routing_key": "plugin.weather",
+      "arguments": {}
+    },
+    {
+      "source": "minder.events",
+      "vhost": "/",
+      "destination": "plugin.crypto",
+      "destination_type": "queue",
+      "routing_key": "plugin.*",
+      "arguments": {}
+    },
+    {
+      "source": "minder.events",
+      "vhost": "/",
+      "destination": "plugin.network",
+      "destination_type": "queue",
+      "routing_key": "plugin.*",
+      "arguments": {}
+    },
+    {
+      "source": "minder.events",
+      "vhost": "/",
+      "destination": "plugin.news",
+      "destination_type": "queue",
+      "routing_key": "plugin.*",
+      "arguments": {}
+    },
+    {
+      "source": "minder.events",
+      "vhost": "/",
+      "destination": "plugin.tefas",
+      "destination_type": "queue",
+      "routing_key": "plugin.*",
+      "arguments": {}
+    },
+    {
+      "source": "minder.events",
+      "vhost": "/",
+      "destination": "plugin.weather",
+      "destination_type": "queue",
+      "routing_key": "plugin.*",
+      "arguments": {}
+    }
+  ],
+  "policies": [
+    {
+      "name": "queue-max-length",
+      "pattern": "plugin\\.",
+      "vhost": "/",
+      "definition": {
+        "max-length": 10000
+      },
+      "priority": 0,
+      "apply-to": "queues"
+    },
+    {
+      "name": "dlq-expiry",
+      "pattern": ".*\\.dlq",
+      "vhost": "/",
+      "definition": {
+        "message-ttl": 604800000
+      },
+      "priority": 0,
+      "apply-to": "queues"
+    }
+  ],
+  "parameters": [],
+  "global_parameters": [
+    {
+      "name": "cluster_name",
+      "value": "minder-rabbitmq-cluster"
+    }
+  ]
+}

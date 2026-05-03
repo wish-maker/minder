@@ -3,9 +3,10 @@
 import json
 from datetime import datetime
 from io import BytesIO
-from typing import Any, Dict
+from typing import Any, Dict, List
 from uuid import UUID
 
+import avro.io
 import avro.schema
 
 from src.shared.events.event import DomainEvent
@@ -16,6 +17,8 @@ class AvroEventSerializer:
 
     def __init__(self, schema_registry_url: str = "http://localhost:8082"):
         self.schema_registry_url = schema_registry_url
+        # TODO: Integrate with Apicurio Registry for schema evolution
+        # See: https://www.apicur.io/registry/docs/
         self._schemas: Dict[str, avro.schema.Schema] = {}
 
     def serialize(self, event: DomainEvent) -> bytes:
@@ -31,7 +34,8 @@ class AvroEventSerializer:
 
         # Write to bytes
         bytes_io = BytesIO()
-        writer.write(bytes_io, event_dict)
+        encoder = avro.io.BinaryEncoder(bytes_io)
+        writer.write(event_dict, encoder)
 
         return bytes_io.getvalue()
 
@@ -43,7 +47,8 @@ class AvroEventSerializer:
 
         reader = avro.io.DatumReader(schema)
         bytes_io = BytesIO(data)
-        event_dict = reader.read(bytes_io)
+        decoder = avro.io.BinaryDecoder(bytes_io)
+        event_dict = reader.read(decoder)
 
         return self._dict_to_event(event_dict, event_type)
 
@@ -53,7 +58,7 @@ class AvroEventSerializer:
 
         if event_type not in self._schemas:
             # Create Avro schema from event structure
-            schema = avro.schema.Parse(
+            schema = avro.schema.parse(
                 json.dumps({"type": "record", "name": event_type, "fields": self._infer_fields(event)})
             )
 
@@ -64,7 +69,7 @@ class AvroEventSerializer:
 
         return self._schemas[event_type]
 
-    def _infer_fields(self, event: DomainEvent) -> list:
+    def _infer_fields(self, event: DomainEvent) -> List[Dict[str, Any]]:
         """Infer Avro fields from event dataclass"""
         fields = []
         for key, value in event.__dict__.items():
@@ -105,5 +110,7 @@ class AvroEventSerializer:
 
     def _dict_to_event(self, data: Dict, event_type: str) -> DomainEvent:
         """Convert dictionary back to event (placeholder)"""
-        # Implementation would use event registry
-        pass
+        raise NotImplementedError(
+            "Event deserialization requires Event Registry. "
+            "This will be implemented in Task 4 when we create concrete event classes."
+        )

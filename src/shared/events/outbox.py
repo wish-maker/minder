@@ -1,10 +1,10 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from src.shared.events.event import Event
+from src.shared.events.event import DomainEvent
 
 
 @dataclass
@@ -32,7 +32,7 @@ class OutboxMessage:
     id: UUID
     event_id: UUID
     event_type: str
-    payload: dict
+    payload: Dict[str, Any]
     status: str = "pending"
     aggregate_type: Optional[str] = None
     aggregate_id: Optional[UUID] = None
@@ -43,24 +43,33 @@ class OutboxMessage:
 
     @classmethod
     def from_event(
-        cls, event: Event, aggregate_type: Optional[str] = None, aggregate_id: Optional[UUID] = None
+        cls, event: DomainEvent, aggregate_type: Optional[str] = None, aggregate_id: Optional[UUID] = None
     ) -> "OutboxMessage":
         """
         Create outbox message from event.
 
         Args:
-            event: Event to create message from
+            event: DomainEvent to create message from
             aggregate_type: Optional aggregate type
             aggregate_id: Optional aggregate ID
 
         Returns:
             OutboxMessage instance
         """
+        # Extract event data (all fields except event_id and metadata)
+        payload = {}
+        for key, value in event.__dict__.items():
+            if key not in ["event_id", "metadata"]:
+                if hasattr(value, "value"):  # Handle Enum values
+                    payload[key] = value.value
+                else:
+                    payload[key] = value
+
         return cls(
             id=uuid4(),
-            event_id=event.metadata.event_id,
-            event_type=event.metadata.event_type,
-            payload=event.data,
+            event_id=event.event_id,
+            event_type=event.__class__.__name__,
+            payload=payload,
             status="pending",
             aggregate_type=aggregate_type,
             aggregate_id=aggregate_id,

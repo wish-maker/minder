@@ -1,10 +1,17 @@
-from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 
-from src.shared.events.event import Event, EventMetadata
+from src.shared.events.event import DomainEvent
 from src.shared.events.outbox import OutboxMessage, OutboxRepository
+
+
+class PluginRegistered(DomainEvent):
+    """Example concrete event for testing"""
+
+    def __init__(self, plugin_id: str):
+        super().__init__()
+        self.plugin_id = plugin_id
 
 
 class TestOutboxMessage:
@@ -12,18 +19,12 @@ class TestOutboxMessage:
 
     def test_create_outbox_message(self):
         """Should create outbox message from event"""
-        event = Event(
-            metadata=EventMetadata(
-                event_id=uuid4(), event_type="PluginRegistered", timestamp=datetime.now(timezone.utc)
-            ),
-            data={"plugin_id": "crypto"},
-        )
+        event = PluginRegistered(plugin_id="crypto")
 
         message = OutboxMessage.from_event(event=event, aggregate_type="Plugin", aggregate_id=uuid4())
 
-        assert message.event_id == event.metadata.event_id
+        assert message.event_id == event.event_id
         assert message.event_type == "PluginRegistered"
-        assert message.payload == event.data
         assert message.status == "pending"
         assert message.retry_count == 0
 
@@ -38,12 +39,7 @@ class TestOutboxRepository:
 
     def test_save_message(self, outbox_repo):
         """Should save message to outbox"""
-        event = Event(
-            metadata=EventMetadata(
-                event_id=uuid4(), event_type="PluginRegistered", timestamp=datetime.now(timezone.utc)
-            ),
-            data={"plugin_id": "crypto"},
-        )
+        event = PluginRegistered(plugin_id="crypto")
 
         message = OutboxMessage.from_event(event=event, aggregate_type="Plugin", aggregate_id=uuid4())
 
@@ -58,10 +54,7 @@ class TestOutboxRepository:
         """Should retrieve only pending messages"""
         # Create 3 pending, 2 published
         for i in range(5):
-            event = Event(
-                metadata=EventMetadata(event_id=uuid4(), event_type=f"Event{i}", timestamp=datetime.now(timezone.utc)),
-                data={"index": i},
-            )
+            event = PluginRegistered(plugin_id=f"plugin_{i}")
 
             message = OutboxMessage.from_event(event=event, aggregate_type="Plugin", aggregate_id=uuid4())
 
@@ -77,12 +70,7 @@ class TestOutboxRepository:
 
     def test_mark_as_published(self, outbox_repo):
         """Should mark message as published"""
-        event = Event(
-            metadata=EventMetadata(
-                event_id=uuid4(), event_type="PluginRegistered", timestamp=datetime.now(timezone.utc)
-            ),
-            data={"plugin_id": "crypto"},
-        )
+        event = PluginRegistered(plugin_id="crypto")
 
         message = OutboxMessage.from_event(event=event, aggregate_type="Plugin", aggregate_id=uuid4())
 
@@ -95,12 +83,7 @@ class TestOutboxRepository:
 
     def test_mark_as_failed(self, outbox_repo):
         """Should mark message as failed with error"""
-        event = Event(
-            metadata=EventMetadata(
-                event_id=uuid4(), event_type="PluginRegistered", timestamp=datetime.now(timezone.utc)
-            ),
-            data={"plugin_id": "crypto"},
-        )
+        event = PluginRegistered(plugin_id="crypto")
 
         message = OutboxMessage.from_event(event=event, aggregate_type="Plugin", aggregate_id=uuid4())
 

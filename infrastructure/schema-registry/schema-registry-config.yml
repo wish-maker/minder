@@ -1,0 +1,53 @@
+# Apicurio Registry Configuration
+# This file configures the Apicurio Schema Registry instance
+
+# Storage configuration
+storage:
+  # Use PostgreSQL for persistent storage
+  type: sql
+  datasource:
+    url: jdbc:postgresql://postgres:5432/minder
+    username: minder
+    password: ${POSTGRES_PASSWORD}
+    driverClassName: org.postgresql.Driver
+
+# Compatibility rules
+compatibility:
+  # Default compatibility level for all schemas
+  # Options: BACKWARD, FORWARD, FULL, NONE
+  level: BACKWARD
+
+# API configuration
+api:
+  # Enable the REST API
+  enabled: true
+  # API base path
+  base-path: /apis
+
+# UI configuration
+ui:
+  # Enable the web UI
+  enabled: true
+  # UI base path
+  base-path: /
+
+# Logging configuration
+logging:
+  level: INFO
+  format: text
+
+# Health check configuration
+health:
+  enabled: true
+  livenessProbe:
+    enabled: true
+    timeout: 5s
+  readinessProbe:
+    enabled: true
+    timeout: 5s
+
+# Metrics configuration
+metrics:
+  enabled: true
+  # Scrape endpoint for Prometheus
+  endpoint: /metrics

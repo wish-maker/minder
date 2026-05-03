@@ -1,0 +1,61 @@
+{
+  "type": "record",
+  "name": "PluginRegistered",
+  "namespace": "minder.events",
+  "doc": "Event emitted when a new plugin is registered in the system",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique identifier for this event"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "doc": "Unix timestamp (milliseconds) when the event occurred"
+    },
+    {
+      "name": "pluginId",
+      "type": "string",
+      "doc": "Unique identifier for the plugin"
+    },
+    {
+      "name": "pluginName",
+      "type": "string",
+      "doc": "Human-readable name of the plugin"
+    },
+    {
+      "name": "version",
+      "type": "string",
+      "doc": "Plugin version (e.g., '1.0.0')"
+    },
+    {
+      "name": "author",
+      "type": "string",
+      "doc": "Plugin author/organization"
+    },
+    {
+      "name": "description",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional description of the plugin"
+    },
+    {
+      "name": "capabilities",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "doc": "List of plugin capabilities (e.g., ['data_processing', 'ai_integration'])"
+    },
+    {
+      "name": "metadata",
+      "type": ["null", {
+        "type": "map",
+        "values": "string"
+      }],
+      "default": null,
+      "doc": "Additional metadata as key-value pairs"
+    }
+  ]
+}

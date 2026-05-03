@@ -1,0 +1,45 @@
+{
+  "type": "record",
+  "name": "PluginStateChanged",
+  "namespace": "minder.events",
+  "doc": "Event emitted when a plugin's state changes (e.g., installed, started, stopped, uninstalled)",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique identifier for this event"
+    },
+    {
+      "name": "timestamp",
+      "type": "long",
+      "doc": "Unix timestamp (milliseconds) when the event occurred"
+    },
+    {
+      "name": "pluginId",
+      "type": "string",
+      "doc": "Unique identifier for the plugin"
+    },
+    {
+      "name": "oldState",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Previous state (e.g., 'INSTALLED', 'RUNNING', 'STOPPED')"
+    },
+    {
+      "name": "newState",
+      "type": "string",
+      "doc": "New state (e.g., 'INSTALLED', 'RUNNING', 'STOPPED', 'UNINSTALLED')"
+    },
+    {
+      "name": "reason",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional reason for the state change"
+    },
+    {
+      "name": "triggeredBy",
+      "type": "string",
+      "doc": "User or system that triggered the state change"
+    }
+  ]
+}
