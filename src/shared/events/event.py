@@ -31,3 +31,31 @@ class DomainEvent:
     def __post_init__(self):
         if not self.metadata:
             self.metadata = {}
+
+
+@dataclass
+class Event:
+    """
+    Generic event wrapper for event sourcing.
+
+    Wraps domain events with metadata and serialization information.
+    Used by aggregates and event store for persistence and replay.
+    """
+
+    metadata: EventMetadata
+    data: Dict[str, Any]
+
+    @property
+    def event_type(self) -> str:
+        """Get event type from metadata"""
+        return self.metadata.event_type
+
+    @property
+    def event_id(self) -> UUID:
+        """Get event ID from metadata"""
+        return self.metadata.event_id
+
+    @property
+    def timestamp(self) -> datetime:
+        """Get timestamp from metadata"""
+        return self.metadata.timestamp
