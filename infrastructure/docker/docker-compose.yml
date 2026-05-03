@@ -887,17 +887,6 @@ services:
     - RABBIT_USER=minder
     - RABBIT_PASSWORD=${RABBITMQ_PASSWORD}
     - RABBIT_CAPABILITIES=sort,bert
-    healthcheck:
-      test:
-      - CMD
-      - wget
-      - --quiet
-      - --tries=1
-      - --spider
-      - http://localhost:9090/metrics
-      interval: 30s
-      timeout: 10s
-      retries: 3
     depends_on:
       rabbitmq:
         condition: service_healthy
