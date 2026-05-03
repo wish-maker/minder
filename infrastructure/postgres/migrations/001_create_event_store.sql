@@ -1,5 +1,8 @@
 -- infrastructure/postgres/migrations/001_create_event_store.sql
 
+-- Enable UUID extension for random UUID generation
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- Events Table (Append-Only Log)
 CREATE TABLE IF NOT EXISTS minder_events (
     global_offset BIGSERIAL PRIMARY KEY,
@@ -49,3 +52,12 @@ CREATE TABLE IF NOT EXISTS outbox_events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMP WITH TIME ZONE
 );
+
+-- Index for Outbox Polling (to efficiently find pending events)
+CREATE INDEX idx_outbox_polling ON outbox_events(status, created_at)
+WHERE status = 'pending';
+
+-- Documentation comments
+COMMENT ON TABLE minder_events IS 'Append-only event log for Event Sourcing';
+COMMENT ON COLUMN minder_events.global_offset IS 'Global ordering for all events in system';
+COMMENT ON TABLE outbox_events IS 'Outbox pattern for reliable event publishing';
