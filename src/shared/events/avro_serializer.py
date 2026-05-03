@@ -1,157 +1,109 @@
-import io
+# src/shared/events/avro_serializer.py
+
 import json
+from datetime import datetime
+from io import BytesIO
 from typing import Any, Dict
+from uuid import UUID
 
-import avro.io
-from avro import schema as avro_schema
-from avro.io import DatumReader, DatumWriter
+import avro.schema
 
-from src.shared.events.event import Event
+from src.shared.events.event import DomainEvent
 
 
-class AvroSerializer:
-    """
-    Avro serialization for events in the Event-Driven Architecture.
+class AvroEventSerializer:
+    """Serialize events using Avro format"""
 
-    Provides binary serialization with schema validation for efficient
-    storage and transmission of events. Avro ensures type safety and
-    enables schema evolution.
+    def __init__(self, schema_registry_url: str = "http://localhost:8082"):
+        self.schema_registry_url = schema_registry_url
+        self._schemas: Dict[str, avro.schema.Schema] = {}
 
-    Future enhancement: Integrate with Schema Registry for centralized
-    schema management and compatibility validation.
-    """
+    def serialize(self, event: DomainEvent) -> bytes:
+        """Serialize event to Avro binary format"""
+        # Get or create schema
+        schema = self._get_or_create_schema(event)
 
-    def __init__(self):
-        """Initialize serializer with Avro schema"""
-        self._schema = self._build_schema()
-        self._parsed_schema = avro_schema.parse(json.dumps(self._schema))
+        # Create Avro record writer
+        writer = avro.io.DatumWriter(schema)
 
-    def serialize(self, event: Event) -> bytes:
-        """
-        Serialize event to Avro binary format.
+        # Convert event to dict
+        event_dict = self._event_to_dict(event)
 
-        Args:
-            event: Event object to serialize
+        # Write to bytes
+        bytes_io = BytesIO()
+        writer.write(bytes_io, event_dict)
 
-        Returns:
-            Binary Avro data
-        """
-        # Convert event to dict format compatible with Avro
-        # Encode data as JSON string to preserve types
-        event_dict = {
-            "metadata": {
-                "event_id": str(event.metadata.event_id),
-                "event_type": event.metadata.event_type,
-                "timestamp": event.metadata.timestamp.isoformat(),
-                "correlation_id": str(event.metadata.correlation_id) if event.metadata.correlation_id else None,
-                "causation_id": str(event.metadata.causation_id) if event.metadata.causation_id else None,
-                "user_id": event.metadata.user_id,
-                "trace_id": event.metadata.trace_id,
-            },
-            "data": event.data,
-        }
+        return bytes_io.getvalue()
 
-        # Write to Avro format
-        writer = DatumWriter(self._parsed_schema)
-        bytes_writer = io.BytesIO()
-        encoder = avro.io.BinaryEncoder(bytes_writer)
-        writer.write(event_dict, encoder)
+    def deserialize(self, data: bytes, event_type: str) -> DomainEvent:
+        """Deserialize Avro binary to event"""
+        schema = self._schemas.get(event_type)
+        if not schema:
+            raise ValueError(f"Unknown event type: {event_type}")
 
-        return bytes_writer.getvalue()
+        reader = avro.io.DatumReader(schema)
+        bytes_io = BytesIO(data)
+        event_dict = reader.read(bytes_io)
 
-    def deserialize(self, data: bytes) -> Event:
-        """
-        Deserialize Avro bytes to Event object.
+        return self._dict_to_event(event_dict, event_type)
 
-        Args:
-            data: Binary Avro data
+    def _get_or_create_schema(self, event: DomainEvent) -> avro.schema.Schema:
+        """Get or register Avro schema for event type"""
+        event_type = event.__class__.__name__
 
-        Returns:
-            Event object
-        """
-        from datetime import datetime
-        from uuid import UUID
+        if event_type not in self._schemas:
+            # Create Avro schema from event structure
+            schema = avro.schema.Parse(
+                json.dumps({"type": "record", "name": event_type, "fields": self._infer_fields(event)})
+            )
 
-        from src.shared.events.event import EventMetadata
+            self._schemas[event_type] = schema
 
-        reader = DatumReader(self._parsed_schema)
-        bytes_reader = io.BytesIO(data)
-        decoder = avro.io.BinaryDecoder(bytes_reader)
-        event_dict = reader.read(decoder)
+            # Register in Apicurio Registry
+            # (Implementation would call registry API)
 
-        # Reconstruct Event object
-        metadata = EventMetadata(
-            event_id=UUID(event_dict["metadata"]["event_id"]),
-            event_type=event_dict["metadata"]["event_type"],
-            timestamp=datetime.fromisoformat(event_dict["metadata"]["timestamp"]),
-            correlation_id=(
-                UUID(event_dict["metadata"]["correlation_id"]) if event_dict["metadata"]["correlation_id"] else None
-            ),
-            causation_id=(
-                UUID(event_dict["metadata"]["causation_id"]) if event_dict["metadata"]["causation_id"] else None
-            ),
-            user_id=event_dict["metadata"]["user_id"],
-            trace_id=event_dict["metadata"]["trace_id"],
-        )
+        return self._schemas[event_type]
 
-        # Data is already deserialized as dict from Avro
-        return Event(metadata=metadata, data=event_dict["data"])
+    def _infer_fields(self, event: DomainEvent) -> list:
+        """Infer Avro fields from event dataclass"""
+        fields = []
+        for key, value in event.__dict__.items():
+            if key == "metadata":
+                continue
 
-    def get_schema(self) -> Dict[str, Any]:
-        """
-        Get the Avro schema for Event type.
+            avro_type = "string"
+            if isinstance(value, int):
+                avro_type = "long"
+            elif isinstance(value, float):
+                avro_type = "double"
+            elif isinstance(value, bool):
+                avro_type = "boolean"
+            elif isinstance(value, list):
+                avro_type = {"type": "array", "items": "string"}
+            elif isinstance(value, dict):
+                avro_type = {"type": "map", "values": "string"}
+            elif isinstance(value, UUID):
+                avro_type = "string"
 
-        Returns:
-            Avro schema as dictionary
-        """
-        return self._schema
+            fields.append({"name": key, "type": [avro_type, "null"] if value is None else avro_type})
 
-    def validate(self, event: Event) -> None:
-        """
-        Validate event against Avro schema.
+        return fields
 
-        Args:
-            event: Event to validate
+    def _event_to_dict(self, event: DomainEvent) -> Dict[str, Any]:
+        """Convert event to dictionary for Avro"""
+        result = {}
+        for key, value in event.__dict__.items():
+            if key == "metadata":
+                continue
+            if isinstance(value, (UUID, datetime)):
+                result[key] = str(value)
+            elif hasattr(value, "value"):
+                result[key] = value.value
+            else:
+                result[key] = value
+        return result
 
-        Raises:
-            ValueError: If event doesn't match schema
-        """
-        # For now, serialize acts as validation
-        # In production, would use Schema Registry
-        try:
-            self.serialize(event)
-        except Exception as e:
-            raise ValueError(f"Event validation failed: {e}")
-
-    def _build_schema(self) -> Dict[str, Any]:
-        """
-        Build Avro schema for Event type.
-
-        Returns:
-            Avro schema dictionary
-        """
-        return {
-            "type": "record",
-            "name": "Event",
-            "namespace": "minder.events",
-            "doc": "Base event type for Minder Event-Driven Architecture",
-            "fields": [
-                {
-                    "name": "metadata",
-                    "type": {
-                        "type": "record",
-                        "name": "EventMetadata",
-                        "fields": [
-                            {"name": "event_id", "type": "string"},
-                            {"name": "event_type", "type": "string"},
-                            {"name": "timestamp", "type": "string"},
-                            {"name": "correlation_id", "type": ["null", "string"], "default": None},
-                            {"name": "causation_id", "type": ["null", "string"], "default": None},
-                            {"name": "user_id", "type": ["null", "string"], "default": None},
-                            {"name": "trace_id", "type": ["null", "string"], "default": None},
-                        ],
-                    },
-                },
-                {"name": "data", "type": {"type": "map", "values": "string"}},
-            ],
-        }
+    def _dict_to_event(self, data: Dict, event_type: str) -> DomainEvent:
+        """Convert dictionary back to event (placeholder)"""
+        # Implementation would use event registry
+        pass

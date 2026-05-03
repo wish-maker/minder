@@ -1,170 +1,207 @@
+# src/shared/events/event_store.py
+
 import json
-from typing import Any, Dict, List, Optional
+import logging
+from datetime import datetime
+from typing import List, Optional
 from uuid import UUID
 
-from src.shared.events.event import Event
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_READ_COMMITTED
+
+from src.shared.events.event import DomainEvent
+
+logger = logging.getLogger(__name__)
 
 
-class EventStore:
+class ConcurrencyException(Exception):
+    """Raised when optimistic concurrency check fails"""
+
+    pass
+
+
+class EventStoreRepository:
     """
-    Repository for Event Sourcing persistence.
+    PostgreSQL-based Event Store with optimistic concurrency.
+    This is the shared repository used by all aggregates.
 
-    Provides append-only event storage with snapshot support for
-    efficient state reconstruction. Events are stored in PostgreSQL
-    and indexed by aggregate for efficient retrieval.
-
-    Attributes:
-        db_session: Database session for PostgreSQL operations
+    CRITICAL: Every append() operation writes to BOTH minder_events and outbox_events
+    in the SAME transaction for reliable event publishing.
     """
 
-    def __init__(self, db_session):
+    def __init__(self, connection_string: str):
+        self.connection_string = connection_string
+        self._conn = None
+
+    def connect(self):
+        """Establish database connection"""
+        if self._conn is None or self._conn.closed:
+            self._conn = psycopg2.connect(self.connection_string)
+            self._conn.set_isolation_level(ISOLATION_LEVEL_READ_COMMITTED)
+
+    def append(self, aggregate_id: UUID, expected_version: int, events: List[DomainEvent]) -> None:
         """
-        Initialize event store.
+        Append events with optimistic concurrency control.
+
+        CRITICAL: This method writes to BOTH minder_events and outbox_events
+        in a SINGLE transaction. This guarantees that if an event is stored,
+        it's also in the outbox for reliable publishing.
 
         Args:
-            db_session: SQLAlchemy database session
+            aggregate_id: Aggregate identifier
+            expected_version: Expected current version (for concurrency check)
+            events: List of events to append
+
+        Raises:
+            ConcurrencyException: If version mismatch (concurrent modification)
         """
-        self.db_session = db_session
+        self.connect()
 
-    def append(self, event: Event, aggregate_type: str, aggregate_id: UUID, version: int) -> None:
-        """
-        Append event to event store.
+        try:
+            with self._conn.cursor() as cursor:
+                # Check current version (FOR UPDATE lock)
+                cursor.execute(
+                    """
+                    SELECT COALESCE(MAX(aggregate_version), 0) as current_version
+                    FROM minder_events
+                    WHERE aggregate_id = %s
+                    FOR UPDATE
+                """,
+                    (str(aggregate_id),),
+                )
 
-        Args:
-            event: Event to append
-            aggregate_type: Type of aggregate (e.g., "Plugin")
-            aggregate_id: Identifier of aggregate instance
-            version: Version number for optimistic locking
-        """
-        query = """
-            INSERT INTO events (
-                event_id, event_type, timestamp,
-                correlation_id, causation_id, user_id, trace_id,
-                data, aggregate_type, aggregate_id, version
-            ) VALUES (
-                :event_id, :event_type, :timestamp,
-                :correlation_id, :causation_id, :user_id, :trace_id,
-                :data, :aggregate_type, :aggregate_id, :version
-            )
-        """
+                result = cursor.fetchone()
+                current_version = result[0] if result else 0
 
-        self.db_session.execute(
-            query,
-            {
-                "event_id": str(event.metadata.event_id),
-                "event_type": event.metadata.event_type,
-                "timestamp": event.metadata.timestamp,
-                "correlation_id": str(event.metadata.correlation_id) if event.metadata.correlation_id else None,
-                "causation_id": str(event.metadata.causation_id) if event.metadata.causation_id else None,
-                "user_id": event.metadata.user_id,
-                "trace_id": event.metadata.trace_id,
-                "data": json.dumps(event.data),
-                "aggregate_type": aggregate_type,
-                "aggregate_id": str(aggregate_id),
-                "version": version,
-            },
-        )
+                # Validate version (OPTIMISTIC CONCURRENCY)
+                if current_version != expected_version:
+                    raise ConcurrencyException(
+                        f"Version conflict for aggregate {aggregate_id}: "
+                        f"expected {expected_version}, found {current_version}"
+                    )
 
-    def get_events(self, aggregate_type: str, aggregate_id: UUID, from_version: Optional[int] = None) -> List[Event]:
-        """
-        Retrieve events for an aggregate.
+                # Insert events ATOMICALLY with outbox entries
+                for version_offset, event in enumerate(events, start=1):
+                    event_dict = self._serialize_event(event)
+                    new_version = current_version + version_offset
 
-        Args:
-            aggregate_type: Type of aggregate
-            aggregate_id: Identifier of aggregate instance
-            from_version: Optional starting version
+                    # 1. Insert into event store
+                    cursor.execute(
+                        """
+                        INSERT INTO minder_events (
+                            aggregate_id,
+                            aggregate_version,
+                            event_type,
+                            payload,
+                            extra_metadata
+                        ) VALUES (%s, %s, %s, %s, %s)
+                    """,
+                        (
+                            str(aggregate_id),
+                            new_version,
+                            event.__class__.__name__,
+                            json.dumps(event_dict["payload"]),
+                            json.dumps(event_dict.get("extra_metadata", {})),
+                        ),
+                    )
 
-        Returns:
-            List of events in version order
-        """
-        query = """
-            SELECT event_id, event_type, timestamp,
-                   correlation_id, causation_id, user_id, trace_id,
-                   data
-            FROM events
-            WHERE aggregate_type = :aggregate_type
-              AND aggregate_id = :aggregate_id
-        """
+                    # 2. Insert into outbox (SAME TRANSACTION)
+                    # This guarantees reliable event publishing
+                    cursor.execute(
+                        """
+                        INSERT INTO outbox_events (
+                            event_id,
+                            event_type,
+                            payload,
+                            extra_metadata,
+                            status
+                        ) VALUES (%s, %s, %s, %s, %s)
+                    """,
+                        (
+                            str(event.event_id),
+                            event.__class__.__name__,
+                            json.dumps(event_dict["payload"]),
+                            json.dumps(event_dict.get("extra_metadata", {})),
+                            "pending",
+                        ),
+                    )
 
-        params = {"aggregate_type": aggregate_type, "aggregate_id": str(aggregate_id)}
+                    logger.debug(
+                        f"Appended event {event.__class__.__name__} "
+                        f"to aggregate {aggregate_id} version {new_version} "
+                        f"with outbox entry"
+                    )
 
-        if from_version:
-            query += " AND version >= :from_version"
-            params["from_version"] = from_version
+                # ATOMIC COMMIT - both event store and outbox written together
+                self._conn.commit()
 
-        query += " ORDER BY version ASC"
+                logger.info(
+                    f"Appended {len(events)} events to aggregate {aggregate_id}, "
+                    f"versions {current_version + 1} to {current_version + len(events)}"
+                )
 
-        results = self.db_session.execute(query, params)
+        except psycopg2.IntegrityError as e:
+            self._conn.rollback()
+            raise ConcurrencyException(f"Concurrent modification detected for aggregate {aggregate_id}") from e
+        except psycopg2.Error as e:
+            self._conn.rollback()
+            logger.error(f"Database error in append: {e}")
+            raise
 
-        events = []
-        for row in results:
-            from src.shared.events.event import EventMetadata
+    def get_stream(self, aggregate_id: UUID, from_version: Optional[int] = None) -> List[DomainEvent]:
+        """Load event stream for aggregate"""
+        self.connect()
 
-            metadata = EventMetadata(
-                event_id=UUID(row[0]),
-                event_type=row[1],
-                timestamp=row[2],
-                correlation_id=UUID(row[3]) if row[3] else None,
-                causation_id=UUID(row[4]) if row[4] else None,
-                user_id=row[5],
-                trace_id=row[6],
-            )
+        try:
+            with self._conn.cursor() as cursor:
+                if from_version is None:
+                    cursor.execute(
+                        """
+                        SELECT event_type, payload, extra_metadata
+                        FROM minder_events
+                        WHERE aggregate_id = %s
+                        ORDER BY aggregate_version ASC
+                    """,
+                        (str(aggregate_id),),
+                    )
+                else:
+                    cursor.execute(
+                        """
+                        SELECT event_type, payload, extra_metadata
+                        FROM minder_events
+                        WHERE aggregate_id = %s AND aggregate_version > %s
+                        ORDER BY aggregate_version ASC
+                    """,
+                        (str(aggregate_id), from_version),
+                    )
 
-            event = Event(metadata=metadata, data=json.loads(row[7]))
-            events.append(event)
+                events = []
+                for row in cursor.fetchall():
+                    event = self._deserialize_event(row)
+                    events.append(event)
 
-        return events
+                return events
 
-    def save_snapshot(self, aggregate_type: str, aggregate_id: UUID, version: int, state: Dict[str, Any]) -> None:
-        """
-        Save aggregate snapshot.
+        except psycopg2.Error as e:
+            logger.error(f"Database error in get_stream: {e}")
+            raise
 
-        Args:
-            aggregate_type: Type of aggregate
-            aggregate_id: Identifier of aggregate instance
-            version: Event version up to which snapshot applies
-            state: Aggregate state as dictionary
-        """
-        query = """
-            INSERT INTO snapshots (aggregate_type, aggregate_id, version, state)
-            VALUES (:aggregate_type, :aggregate_id, :version, :state)
-        """
+    def _serialize_event(self, event: DomainEvent) -> dict:
+        """Serialize event to dictionary"""
+        payload = {}
+        for key, value in event.__dict__.items():
+            if key not in ["event_id", "metadata"]:
+                if isinstance(value, (UUID, datetime)):
+                    payload[key] = str(value)
+                elif hasattr(value, "value"):
+                    payload[key] = value.value
+                else:
+                    payload[key] = value
 
-        self.db_session.execute(
-            query,
-            {
-                "aggregate_type": aggregate_type,
-                "aggregate_id": str(aggregate_id),
-                "version": version,
-                "state": json.dumps(state),
-            },
-        )
+        return {"payload": payload, "extra_metadata": event.metadata}
 
-    def get_latest_snapshot(self, aggregate_type: str, aggregate_id: UUID) -> Optional[Dict[str, Any]]:
-        """
-        Get latest snapshot for an aggregate.
-
-        Args:
-            aggregate_type: Type of aggregate
-            aggregate_id: Identifier of aggregate instance
-
-        Returns:
-            Snapshot dictionary with 'version' and 'state' keys, or None
-        """
-        query = """
-            SELECT version, state
-            FROM snapshots
-            WHERE aggregate_type = :aggregate_type
-              AND aggregate_id = :aggregate_id
-            ORDER BY version DESC
-            LIMIT 1
-        """
-
-        result = self.db_session.execute(
-            query, {"aggregate_type": aggregate_type, "aggregate_id": str(aggregate_id)}
-        ).fetchone()
-
-        if not result:
-            return None
-
-        return {"version": result[0], "state": json.loads(result[1])}
+    def _deserialize_event(self, row) -> DomainEvent:
+        """Deserialize event from database row"""
+        # Implementation would use event registry
+        # For now, return placeholder
+        pass
