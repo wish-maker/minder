@@ -1,12 +1,18 @@
+# ============================================================================
 # Prometheus Configuration for Minder Platform
-# Monitors all microservices and infrastructure components
+# ============================================================================
+# Pillar 4: Deep Observability - Comprehensive metrics collection
+#
+# This configuration monitors all microservices and infrastructure components
+# including Traefik, databases, message queues, AI services, and host metrics.
+# ============================================================================
 
 global:
   scrape_interval: 30s
   evaluation_interval: 30s
   external_labels:
     cluster: 'minder-platform'
-    environment: 'development'
+    environment: 'production'
 
 # Alertmanager configuration
 alerting:
@@ -20,12 +26,41 @@ rule_files:
 
 # Scrape configurations
 scrape_configs:
+  # ==========================================================================
+  # PILLAR 1: Zero-Trust Security Layer Metrics
+  # ==========================================================================
+
+  # Traefik metrics (Pillar 1: Zero-Trust reverse proxy)
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['minder-traefik:8080']
+        labels:
+          service: 'traefik'
+          tier: 'security'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Authelia metrics (Pillar 1: SSO/2FA)
+  - job_name: 'authelia'
+    static_configs:
+      - targets: ['minder-authelia:9091']
+        labels:
+          service: 'authelia'
+          tier: 'security'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ==========================================================================
+  # Application Services Metrics
+  # ==========================================================================
+
   # Prometheus self-monitoring
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
         labels:
           service: 'prometheus'
+          tier: 'observability'
 
   # API Gateway
   - job_name: 'api-gateway'
@@ -43,6 +78,16 @@ scrape_configs:
       - targets: ['minder-plugin-registry:8001']
         labels:
           service: 'plugin-registry'
+          tier: 'core'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Plugin State Manager
+  - job_name: 'plugin-state-manager'
+    static_configs:
+      - targets: ['minder-plugin-state-manager:8003']
+        labels:
+          service: 'plugin-state-manager'
           tier: 'core'
     metrics_path: '/metrics'
     scrape_interval: 30s
@@ -67,6 +112,40 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 30s
 
+  # Model Fine Tuning
+  - job_name: 'model-fine-tuning'
+    static_configs:
+      - targets: ['minder-model-fine-tuning:8007']
+        labels:
+          service: 'model-fine-tuning'
+          tier: 'ml'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # TTS/STT Service
+  - job_name: 'tts-stt-service'
+    static_configs:
+      - targets: ['minder-tts-stt-service:8006']
+        labels:
+          service: 'tts-stt-service'
+          tier: 'ml'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Marketplace
+  - job_name: 'marketplace'
+    static_configs:
+      - targets: ['minder-marketplace:8002']
+        labels:
+          service: 'marketplace'
+          tier: 'core'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ==========================================================================
+  # PILLAR 4: Infrastructure Metrics Exporters
+  # ==========================================================================
+
   # PostgreSQL Exporter
   - job_name: 'postgres-exporter'
     static_configs:
@@ -74,6 +153,7 @@ scrape_configs:
         labels:
           service: 'postgres-exporter'
           tier: 'infrastructure'
+          component: 'database'
     metrics_path: '/metrics'
     scrape_interval: 30s
 
@@ -84,23 +164,85 @@ scrape_configs:
         labels:
           service: 'redis-exporter'
           tier: 'infrastructure'
+          component: 'cache'
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Qdrant
+  # RabbitMQ Exporter
+  - job_name: 'rabbitmq-exporter'
+    static_configs:
+      - targets: ['minder-rabbitmq-exporter:9090']
+        labels:
+          service: 'rabbitmq-exporter'
+          tier: 'infrastructure'
+          component: 'message-queue'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Qdrant Vector Database
   - job_name: 'qdrant'
     static_configs:
       - targets: ['minder-qdrant:6333']
         labels:
           service: 'qdrant'
           tier: 'infrastructure'
+          component: 'vector-db'
     metrics_path: '/metrics'
     scrape_interval: 30s
 
-  # Node Exporter (system metrics) - Optional for Phase 4
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
-  #       labels:
-  #         service: 'node-exporter'
-  #         tier: 'infrastructure'
+  # ==========================================================================
+  # PILLAR 4: Host and Container Metrics
+  # ==========================================================================
+
+  # Node Exporter (host metrics via Telegraf equivalent)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['minder-node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+          tier: 'infrastructure'
+          component: 'host'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # cAdvisor (Docker container metrics)
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['minder-cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+          tier: 'infrastructure'
+          component: 'containers'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Blackbox Exporter (remote endpoint monitoring)
+  - job_name: 'blackbox'
+    static_configs:
+      - targets: ['minder-blackbox-exporter:9115']
+        labels:
+          service: 'blackbox-exporter'
+          tier: 'observability'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Blackbox HTTP probes (for remote Ollama health)
+  - job_name: 'blackbox-http'
+    metrics_path: /probe
+    params:
+      module:
+      - http_2xx
+    static_configs:
+      - targets:
+        # Add remote Ollama endpoints here for health monitoring
+        - http://ollama:11434/metrics
+        labels:
+          service: 'ollama-remote-check'
+          tier: 'ml'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: minder-blackbox-exporter:9115
