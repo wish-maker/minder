@@ -36,6 +36,7 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ─────────────────────────────────────────────────────────────
 
 readonly COMPOSE_FILE="${SCRIPT_DIR}/infrastructure/docker/docker-compose.yml"
+readonly SECRETS_FILE="${SCRIPT_DIR}/infrastructure/docker/docker-compose.secrets.yml"
 readonly ENV_FILE="${SCRIPT_DIR}/infrastructure/docker/.env"
 readonly ENV_EXAMPLE="${SCRIPT_DIR}/infrastructure/docker/.env.example"
 readonly LOGS_DIR="${SCRIPT_DIR}/logs"
@@ -51,6 +52,7 @@ declare -A RESOLVED_IMAGE_TAGS=()
 
 readonly CONTAINER_PREFIX="minder"
 readonly NETWORK_NAME="docker_minder-network"
+readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
 readonly -a SECURITY_SERVICES=(traefik authelia)
 readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq)
@@ -72,10 +74,13 @@ declare -A SERVICE_PORTS=(
     [openwebui]="8080"
     [prometheus]="9090/-/healthy"
     [grafana]="3000/api/health"
-    [influxdb]="8086/ping"
+    [influxdb]="8086"
     [traefik]="8081/ping"
     [authelia]="9091/api/health"
     [rabbitmq]="15672"
+    [minio]="9000/minio/health/live"
+    [jaeger]="16686"
+    [otel-collector]="18888/metrics"
 )
 
 # ─────────────────────────────────────────────────────────────
@@ -102,21 +107,24 @@ declare -A SERVICE_PORTS=(
 
 readonly -a THIRD_PARTY_IMAGE_SPECS=(
     # image_ref                                              | stable_tag | constraint
-    "postgres:16|16|major"
-    "redis:7.2-alpine|7|major"
+    "postgres:17.4-alpine|17|major"
+    "redis:7.4.2-alpine|7|major"
     "qdrant/qdrant:v1.17.1|v1|major"
-    "neo4j:5.24-community|5|major"
-    "ollama/ollama:0.5.7|0|minor"
-    "prom/prometheus:v2.55.1|v2|major"
-    "grafana/grafana:11.4.0|11|major"
+    "neo4j:5.26-community|5|major"
+    "ollama/ollama:0.5.12|0|minor"
+    "prom/prometheus:v3.1.0|v3|major"
+    "grafana/grafana:11.5.2|11|major"
     "prom/alertmanager:v0.28.1|v0|major"
     "authelia/authelia:4.38.7|4|major"
-    "traefik:v3.1.6|v3|major"
-    "influxdb:2.7.12|2|major"
-    "telegraf:1.33.1|1|major"
+    "traefik:v3.3.4|v3|major"
+    "influxdb:3.9.1-core|3|major"
+    "telegraf:1.34.0|1|major"
     "prometheuscommunity/postgres-exporter:v0.15.0|v0|minor"
     "oliver006/redis_exporter:v1.62.0|v1|major"
-    "ghcr.io/open-webui/open-webui:git-69d0a16|main|none"
+    "minio/minio:RELEASE.2025-09-07T16-13-09Z|RELEASE|minor"
+    "jaegertracing/all-in-one:1.57|1|minor"
+    "otel/opentelemetry-collector:0.114.0|0|minor"
+    "ghcr.io/open-webui/open-webui:latest|main|none"
 )
 
 # Build a plain array of pinned image refs (for backward compat / fallback)
@@ -282,11 +290,19 @@ run() {
 # ─────────────────────────────────────────────────────────────
 
 compose() {
-    run docker compose -f "$COMPOSE_FILE" "$@"
+    if [[ "${MINDER_USE_SECRETS:-false}" == "true" ]] && [[ -f "$SECRETS_FILE" ]]; then
+        run docker compose -f "$COMPOSE_FILE" -f "$SECRETS_FILE" "$@"
+    else
+        run docker compose -f "$COMPOSE_FILE" "$@"
+    fi
 }
 
 compose_monitoring() {
-    run docker compose -f "$COMPOSE_FILE" --profile monitoring "$@"
+    if [[ "${MINDER_USE_SECRETS:-false}" == "true" ]] && [[ -f "$SECRETS_FILE" ]]; then
+        run docker compose -f "$COMPOSE_FILE" -f "$SECRETS_FILE" --profile monitoring "$@"
+    else
+        run docker compose -f "$COMPOSE_FILE" --profile monitoring "$@"
+    fi
 }
 
 container_name() { echo "${CONTAINER_PREFIX}-${1}"; }
@@ -363,6 +379,79 @@ gen_secret() {
         openssl rand -hex "$bytes"
     else
         LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c $(( bytes * 2 ))
+    fi
+}
+
+generate_secrets() {
+    local secrets_dir="${SCRIPT_DIR}/.secrets"
+
+    log_step "Generating Docker secrets"
+
+    # Create secrets directory
+    mkdir -p "$secrets_dir"
+
+    # Check if secrets already exist
+    if [[ -f "$secrets_dir/postgres_password.secret" ]]; then
+        log_info "Secrets already exist in $secrets_dir"
+        log_detail "Remove directory to regenerate: rm -rf $secrets_dir"
+        return 0
+    fi
+
+    log_detail "Generating 12 secrets in $secrets_dir"
+
+    # Generate 12 secrets
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/postgres_password.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/redis_password.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/rabbitmq_password.secret"
+    openssl rand -base64 85 | tr -d '=+/' | head -c 85 > "$secrets_dir/jwt_secret.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/webui_secret_key.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/grafana_password.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/influxdb_admin_password.secret"
+    openssl rand -base64 64 | tr -d '=+/' | head -c 64 > "$secrets_dir/influxdb_token.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_jwt_secret.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_session_secret.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_storage_encryption_key.secret"
+    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/minio_root_password.secret"
+
+    # Set permissions
+    chmod 600 "$secrets_dir"/*.secret
+
+    # Grafana için 644 (non-root container user)
+    chmod 644 "$secrets_dir/grafana_password.secret"
+    chmod 644 "$secrets_dir/influxdb_admin_password.secret"
+    chmod 644 "$secrets_dir/influxdb_token.secret"
+
+    log_success "Secrets generated in $secrets_dir"
+    log_detail "Permissions: 600 (grafana/influxdb: 644)"
+}
+
+sync_postgres_password() {
+    local password_file="${SCRIPT_DIR}/.secrets/postgres_password.secret"
+
+    if [[ ! -f "$password_file" ]]; then
+        log_error "Password file not found: $password_file"
+        return 1
+    fi
+
+    local new_password
+    new_password=$(cat "$password_file")
+
+    log_step "Syncing PostgreSQL password"
+
+    # Check if PostgreSQL container is running
+    if ! container_running postgres; then
+        log_warn "PostgreSQL container not running"
+        log_detail "Start services first: ./setup.sh start"
+        return 1
+    fi
+
+    # Update password in database
+    log_detail "Updating password in database..."
+    if docker exec "$(container_name postgres)" psql -U minder -d minder -c \
+        "ALTER USER minder PASSWORD '$new_password';" &>/dev/null; then
+        log_success "PostgreSQL password synced"
+    else
+        log_warn "Password sync failed (may already be set)"
     fi
 }
 
@@ -833,6 +922,230 @@ check_prerequisites() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# GPU VALIDATION (Phase 3)
+# ─────────────────────────────────────────────────────────────
+
+validate_gpu_environment() {
+    log_info "Validating GPU environment for AI acceleration..."
+
+    # Check if NVIDIA Container Toolkit is available
+    if ! docker run --rm --gpus all nvidia/cuda:11.0-base-ubuntu20.04 nvidia-smi &>/dev/null; then
+        log_warn "NVIDIA Container Toolkit not found"
+        log_detail "GPU acceleration disabled - falling back to CPU mode"
+        log_detail "Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide"
+        export GPU_AVAILABLE=false
+        return 0
+    fi
+
+    # Validate GPU availability
+    local gpu_count
+    gpu_count=$(nvidia-smi --query-gpu=count --format=csv,noheader 2>/dev/null || echo "0")
+
+    if [[ "$gpu_count" -eq 0 ]]; then
+        log_warn "No NVIDIA GPUs detected - falling back to CPU mode"
+        export GPU_AVAILABLE=false
+        return 0
+    fi
+
+    log_detail "GPUs detected: $gpu_count"
+
+    # Get GPU model information
+    local gpu_model
+    gpu_model=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -1 2>/dev/null || echo "Unknown")
+    log_detail "GPU Model: $gpu_model"
+
+    # Get GPU memory information
+    local gpu_memory
+    gpu_memory=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader | head -1 2>/dev/null || echo "Unknown")
+    log_detail "GPU Memory: $gpu_memory"
+
+    export GPU_AVAILABLE=true
+    log_success "GPU validation passed - hardware acceleration enabled"
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────
+# DYNAMIC CONFIGURATION VALIDATION (Phase 4)
+# ─────────────────────────────────────────────────────────────
+
+configure_traefik_access_mode() {
+    local mode
+    mode="$(_env_get "ACCESS_MODE")"
+    mode="${mode:-local}"
+
+    log_info "Configuring Traefik access mode: $mode"
+
+    local traefik_dynamic_dir="${SCRIPT_DIR}/infrastructure/docker/traefik/dynamic"
+
+    # Disable all access mode configs first
+    local config_file
+    for config_file in "${traefik_dynamic_dir}"/access-mode-*.yml; do
+        if [[ -f "$config_file" ]]; then
+            mv "$config_file" "${config_file}.disabled" 2>/dev/null || true
+        fi
+    done
+
+    # Enable the selected access mode config
+    local target_config="${traefik_dynamic_dir}/access-mode-${mode}.yml.disabled"
+    if [[ -f "$target_config" ]]; then
+        mv "$target_config" "${target_config%.disabled}"
+        log_success "Enabled Traefik config: access-mode-${mode}.yml"
+    else
+        log_warn "Traefik config not found: access-mode-${mode}.yml"
+        log_detail "Using default middleware configuration"
+    fi
+
+    return 0
+}
+
+validate_access_mode() {
+    local mode
+    mode="$(_env_get "ACCESS_MODE")"
+    mode="${mode:-local}"  # Default to local if not set
+
+    log_info "Validating Access Mode configuration..."
+
+    case "$mode" in
+        local)
+            log_detail "Access Mode: LOCAL (localhost only)"
+            log_detail "Services accessible only on 127.0.0.1"
+            export TRAEFIK_ACCESS_MODE="local"
+            ;;
+        vpn)
+            log_detail "Access Mode: VPN (LAN/VPN subnets)"
+            log_detail "Services accessible via VPN with enhanced security"
+            log_detail "Allowed CIDRs: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16"
+            export TRAEFIK_ACCESS_MODE="vpn"
+            ;;
+        public)
+            log_detail "Access Mode: PUBLIC (internet-facing)"
+            log_detail "Services accessible via internet with DDoS protection"
+            log_detail "WARNING: Ensure SSL certificates and firewall rules are configured"
+            export TRAEFIK_ACCESS_MODE="public"
+            ;;
+        *)
+            log_error "Invalid ACCESS_MODE: $mode"
+            log_detail "Valid options: local, vpn, public"
+            log_detail "Fix: Set ACCESS_MODE in $ENV_FILE"
+            return 1
+            ;;
+    esac
+
+    # Configure Traefik dynamic files based on access mode
+    configure_traefik_access_mode
+
+    log_success "Access Mode validation passed: $mode"
+    return 0
+}
+
+validate_ai_compute_mode() {
+    local mode
+    mode="$(_env_get "AI_COMPUTE_MODE")"
+    mode="${mode:-internal}"  # Default to internal if not set
+
+    log_info "Validating AI Compute Mode configuration..."
+
+    case "$mode" in
+        internal)
+            log_detail "AI Compute Mode: INTERNAL (local Ollama)"
+            log_detail "Using local Docker Ollama service: minder-ollama:11434"
+            export AI_ENDPOINT_STRATEGY="local"
+            export AI_LOCAL_OLLAMA_URL="http://minder-ollama:11434"
+            export AI_ENABLE_FALLBACK="false"
+            ;;
+        external)
+            local external_url
+            external_url="$(_env_get "EXTERNAL_GPU_NODE_URL")"
+            if [[ -z "$external_url" ]]; then
+                log_error "AI_COMPUTE_MODE=external requires EXTERNAL_GPU_NODE_URL"
+                log_detail "Fix: Set EXTERNAL_GPU_NODE_URL in $ENV_FILE"
+                log_detail "Example: http://gpu-node.example.com:11434"
+                return 1
+            fi
+            log_detail "AI Compute Mode: EXTERNAL (remote GPU node)"
+            log_detail "Routing AI requests to: $external_url"
+            export AI_ENDPOINT_STRATEGY="external"
+            export AI_LAN_OLLAMA_URL="$external_url"
+            export AI_ENABLE_FALLBACK="false"
+            ;;
+        hybrid)
+            local external_url
+            external_url="$(_env_get "EXTERNAL_GPU_NODE_URL")"
+            if [[ -z "$external_url" ]]; then
+                log_warn "AI_COMPUTE_MODE=hybrid recommended EXTERNAL_GPU_NODE_URL"
+                log_detail "Proceeding with local-only mode (no external fallback)"
+                external_url="http://minder-ollama:11434"
+            fi
+            log_detail "AI Compute Mode: HYBRID (local + external fallback)"
+            log_detail "Primary: local Ollama (minder-ollama:11434)"
+            log_detail "Fallback: $external_url"
+            export AI_ENDPOINT_STRATEGY="hybrid"
+            export AI_LOCAL_OLLAMA_URL="http://minder-ollama:11434"
+            export AI_LAN_OLLAMA_URL="$external_url"
+            export AI_ENABLE_FALLBACK="true"
+            export AI_FALLBACK_TIMEOUT_MS="5000"
+            ;;
+        *)
+            log_error "Invalid AI_COMPUTE_MODE: $mode"
+            log_detail "Valid options: internal, external, hybrid"
+            log_detail "Fix: Set AI_COMPUTE_MODE in $ENV_FILE"
+            return 1
+            ;;
+    esac
+
+    log_success "AI Compute Mode validation passed: $mode"
+    return 0
+}
+
+validate_compute_resource_profile() {
+    local profile
+    profile="$(_env_get "COMPUTE_RESOURCE_PROFILE")"
+    profile="${profile:-medium}"  # Default to medium if not set
+
+    log_info "Validating Compute Resource Profile..."
+
+    case "$profile" in
+        low)
+            log_detail "Resource Profile: LOW (development)"
+            log_detail "CPU limits: 1 core, Memory: 2GB per service"
+            export COMPUTE_CPU_LIMIT="1.0"
+            export COMPUTE_MEMORY_LIMIT="2g"
+            ;;
+        medium)
+            log_detail "Resource Profile: MEDIUM (staging)"
+            log_detail "CPU limits: 2 cores, Memory: 4GB per service"
+            export COMPUTE_CPU_LIMIT="2.0"
+            export COMPUTE_MEMORY_LIMIT="4g"
+            ;;
+        high)
+            log_detail "Resource Profile: HIGH (production)"
+            log_detail "CPU limits: 4 cores, Memory: 8GB per service"
+            export COMPUTE_CPU_LIMIT="4.0"
+            export COMPUTE_MEMORY_LIMIT="8g"
+            ;;
+        enterprise)
+            log_detail "Resource Profile: ENTERPRISE (GPU-accelerated)"
+            log_detail "CPU limits: 8 cores, Memory: 16GB per service + GPU passthrough"
+            export COMPUTE_CPU_LIMIT="8.0"
+            export COMPUTE_MEMORY_LIMIT="16g"
+            if [[ "$GPU_AVAILABLE" == "true" ]]; then
+                log_detail "GPU acceleration: ENABLED"
+            else
+                log_warn "GPU acceleration: DISABLED (no NVIDIA GPU detected)"
+            fi
+            ;;
+        *)
+            log_error "Invalid COMPUTE_RESOURCE_PROFILE: $profile"
+            log_detail "Valid options: low, medium, high, enterprise"
+            return 1
+            ;;
+    esac
+
+    log_success "Resource Profile validation passed: $profile"
+    return 0
+}
+
+# ─────────────────────────────────────────────────────────────
 # ENVIRONMENT SETUP
 # ─────────────────────────────────────────────────────────────
 
@@ -937,12 +1250,22 @@ _env_get() {
 # ─────────────────────────────────────────────────────────────
 
 create_networks() {
-    log_step "Setting up Docker network"
+    log_step "Setting up Docker networks"
+
+    # Create main application network
     if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
         log_info "Network '${NETWORK_NAME}' already exists"
     else
         run docker network create "$NETWORK_NAME"
         log_success "Network '${NETWORK_NAME}' created"
+    fi
+
+    # Create monitoring network (for isolated monitoring zone)
+    if docker network ls --format '{{.Name}}' | grep -q "^${MONITORING_NETWORK_NAME}$"; then
+        log_info "Network '${MONITORING_NETWORK_NAME}' already exists"
+    else
+        run docker network create "${MONITORING_NETWORK_NAME}" --driver bridge --attachable
+        log_success "Network '${MONITORING_NETWORK_NAME}' created"
     fi
 }
 
@@ -972,10 +1295,73 @@ initialize_database() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# MINIO OBJECT STORAGE INITIALIZATION
+# ─────────────────────────────────────────────────────────────
+
+initialize_minio() {
+    log_step "Initialising MinIO object storage"
+
+    compose up -d minio
+    wait_for_service "minio" "9000/minio/health/live" || exit 1
+
+    log_info "Creating MinIO buckets…"
+
+    # Define required buckets
+    local buckets=(
+        "rag-documents"
+        "tts-artifacts"
+        "fine-tuning-datasets"
+        "model-checkpoints"
+        "plugin-packages"
+        "backup-archives"
+    )
+
+    # Wait for MinIO to be fully ready
+    sleep 5
+
+    # Install MinIO client if not available
+    if ! docker exec minder-minio which mc &>/dev/null; then
+        log_detail "Installing MinIO client..."
+        docker exec minder-minio wget -q https://dl.min.io/client/mc/release/linux-amd64/mc -O /tmp/mc
+        docker exec minder-minio chmod +x /tmp/mc
+        docker exec minder-minio mv /tmp/mc /usr/local/bin/mc
+    fi
+
+    # Create buckets
+    for bucket in "${buckets[@]}"; do
+        if docker exec minder-minio mc ls mydata/"$bucket" &>/dev/null 2>&1; then
+            log_detail "Already exists: $bucket"
+        else
+            if docker exec minder-minio mc mb mydata/"$bucket" &>/dev/null 2>&1; then
+                log_detail "Created: $bucket"
+
+                # Set public policy for buckets that need it
+                case "$bucket" in
+                    rag-documents|tts-artifacts|plugin-packages)
+                        docker exec minder-minio mc anonymous set download mydata/"$bucket" &>/dev/null 2>&1
+                        log_detail "Set public policy: $bucket"
+                        ;;
+                esac
+            else
+                log_warning "Failed to create bucket: $bucket"
+            fi
+        fi
+    done
+
+    log_success "MinIO initialisation complete"
+}
+
+# ─────────────────────────────────────────────────────────────
 # SERVICE STARTUP
 # ─────────────────────────────────────────────────────────────
 
 start_services() {
+    # Check if manual docker mode is enabled
+    if [[ "${MINDER_USE_MANUAL_DOCKER:-false}" == "true" ]]; then
+        start_services_manually
+        return $?
+    fi
+
     log_step "Starting all services"
 
     log_info "① Security layer…"
@@ -1010,6 +1396,702 @@ start_services() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# MANUAL DOCKER RUN MODE (for YAML validation error workaround)
+# ─────────────────────────────────────────────────────────────
+
+start_services_manually() {
+    log_step "Starting services manually (docker run)"
+
+    # Check if secrets exist
+    if [[ ! -d "${SCRIPT_DIR}/.secrets" ]]; then
+        log_error "Secrets not found. Run: ./setup.sh generate-secrets"
+        exit 1
+    fi
+
+    # Create network if not exists
+    if ! docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
+        log_detail "Creating network: ${NETWORK_NAME}"
+        run docker network create "$NETWORK_NAME"
+    fi
+
+    # Load secrets
+    local postgres_pass redis_pass rabbitmq_pass jwt_secret webui_key grafana_pass
+    local influxdb_pass influxdb_token authelia_jwt authelia_enc
+
+    postgres_pass=$(cat "${SCRIPT_DIR}/.secrets/postgres_password.secret")
+    redis_pass=$(cat "${SCRIPT_DIR}/.secrets/redis_password.secret")
+    rabbitmq_pass=$(cat "${SCRIPT_DIR}/.secrets/rabbitmq_password.secret")
+    jwt_secret=$(cat "${SCRIPT_DIR}/.secrets/jwt_secret.secret")
+    webui_key=$(cat "${SCRIPT_DIR}/.secrets/webui_secret_key.secret")
+    grafana_pass=$(cat "${SCRIPT_DIR}/.secrets/grafana_password.secret")
+    influxdb_pass=$(cat "${SCRIPT_DIR}/.secrets/influxdb_admin_password.secret")
+    influxdb_token=$(cat "${SCRIPT_DIR}/.secrets/influxdb_token.secret")
+    authelia_jwt=$(cat "${SCRIPT_DIR}/.secrets/authelia_jwt_secret.secret")
+    authelia_enc=$(cat "${SCRIPT_DIR}/.secrets/authelia_storage_encryption_key.secret")
+
+    # Core services
+    log_info "① Starting core services (PostgreSQL, Redis, RabbitMQ)..."
+
+    # PostgreSQL
+    if ! container_running postgres; then
+        if container_exists postgres; then
+            log_detail "Removing existing PostgreSQL container..."
+            run docker rm "$(container_name postgres)" 2>/dev/null || true
+        fi
+        log_detail "Starting PostgreSQL..."
+        run docker run -d \
+          --name "$(container_name postgres)" \
+          --network "$NETWORK_NAME" \
+          -v docker_postgres_data:/var/lib/postgresql/data \
+          -v "${SCRIPT_DIR}/infrastructure/docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro" \
+          -v "${SCRIPT_DIR}/.secrets/postgres_password.secret:/run/secrets/postgres_password:ro" \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_MULTIPLE_DATABASES=tefas_db,weather_db,news_db,crypto_db \
+          -e POSTGRES_DB=minder \
+          -e POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password \
+          --health-cmd="pg_isready -U minder -d minder" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          postgres:17.4-alpine
+    fi
+
+    # Wait for PostgreSQL
+    wait_postgres_ready || true
+
+    # Redis
+    if ! container_running redis; then
+        log_detail "Starting Redis..."
+        run docker run -d \
+          --name "$(container_name redis)" \
+          --network "$NETWORK_NAME" \
+          -v docker_redis_data:/data \
+          -v "${SCRIPT_DIR}/.secrets/redis_password.secret:/run/secrets/redis_password:ro" \
+          redis:7.2.13-alpine \
+          sh -c 'redis-server --appendonly yes --requirepass "$(cat /run/secrets/redis_password)" --masterauth "$(cat /run/secrets/redis_password)"'
+    fi
+
+    # RabbitMQ
+    if ! container_running rabbitmq; then
+        log_detail "Starting RabbitMQ..."
+        run docker run -d \
+          --name "$(container_name rabbitmq)" \
+          --network "$NETWORK_NAME" \
+          -v docker_rabbitmq_data:/var/lib/rabbitmq \
+          -v "${SCRIPT_DIR}/.secrets/rabbitmq_password.secret:/run/secrets/rabbitmq_password:ro" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/rabbitmq/entrypoint.sh:/entrypoint.sh:ro" \
+          -e RABBITMQ_CONFIG_FILE=/etc/rabbitmq/rabbitmq.conf \
+          -e RABBITMQ_LOGS=- \
+          -e RABBITMQ_LOG_LEVEL=info \
+          -e RABBITMQ_DEFAULT_USER=minder \
+          --entrypoint=/entrypoint.sh \
+          --health-cmd="rabbitmq-diagnostics -q ping" \
+          --health-interval=30s \
+          --health-timeout=30s \
+          --health-retries=3 \
+          rabbitmq:3.13.7-management-alpine
+    fi
+
+    sleep 5
+
+    # Monitoring services
+    log_info "② Starting monitoring services..."
+
+    # Grafana
+    if ! container_running grafana; then
+        log_detail "Starting Grafana..."
+        run docker run -d \
+          --name "$(container_name grafana)" \
+          --network "$NETWORK_NAME" \
+          -v docker_grafana_data:/var/lib/grafana \
+          -v "${SCRIPT_DIR}/infrastructure/docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro" \
+          -v "${SCRIPT_DIR}/.secrets/grafana_password.secret:/run/secrets/grafana_password:ro" \
+          -e GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_password \
+          -e GF_SERVER_ROOT_URL=https://grafana.minder.local \
+          -e GF_INSTALL_PLUGINS= \
+          --health-cmd="wget --no-verbose --tries=1 --spider http://localhost:3000/api/health" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          grafana/grafana:11.3.1
+    fi
+
+    # InfluxDB
+    if ! container_running influxdb; then
+        log_detail "Starting InfluxDB..."
+        run docker run -d \
+          --name "$(container_name influxdb)" \
+          --network "$NETWORK_NAME" \
+          -v docker_influxdb_data:/var/lib/influxdb2 \
+          -v "${SCRIPT_DIR}/.secrets/influxdb_admin_password.secret:/run/secrets/influxdb_admin_password:ro" \
+          -v "${SCRIPT_DIR}/.secrets/influxdb_token.secret:/run/secrets/influxdb_token:ro" \
+          -e DOCKER_INFLUXDB_INIT_MODE=setup \
+          -e DOCKER_INFLUXDB_INIT_USERNAME=admin \
+          -e DOCKER_INFLUXDB_INIT_ORG=minder \
+          -e DOCKER_INFLUXDB_INIT_BUCKET=minder-metrics \
+          -e DOCKER_INFLUXDB_INIT_RETENTION=30d \
+          -e DOCKER_INFLUXDB_INIT_ADMIN_TOKEN_FILE=/run/secrets/influxdb_token \
+          -e DOCKER_INFLUXDB_INIT_PASSWORD_FILE=/run/secrets/influxdb_admin_password \
+          -e INFLUXDB_LOG_LEVEL=info \
+          --health-cmd="influx ping" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          influxdb:2.7.12
+    fi
+
+    sleep 5
+
+    # Application services
+    log_info "③ Starting application services..."
+
+    # API-Gateway
+    if ! container_running api-gateway; then
+        log_detail "Starting API-Gateway..."
+        run docker run -d \
+          --name "$(container_name api-gateway)" \
+          --network "$NETWORK_NAME" \
+          -p 8000:8000 \
+          -e REDIS_HOST="$(container_name redis)" \
+          -e REDIS_PORT=6379 \
+          -e REDIS_PASSWORD="$redis_pass" \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          -e JWT_SECRET="$jwt_secret" \
+          -e PLUGIN_REGISTRY_URL=http://$(container_name plugin-registry):8001 \
+          -e RAG_PIPELINE_URL=http://$(container_name rag-pipeline):8004 \
+          -e MODEL_MANAGEMENT_URL=http://$(container_name model-management):8005 \
+          -e RATE_LIMIT_ENABLED=true \
+          -e LOG_LEVEL=INFO \
+          -e ENVIRONMENT=development \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8000/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/api-gateway:1.0.0
+    fi
+
+    # OpenWebUI
+    if ! container_running openwebui; then
+        log_detail "Starting OpenWebUI..."
+        run docker run -d \
+          --name "$(container_name openwebui)" \
+          --network "$NETWORK_NAME" \
+          -p 3000:8080 \
+          -e WEBUI_SECRET_KEY="$webui_key" \
+          -e JWT_SECRET="$jwt_secret" \
+          -e GPG_KEY=A035C8C19219BA821ECEA86B64E628F8D684696D \
+          -e OPENAI_API_KEY=${OPENAI_API_KEY:-} \
+          -e TIKTOKEN_ENCODING_NAME=cl100k_base \
+          -v docker_openwebui_data:/app/backend/data \
+          -v "${SCRIPT_DIR}/infrastructure/docker/openwebui/functions.json:/app/config/functions.json:ro" \
+          --restart unless-stopped \
+          ghcr.io/open-webui/open-webui:latest
+    fi
+
+    # Schema Registry
+    if ! container_running schema-registry; then
+        log_detail "Starting Schema Registry..."
+        run docker run -d \
+          --name "$(container_name schema-registry)" \
+          --network "$NETWORK_NAME" \
+          -e QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://$(container_name postgres):5432/minder \
+          -e QUARKUS_DATASOURCE_USERNAME=minder \
+          -e QUARKUS_DATASOURCE_PASSWORD="$postgres_pass" \
+          -e REGISTRY_DATASOURCE_URL=jdbc:postgresql://$(container_name postgres):5432/minder \
+          -e REGISTRY_DATASOURCE_USERNAME=minder \
+          -e REGISTRY_DATASOURCE_PASSWORD="$postgres_pass" \
+          -e QUARKUS_DATASOURCE_DRIVER=org.postgresql.Driver \
+          -e REGISTRY_DATASOURCE_DRIVER=org.postgresql.Driver \
+          apicurio/apicurio-registry-sql:2.5.7.Final
+    fi
+
+    # RabbitMQ-Exporter
+    if ! container_running rabbitmq-exporter; then
+        log_detail "Starting RabbitMQ Exporter..."
+        run docker run -d \
+          --name "$(container_name rabbitmq-exporter)" \
+          --network "$NETWORK_NAME" \
+          -e RABBIT_USER=minder \
+          -e RABBIT_PASSWORD="$rabbitmq_pass" \
+          -e RABBIT_URL=http://minder:$rabbitmq_pass@$(container_name rabbitmq):15672 \
+          -e PUBLISH_PORT=9419 \
+          -e RABBIT_CAPABILITIES=sort,bert \
+          --restart unless-stopped \
+          kbudde/rabbitmq-exporter:latest
+    fi
+
+    sleep 5
+
+    # Security & Proxy services
+    log_info "④ Starting security and proxy services..."
+
+    # Traefik
+    if ! container_running traefik; then
+        log_detail "Starting Traefik..."
+        run docker run -d \
+          --name "$(container_name traefik)" \
+          --network "$NETWORK_NAME" \
+          -p 8080:8080 \
+          -p 8443:8443 \
+          -p 80:80 \
+          -p 443:443 \
+          -v /var/run/docker.sock:/var/run/docker.sock:ro \
+          -v "${SCRIPT_DIR}/infrastructure/docker/traefik/traefik.yml:/etc/traefik/traefik.yml:ro" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/traefik/dynamic:/etc/traefik/dynamic:ro" \
+          --restart unless-stopped \
+          traefik:v3.3.4
+    fi
+
+    # Authelia
+    if ! container_running authelia; then
+        log_detail "Starting Authelia..."
+        run docker run -d \
+          --name "$(container_name authelia)" \
+          --network "$NETWORK_NAME" \
+          -p 9091:9091 \
+          -v "${SCRIPT_DIR}/.secrets:/secrets:ro" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/authelia/configuration.yml:/config/configuration.yml:ro" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/authelia/users_database.yml:/config/users_database.yml:ro" \
+          -v docker_authelia_data:/config \
+          -e AUTHELIA_STORAGE_POSTGRES_PASSWORD="$postgres_pass" \
+          -e AUTHELIA_STORAGE_ENCRYPTION_KEY="$authelia_enc" \
+          -e AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET="$authelia_jwt" \
+          --health-cmd="curl -f http://localhost:9091 | grep 'OK' || exit 1" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          authelia/authelia:4.38.7
+    fi
+
+    sleep 5
+
+    # Core databases & AI runtime
+    log_info "⑤ Starting core databases and AI runtime..."
+
+    # Neo4j
+    if ! container_running neo4j; then
+        log_detail "Starting Neo4j..."
+        run docker run -d \
+          --name "$(container_name neo4j)" \
+          --network "$NETWORK_NAME" \
+          -p 7474:7474 \
+          -p 7687:7687 \
+          -v docker_neo4j_data:/data \
+          -e NEO4J_AUTH=neo4j/$(openssl rand -base64 16 | tr -d '=+/') \
+          --health-cmd="curl -f http://localhost:7474 || exit 1" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          neo4j:5.26-community
+    fi
+
+    # Qdrant
+    if ! container_running qdrant; then
+        log_detail "Starting Qdrant..."
+        run docker run -d \
+          --name "$(container_name qdrant)" \
+          --network "$NETWORK_NAME" \
+          -p 6333:6333 \
+          -v docker_qdrant_data:/qdrant/storage \
+          qdrant/qdrant:v1.17.1
+    fi
+
+    # Ollama
+    if ! container_running ollama; then
+        log_detail "Starting Ollama..."
+        run docker run -d \
+          --name "$(container_name ollama)" \
+          --network "$NETWORK_NAME" \
+          -p 11434:11434 \
+          -v docker_ollama_data:/root/.ollama \
+          --restart unless-stopped \
+          ollama/ollama:0.5.12
+    fi
+
+    sleep 5
+
+    # API Services
+    log_info "⑥ Starting API microservices..."
+
+    # Plugin Registry
+    if ! container_running plugin-registry; then
+        log_detail "Starting Plugin Registry..."
+        run docker run -d \
+          --name "$(container_name plugin-registry)" \
+          --network "$NETWORK_NAME" \
+          -p 8001:8001 \
+          -e REDIS_HOST="$(container_name redis)" \
+          -e REDIS_PORT=6379 \
+          -e REDIS_PASSWORD="$redis_pass" \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8001/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/plugin-registry:1.0.0
+    fi
+
+    # Marketplace
+    if ! container_running marketplace; then
+        log_detail "Starting Marketplace..."
+        run docker run -d \
+          --name "$(container_name marketplace)" \
+          --network "$NETWORK_NAME" \
+          -p 8002:8002 \
+          -e REDIS_HOST="$(container_name redis)" \
+          -e REDIS_PORT=6379 \
+          -e REDIS_PASSWORD="$redis_pass" \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8002/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/marketplace:1.0.0
+    fi
+
+    # Plugin State Manager
+    if ! container_running plugin-state-manager; then
+        log_detail "Starting Plugin State Manager..."
+        run docker run -d \
+          --name "$(container_name plugin-state-manager)" \
+          --network "$NETWORK_NAME" \
+          -p 8003:8003 \
+          -e REDIS_HOST="$(container_name redis)" \
+          -e REDIS_PORT=6379 \
+          -e REDIS_PASSWORD="$redis_pass" \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8003/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/plugin-state-manager:1.0.0
+    fi
+
+    # RAG Pipeline
+    if ! container_running rag-pipeline; then
+        log_detail "Starting RAG Pipeline..."
+        run docker run -d \
+          --name "$(container_name rag-pipeline)" \
+          --network "$NETWORK_NAME" \
+          -p 8004:8004 \
+          -e REDIS_HOST="$(container_name redis)" \
+          -e REDIS_PORT=6379 \
+          -e REDIS_PASSWORD="$redis_pass" \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          -e QDRANT_HOST="$(container_name qdrant)" \
+          -e QDRANT_PORT=6333 \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8004/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/rag-pipeline:1.0.0
+    fi
+
+    # Model Management
+    if ! container_running model-management; then
+        log_detail "Starting Model Management..."
+        run docker run -d \
+          --name "$(container_name model-management)" \
+          --network "$NETWORK_NAME" \
+          -p 8005:8005 \
+          -e REDIS_HOST="$(container_name redis)" \
+          -e REDIS_PORT=6379 \
+          -e REDIS_PASSWORD="$redis_pass" \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8005/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/model-management:1.0.0
+    fi
+
+    sleep 5
+
+    # Monitoring stack
+    log_info "⑦ Starting monitoring stack..."
+
+    # Telegraf
+    if ! container_running telegraf; then
+        log_detail "Starting Telegraf..."
+        run docker run -d \
+          --name "$(container_name telegraf)" \
+          --network "$NETWORK_NAME" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
+          -v /var/run/docker.sock:/var/run/docker.sock:ro \
+          --restart unless-stopped \
+          telegraf:1.34.0
+    fi
+
+    # Prometheus
+    if ! container_running prometheus; then
+        log_detail "Starting Prometheus..."
+        run docker run -d \
+          --name "$(container_name prometheus)" \
+          --network "$NETWORK_NAME" \
+          -p 9090:9090 \
+          -v "${SCRIPT_DIR}/infrastructure/docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro" \
+          -v docker_prometheus_data:/prometheus \
+          --restart unless-stopped \
+          --health-cmd="wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          prom/prometheus:v3.1.0
+    fi
+
+    # Alertmanager
+    if ! container_running alertmanager; then
+        log_detail "Starting Alertmanager..."
+        run docker run -d \
+          --name "$(container_name alertmanager)" \
+          --network "$NETWORK_NAME" \
+          -p 9093:9093 \
+          -v "${SCRIPT_DIR}/infrastructure/docker/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" \
+          -v docker_alertmanager_data:/alertmanager \
+          --restart unless-stopped \
+          prom/alertmanager:v0.28.1
+    fi
+
+    sleep 5
+
+    # Exporters
+    log_info "⑦ Starting metrics exporters..."
+
+    # Blackbox Exporter
+    if ! container_running blackbox-exporter; then
+        log_detail "Starting Blackbox Exporter..."
+        run docker run -d \
+          --name "$(container_name blackbox-exporter)" \
+          --network "$NETWORK_NAME" \
+          -v "${SCRIPT_DIR}/infrastructure/docker/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro" \
+          --restart unless-stopped \
+          prom/blackbox-exporter:latest
+    fi
+
+    # Postgres Exporter
+    if ! container_running postgres-exporter; then
+        log_detail "Starting Postgres Exporter..."
+        run docker run -d \
+          --name "$(container_name postgres-exporter)" \
+          --network "$NETWORK_NAME" \
+          -e DATA_SOURCE_NAME="postgresql://minder:${postgres_pass}@$(container_name postgres):5432/minder?sslmode=disable" \
+          --restart unless-stopped \
+          prometheuscommunity/postgres-exporter:v0.15.0
+    fi
+
+    # Redis Exporter
+    if ! container_running redis-exporter; then
+        log_detail "Starting Redis Exporter..."
+        run docker run -d \
+          --name "$(container_name redis-exporter)" \
+          --network "$NETWORK_NAME" \
+          -e REDIS_ADDR="$(container_name redis):6379" \
+          -e REDIS_PASSWORD="$redis_pass" \
+          --restart unless-stopped \
+          oliver006/redis_exporter:v1.62.0
+    fi
+
+    # cAdvisor
+    if ! container_running cadvisor; then
+        log_detail "Starting cAdvisor..."
+        run docker run -d \
+          --name "$(container_name cadvisor)" \
+          --network "$NETWORK_NAME" \
+          -v /:/rootfs:ro \
+          -v /var/run:/var/run:ro \
+          -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
+          -v /var/lib/docker/:/var/lib/docker:ro \
+          --restart unless-stopped \
+          gcr.io/cadvisor/cadvisor:latest
+    fi
+
+    # Node Exporter
+    if ! container_running node-exporter; then
+        log_detail "Starting Node Exporter..."
+        run docker run -d \
+          --name "$(container_name node-exporter)" \
+          --network "$NETWORK_NAME" \
+          -v /proc:/host/proc:ro \
+          -v /sys:/host/sys:ro \
+          -v /:/rootfs:ro \
+          --restart unless-stopped \
+          prom/node-exporter:latest
+    fi
+
+    sleep 5
+
+    # AI Services
+    log_info "⑧ Starting AI enhancement services..."
+
+    # TTS/STT Service
+    if ! container_running tts-stt-service; then
+        log_detail "Starting TTS/STT Service..."
+        run docker run -d \
+          --name "$(container_name tts-stt-service)" \
+          --network "$NETWORK_NAME" \
+          -p 8006:8006 \
+          -e OLLAMA_URL=http://$(container_name ollama):11434 \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8006/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/tts-stt-service:1.0.0
+    fi
+
+    # Model Fine-tuning
+    if ! container_running model-fine-tuning; then
+        log_detail "Starting Model Fine-tuning..."
+        run docker run -d \
+          --name "$(container_name model-fine-tuning)" \
+          --network "$NETWORK_NAME" \
+          -p 8007:8007 \
+          -e POSTGRES_HOST="$(container_name postgres)" \
+          -e POSTGRES_PORT=5432 \
+          -e POSTGRES_USER=minder \
+          -e POSTGRES_PASSWORD="$postgres_pass" \
+          -e POSTGRES_DB=minder \
+          -e QDRANT_HOST="$(container_name qdrant)" \
+          -e QDRANT_PORT=6333 \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:8007/health || exit 1" \
+          --health-interval=30s \
+          --health-timeout=10s \
+          --health-retries=3 \
+          minder/model-fine-tuning:1.0.0
+    fi
+
+    sleep 5
+
+    # Observability services
+    log_info "⑧ Starting observability services..."
+
+    # Jaeger
+    if ! container_running jaeger; then
+        log_detail "Starting Jaeger..."
+        run docker run -d \
+          --name "$(container_name jaeger)" \
+          --network "$NETWORK_NAME" \
+          -p 16686:16686 \
+          -p 14268:14268 \
+          -p 14250:14250 \
+          -p 9411:9411 \
+          -p 5778:5778 \
+          --restart unless-stopped \
+          jaegertracing/all-in-one:1.57
+    fi
+
+    # OTEL Collector
+    if ! container_running otel-collector; then
+        log_detail "Starting OTEL Collector..."
+        run docker run -d \
+          --name "$(container_name otel-collector)" \
+          --network "$NETWORK_NAME" \
+          -p 18888:18888 \
+          -p 4317:4317 \
+          -p 4318:4318 \
+          -v "${SCRIPT_DIR}/infrastructure/docker/otel-collector/otel-collector-config.yml:/etc/otelcol/config.yaml:ro" \
+          --restart unless-stopped \
+          otel/opentelemetry-collector-contrib:0.114.0
+    fi
+
+    # MinIO (Object Storage)
+    if ! container_running minio; then
+        log_detail "Starting MinIO..."
+        run docker run -d \
+          --name "$(container_name minio)" \
+          --network "$NETWORK_NAME" \
+          -p 9000:9000 \
+          -p 9001:9001 \
+          -v docker_minio_data:/data \
+          -e MINIO_ROOT_USER=minioadmin \
+          -e MINIO_ROOT_PASSWORD=$(cat "${SCRIPT_DIR}/.secrets/minio_root_password.secret") \
+          --restart unless-stopped \
+          --health-cmd="curl -f http://localhost:9000/minio/health/live" \
+          --health-interval=10s \
+          --health-timeout=5s \
+          --health-retries=5 \
+          minio/minio:RELEASE.2025-09-07T16-13-09Z
+    fi
+
+    log_success "All 31 services started manually"
+    log_detail "Use MINDER_USE_MANUAL_DOCKER=true ./setup.sh stop to stop services"
+}
+
+stop_services_manually() {
+    log_step "Stopping all manually started services"
+
+    # Stop all minder containers
+    local containers
+    containers=$(docker ps -a --format '{{.Names}}' | grep "^${CONTAINER_PREFIX}-" || true)
+
+    if [[ -z "$containers" ]]; then
+        log_info "No containers found"
+        return 0
+    fi
+
+    log_info "Stopping and removing containers..."
+    for container in $containers; do
+        log_detail "Stopping: $container"
+        run docker stop "$container" 2>/dev/null || true
+        log_detail "Removing: $container"
+        run docker rm "$container" 2>/dev/null || true
+    done
+
+    # Remove networks if not in use
+    if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
+        run docker network rm "$NETWORK_NAME" 2>/dev/null \
+            && log_success "Network '${NETWORK_NAME}' removed" \
+            || log_detail "Network still in use"
+    fi
+
+    if docker network ls --format '{{.Name}}' | grep -q "^${MONITORING_NETWORK_NAME}$"; then
+        run docker network rm "${MONITORING_NETWORK_NAME}" 2>/dev/null \
+            && log_success "Network '${MONITORING_NETWORK_NAME}' removed" \
+            || log_detail "Network still in use"
+    fi
+
+    if [[ "$CLEAN_DANGLING" == "true" ]]; then
+        local reclaimed
+        reclaimed="$(docker image prune -f | grep 'Total reclaimed' || echo 'unknown')"
+        log_success "Dangling images pruned — ${reclaimed}"
+    fi
+
+    log_success "All services stopped and removed"
+}
+
+# ─────────────────────────────────────────────────────────────
 # HEALTH CHECKS
 # ─────────────────────────────────────────────────────────────
 
@@ -1033,6 +2115,18 @@ run_health_checks() {
         local port="${path%%/*}"
         local url="http://localhost:${path}"
         [[ "$path" == "$port" ]] && url="http://localhost:${port}"
+
+        # Special case for InfluxDB v3 (requires auth for HTTP endpoints)
+        if [[ "$name" == "influxdb" ]]; then
+            if 2>/dev/null >/dev/tcp/127.0.0.1/"$port"; then
+                results+=("${name}:ok:${url}")
+                [[ "$json_mode" == false ]] && echo -e "  ${GREEN}✓${NC} ${name}  ${DIM}${url}${NC}  ${DIM}(TCP port check)${NC}"
+            else
+                results+=("${name}:warn:${url}")
+                [[ "$json_mode" == false ]] && echo -e "  ${YELLOW}⚠${NC} ${name}  ${DIM}${url}  (not yet reachable)${NC}"
+            fi
+            return
+        fi
 
         if curl -sf --max-time 3 "$url" &>/dev/null; then
             results+=("${name}:ok:${url}")
@@ -1597,6 +2691,12 @@ cmd_status() {
 cmd_stop() {
     log_step "Stopping all services"
 
+    # Check if manual docker mode is enabled
+    if [[ "${MINDER_USE_MANUAL_DOCKER:-false}" == "true" ]]; then
+        stop_services_manually
+        return $?
+    fi
+
     compose_monitoring down
 
     if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
@@ -1620,6 +2720,21 @@ cmd_stop() {
 
 cmd_start() {
     check_prerequisites
+
+    # Phase 3: Validate GPU environment for AI acceleration
+    validate_gpu_environment
+
+    # Phase 4: Validate dynamic configuration
+    validate_access_mode
+    validate_ai_compute_mode
+    validate_compute_resource_profile
+
+    # Auto-regenerate docker-compose.yml if needed
+    if should_regenerate_compose; then
+        log_info "Auto-regenerating docker-compose.yml from version specs..."
+        cmd_regenerate_compose
+    fi
+
     create_networks
     start_services
     wait_for_services
@@ -1630,6 +2745,46 @@ cmd_restart() {
     cmd_stop
     sleep 3
     cmd_start
+}
+
+# ─────────────────────────────────────────────────────────────
+# COMPOSE FILE MANAGEMENT
+# ─────────────────────────────────────────────────────────────
+
+should_regenerate_compose() {
+    local compose_output="${SCRIPT_DIR}/infrastructure/docker/docker-compose.yml"
+    local compose_hash_file="${SCRIPT_DIR}/.setup/compose.hash"
+
+    # Return false if compose file doesn't exist
+    [[ ! -f "$compose_output" ]] && return 1
+
+    # Calculate current hash of THIRD_PARTY_IMAGE_SPECS
+    local current_hash
+    current_hash=$(for spec in "${THIRD_PARTY_IMAGE_SPECS[@]}"; do echo "$spec"; done | md5sum | cut -d' ' -f1)
+
+    # Check if hash file exists and matches
+    if [[ -f "$compose_hash_file" ]]; then
+        local stored_hash
+        stored_hash=$(cat "$compose_hash_file" 2>/dev/null || echo "")
+        [[ "$current_hash" == "$stored_hash" ]] && return 1
+    fi
+
+    # Hash doesn't match or file doesn't exist - should regenerate
+    return 0
+}
+
+update_compose_hash() {
+    local compose_hash_file="${SCRIPT_DIR}/.setup/compose.hash"
+    local hash_dir
+    hash_dir="$(dirname "$compose_hash_file")"
+
+    # Create directory if not exists
+    mkdir -p "$hash_dir"
+
+    # Calculate and store hash
+    local current_hash
+    current_hash=$(for spec in "${THIRD_PARTY_IMAGE_SPECS[@]}"; do echo "$spec"; done | md5sum | cut -d' ' -f1)
+    echo "$current_hash" > "$compose_hash_file"
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -1687,6 +2842,81 @@ cmd_logs() {
         log_info "Streaming all service logs (Ctrl+C to exit)…"
         compose logs -f --tail 50
     fi
+}
+
+# ─────────────────────────────────────────────────────────────
+# REGENERATE COMPOSE
+# ─────────────────────────────────────────────────────────────
+
+cmd_regenerate_compose() {
+    section "🔧 Regenerating docker-compose.yml"
+
+    local compose_template="${SCRIPT_DIR}/.setup/templates/docker-compose.yml.template"
+    local compose_output="${SCRIPT_DIR}/infrastructure/docker/docker-compose.yml"
+
+    # Create template directory if not exists
+    mkdir -p "$(dirname "$compose_template")"
+
+    # Create template from current compose if not exists
+    if [[ ! -f "$compose_template" ]]; then
+        if [[ -f "$compose_output" ]]; then
+            log_detail "Creating template from current docker-compose.yml..."
+            cp "$compose_output" "$compose_template"
+        else
+            log_error "Neither template nor docker-compose.yml found!"
+            exit 1
+        fi
+    fi
+
+    # Copy template to output
+    log_detail "Generating ${compose_output}..."
+    cp "$compose_template" "$compose_output"
+
+    # Update versions from THIRD_PARTY_IMAGE_SPECS
+    log_detail "Updating image versions from THIRD_PARTY_IMAGE_SPECS..."
+    local updated=false
+    for spec in "${THIRD_PARTY_IMAGE_SPECS[@]}"; do
+        local image_ref="${spec%%|*}"
+        local image_name="${image_ref%%:*}"
+        local image_tag="${image_ref##*:}"
+
+        # Skip if no tag specified
+        [[ "$image_name" == "$image_tag" ]] && continue
+
+        # Get current image in docker-compose.yml
+        local current_image
+        current_image=$(grep "^[[:space:]]*image:[[:space:]]*${image_name}:" "$compose_output" 2>/dev/null | sed 's/^[[:space:]]*image:[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+
+        if [[ -n "$current_image" ]] && [[ "$current_image" != "$image_ref" ]]; then
+            # Replace image in docker-compose.yml
+            sed -i "s|image:[[:space:]]*${image_name}:[^[:space:]]*|image: ${image_ref}|g" "$compose_output"
+            log_detail "   Updated: ${image_name}: ${current_image} → ${image_ref}"
+            updated=true
+        fi
+    done
+
+    if [[ "$updated" == false ]]; then
+        log_detail "All versions already up to date ✓"
+    else
+        log_success "Image versions updated in docker-compose.yml"
+    fi
+
+    log_success "✅ docker-compose.yml regenerated successfully"
+    echo ""
+    echo "Current versions from THIRD_PARTY_IMAGE_SPECS:"
+    echo "-------------------------------------------"
+    for spec in "${THIRD_PARTY_IMAGE_SPECS[@]}"; do
+        local image_ref="${spec%%|*}"
+        echo "   • $image_ref"
+    done
+    echo ""
+    echo "To update versions:"
+    echo "  1. Edit THIRD_PARTY_IMAGE_SPECS in setup.sh"
+    echo "  2. Run: ./setup.sh regenerate-compose"
+    echo "  3. Run: ./setup.sh stop && ./setup.sh start"
+
+    # Update hash so we don't regenerate unnecessarily
+    update_compose_hash
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -1805,6 +3035,8 @@ ${BOLD}OPERATIONS${NC}
     shell [service]         Open an interactive shell in a container
     migrate [target]        Run Alembic migrations (default: head)
     doctor                  Deep diagnostics: disk, ports, secrets, images, version drift
+    generate-secrets        Generate production secrets in .secrets/ directory
+    sync-postgres-password  Sync PostgreSQL password with secret file
 
 ${BOLD}DATA MANAGEMENT${NC}
     backup                  Full backup: Postgres, Neo4j, InfluxDB, Qdrant, .env
@@ -1823,11 +3055,16 @@ ${BOLD}VERSION RESOLUTION${NC}
     SKIP_VERSION_CHECK=1   Bypass registry queries, use pins directly
     VERBOSE=1              Show per-image resolution details
 
+${BOLD}CONFIGURATION MANAGEMENT${NC}
+    regenerate-compose       Regenerate docker-compose.yml from template using version specs
+                             All version changes MUST be done via THIRD_PARTY_IMAGE_SPECS
+
 ${BOLD}FLAGS${NC}
     DRY_RUN=1               Preview commands without executing
     VERBOSE=1               Enable debug-level output
     NONINTERACTIVE=1        Disable interactive prompts (for CI)
     SKIP_VERSION_CHECK=1    Use exact pinned versions, skip registry queries
+    MINDER_USE_MANUAL_DOCKER=true  Use manual docker run instead of docker compose (YAML error workaround)
 
 ${BOLD}EXAMPLES${NC}
     ./${SCRIPT_NAME}                                # Fresh install
@@ -1865,6 +3102,7 @@ cmd_install() {
     progress_next "Creating Docker network";   create_networks
     progress_next "Resolving & pulling images";pull_all_images
     progress_next "Initialising databases";    initialize_database
+    progress_next "Initialising object storage"; initialize_minio
     progress_next "Starting services";         start_services
     progress_next "Waiting for services";      wait_for_services
     progress_next "Downloading AI models";     download_ollama_models
@@ -1913,6 +3151,9 @@ main() {
         restore)    cmd_restore "$arg1" ;;
         doctor)     cmd_doctor ;;
         update)     cmd_update "${arg1:-}" ;;
+        regenerate-compose) cmd_regenerate_compose ;;
+        generate-secrets) generate_secrets ;;
+        sync-postgres-password) sync_postgres_password ;;
         uninstall)  cmd_uninstall "$arg1" ;;
         -h|--help|help) show_help ;;
         *)
