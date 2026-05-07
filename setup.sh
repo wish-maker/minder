@@ -1301,6 +1301,12 @@ initialize_database() {
 initialize_minio() {
     log_step "Initialising MinIO object storage"
 
+    # Check if minio service exists in docker-compose.yml
+    if ! grep -q "minio:" "$COMPOSE_FILE"; then
+        log_info "MinIO service not defined in docker-compose.yml - skipping"
+        return 0
+    fi
+
     compose up -d minio
     wait_for_service "minio" "9000/minio/health/live" || exit 1
 
