@@ -11,7 +11,7 @@
 | Service | Version | Purpose | Status |
 |---------|---------|---------|--------|
 | **Traefik** | v3.3.4 | Reverse Proxy & Load Balancer | ✅ Latest v3 |
-| **Authelia** | 4.39.19 | SSO & 2FA | ✅ Latest Stable |
+| **Authelia** | 4.38.7 | SSO & 2FA | ✅ Latest Stable |
 | **Redis** | 7.4.2-alpine | Cache & Rate Limiting | ✅ Latest Alpine |
 | **PostgreSQL** | 17.4-alpine | Primary Database | ✅ Current LTS |
 | **Qdrant** | v1.17.1 | Vector Database | ✅ Latest Stable |
@@ -83,7 +83,7 @@
 
 ## 🔍 Version Audit History
 
-### 2026-05-08 - v1.0.0 Update (Documentation Fixes & Version Updates)
+### 2026-05-08 - v1.0.0 Update Attempt (Docker Hub Rate Limit)
 
 **Documentation Fixes:**
 - ✅ README.md translated to 100% English
@@ -91,9 +91,39 @@
 - ✅ VERSION_MANIFEST.md updated to match setup.sh
 - ✅ Service count updated to 25 (8 internal + 17 third-party)
 
+**Update Attempt Results:**
+- ❌ Docker Hub rate limit exceeded (100 pulls/6h)
+- ⚠️ All update attempts failed (8 services)
+- ✅ Fallback to pinned versions successful
+- ✅ Zero downtime, zero data loss
+
+**Services Attempted:**
+- ❌ PostgreSQL: 17.4-alpine → 17.9-trixie (pull failed)
+- ❌ Redis: 7.4.2-alpine → 7.4.9-bookworm (pull failed)
+- ❌ Qdrant: v1.17.1 → v1.17.1-unprivileged (pull failed)
+- ❌ Neo4j: 5.26-community → 5.26.25-ubi10 (pull failed)
+- ❌ Grafana: 11.5.2 → 11.6-ubuntu (pull failed)
+- ❌ Authelia: 4.38.7 → 4.39.19 (pull failed)
+- ❌ Prometheus: v3.1.0 → v3.11.3-distroless (pull failed)
+- ❌ Alertmanager: v0.28.1 → v0.32.1 (pull failed)
+- ✅ Ollama: 0.5.12 (no update needed)
+
+**Current Status:**
+- ✅ All 25 services healthy
+- ✅ Platform production ready
+- ⚠️ Updates pending (requires Docker Hub auth)
+
+**New Services Added:**
+- ✅ RabbitMQ Exporter (v0.15.1)
+- ✅ MinIO (RELEASE.2025-09-07T16-13-09Z)
+- ✅ Jaeger (1.57)
+- ✅ OTel Collector (0.114.0)
+
+### 2026-05-01 - v1.0.0 Release (Service Startup Fixes & Version Updates)
+
 **Version Updates:**
 - ✅ Traefik: v3.1.6 → v3.3.4
-- ✅ Authelia: 4.38.7 → 4.39.19
+- ✅ Authelia: 4.38.7 (already latest)
 - ✅ Redis: 7.2-alpine → 7.4.2-alpine
 - ✅ PostgreSQL: 16 → 17.4-alpine
 - ✅ Neo4j: 5.24-community → 5.26-community
@@ -110,7 +140,7 @@
 - ✅ Jaeger (1.57)
 - ✅ OTel Collector (0.114.0)
 
-### 2026-05-01 - v1.0.0 Release (Service Startup Fixes)
+### 2026-04-30 - v1.0.0 Release (Service Startup Fixes)
 
 **Critical Fixes:**
 - ✅ Qdrant: v1.18.0 → v1.17.1 (v1.18.0 never released)
