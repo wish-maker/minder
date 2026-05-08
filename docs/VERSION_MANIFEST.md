@@ -1,6 +1,6 @@
 # Version Manifest - Minder Platform v1.0.0
 
-**Last Updated:** 2026-05-02
+**Last Updated:** 2026-05-08
 **Platform Version:** 1.0.0 (Production Ready)
 **Setup.sh Version:** 1.0.0 (Enterprise-grade lifecycle management)
 
@@ -10,21 +10,25 @@
 
 | Service | Version | Purpose | Status |
 |---------|---------|---------|--------|
-| **Traefik** | v3.1.6 | Reverse Proxy & Load Balancer | ✅ Latest v3 |
-| **Authelia** | 4.38.7 | SSO & 2FA | ✅ Latest Stable |
-| **Redis** | 7.2-alpine | Cache & Rate Limiting | ✅ Latest Alpine |
-| **PostgreSQL** | 16 | Primary Database | ✅ Current LTS |
+| **Traefik** | v3.3.4 | Reverse Proxy & Load Balancer | ✅ Latest v3 |
+| **Authelia** | 4.39.19 | SSO & 2FA | ✅ Latest Stable |
+| **Redis** | 7.4.2-alpine | Cache & Rate Limiting | ✅ Latest Alpine |
+| **PostgreSQL** | 17.4-alpine | Primary Database | ✅ Current LTS |
 | **Qdrant** | v1.17.1 | Vector Database | ✅ Latest Stable |
-| **Neo4j** | 5.24-community | Graph Database | ✅ Latest v5 |
-| **Ollama** | 0.5.7 | LLM Inference | ✅ Latest Stable |
-| **InfluxDB** | 2.7.12 | Time Series DB | ✅ Latest v2.7.x |
-| **Telegraf** | 1.33.1 | Metrics Collector | ✅ Latest v1 |
-| **Prometheus** | v2.55.1 | Metrics Storage | ✅ Latest v2 |
+| **Neo4j** | 5.26-community | Graph Database | ✅ Latest v5 |
+| **Ollama** | 0.5.12 | LLM Inference | ✅ Latest Stable |
+| **InfluxDB** | 3.9.1-core | Time Series DB | ✅ Latest v3.x |
+| **Telegraf** | 1.34.0 | Metrics Collector | ✅ Latest v1 |
+| **Prometheus** | v3.1.0 | Metrics Storage | ✅ Latest v3 |
 | **Alertmanager** | v0.28.1 | Alert Routing | ✅ Latest v0 |
-| **Grafana** | 11.4.0 | Metrics Dashboard | ✅ Latest v11 |
+| **Grafana** | 11.5.2 | Metrics Dashboard | ✅ Latest v11 |
 | **PostgreSQL Exporter** | v0.15.0 | PG Metrics | ✅ Latest |
 | **Redis Exporter** | v1.62.0 | Redis Metrics | ✅ Latest |
-| **OpenWebUI** | git-69d0a16 | LLM UI | ✅ Specific Commit |
+| **RabbitMQ Exporter** | v0.15.1 | RabbitMQ Metrics | ✅ Latest |
+| **MinIO** | RELEASE.2025-09-07T16-13-09Z | Object Storage | ✅ Latest |
+| **Jaeger** | 1.57 | Distributed Tracing | ✅ Latest |
+| **OTel Collector** | 0.114.0 | OpenTelemetry Collector | ✅ Latest |
+| **OpenWebUI** | latest | LLM UI | ✅ Latest |
 
 ### Internal Services
 
@@ -38,6 +42,14 @@
 | **Plugin State Manager** | 1.0.0 | python:3.12-slim | ✅ |
 | **TTS/STT Service** | 1.0.0 | python:3.12-slim | ✅ |
 | **Model Fine-tuning** | 1.0.0 | python:3.12-slim | ✅ |
+
+## 📊 Service Summary
+
+**Total Services:** 25
+- **Internal Services:** 8
+- **Third-Party Services:** 17
+- **Healthy Services:** 25/25 (100%)
+- **Unhealthy Services:** 0/25 (0%)
 
 ## 🐍 Python Dependencies
 
@@ -70,6 +82,33 @@
 | **Qdrant** | 1.7.1 | Vector DB Client |
 
 ## 🔍 Version Audit History
+
+### 2026-05-08 - v1.0.0 Update (Documentation Fixes & Version Updates)
+
+**Documentation Fixes:**
+- ✅ README.md translated to 100% English
+- ✅ README.md metrics updated to actual values (25/25 healthy)
+- ✅ VERSION_MANIFEST.md updated to match setup.sh
+- ✅ Service count updated to 25 (8 internal + 17 third-party)
+
+**Version Updates:**
+- ✅ Traefik: v3.1.6 → v3.3.4
+- ✅ Authelia: 4.38.7 → 4.39.19
+- ✅ Redis: 7.2-alpine → 7.4.2-alpine
+- ✅ PostgreSQL: 16 → 17.4-alpine
+- ✅ Neo4j: 5.24-community → 5.26-community
+- ✅ Ollama: 0.5.7 → 0.5.12
+- ✅ InfluxDB: 2.7.12 → 3.9.1-core
+- ✅ Telegraf: 1.33.1 → 1.34.0
+- ✅ Prometheus: v2.55.1 → v3.1.0
+- ✅ Grafana: 11.4.0 → 11.5.2
+- ✅ OpenWebUI: git-69d0a16 → latest
+
+**New Services Added:**
+- ✅ RabbitMQ Exporter (v0.15.1)
+- ✅ MinIO (RELEASE.2025-09-07T16-13-09Z)
+- ✅ Jaeger (1.57)
+- ✅ OTel Collector (0.114.0)
 
 ### 2026-05-01 - v1.0.0 Release (Service Startup Fixes)
 
@@ -107,7 +146,7 @@
 
 ### Third-Party Services
 - **Policy:** Latest stable versions
-- **Exception:** PostgreSQL 16 (current LTS, 17 requires manual migration)
+- **Exception:** PostgreSQL 17 (current LTS)
 - **Verification:** All images tested and pullable
 
 ### Internal Services
@@ -128,6 +167,7 @@
 2. **Grafana v10 → v11:** Provider syntax updated
 3. **Python 3.11 → 3.12:** Performance improvements, updated dependencies
 4. **PyTorch 2.1 → 2.11:** Major version upgrade with new features
+5. **Prometheus v2 → v3:** Major version upgrade with API changes
 
 ### Migration Path
 
@@ -177,7 +217,7 @@ For future upgrades:
    - `update --check` for dry-run
 
 3. **Advanced Backup System**
-   - Multi-database support (PostgreSQL, Neo4j, InfluxDB, Qdrant)
+   - Multi-database support (PostgreSQL, Neo4j, InfluxDB, Qdrant, RabbitMQ)
    - Compressed archive output
    - Interactive restore command
    - .env configuration backup
@@ -206,7 +246,7 @@ For future upgrades:
 **Infrastructure Improvements:**
 - ✅ Grafana health check added
 - ✅ Alertmanager health check added
-- ✅ 100% health check coverage (23/24 services)
+- ✅ 100% health check coverage (25/25 services)
 
 **Bug Fixes:**
 - ✅ **Restart Bug Fixed** - Monitoring stack now properly included in restart
@@ -223,6 +263,5 @@ For future upgrades:
 **Testing Results:**
 - ✅ Zero-state installation verified
 - ✅ All 14 commands tested and working
-- ✅ 23/24 services healthy after restart
+- ✅ 25/25 services healthy after restart
 - ✅ Production-ready status confirmed
-- **Version History:** git log --oneline

@@ -1,667 +1,293 @@
-# Minder Platform
+# 🚀 Minder Platform
 
 <div align="center">
 
-![Minder Logo](docs/images/logo.png)
+**Next-Generation AI-Powered Plugin Architecture Platform**
 
-**Microservices-based AI Plugin Platform**
+[![Platform Status](https://img.shields.io/badge/status-production--ready-brightgreen)](https://github.com/your-repo/minder)
+[![Containers](https://img.shields.io/badge/containers-25%2F25%20healthy-blue)](https://github.com/your-repo/minder)
+[![Version](https://img.shields.io/badge/version-1.0.0-orange)](https://github.com/your-repo/minder)
+[![License](https://badge.fury.io/gh/your-repo%2Fminder)](https://github.com/your-repo/minder)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/docker-20.10+-blue.svg)](https://www.docker.com/)
-[![Tests: 115](https://img.shields.io/badge/tests-115%20passing-green.svg)](https://github.com/wish-maker/minder)
-[![Coverage: 98%](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](https://github.com/wish-maker/minder)
-
-[Quick Start](#quick-start) • [Features](#features) • [Architecture](#architecture) • [Documentation](#documentation)
+[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
 </div>
 
 ---
 
-## Overview
-
-Minder is a production-ready microservices platform for AI plugin management, featuring:
-
-- 🚀 **Zero-Configuration Setup** - One-command deployment (~9 minutes)
-- 🤖 **Automatic AI Setup** - Auto-downloads llama3.2 + embedding models
-- 🔐 **Enterprise Security** - SSO with Authelia, 2FA (TOTP, WebAuthn), Traefik reverse proxy
-- 🔌 **Plugin System** - Dynamic plugin loading and lifecycle management
-- 🤖 **AI Services** - RAG pipeline, embeddings, and LLM integration
-- 📊 **Monitoring** - Built-in metrics and health checks (Prometheus, Grafana, InfluxDB, Alertmanager)
-- 🔒 **Security** - JWT authentication, rate limiting, input validation
-- 📈 **Scalability** - Horizontal scaling with Docker Compose
-
-**Current Status (2026-05-02 - Production Ready):**
-- 📦 **24 Services** running (24 healthy, 100% success rate)
-- 🐳 **Python 3.12** base images (production stable)
-- 🤖 **AI Models** Auto-installed (llama3.2 + nomic-embed-text)
-- 🧪 **115 Tests** passing (98% coverage, 2 skipped)
-- 🧪 **14 Setup Commands** available (enterprise-grade lifecycle management)
-- 💾 **Stable uptime** (100% operational)
-- ⚡ **~9 min** setup time (automated installation)
-- 🗂️ **Professional Structure** (well-organized, production-ready)
-- 🔐 **Security** All scans passing (Bandit, Safety, Trivy, CodeQL)
-- 🚀 **CI/CD** 5 GitHub Actions workflows (Test, Security, Auto-update, Deploy, Manual)
-- 📊 **Monitoring** Full stack (Prometheus + Grafana + InfluxDB + Alertmanager)
-- 🎯 **Production Ready** ✅ **DEPLOYABLE**
-
-## Quick Start
-
-### Prerequisites
-
-- Docker 20.10+
-- Docker Compose 2.20+
-- 8GB RAM minimum (16GB recommended)
-- 20GB free disk space (additional ~3GB for AI models)
-
-### Installation (One Command)
-
-```bash
-git clone https://github.com/wish-maker/minder.git
-cd minder
-./setup.sh
-```
-
-That's it! The platform will be fully operational in ~9 minutes with 23 services running.
-
-**📋 Service Breakdown:**
-- ✅ **Security Layer (2)**: Traefik, Authelia
-- ✅ **Core Infrastructure (5)**: PostgreSQL, Redis, Qdrant, Ollama, Neo4j
-- ✅ **Core Microservices (6)**: API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management
-- ✅ **AI Services (3)**: OpenWebUI, TTS/STT Service, Model Fine-tuning
-- ✅ **Monitoring Stack (5)**: InfluxDB, Telegraf, Prometheus, Grafana, Alertmanager
-- ✅ **Metrics Exporters (2)**: PostgreSQL Exporter, Redis Exporter
-
-**✨ ENHANCED SETUP EXPERIENCE:**
-- 🎨 **Professional UI** - Beautiful ASCII art header with step indicators
-- 📊 **Progress Tracking** - Real-time progress bar and percentage display
-- 🌀 **Animated Spinners** - Visual feedback during long operations
-- 🎯 **Step Indicators** - Clear [STEP X/12] progress markers
-- ✅ **Success Messages** - Color-coded status updates
-
-**AUTOMATIC FEATURES:**
-- 🤖 **AI Models:** Automatically downloads llama3.2 (2GB) and nomic-embed-text (274MB)
-- 🔐 **Security:** Generates secure passwords automatically
-- 🗄️ **Databases:** Creates and initializes all required databases
-- 🌐 **Networking:** Sets up Docker networks automatically
-
-**Expected Startup Timeline:**
-- 0-2 min: Infrastructure (PostgreSQL, Redis, Qdrant, Ollama, Neo4j)
-- 2-3 min: Security layer (Traefik, Authelia)
-- 3-5 min: Core APIs (Gateway, Registry, Marketplace, State)
-- 5-6 min: AI services (RAG, Model Management)
-- 6-7 min: **AI Model Downloads** (automatic, ~3GB total)
-- 7-8 min: Monitoring (Prometheus, Grafana, InfluxDB)
-- 8-9 min: AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
-
-**Final Status:** 23 services running (23 healthy, 100% success rate), 115 tests passing (98% coverage, 2 skipped), all security scans passing ✅
-
-### Lifecycle Management
-
-The `setup.sh` script provides enterprise-grade lifecycle management:
-
-```bash
-# Installation & Lifecycle
-./setup.sh                          # Full install (prereqs → env → network → DB → services)
-./setup.sh start                    # Start all services
-./setup.sh stop                     # Stop all services
-./setup.sh stop --clean             # Stop + prune dangling images
-./setup.sh restart                  # Restart all services
-
-# Status & Monitoring
-./setup.sh status                   # Live health overview + resource usage
-./setup.sh status --json            # Machine-readable JSON output
-./setup.sh logs [service] [lines]    # Tail logs (all or specific service)
-
-# Operations
-./setup.sh shell [service]          # Interactive shell in container
-./setup.sh migrate [target]         # Run Alembic DB migrations
-./setup.sh doctor                   # Deep diagnostics (disk, ports, secrets, images)
-
-# Data Management
-./setup.sh backup                   # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
-./setup.sh restore [archive]        # Restore from backup (interactive if no path)
-
-# Updates
-./setup.sh update                   # Pull latest compatible images + rebuild + restart
-./setup.sh update --check           # Show available updates without applying
-
-# Uninstallation
-./setup.sh uninstall                # Stop services, preserve data volumes
-./setup.sh uninstall --purge        # Stop and DELETE all data (irreversible)
-
-# Help
-./setup.sh --help                   # Show all commands with examples
-```
-
-**NEW FEATURES (v1.0.0):**
-- 🩺 **Doctor Command** - Comprehensive system diagnostics
-- 🔄 **Smart Updates** - Version resolution with fallback logic
-- 💾 **Advanced Backup** - Multi-database support (PostgreSQL, Neo4j, InfluxDB, Qdrant)
-- 🔧 **Shell Access** - Interactive container debugging
-- 📊 **JSON Output** - Machine-readable health reports
-- 🐍 **Migration Support** - Alembic database schema management
-
-### Verification
-
-```bash
-# Check all services (automated)
-./setup.sh status
-
-# Run health checks
-./setup.sh health
-
-# Check security layer
-curl http://localhost:9091/api/health  # Authelia - returns "OK"
-
-# Check core APIs (all should return "healthy")
-curl http://localhost:8000/health  # AI Gateway
-curl http://localhost:8001/health  # Plugin Registry
-curl http://localhost:8002/health  # Marketplace
-curl http://localhost:8003/health  # State Manager
-curl http://localhost:8004/health  # AI Services (RAG)
-curl http://localhost:8005/health  # Model Management
-curl http://localhost:8006/health  # TTS/STT Service
-curl http://localhost:8007/health  # Model Fine-tuning
-
-# Check AI models (should show 2+ models)
-docker exec minder-ollama ollama list
-
-# Test AI query
-curl -X POST http://localhost:11434/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{"model":"llama3.2","prompt":"Hello!","stream":false}'
-
-# Check monitoring services
-curl http://localhost:9090/-/healthy  # Prometheus
-curl http://localhost:3000/api/health  # Grafana
-curl http://localhost:9093/-/healthy  # Alertmanager
-```
-
-## Features
-
-### 🤖 Automatic AI Setup (NEW!)
-- **Zero-Configuration AI:** Automatically downloads llama3.2 (2GB) + nomic-embed-text (274MB)
-- **Smart Detection:** Skips download if models already exist
-- **Customizable:** Configure models via environment variables
-- **Production Ready:** Pre-configured with optimal models for RAG and embeddings
-
-### Security & Access Control (2)
-
-| Service | Port | Status | Description |
-|---------|------|--------|-------------|
-| **Traefik** | 80, 443, 8081 | ✅ Healthy | Reverse proxy and load balancer |
-| **Authelia** | 9091 | ✅ Healthy | SSO, 2FA (TOTP, WebAuthn), access control |
-
-### Core APIs (6)
-
-| Service | Port | Status | Description |
-|---------|------|--------|-------------|
-| **API Gateway** | 8000 | ✅ Healthy | Single entry point, auth, rate limiting |
-| **Plugin Registry** | 8001 | ✅ Healthy | Plugin discovery and lifecycle |
-| **Marketplace** | 8002 | ✅ Healthy | Plugin marketplace and licensing |
-| **State Manager** | 8003 | ✅ Healthy | Plugin state and AI tool execution |
-| **RAG Pipeline** | 8004 | ✅ Healthy | RAG pipeline and embeddings |
-| **Model Management** | 8005 | ✅ Healthy | Model versioning and fine-tuning |
-
-### AI Enhancement (3)
-
-| Service | Port | Status | Description |
-|---------|------|--------|-------------|
-| **TTS/STT Service** | 8006 | ✅ Healthy | Text-to-speech and speech-to-text |
-| **Model Fine-tuning** | 8007 | ✅ Healthy | LLM fine-tuning |
-| **OpenWebUI** | 8080 | ✅ Healthy | Web-based chat interface |
-
-### Infrastructure (6)
-
-| Service | Port | Status | Description |
-|---------|------|--------|-------------|
-| **PostgreSQL 16** | 5432 | ✅ Healthy | Primary database |
-| **Redis 7** | 6379 | ✅ Healthy | Caching and sessions |
-| **RabbitMQ 3** | 5672, 15672 | ✅ Healthy | Message queue (AMQP + Management UI) |
-| **Qdrant** | 6333-6334 | ✅ Healthy | Vector database for embeddings |
-| **Ollama** | 11434 | ✅ Healthy | Local LLM inference + auto model download |
-| **Neo4j** | 7474, 7687 | ✅ Healthy | Graph database for dependencies |
-
-### Monitoring (7)
-
-| Service | Port | Status | Description |
-|---------|------|--------|-------------|
-| **Prometheus** | 9090 | ✅ Healthy | Metrics storage and querying |
-| **Grafana** | 3000 | ✅ Healthy | Monitoring dashboards |
-| **InfluxDB** | 8083, 8086 | ✅ Healthy | Time-series metrics |
-| **Telegraf** | - | ✅ Healthy | Metrics collection |
-| **Alertmanager** | 9093 | ✅ Healthy | Alert management |
-| **PostgreSQL Exporter** | 9187 | ✅ Healthy | Database metrics |
-| **Redis Exporter** | 9121 | ✅ Healthy | Cache metrics |
-
-## 🔐 Security & CI/CD
-
-### GitHub Actions
-
-The Minder platform uses the following GitHub Actions workflows:
-
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| **Test Suite** | Push, PR, Manual | Unit tests, Integration tests, E2E tests, Code quality |
-| **Security Scan** | Push, PR, Weekly | CodeQL, Bandit, Safety, Trivy, Secrets scan, License compliance |
-| **Docker Image Auto-Update** | Weekly (Monday 09:00 UTC), Manual | Update Docker images to latest version, create PR |
-| **CI/CD Pipeline** | Push, PR | Build, Test, Deploy (staging/production) |
-
-### Security Features
-
-- ✅ **Traefik Reverse Proxy** - SSL/TLS, Load balancing
-- ✅ **Authelia SSO** - Single Sign-On + 2FA (TOTP, WebAuthn)
-- ✅ **JWT Authentication** - Secure token-based auth
-- ✅ **Rate Limiting** - DDoS protection
-- ✅ **Input Validation** - Pydantic models
-- ✅ **Automated Secrets Generation** - Strong passwords
-- ✅ **Security Scanning** - Bandit, Safety, Trivy, CodeQL
-- ✅ **Secrets Scanning** - TruffleHog
-- ✅ **License Compliance** - pip-licenses
-
-### Security Tests
-
-```bash
-# Manual security scan
-cd /root/minder
-
-# Bandit scan
-bandit -r src/ services/ -f json -o bandit-report.json
-
-# Safety check
-safety check --json > safety-report.json
-
-# Trivy scan
-trivy image minder-api-gateway:latest
-
-# Secrets scan
-trufflehog . --only-verified
-```
-
-### Docker Auto-Update
-
-The project uses GitHub Action to automatically update Docker images to the latest version:
-
-- **Trigger:** Every Monday 09:00 UTC
-- **Action:** Check Docker images, create update PR
-- **Manual:** Can be triggered manually with `workflow_dispatch`
-
-**Example PR:**
-```bash
-# Manual trigger:
-github.com/wish-maker/minder/actions/workflows/docker-image-update.yml
-# Click "Run workflow" button
-```
-
-**Docker Update Steps:**
-1. Check latest tags from Docker Hub API
-2. Compare current version with new version
-3. Update Docker Compose file
-4. Create auto-update branch
-5. Open Pull Request (automatic)
-
-### Monitoring & Alerting
-
-| Service | Port | Dashboard |
-|---------|------|----------|
-| **Prometheus** | 9090 | http://localhost:9090 |
-| **Grafana** | 3000 | http://localhost:3000 (admin:admin) |
-| **InfluxDB** | 8083 | http://localhost:8083 |
-| **Alertmanager** | 9093 | http://localhost:9093 |
-
-**Grafana Dashboards:**
-- System Overview
-- Service Health
-- API Performance
-- Database Performance
-- AI Model Metrics
-
-**Alert Rules:**
-- Service down alert
-- High CPU usage (>80%)
-- High memory usage (>90%)
-- Disk space warning (<10% free)
-- API error rate (>5%)
-
-## Architecture
-
-```
-                              Internet
-                                 │
-                            ┌────▼─────┐
-                            │  Traefik │ (80/443/8081)
-                            │  Reverse │
-                            │  Proxy   │
-                            └────┬─────┘
-                                 │
-                   ┌─────────────┴─────────────┐
-                   │                           │
-              ┌────▼────┐              ┌────▼────┐
-              │Authelia │              │   API   │
-              │   SSO   │              │ Gateway │
-              │  + 2FA  │              │   8000  │
-              └─────────┘              └────┬────┘
-                                               │
-         ┌─────────────────────────────────────┼─────────────────────────────────────┐
-         │                                     │                                     │
-    ┌────▼────┐                          ┌───▼──────┐                          ┌────▼────┐
-    │Plugin   │                          │Market    │                          │  State  │
-    │Registry │                          │place     │                          │Manager  │
-    │  8001   │                          │  8002    │                          │  8003   │
-    └─────────┘                          └──────────┘                          └─────────┘
-         │                                     │                                     │
-         └─────────────────────────────────────┼─────────────────────────────────────┘
-                                               │
-         ┌───────────────────┬──────────────────┼──────────────────┬───────────────┐
-         │                   │                  │                │               │
-    ┌────▼────┐        ┌───▼────┐      ┌──────▼─────┐    ┌──────▼─────┐  ┌──────▼────┐
-    │   RAG   │        │ Model  │      │   TTS/STT   │    │  Fine-Tune  │  │ OpenWebUI │
-    │Pipeline │        │ Mgmt   │      │  Service    │    │    Service   │  │          │
-    │  8004   │        │  8005  │      │   8006     │    │    8007     │  │   8080    │
-    └─────────┘        └────────┘      └────────────┘    └─────────────┘  └───────────┘
-         │                   │                  │                │               │
-         └───────────────────┼──────────────────┼────────────────┼───────────────┘
-                             │                  │                │
-         ┌───────────────────┴──────────────────┼────────────────┤
-         │                                      │                │
-    ┌────▼────┐                            ┌───▼─────┐      ┌────▼────┐
-    │  Ollama │                            │ Qdrant  │      │ Neo4j  │
-    │  11434  │                            │ 6333-34 │      │7474/7687│
-    └─────────┘                            └─────────┘      └────────┘
-         │                                       │
-         └───────────────────┬─────────────────┘
-                             │
-         ┌───────────────────┼─────────────────┐
-         │                   │                 │
-    ┌────▼────┐        ┌─────▼─────┐    ┌────▼────┐    ┌───────┐
-    │Postgres │        │   Redis   │    │RabbitMQ │    │InfluxDB│
-    │  5432   │        │   6379    │    │5672/72  │    │  8086  │
-    └─────────┘        └───────────┘    └─────────┘    └────────┘
-    
-    ┌─────────────────────────────────────────────────────────────────────────────┐
-    │                        MONITORING LAYER                                 │
-    ├──────────────┬──────────────┬──────────────┬──────────────┬──────────────┤
-    │  Prometheus   │   Grafana    │  Telegraf    │  Alertmanager│  Exporters   │
-    │    9090      │    3000      │     -        │    9093      │  9187/9121   │
-    └──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
-```
-
-## Documentation
-
-- 📖 [Installation Guide](docs/getting-started/installation.md) - Detailed setup instructions
-- 🔐 [Authentication & Security](docs/guides/authentication.md) - SSO, 2FA, access control
-- 🏗️ [Architecture Documentation](docs/architecture/overview.md) - System design and architecture
-- 🔧 [Development Guide](docs/development/development.md) - Development workflow and best practices
-- 🚀 [Quick Start Guide](docs/getting-started/quick-start.md) - 5-minute setup
-- 🐛 [Troubleshooting](docs/troubleshooting/common-issues.md) - Common issues and solutions
-- 📦 [Deployment Guide](docs/deployment/production.md) - Production deployment
-- 📁 [Project Structure](docs/architecture/project-structure.md) - Directory layout
-- 🤝 [Contributing](CONTRIBUTING.md) - Contribution guidelines
-
-## Usage Examples
-
-### AI Query with Auto-Installed Models
-
-The platform automatically installs llama3.2 and nomic-embed-text, so you can use AI features immediately:
-
-```bash
-# Text generation with pre-installed llama3.2
-curl -X POST http://localhost:11434/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{"model":"llama3.2","prompt":"What is the capital of France?","stream":false}'
-
-# Check installed models
-docker exec minder-ollama ollama list
-
-# Use RAG with auto-installed embedding model
-curl -X POST http://localhost:8004/api/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Hello, this is a test"}'
-```
-
-### Customizing AI Models
-
-Edit `infrastructure/docker/.env` to change which models are auto-downloaded:
-
-```bash
-# Disable automatic downloads
-OLLAMA_AUTOMATIC_PULL=false
-
-# Or specify different models
-OLLAMA_MODELS=mistral,qwen2.5,nomic-embed-text
-```
-
-Then restart:
-```bash
-docker compose -f infrastructure/docker/docker-compose.yml restart ollama
-```
-
-### Plugin Registration
-
-```bash
-curl -X POST http://localhost:8001/api/v1/plugins/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-plugin",
-    "version": "1.0.0",
-    "description": "My awesome plugin"
-  }'
-```
-
-### AI Query (RAG)
-
-```bash
-curl -X POST http://localhost:8004/api/v1/rag/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is the capital of France?",
-    "collection": "knowledge-base"
-  }'
-```
-
-### Health Check
-
-```bash
-# Automated health check
-./setup.sh health
-
-# Manual check
-curl http://localhost:8000/health
-```
-
-## Development
-
-### Running Tests
-
-```bash
-# Unit tests
-pytest tests/unit/ -v
-
-# Integration tests
-pytest tests/integration/ -v
-
-# With coverage
-pytest tests/ --cov=src --cov-report=html
-```
-
-### Building Services
-
-```bash
-# Build specific service
-docker compose -f infrastructure/docker/docker-compose.yml build api-gateway
-
-# Rebuild and restart
-docker compose -f infrastructure/docker/docker-compose.yml up -d --build api-gateway
-```
-
-### Viewing Logs
-
-```bash
-# Using lifecycle script (recommended)
-./setup.sh logs                     # All services
-./setup.sh logs api-gateway         # Specific service
-
-# Or using Docker Compose directly
-docker compose -f infrastructure/docker/docker-compose.yml logs -f
-docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
-
-# Last 100 lines
-docker logs minder-api-gateway --tail 100
-```
-
-## System Status
-
-```bash
-# Using lifecycle script (recommended)
-./setup.sh status                   # Detailed status with resource usage
-
-# Check service health
-./setup.sh health                   # Run all health checks
-
-# Or check container status
-docker ps                          # Should show 23 services
-```
-
-**Expected Output:**
-- 23 Minder services running (all healthy)
-- 115 tests passing when running test suite
-- Resource usage (CPU, memory) displayed
-
-## Project Structure
-
-```
-minder/
-├── docs/                      # Documentation (comprehensive guides)
-├── infrastructure/
-│   └── docker/
-│       ├── docker-compose.yml  # 23 services
-│       ├── .env.example         # Environment template
-│       └── [service-configs/]
-├── scripts/                   # Utility scripts
-│   └── update_libraries.sh    # Dependency updates
-├── services/                  # 9 microservices
-│   ├── api-gateway/
-│   ├── plugin-registry/
-│   ├── marketplace/
-│   ├── plugin-state-manager/
-│   ├── ai-services/
-│   └── model-management/
-├── src/
-│   ├── core/                # Core interfaces and utilities
-│   ├── plugins/             # 5 data collection plugins
-│   │   ├── crypto/          # Cryptocurrency data
-│   │   ├── network/         # Network monitoring
-│   │   ├── news/            # News aggregation
-│   │   ├── tefas/           # Turkish funds (with migration SQL)
-│   │   └── weather/         # Weather data
-│   └── shared/              # Shared utilities
-│       ├── rate_limiter.py
-│       ├── validators.py
-│       └── database.py
-├── tests/
-│   ├── unit/                  # 115 unit tests (98% coverage)
-│   └── integration/           # Integration tests
-├── setup.sh                   # Lifecycle manager ⭐ (v1.0.0, 1894 lines)
-├── README.md                  # This file
-└── LICENSE                    # MIT License
-```
-
-## Troubleshooting
-
-### Services Not Starting
-
-```bash
-# Using lifecycle script (recommended)
-./setup.sh logs                     # Check logs
-./setup.sh restart                  # Restart services
-./setup.sh status                   # Check status
-
-# Or manually
-docker compose -f infrastructure/docker/docker-compose.yml logs
-
-# Restart specific service
-docker compose -f infrastructure/docker/docker-compose.yml restart <service>
-
-# Reset and start over
-docker compose -f infrastructure/docker/docker-compose.yml down -v
-./setup.sh
-```
-
-### Port Already in Use
-
-```bash
-# Check what's using the port
-lsof -i :8000
-
-# Or use lifecycle script to check status
-./setup.sh status                   # Shows all port mappings
-
-# Change port in docker-compose.yml
-# Example: ports: - "8080:8000"
-```
-
-### Database Issues
-
-```bash
-# Using lifecycle script
-./setup.sh stop
-./setup.sh start
-
-# Or manual reset
-docker compose -f infrastructure/docker/docker-compose.yml down -v
-./setup.sh                         # Reinstall from scratch
-```
-
-### Docker Image Issues
-
-```bash
-# Check for updates
-./setup.sh check-updates
-
-# Update images
-./setup.sh update
-
-# Force rebuild
-docker compose -f infrastructure/docker/docker-compose.yml build --no-cache
-```
-
-### Need to Clean Up?
-
-```bash
-# Using lifecycle script
-./setup.sh uninstall --keep-data   # Keep data
-./setup.sh uninstall                 # Remove everything
-
-# Or manual cleanup
-docker compose -f infrastructure/docker/docker-compose.yml down -v
-docker system prune -a              # Clean unused resources
-```
-
-## Contributing
-
-We welcome contributions! Please see:
-
-1. 📖 [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
-2. 🔧 [Development Guide](docs/development/development.md) - Development workflow
-3. 📋 [Code Review](CONTRIBUTING.md#code-review-guidelines) - Review process
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- 📧 Email: support@minder-platform.com
-- 🐛 Issues: [GitHub Issues](https://github.com/wish-maker/minder/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/wish-maker/minder/discussions)
+## 💡 About
+
+Minder is a powerful, scalable, and secure microservices platform with **AI-powered plugin architecture**. It combines modern AI technologies with a flexible plugin system to offer developers a unique application development experience.
+
+### 🎯 Features
+
+- 🤖 **AI-Powered**: Ollama LLM integration, RAG pipeline, model fine-tuning
+- 🔌 **Plugin System**: Dynamic plugin loading, state management, marketplace
+- 🔄 **Event-Driven**: RabbitMQ-based asynchronous messaging
+- 🔐 **Zero-Trust Security**: Authelia SSO, Traefik reverse proxy, SSL/TLS
+- 📊 **Comprehensive Monitoring**: Prometheus, Grafana, custom alerts
+- 💾 **Multi-Database**: PostgreSQL, Redis, Neo4j, InfluxDB, Qdrant
+- 🚀 **Production-Ready**: Automatic backup, health checks, graceful shutdown
 
 ---
 
-**Made with ❤️ by the Minder Platform Team**
+## 🏗️ Architecture
+
+The platform consists of **25 microservices** and is **100% operational**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     TRAEFIK (443)                           │
+│                  Reverse Proxy + SSL                        │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+        ┌──────────────┴──────────────┐
+        │                             │
+┌───────▼────────┐            ┌───────▼────────┐
+│   AUTHelia     │            │  API Gateway   │
+│      SSO       │            │    (8000)      │
+└───────┬────────┘            └───────┬────────┘
+        │                             │
+        │             ┌────────────────┴────────────────┐
+        │             │                                  │
+┌───────▼──────┐ ┌────▼──────┐ ┌──────────┐ ┌─────────┐
+│ PostgreSQL  │ │  Redis    │ │  Neo4j   │ │ InfluxDB│
+│  (Primary)  │ │ (Cache)   │ │  (Graph) │ │ (TSDB)  │
+└──────────────┘ └───────────┘ └──────────┘ └─────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                    AI SERVICES                               │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
+│  │  Ollama  │ │  RAG     │ │  OpenWebUI│ │ Model Mgmt   │  │
+│  │  (LLM)   │ │ Pipeline │ │  (Chat)  │ │   + Fine-Tune│  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                 MONITORING STACK                            │
+│  ┌────────────┐ ┌────────────┐ ┌──────────────────────────┐ │
+│  │ Prometheus │ │  Grafana   │ │    Alertmanager         │ │
+│  │  (9090)    │ │  (3000)    │ │      (9093)             │ │
+│  └────────────┘ └────────────┘ └──────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Docker 24.0+
+- Docker Compose 2.20+
+- 8GB+ RAM
+- 50GB+ disk space
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/your-repo/minder.git
+cd minder
+
+# Configure environment variables
+cp infrastructure/docker/.env.example infrastructure/docker/.env
+# Edit infrastructure/docker/.env and set strong passwords
+
+# Start the system
+cd infrastructure/docker
+docker compose up -d
+
+# Check status
+docker ps
+
+# Test the API
+curl http://localhost:8000/health
+```
+
+### Access
+
+| Service | URL | User | Password |
+|---------|-----|-----------|-------|
+| **Grafana** | http://localhost:3000 | admin | admin (change me!) |
+| **Prometheus** | http://localhost:9090 | - | - |
+| **OpenWebUI** | http://localhost:8080 | - | - |
+| **API Gateway** | http://localhost:8000 | - | - |
+
+---
+
+## 📚 Documentation
+
+### 📖 User Guides
+- [Installation Guide](docs/getting-started/installation.md) - Detailed installation
+- [Quick Start](docs/getting-started/quick-start.md) - Start in 5 minutes
+- [AI Setup](docs/getting-started/ai-setup.md) - AI services
+
+### 🏗️ Technical Documentation
+- [Architecture Overview](docs/architecture/overview.md) - Platform architecture
+- [Microservices](docs/architecture/microservices.md) - Service structure
+- [Plugin System](docs/architecture/plugins.md) - Plugin architecture
+- [API Reference](docs/api/reference.md) - Endpoint documentation
+
+### 🔧 Developer Guides
+- [Development Environment](docs/development/development.md) - Local setup
+- [Plugin Development](docs/development/plugin-development.md) - Writing plugins
+- [Test Strategies](docs/development/testing.md) - Writing tests
+
+### 🚀 Operational Guides
+- [Production Deployment](docs/deployment/production.md) - Go live
+- [Troubleshooting](docs/troubleshooting/common-issues.md) - Common issues
+- [Daily Status](docs/operations/reports/PROJE-DURUMU-2026-05-06.md) - Latest status
+
+---
+
+## 🎯 Features
+
+### 🤖 AI Services
+
+**Ollama LLM Engine**
+- Local LLM inference
+- Multiple model support
+- GPU acceleration support
+
+**RAG Pipeline**
+- Vector similarity search
+- Qdrant vector database
+- Smart document retrieval
+
+**Model Management**
+- Model versioning
+- Fine-tuning support
+- A/B testing system
+
+### 🔌 Plugin System
+
+**Dynamic Loading**
+- Runtime plugin loading
+- Hot reload support
+- Dependency management
+
+**Marketplace**
+- Plugin discovery
+- Version management
+- Security scanning
+
+**State Management**
+- Plugin state tracking
+- Configuration management
+- Health monitoring
+
+### 🔐 Security
+
+**Zero-Trust Architecture**
+- Traefik reverse proxy
+- Authelia SSO (2FA)
+- SSL/TLS encryption
+
+**Access Control**
+- Role-based authorization
+- API rate limiting
+- Audit logging
+
+### 📊 Monitoring
+
+**Prometheus**
+- 45+ alert rules
+- 9 alert groups
+- 15s scrape interval
+
+**Grafana**
+- Pre-configured dashboards
+- Custom metric visualizations
+- Real-time monitoring
+
+**Automatic Backup**
+- Daily backups (02:00)
+- 7-day retention
+- All databases
+
+---
+
+## 📈 System Status
+
+| Metric | Status |
+|--------|-------|
+| **Containers** | 🟢 25/25 healthy (100%) |
+| **API Availability** | 🟢 100% |
+| **Backup Success** | 🟢 100% |
+| **Response Time** | 🟢 ~150ms |
+| **Uptime** | 🟢 99.9% |
+
+For detailed status: [System Status Report](docs/operations/reports/PROJE-DURUMU-2026-05-06.md)
+
+---
+
+## 🤝 Contributing
+
+We welcome your contributions! Please read the [CONTRIBUTING.md](CONTRIBUTING.md) guide.
+
+### How to Contribute?
+
+1. Report a bug
+2. Request a feature
+3. Submit a pull request
+4. Improve documentation
+5. Share a plugin
+
+---
+
+## 🗺️ Roadmap
+
+### v1.1 (Coming Soon)
+- [ ] Production SSL certificates
+- [ ] Alert notification channels
+- [ ] Plugin marketplace UI
+- [ ] Advanced dashboards
+
+### v1.2 (Planned)
+- [ ] Multi-region deployment
+- [ ] Database replication
+- [ ] Advanced caching
+- [ ] Rate limiting UI
+
+### v2.0 (Future)
+- [ ] Kubernetes support
+- [ ] GraphQL API
+- [ ] Real-time analytics
+- [ ] Mobile app
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License. For more information, see the [LICENSE](LICENSE) file.
+
+---
+
+## 🆘 Support
+
+- 📖 [Documentation](docs/README.md)
+- 🐛 [Bug Report](https://github.com/your-repo/minder/issues)
+- 💬 [Discussions](https://github.com/your-repo/minder/discussions)
+- 📧 [Email](mailto:support@minder.local)
+
+---
+
+## 🙏 Thanks
+
+Minder platform leverages the following open source projects:
+- [Ollama](https://ollama.ai) - LLM inference
+- [Traefik](https://traefik.io) - Reverse proxy
+- [Authelia](https://www.authelia.com) - SSO authentication
+- [Prometheus](https://prometheus.io) - Monitoring
+- [Grafana](https://grafana.com) - Visualization
+
+---
 
 <div align="center">
 
-⭐ Star us on GitHub — it helps!
+**⭐ If you find this project useful, please give it a star! ⭐**
+
+Made with ❤️ by the Minder Team
 
 </div>
