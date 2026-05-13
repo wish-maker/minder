@@ -1,0 +1,340 @@
+{
+  "dashboard": {
+    "title": "Minder Platform Overview",
+    "tags": ["minder", "platform", "overview"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"docker-containers\"}"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "palette-classic"
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Total CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(rate(container_cpu_usage_seconds_total{name!=\"\"}[5m])) * 100"
+          }
+        ],
+        "gridPos": {"x": 6, "y": 0, "w": 18, "h": 4},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Total Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum(container_memory_usage_bytes{name!=\"\"}) / 1024 / 1024 / 1024"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 4, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Memory GB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Service Health Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job=\"docker-containers\"}"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "Value": true
+              },
+              "indexByName": {
+                "Time": 0
+              },
+              "renameByName": {
+                "Time": "Time",
+                "Value": "Status"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "API Gateway Requests",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"api-gateway\"}[5m])"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Requests/sec"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "API Gateway Latency",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"api-gateway\"}[5m]))"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Latency (p95)"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "API Gateway Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"api-gateway\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"api-gateway\"}[5m])"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Error Rate",
+            "format": "percentunit",
+            "max": 0.1
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [0.05],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"],
+                "refId": "A"
+              },
+              "type": "query"
+            }
+          ],
+          "name": "API Gateway error rate too high",
+          "message": "API Gateway error rate is above 5%"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Database Performance",
+        "type": "row",
+        "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+        "panels": [
+          {
+            "title": "PostgreSQL CPU",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-postgres\"}[5m]) * 100"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100,
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 80, "color": "yellow"},
+                    {"value": 95, "color": "red"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "title": "PostgreSQL Memory",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "container_memory_usage_bytes{name=\"minder-postgres\"} / container_spec_memory_limit_bytes{name=\"minder-postgres\"} * 100"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            }
+          },
+          {
+            "title": "Redis CPU",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-redis\"}[5m]) * 100"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            }
+          },
+          {
+            "title": "Neo4j CPU",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-neo4j\"}[5m]) * 100"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 0,
+                "max": 100
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Top 10 CPU Consumers",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]))"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 28, "w": 12, "h": 8},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "indexByName": {
+                "Time": 0,
+                "Value": 1
+              },
+              "renameByName": {
+                "Time": "Service",
+                "Value": "CPU %"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Disk Space Usage",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "(node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"\"}) * 100"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 28, "w": 12, "h": 8},
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Active Alerts",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "ALERTS{}"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 36, "w": 24, "h": 8},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "indexByName": {
+                "Time": 0,
+                "Alertname": 1,
+                "State": 2,
+                "Severity": 3
+              },
+              "renameByName": {
+                "Time": "Time",
+                "Value": "Alert Name",
+                "Value": "State",
+                "alertname": "Alert Name",
+                "state": "State",
+                "severity": "Severity"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

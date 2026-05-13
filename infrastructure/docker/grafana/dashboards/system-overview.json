@@ -1,0 +1,86 @@
+{
+  "dashboard": {
+    "title": "Minder System Overview",
+    "tags": ["minder", "system", "overview"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Container CPU Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name!=\"\"}[5m])",
+            "legendFormat": "{{name}}"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Container Memory Usage",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes",
+            "legendFormat": "{{name}}"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Container Network I/O",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(container_network_receive_bytes_total[5m])",
+            "legendFormat": "{{name}} RX"
+          },
+          {
+            "expr": "rate(container_network_transmit_bytes_total[5m])",
+            "legendFormat": "{{name}} TX"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Service Health Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "up",
+            "legendFormat": "Healthy Services"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Total Containers",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 8, "y": 16},
+        "targets": [
+          {
+            "expr": "count(container_last_seen)",
+            "legendFormat": "Total Containers"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Disk Usage",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 16},
+        "targets": [
+          {
+            "expr": "(node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100",
+            "legendFormat": "Disk Usage %"
+          }
+        ]
+      }
+    ]
+  },
+  "overwrite": true
+}

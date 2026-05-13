@@ -63,9 +63,7 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
@@ -73,17 +71,13 @@ http_request_duration_seconds = Histogram(
 
 knowledge_bases_total = Gauge("knowledge_bases_total", "Total number of knowledge bases")
 
-documents_processed_total = Counter(
-    "documents_processed_total", "Total documents processed", ["status"]
-)
+documents_processed_total = Counter("documents_processed_total", "Total documents processed", ["status"])
 
 embedding_generation_duration = Histogram(
     "embedding_generation_duration_seconds", "Time to generate embeddings", ["model"]
 )
 
-llm_generation_duration = Histogram(
-    "llm_generation_duration_seconds", "Time to generate LLM response", ["model"]
-)
+llm_generation_duration = Histogram("llm_generation_duration_seconds", "Time to generate LLM response", ["model"])
 
 
 # ============================================================================
@@ -225,9 +219,7 @@ class OllamaManager:
         except Exception as e:
             logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
 
-    async def generate_embeddings(
-        self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
-    ) -> List[List[float]]:
+    async def generate_embeddings(self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL) -> List[List[float]]:
         """Generate embeddings using Ollama"""
         if not self._initialized:
             await self.initialize()
@@ -454,9 +446,7 @@ async def list_knowledge_bases():
     return list(knowledge_bases.values())
 
 
-@app.post(
-    "/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"]
-)
+@app.post("/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
     """Upload document to knowledge base"""
     if kb_id not in knowledge_bases:
@@ -654,6 +644,17 @@ async def startup_event():
     logger.info(f"Ollama: {OLLAMA_HOST}")
     logger.info(f"Default LLM: {DEFAULT_LLM_MODEL}")
     logger.info(f"Default Embedding: {DEFAULT_EMBEDDING_MODEL}")
+
+    # Initialize Ollama manager
+    if OLLAMA_AVAILABLE:
+        try:
+            await ollama_manager.initialize()
+            logger.info("✅ Ollama manager initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Ollama manager: {e}")
+            # Don't fail startup, just log the error
+    else:
+        logger.warning("⚠️  Ollama not available, RAG features will be limited")
 
 
 if __name__ == "__main__":

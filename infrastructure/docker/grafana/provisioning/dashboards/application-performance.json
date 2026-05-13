@@ -1,0 +1,297 @@
+{
+  "dashboard": {
+    "title": "Application Performance",
+    "tags": ["minder", "application", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "API Gateway Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"api-gateway\"}[5m])"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Requests/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "API Gateway Response Time (p95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"api-gateway\"}[5m]))"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Response Time (s)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        },
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [1],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "10m", "now"],
+                "refId": "A"
+              },
+              "type": "query"
+            }
+          ],
+          "name": "API Gateway high latency",
+          "message": "API Gateway p95 latency is above 1 second"
+        }
+      },
+      {
+        "id": 3,
+        "title": "API Gateway Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"api-gateway\",status=~\"5..\"}[5m]) / rate(http_requests_total{job=\"api-gateway\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Error Rate %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        },
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [5],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"],
+                "refId": "A"
+              },
+              "type": "query"
+            }
+          ],
+          "name": "API Gateway error rate too high",
+          "message": "API Gateway error rate is above 5%"
+        }
+      },
+      {
+        "id": 4,
+        "title": "API Gateway 4xx Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total{job=\"api-gateway\",status=~\"4..\"}[5m]) / rate(http_requests_total{job=\"api-gateway\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "4xx Rate %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Response Time Distribution",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(http_request_duration_seconds_bucket{job=\"api-gateway\"}[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"api-gateway\"}[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket{job=\"api-gateway\"}[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+        "yAxes": [
+          {
+            "label": "Response Time (s)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Top 10 Slowest Endpoints",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"api-gateway\"}[5m])))"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "handler": "Endpoint",
+                "Value": "p95 (s)"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Request Rate by Endpoint",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "topk(10, rate(http_requests_total{job=\"api-gateway\"}[5m]))"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true
+              },
+              "renameByName": {
+                "handler": "Endpoint",
+                "Value": "Requests/sec"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Plugin Registry CPU",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-plugin-registry\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 32, "w": 8, "h": 8},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "RAG Pipeline CPU",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-rag-pipeline\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 8, "y": 32, "w": 8, "h": 8},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Model Management CPU",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-model-management\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 16, "y": 32, "w": 8, "h": 8},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      }
+    ]
+  }
+}

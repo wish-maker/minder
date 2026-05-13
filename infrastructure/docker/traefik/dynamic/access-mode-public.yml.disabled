@@ -1,0 +1,156 @@
+# Traefik Dynamic Configuration - Public Access Mode
+# SECURITY: Services accessible via internet with DDoS protection
+# WARNING: Ensure SSL certificates and firewall rules are properly configured
+
+http:
+  middlewares:
+    # No IP whitelist for public mode (access from anywhere)
+    # Security relies on authentication (Authelia) and rate limiting
+
+    # Enhanced security headers for public access
+    public-security-headers:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "no-referrer"
+          Permissions-Policy: "camera=(), microphone=(), geolocation=()"
+          Strict-Transport-Security: "max-age=63072000; includeSubDomains; preload"
+          Content-Security-Policy: "default-src 'self'"
+
+    # Strict rate limiting for public access (DDoS protection)
+    public-rate-limit:
+      rateLimit:
+        average: 60
+        burst: 30
+        period: 1m
+
+    # Enhanced API rate limiting (stricter for public APIs)
+    public-api-rate-limit:
+      rateLimit:
+        average: 30
+        burst: 15
+        period: 1m
+
+    # Public authentication middleware (no IP whitelist)
+    public-auth-middleware:
+      chain:
+        middlewares:
+          - authelia-forwardauth
+
+    # DDoS protection middleware
+    ddos-protection:
+      ipStrategy:
+        depth: 2
+      sourceCriterion:
+        ipStrategy:
+          excludedIPs:
+            - "127.0.0.1/32"
+            - "::1/128"
+
+  routers:
+    # Override default routers for public access
+    api-router-public:
+      rule: "PathPrefix(`/api`)"
+      service: api-gateway
+      entryPoints:
+        - websecure
+      middlewares:
+        - public-security-headers
+        - public-api-rate-limit
+        - public-auth-middleware
+        - ddos-protection
+      tls:
+        certResolver: default
+        domains:
+          - main: "api.minder.local"
+
+    services-router-public:
+      rule: "PathPrefix(`/`)"
+      service: services
+      entryPoints:
+        - websecure
+      middlewares:
+        - public-security-headers
+        - public-rate-limit
+        - public-auth-middleware
+        - ddos-protection
+      tls:
+        certResolver: default
+        domains:
+          - main: "minder.local"
+
+    # Dashboard routers (public with authentication)
+    traefik-dashboard-public:
+      rule: "Host(`traefik.minder.local`)"
+      service: api@internal
+      middlewares:
+        - public-security-headers
+        - public-rate-limit
+        - public-auth-middleware
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: default
+
+    grafana-dashboard-public:
+      rule: "Host(`grafana.minder.local`)"
+      service: grafana
+      middlewares:
+        - public-security-headers
+        - public-rate-limit
+        - public-auth-middleware
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: default
+
+    jaeger-dashboard-public:
+      rule: "Host(`jaeger.minder.local`)"
+      service: jaeger
+      middlewares:
+        - public-security-headers
+        - public-rate-limit
+        - public-auth-middleware
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: default
+
+    prometheus-dashboard-public:
+      rule: "Host(`prometheus.minder.local`)"
+      service: prometheus
+      middlewares:
+        - public-security-headers
+        - public-rate-limit
+        - public-auth-middleware
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: default
+
+  services:
+    jaeger:
+      loadBalancer:
+        servers:
+          - url: "http://minder-jaeger:16686"
+        healthCheck:
+          path: /
+          interval: 15s
+
+    prometheus:
+      loadBalancer:
+        servers:
+          - url: "http://minder-prometheus:9090"
+        healthCheck:
+          path: /-/healthy
+          interval: 15s
+
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://minder-grafana:3000"
+        healthCheck:
+          path: /api/health
+          interval: 10s

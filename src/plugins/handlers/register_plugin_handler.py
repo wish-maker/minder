@@ -1,6 +1,6 @@
 from typing import Any, Dict
 
-from src.plugins.domain.plugin_aggregate import PluginAggregate
+from plugins.domain.plugin_aggregate import PluginAggregate
 from src.shared.commands.command import Command
 
 

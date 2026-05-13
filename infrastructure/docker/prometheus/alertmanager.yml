@@ -1,0 +1,133 @@
+# Minder Platform - Alert Configuration
+# Alertmanager configuration for routing alerts to various receivers
+
+global:
+  resolve_timeout: 5m
+  # SMTP configuration for email alerts
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@minder.local'
+  smtp_auth_username: 'your-email@gmail.com'
+  smtp_auth_password: 'your-app-password'
+  smtp_require_tls: true
+
+# Template files for alert notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route alerts to appropriate receivers
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+      group_wait: 0s
+      repeat_interval: 5m
+
+    # Security alerts - immediate notification
+    - match:
+        category: security
+      receiver: 'security-alerts'
+      continue: true
+      group_wait: 0s
+      repeat_interval: 5m
+
+    # Database alerts - dedicated team
+    - match:
+        category: database
+      receiver: 'database-alerts'
+      continue: true
+
+    # AI service alerts
+    - match:
+        category: ai
+      receiver: 'ai-service-alerts'
+      continue: true
+
+# Inhibition rules to prevent alert spam
+inhibit_rules:
+  # Inhibit warnings if critical alert is firing for same service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # Inhibit database alerts if service is down
+  - source_match:
+      alertname: 'ServiceDown'
+    target_match_re:
+      alertname: '.*Database.*'
+    equal: ['instance']
+
+# Alert receivers
+receivers:
+  # Default receiver - log only
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://localhost:5001/alerts'
+
+  # Critical alerts - immediate notification
+  - name: 'critical-alerts'
+    email_configs:
+      - to: 'ops-team@minder.local'
+        headers:
+          Subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+    webhook_configs:
+      - url: 'http://localhost:5001/critical'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+        channel: '#minder-critical'
+        title: '🚨 {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+
+  # Security alerts
+  - name: 'security-alerts'
+    email_configs:
+      - to: 'security@minder.local'
+        headers:
+          Subject: '🔒 SECURITY: {{ .GroupLabels.alertname }}'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+        channel: '#minder-security'
+
+  # Database alerts
+  - name: 'database-alerts'
+    email_configs:
+      - to: 'database-team@minder.local'
+
+  # AI service alerts
+  - name: 'ai-service-alerts'
+    email_configs:
+      - to: 'ai-team@minder.local'
+
+# Time intervals for alerting
+time_intervals:
+  - name: 'business-hours'
+    time_intervals:
+      - times:
+          - start_time: '09:00'
+            end_time: '18:00'
+        weekdays: ['monday:friday']
+
+  - name: 'off-hours'
+    time_intervals:
+      - times:
+          - start_time: '18:00'
+            end_time: '09:00'
+        weekdays: ['monday:friday']
+      - weekdays: ['saturday', 'sunday']
+
+# Mute timing for maintenance windows
+mute_time_intervals:
+  - name: 'maintenance-window'
+    time_intervals:
+      - start_time: '2026-05-06T22:00:00+03:00'
+        end_time: '2026-05-06T23:59:59+03:00'

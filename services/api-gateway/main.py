@@ -13,6 +13,7 @@ from typing import Dict
 
 import httpx
 import redis
+from config import settings
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -21,8 +22,6 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, ge
 
 # Import AI integration router
 from routes.ai import router as ai_router
-
-from config import settings
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -46,14 +45,26 @@ async def lifespan(app: FastAPI):
     redis_client.close()
 
 
+# Configure API documentation based on environment
+# Disable docs in production for security
+if settings.ENVIRONMENT == "production":
+    docs_config = {
+        "docs_url": None,  # Disable Swagger UI
+        "redoc_url": None,  # Disable ReDoc
+    }
+else:
+    docs_config = {
+        "docs_url": "/docs",  # Enable in development
+        "redoc_url": "/redoc",
+    }
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Minder API Gateway",
     description="Central API Gateway for Minder Platform",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
     lifespan=lifespan,
+    **docs_config,
 )
 
 # Include AI integration router
@@ -166,8 +177,20 @@ if settings.RATE_LIMIT_ENABLED:
     @app.middleware("http")
     async def rate_limit_middleware(request: Request, call_next):
         """Apply rate limiting based on user IP or JWT token"""
-        # Skip rate limiting for health checks
+        # Skip rate limiting for health checks and internal monitoring
         if request.url.path == "/health":
+            return await call_next(request)
+
+        # Skip rate limiting for metrics (monitoring)
+        if request.url.path == "/metrics":
+            return await call_next(request)
+
+        # Skip rate limiting for API documentation
+        if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+            return await call_next(request)
+
+        # Skip rate limiting for static files and frontend assets
+        if request.url.path.startswith("/static/") or request.url.path.startswith("/favicon"):
             return await call_next(request)
 
         # Get identifier (JWT token subject or IP address)
@@ -225,7 +248,7 @@ async def health_check():
     PHASE_1_SERVICES = ["redis", "plugin_registry"]
     PHASE_2_SERVICES = ["rag_pipeline", "model_management"]
 
-    # All services to check
+    # All services to check (expanded to include AI services)
     ALL_SERVICES = {
         "redis": ("redis", lambda: redis_client.ping()),
         "plugin_registry": (
@@ -242,6 +265,9 @@ async def health_check():
         ),
     }
 
+    # Always check all services but mark Phase 2 as optional in Phase 1
+    services_to_check = ALL_SERVICES
+
     # Determine which services are critical for current phase
     if settings.MINDER_PHASE == 1:
         critical_services = PHASE_1_SERVICES
@@ -249,13 +275,6 @@ async def health_check():
         critical_services = PHASE_1_SERVICES + PHASE_2_SERVICES
     else:
         critical_services = PHASE_1_SERVICES
-
-    # In Phase 1, only check critical services to avoid "degraded" status
-    services_to_check = (
-        {k: v for k, v in ALL_SERVICES.items() if k in critical_services}
-        if settings.MINDER_PHASE == 1
-        else ALL_SERVICES
-    )
 
     # Check only services relevant to current phase
     critical_unhealthy = False
@@ -513,7 +532,7 @@ async def proxy_to_rag_pipeline(path: str, request: Request):
     Proxy all /v1/rag/* requests to RAG Pipeline service
     """
     service_url = SERVICE_REGISTRY.get("rag_pipeline")
-    return await proxy_request(service_url, f"rag/{path}", request)
+    return await proxy_request(service_url, path, request)
 
 
 # ============================================================================
@@ -527,7 +546,7 @@ async def proxy_to_model_management(path: str, request: Request):
     Proxy all /v1/models/* requests to Model Management service
     """
     service_url = SERVICE_REGISTRY.get("model_management")
-    return await proxy_request(service_url, f"models/{path}", request)
+    return await proxy_request(service_url, path, request)
 
 
 # ============================================================================

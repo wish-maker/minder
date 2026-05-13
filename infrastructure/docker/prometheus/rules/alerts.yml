@@ -1,0 +1,313 @@
+# ============================================================================
+# Minder Platform - Prometheus Alerting Rules
+# ============================================================================
+# Comprehensive alerting for system health, performance, and security
+# ============================================================================
+
+groups:
+  # ==========================================================================
+  # ALERT GROUP: System Health
+  # ==========================================================================
+  - name: system_health
+    interval: 30s
+    rules:
+      # Container Down Alerts
+      - alert: ContainerDown
+        expr: up{job="docker-containers"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Container {{ $labels.name }} is down"
+          description: "Container {{ $labels.name }} has been down for more than 2 minutes"
+
+      # Service Health Check Failures
+      - alert: ServiceHealthCheckFailing
+        expr: probe_success{job="blackbox"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "Health check failing for {{ $labels.instance }}"
+          description: "Health check for {{ $labels.instance }} has been failing for 5 minutes"
+
+      # High System Load
+      - alert: HighSystemLoad
+        expr: node_load1 > 2.0
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High system load on {{ $labels.instance }}"
+          description: "System load is {{ $value }} for more than 10 minutes"
+
+  # ==========================================================================
+  # ALERT GROUP: Application Performance
+  # ==========================================================================
+  - name: application_performance
+    interval: 30s
+    rules:
+      # High CPU Usage Alerts
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[5m]) > 0.8
+        for: 15m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High CPU usage for {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using more than 80% CPU for 15 minutes"
+
+      # Critical CPU Usage
+      - alert: CriticalCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[5m]) > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical CPU usage for {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using more than 95% CPU for 5 minutes"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+        for: 15m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High memory usage for {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using more than 90% of memory limit for 15 minutes"
+
+      # Critical Memory Usage
+      - alert: CriticalMemoryUsage
+        expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical memory usage for {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using more than 95% of memory limit for 5 minutes"
+
+      # API Gateway High Error Rate
+      - alert: APIGatewayHighErrorRate
+        expr: rate(http_requests_total{job="api-gateway",status=~"5.."}[5m]) / rate(http_requests_total{job="api-gateway"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: application
+        annotations:
+          summary: "High error rate in API Gateway"
+          description: "API Gateway error rate is {{ $value | humanizePercentage }} for more than 5 minutes"
+
+      # API Gateway High Latency
+      - alert: APIGatewayHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="api-gateway"}[5m])) > 1
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High latency in API Gateway"
+          description: "API Gateway p95 latency is {{ $value }}s for more than 10 minutes"
+
+  # ==========================================================================
+  # ALERT GROUP: Database Performance
+  # ==========================================================================
+  - name: database_performance
+    interval: 30s
+    rules:
+      # PostgreSQL High CPU
+      - alert: PostgreSQLHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name="minder-postgres"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL high CPU usage"
+          description: "PostgreSQL CPU usage is {{ $value | humanizePercentage }} for more than 10 minutes"
+
+      # PostgreSQL High Memory
+      - alert: PostgreSQLHighMemory
+        expr: container_memory_usage_bytes{name="minder-postgres"} / container_spec_memory_limit_bytes{name="minder-postgres"} > 0.85
+        for: 15m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL high memory usage"
+          description: "PostgreSQL memory usage is {{ $value | humanizePercentage }} for more than 15 minutes"
+
+      # PostgreSQL Connection Pool Exhaustion
+      - alert: PostgreSQLConnectionPoolHigh
+        expr: pg_stat_activity_count{datname="minder"} > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "PostgreSQL connection pool running high"
+          description: "PostgreSQL has {{ $value }} active connections (threshold: 80)"
+
+      # Redis High Memory
+      - alert: RedisHighMemory
+        expr: container_memory_usage_bytes{name="minder-redis"} / container_spec_memory_limit_bytes{name="minder-redis"} > 0.85
+        for: 15m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is {{ $value | humanizePercentage }} for more than 15 minutes"
+
+      # Neo4j High CPU
+      - alert: Neo4jHighCPU
+        expr: rate(container_cpu_usage_seconds_total{name="minder-neo4j"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "Neo4j high CPU usage"
+          description: "Neo4j CPU usage is {{ $value | humanizePercentage }} for more than 10 minutes"
+
+  # ==========================================================================
+  # ALERT GROUP: Storage and Disk Space
+  # ==========================================================================
+  - name: storage_health
+    interval: 30s
+    rules:
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.2
+        for: 15m
+        labels:
+          severity: warning
+          category: storage
+        annotations:
+          summary: "Disk space low on {{ $labels.instance }}"
+          description: "Only {{ $value | humanizePercentage }} disk space available on {{ $labels.instance }}"
+
+      # Disk Space Critical
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 5m
+        labels:
+          severity: critical
+          category: storage
+        annotations:
+          summary: "Critical disk space on {{ $labels.instance }}"
+          description: "Only {{ $value | humanizePercentage }} disk space available on {{ $labels.instance }}"
+
+      # Docker Volume High Usage
+      - alert: DockerVolumeHighUsage
+        expr: (node_filesystem_avail_bytes{fstype="overlay"} / node_filesystem_size_bytes{fstype="overlay"}) < 0.3
+        for: 10m
+        labels:
+          severity: warning
+          category: storage
+        annotations:
+          summary: "Docker volume space low"
+          description: "Only {{ $value | humanizePercentage }} space available in Docker volumes"
+
+  # ==========================================================================
+  # ALERT GROUP: Monitoring System
+  # ==========================================================================
+  - name: monitoring_system
+    interval: 30s
+    rules:
+      # Prometheus Target Down
+      - alert: PrometheusTargetDown
+        expr: up{job="prometheus"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "Prometheus target down"
+          description: "Prometheus target {{ $labels.instance }} is down"
+
+      # Prometheus Scrapes Failing
+      - alert: PrometheusScrapeFailing
+        expr: rate(prometheus_sd_failed_scrapes_total[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "High Prometheus scrape failure rate"
+          description: "Prometheus scrape failure rate is {{ $value | humanizePercentage }}"
+
+      # AlertManager Failing
+      - alert: AlertManagerFailing
+        expr: up{job="alertmanager"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: monitoring
+        annotations:
+          summary: "AlertManager is down"
+          description: "AlertManager has been down for more than 5 minutes"
+
+      # Grafana Down
+      - alert: GrafanaDown
+        expr: up{job="grafana"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: monitoring
+        annotations:
+          summary: "Grafana is down"
+          description: "Grafana has been down for more than 5 minutes"
+
+  # ==========================================================================
+  # ALERT GROUP: Security and Authentication
+  # ==========================================================================
+  - name: security_alerts
+    interval: 30s
+    rules:
+      # Authelia High Error Rate
+      - alert: AutheliaHighErrorRate
+        expr: rate(http_requests_total{job="authelia",status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High error rate in Authelia"
+          description: "Authelia error rate is {{ $value | humanizePercentage }}"
+
+      # Too Many Failed Authentication Attempts
+      - alert: ExcessiveFailedAuth
+        expr: rate(http_requests_total{job="api-gateway",handler="/v1/auth/login",status="401"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Excessive failed authentication attempts"
+          description: "{{ $value }} failed login attempts per second"
+
+  # ==========================================================================
+  # ALERT GROUP: Backup and Recovery
+  # ==========================================================================
+  - name: backup_monitoring
+    interval: 1h
+    rules:
+      # PostgreSQL Backup Monitoring
+      # Note: Backup monitoring requires external metric or file timestamp check
+      # This is a placeholder for future implementation
+
+      # Neo4j Backup Monitoring
+      # Note: Backup monitoring requires external metric or file timestamp check
+      # This is a placeholder for future implementation
+
+      # Volume Backup Monitoring
+      # Note: Backup monitoring requires external metric or file timestamp check
+      # This is a placeholder for future implementation

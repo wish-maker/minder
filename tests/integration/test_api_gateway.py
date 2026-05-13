@@ -5,7 +5,6 @@ Tests endpoint integration, auth, rate limiting, and error handling.
 
 import pytest
 import pytest_asyncio
-from conftest import gateway_test_client, test_headers
 from fastapi.testclient import TestClient
 
 

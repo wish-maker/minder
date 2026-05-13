@@ -1,0 +1,316 @@
+{
+  "dashboard": {
+    "title": "Database Performance",
+    "tags": ["minder", "database", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 0,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "PostgreSQL CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-postgres\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "PostgreSQL Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name=\"minder-postgres\"} / 1024 / 1024 / 1024"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Memory GB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "PostgreSQL Active Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_stat_activity_count{datname=\"minder\"}"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Connections"
+          }
+        ],
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [80],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": ["A", "5m", "now"],
+                "refId": "A"
+              },
+              "type": "query"
+            }
+          ],
+          "name": "PostgreSQL connection pool high",
+          "message": "PostgreSQL has more than 80 active connections"
+        }
+      },
+      {
+        "id": 4,
+        "title": "PostgreSQL Database Size",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "pg_database_size_bytes{datname=\"minder\"} / 1024 / 1024 / 1024"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Database Size GB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Redis CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-redis\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Redis Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name=\"minder-redis\"} / 1024 / 1024"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Memory MB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Redis Hit Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 24, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Hit Rate %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 80, "color": "yellow"},
+                {"value": 90, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Redis Connected Clients",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "redis_connected_clients"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 24, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Clients"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Neo4j CPU Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=\"minder-neo4j\"}[5m]) * 100"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 32, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "CPU %",
+            "min": 0,
+            "max": 100
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Neo4j Memory Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name=\"minder-neo4j\"} / 1024 / 1024"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 32, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Memory MB"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bytes"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Neo4j Active Connections",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "neo4j_active_connections"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 40, "w": 12, "h": 8},
+        "yAxes": [
+          {
+            "label": "Connections"
+          }
+        ]
+      },
+      {
+        "id": 12,
+        "title": "Database Health Status",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "up{job=~\".*postgres|.*redis|.*neo4j\"}"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 40, "w": 12, "h": 8},
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {
+                "Time": true,
+                "Value": true
+              },
+              "renameByName": {
+                "name": "Database",
+                "Value": "Status"
+              }
+            }
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 1, "color": "green"}
+              ]
+            },
+            "mappings": [
+              {
+                "type": "value",
+                "options": {
+                  "0": {
+                    "text": "DOWN",
+                    "color": "red"
+                  },
+                  "1": {
+                    "text": "UP",
+                    "color": "green"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

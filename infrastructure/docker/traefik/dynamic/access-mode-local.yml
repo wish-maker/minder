@@ -1,0 +1,82 @@
+# Traefik Dynamic Configuration - Local Access Mode
+# SECURITY: Services accessible ONLY on localhost (127.0.0.1)
+# This is the most secure mode for development
+
+http:
+  middlewares:
+    # Local network access whitelist (development mode)
+    local-access-whitelist:
+      ipWhiteList:
+        sourceRange:
+          - "127.0.0.1/32"          # Localhost
+          - "::1/128"                # IPv6 localhost
+          - "192.168.0.0/16"        # Private network
+          - "172.16.0.0/12"         # Private network
+          - "10.0.0.0/8"            # Private network
+
+    # Enhanced security headers for local development
+    local-security-headers:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: "DENY"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "no-referrer"
+          Permissions-Policy: "camera=(), microphone=(), geolocation=()"
+
+    # Rate limiting (relaxed for local development)
+    local-rate-limit:
+      rateLimit:
+        average: 1000
+        burst: 500
+        period: 1m
+
+  routers:
+    # Override default routers with local-only access
+    api-router-local:
+      rule: "PathPrefix(`/api`) && ClientIP(`127.0.0.1`)"
+      service: api-gateway
+      entryPoints:
+        - websecure
+      middlewares:
+        - local-security-headers
+        - local-rate-limit
+      tls: {}
+
+    services-router-local:
+      rule: "PathPrefix(`/`) && ClientIP(`127.0.0.1`)"
+      service: services
+      entryPoints:
+        - websecure
+      middlewares:
+        - local-security-headers
+        - authelia-forwardauth
+      tls: {}
+
+    # Dashboard routers (local only)
+    traefik-dashboard-local:
+      rule: "Host(`traefik.minder.local`) && ClientIP(`127.0.0.1`)"
+      service: api@internal
+      middlewares:
+        - local-security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+    grafana-dashboard-local:
+      rule: "Host(`grafana.minder.local`) && ClientIP(`127.0.0.1`)"
+      service: grafana
+      middlewares:
+        - local-security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://minder-grafana:3000"
+        healthCheck:
+          path: /api/health
+          interval: 10s

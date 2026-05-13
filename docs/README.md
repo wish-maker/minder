@@ -1,65 +1,94 @@
-# Minder Platform Documentation
+# Minder Platform - Dokümantasyon
 
-Welcome to the Minder Platform documentation. This guide helps you get started with the microservices-based AI plugin platform.
+Bu dizin Minder platformunun tüm dokümantasyonunu içerir.
 
-## Quick Navigation
+## 📚 Dokümantasyon Yapısı
 
-### 🚀 Getting Started
-- [Quick Start Guide](getting-started/quick-start.md) - 5-minute setup
-- [Installation Guide](getting-started/installation.md) - Detailed installation instructions
-- [AI Setup Guide](getting-started/ai-setup.md) - Automatic AI model configuration
+### 🚀 Başlarken (`getting-started/`)
+- [Kurulum](getting-started/installation.md) - Sistem kurulumu
+- [Hızlı Başlangıç](getting-started/quick-start.md) - 5 dakikada başlayın
+- [AI Kurulumu](getting-started/ai-setup.md) - AI hizmetleri yapılandırması
 
-### 📚 User Guides
-- [Authentication & Security](guides/authentication.md) - SSO, 2FA, access control
-- [Security Setup Guide](guides/security-setup.md) - Hardening your deployment
+### 🏗️ Mimari (`architecture/`)
+- [Genel Bakış](architecture/overview.md) - Platform mimarisi
+- [Mikroservisler](architecture/microservices.md) - Hizmet yapısı
+- [Plugin Sistemi](architecture/plugins.md) - Plugin mimarisi
+- [Proje Yapısı](architecture/project-structure.md) - Kod organizasyonu
+- [Yol Haritası](architecture/roadmap.md) - Gelecek planlar
 
-### 🔧 Development
-- [Development Guide](development/development.md) - Development workflow
-- [Code Style Guide](development/code-style.md) - Coding standards
-- [Testing Guide](development/testing.md) - Testing practices
-- [Plugin Development](development/plugin-development.md) - Building plugins
+### 💻 Geliştirme (`development/`)
+- [Geliştirme Rehberi](development/development.md) - Geliştirme ortamı
+- [Test](development/testing.md) - Test stratejileri
+- [Plugin Geliştirme](development/plugin-development.md) - Plugin yazma
+- [Kod Stili](development/code-style.md) - Kodlama standartları
 
-### 📦 Deployment
-- [Production Deployment](deployment/production.md) - Production setup
-- [Monitoring Setup](deployment/monitoring.md) - Monitoring configuration
+### 🚀 Deployment (`deployment/`)
+- [Production Deployment](deployment/production.md) - Canlıya alma
+- [Donanım Optimizasyonu](deployment/hardware-optimization.md) - Performans
+- [İzleme](deployment/monitoring.md) - Monitoring kurulumu
 
-### 🏗️ Architecture
-- [System Architecture](architecture/overview.md) - High-level design
-- [Microservices Architecture](architecture/microservices.md) - Service design
+### 🔧 Operasyonlar (`operations/`)
+- [Operasyonel Kılavuz](operations/README.md) - Günlük operasyonlar
+- [Raporlar](operations/reports/) - Sistem durum raporları
+  - [Günlük Durum](operations/reports/PROJE-DURUMU-2026-05-06.md) - Son durum
+  - [API Testleri](operations/reports/API-ENDPOINTS-TEST-RESULTS.md) - Endpoint testleri
 
-### 🔌 API Reference
-- [API Documentation](api/reference.md) - Complete API reference
+### 🔒 Güvenlik (`guides/`)
+- [Kimlik Doğrulama](guides/authentication.md) - Authelia SSO
+- [Güvenlik Kurulumu](guides/security-setup.md) - Güvenlik best practices
 
-### 🐛 Troubleshooting
-- [Common Issues](troubleshooting/common-issues.md) - Frequently asked questions
-- [Emergency Procedures](troubleshooting/emergency-procedures.md) - Crisis management
+### 🐛 Sorun Giderme (`troubleshooting/`)
+- [Sık Sorunlar](troubleshooting/common-issues.md) - Yaygın sorunlar
+- [Acil Prosedürler](troubleshooting/emergency-procedures.md) - Kriz yönetimi
 
-## Documentation Structure
+### 📔 Arşiv (`archive/`)
+- [Eski Raporlar](archive/reports/) - Geçmiş dönem raporları
+- [Oturum Özetleri](archive/sessions/) - Çalışma oturumları
 
-```
-docs/
-├── getting-started/     # Installation and quick start
-├── guides/              # User guides and how-tos
-├── development/         # Development documentation
-├── deployment/          # Deployment and operations
-├── architecture/        # System architecture
-├── api/                 # API documentation
-├── troubleshooting/     # Troubleshooting guides
-└── images/              # Documentation images and diagrams
-```
+### 🔌 API Referansı (`api/`)
+- [API Dokümantasyonu](api/reference.md) - Endpoint'ler
+- [API Kılavuzu](api/README.md) - API kullanımı
 
-## Contributing
+### ⚡ Event-Driven Architecture
+- [EDA Entegrasyon Rehberi](eda-integration-guide.md) - Event-driven mimari
+- [EDA Test Sonuçları](eda-test-results.md) - Test sonuçları
 
-Found a documentation issue? Please:
+### 🦾 Superpowers
+- [Superpowers README](superpowers/README.md) - AI destekli geliştirme
+- [Planlar](superpowers/plans/) - Geliştirme planları
+- [Spesifikasyonlar](superpowers/specs/) - Teknik spesifikasyonlar
 
-1. Check for existing issues in [GitHub Issues](https://github.com/wish-maker/minder/issues)
-2. Create a new issue with the `documentation` label
-3. Or submit a pull request with your improvements
+---
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for contribution guidelines.
+## 🎯 Hızlı Erişim
 
-## Additional Resources
+### Yeni Başlayanlar İçin
+1. [Kurulum Rehberi](getting-started/installation.md)
+2. [Hızlı Başlangıç](getting-started/quick-start.md)
+3. [Mimari Genel Bakış](architecture/overview.md)
 
-- [Project README](../README.md) - Main project README
-- [GitHub Repository](https://github.com/wish-maker/minder) - Source code
-- [Issue Tracker](https://github.com/wish-maker/minder/issues) - Bug reports
+### Geliştiriciler İçin
+1. [Geliştirme Ortamı](development/development.md)
+2. [Plugin Geliştirme](development/plugin-development.md)
+3. [API Referansı](api/reference.md)
+
+### Operasyon Ekibi İçin
+1. [Production Deployment](deployment/production.md)
+2. [Sorun Giderme](troubleshooting/common-issues.md)
+3. [Günlük Durum Raporu](operations/reports/PROJE-DURUMU-2026-05-06.md)
+
+---
+
+## 📝 Dokümantasyon Katkıları
+
+Dokümantasyonu iyileştirmek için:
+1. Yanlış veya güncel olmayan bilgiyi düzeltin
+2. Eksik bölümleri tamamlayın
+3. Örnekler ekleyin
+4. [CONTRIBUTING.md](../../CONTRIBUTING.md) rehberini takip edin
+
+---
+
+**Son Güncelleme:** 2026-05-06  
+**Platform Sürümü:** 1.0.0  
+**Dokümantasyon Sürümü:** 1.0

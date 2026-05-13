@@ -1,0 +1,130 @@
+# Traefik Dynamic Configuration - VPN Access Mode
+# SECURITY: Services accessible via VPN/LAN with enhanced security
+# Allows private network subnets (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+
+http:
+  middlewares:
+    # VPN/LAN IP whitelist (private networks only)
+    vpn-access-whitelist:
+      ipWhiteList:
+        sourceRange:
+          - "10.0.0.0/8"            # Private network Class A
+          - "172.16.0.0/12"         # Private network Class B
+          - "192.168.0.0/16"        # Private network Class C
+          - "127.0.0.1/32"          # Localhost
+          - "::1/128"               # IPv6 localhost
+          - "fc00::/7"              # IPv6 private network
+
+    # Enhanced security headers for VPN access
+    vpn-security-headers:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: "SAMEORIGIN"
+          X-Content-Type-Options: "nosniff"
+          X-XSS-Protection: "1; mode=block"
+          Referrer-Policy: "strict-origin-when-cross-origin"
+          Permissions-Policy: "camera=(self), microphone=(self), geolocation=(self)"
+          Strict-Transport-Security: "max-age=31536000; includeSubDomains"
+
+    # Moderate rate limiting for VPN users
+    vpn-rate-limit:
+      rateLimit:
+        average: 200
+        burst: 100
+        period: 1m
+
+    # VPN-specific authentication middleware
+    vpn-auth-middleware:
+      chain:
+        middlewares:
+          - vpn-access-whitelist
+          - authelia-forwardauth
+
+  routers:
+    # Override default routers with VPN access
+    api-router-vpn:
+      rule: "PathPrefix(`/api`)"
+      service: api-gateway
+      entryPoints:
+        - websecure
+      middlewares:
+        - vpn-security-headers
+        - vpn-rate-limit
+        - vpn-auth-middleware
+      tls: {}
+
+    services-router-vpn:
+      rule: "PathPrefix(`/`)"
+      service: services
+      entryPoints:
+        - websecure
+      middlewares:
+        - vpn-security-headers
+        - vpn-auth-middleware
+      tls: {}
+
+    # Dashboard routers (VPN only)
+    traefik-dashboard-vpn:
+      rule: "Host(`traefik.minder.local`)"
+      service: api@internal
+      middlewares:
+        - vpn-access-whitelist
+        - vpn-security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+    grafana-dashboard-vpn:
+      rule: "Host(`grafana.minder.local`)"
+      service: grafana
+      middlewares:
+        - vpn-access-whitelist
+        - vpn-security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+    jaeger-dashboard-vpn:
+      rule: "Host(`jaeger.minder.local`)"
+      service: jaeger
+      middlewares:
+        - vpn-access-whitelist
+        - vpn-security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+    prometheus-dashboard-vpn:
+      rule: "Host(`prometheus.minder.local`)"
+      service: prometheus
+      middlewares:
+        - vpn-access-whitelist
+        - vpn-security-headers
+      entryPoints:
+        - websecure
+      tls: {}
+
+  services:
+    jaeger:
+      loadBalancer:
+        servers:
+          - url: "http://minder-jaeger:16686"
+        healthCheck:
+          path: /
+          interval: 15s
+
+    prometheus:
+      loadBalancer:
+        servers:
+          - url: "http://minder-prometheus:9090"
+        healthCheck:
+          path: /-/healthy
+          interval: 15s
+
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://minder-grafana:3000"
+        healthCheck:
+          path: /api/health
+          interval: 10s

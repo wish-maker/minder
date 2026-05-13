@@ -1,0 +1,40 @@
+volumes:
+  traefik_letsencrypt:
+    driver: local
+  traefik_logs:
+    driver: local
+  postgres_data:
+    external: true
+    name: docker_postgres_data
+  redis_data:
+    external: true
+    name: docker_redis_data
+  rabbitmq_data:
+    external: true
+    name: docker_rabbitmq_data
+  minio_data:
+    external: true
+    name: docker_minio_data
+  qdrant_data:
+    external: true
+    name: docker_qdrant_data
+  neo4j_data:
+    external: true
+    name: docker_neo4j_data
+  influxdb_data:
+    external: true
+    name: docker_influxdb_data
+  ollama_data:
+    external: true
+    name: docker_ollama_data
+  openwebui_data:
+    external: true
+    name: docker_openwebui_data
+  otel-collector-data:
+    external: true
+    name: docker_otel-collector-data
+
+networks:
+  minder-network:
+    external: true
+    name: docker_minder-network

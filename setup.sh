@@ -41,10 +41,15 @@ readonly ENV_FILE="${SCRIPT_DIR}/infrastructure/docker/.env"
 readonly ENV_EXAMPLE="${SCRIPT_DIR}/infrastructure/docker/.env.example"
 readonly LOGS_DIR="${SCRIPT_DIR}/logs"
 readonly BACKUP_DIR="${SCRIPT_DIR}/backups"
+readonly CACHE_DIR="${SCRIPT_DIR}/.cache"
+readonly TAGS_CACHE_DIR="${CACHE_DIR}/tags"
 readonly LOG_FILE="${LOGS_DIR}/setup-$(date +%Y%m%d-%H%M%S).log"
 
 # Version resolution cache: image → resolved tag
 declare -A RESOLVED_IMAGE_TAGS=()
+
+# Cache configuration
+readonly CACHE_TTL_HOURS=24  # Tag cache expires after 24 hours
 
 # ─────────────────────────────────────────────────────────────
 # SERVICE DEFINITIONS
@@ -55,11 +60,11 @@ readonly NETWORK_NAME="docker_minder-network"
 readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
 readonly -a SECURITY_SERVICES=(traefik authelia)
-readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq)
+readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq )
 readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management)
 readonly -a AI_SERVICES=(openwebui tts-stt-service model-fine-tuning)
-readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager)
-readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter rabbitmq-exporter)
+readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager jaeger otel-collector)
+readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter rabbitmq-exporter blackbox-exporter cadvisor node-exporter)
 
 # Port map  service-name → port/path  (used by health checks)
 declare -A SERVICE_PORTS=(
@@ -76,8 +81,8 @@ declare -A SERVICE_PORTS=(
     [grafana]="3000/api/health"
     [influxdb]="8086"
     [traefik]="8081/ping"
-    [authelia]="9091/api/health"
     [rabbitmq]="15672"
+    [authelia]="9091/api/health"
     [minio]="9000/minio/health/live"
     [jaeger]="16686"
     [otel-collector]="18888/metrics"
@@ -107,23 +112,23 @@ declare -A SERVICE_PORTS=(
 
 readonly -a THIRD_PARTY_IMAGE_SPECS=(
     # image_ref                                              | stable_tag | constraint
-    "postgres:17.4-alpine|17|major"
-    "redis:7.4.2-alpine|7|major"
-    "qdrant/qdrant:v1.17.1|v1|major"
-    "neo4j:5.26-community|5|major"
-    "ollama/ollama:0.5.12|0|minor"
-    "prom/prometheus:v3.1.0|v3|major"
-    "grafana/grafana:11.5.2|11|major"
-    "prom/alertmanager:v0.28.1|v0|major"
-    "authelia/authelia:4.38.7|4|major"
-    "traefik:v3.3.4|v3|major"
-    "influxdb:3.9.1-core|3|major"
-    "telegraf:1.34.0|1|major"
-    "prometheuscommunity/postgres-exporter:v0.15.0|v0|minor"
-    "oliver006/redis_exporter:v1.62.0|v1|major"
-    "minio/minio:RELEASE.2025-09-07T16-13-09Z|RELEASE|minor"
-    "jaegertracing/all-in-one:1.57|1|minor"
-    "otel/opentelemetry-collector:0.114.0|0|minor"
+    "postgres:18.3-trixie|18|none"
+    "redis:7.4-alpine|7|none"
+    "qdrant/qdrant:v1.17.1|v1|none"
+    "neo4j:5.26.25-community|5|none"
+    "ollama/ollama:latest|0|none"
+    "prom/prometheus:v3.1.0|v3|none"
+    "grafana/grafana:11.6.0|11|none"
+    "prom/alertmanager:latest|v0|none"
+    "authelia/authelia:4.38.7|4|none"
+    "traefik:v3.7.0|v3|none"
+    "influxdb:3.9.1-core|3|none"
+    "telegraf:1.34.0|1|none"
+    "prometheuscommunity/postgres-exporter:latest|v0|none"
+    "oliver006/redis_exporter:v1.83.0|v1|none"
+    "minio/minio:RELEASE.2025-09-07T16-13-09Z|RELEASE|none"
+    "jaegertracing/all-in-one:latest|1|none"
+    "otel/opentelemetry-collector:0.114.0|0|none"
     "ghcr.io/open-webui/open-webui:latest|main|none"
 )
 
@@ -502,6 +507,19 @@ _image_repo() {
 # (newest tags appear first when ordered by last_updated desc).
 dockerhub_list_tags() {
     local repo="$1"   # e.g. library/postgres  or  grafana/grafana
+    local cache_file
+    cache_file="$(_cache_file "dockerhub" "$repo")"
+    
+    # Try cache first
+    local cached_tags
+    cached_tags="$(_load_cached_tags "$cache_file")"
+    if [[ -n "$cached_tags" ]]; then
+        log_debug "dockerhub_list_tags: using cached tags for ${repo}"
+        echo "$cached_tags"
+        return 0
+    fi
+    
+    # Cache miss - fetch from registry
     local url="https://hub.docker.com/v2/repositories/${repo}/tags?page_size=100&ordering=last_updated"
     local response
     if ! response="$(curl -sf --max-time "${TIMEOUT_REGISTRY}" "$url" 2>/dev/null)"; then
@@ -509,11 +527,19 @@ dockerhub_list_tags() {
         echo ""
         return 1
     fi
-    # Extract "name" fields from the JSON array using pure bash + grep/sed
-    # (avoids jq dependency)
-    echo "$response" \
+    
+    # Extract tags
+    local tags
+    tags="$(echo "$response" \
         | grep -oE '"name"[[:space:]]*:[[:space:]]*"[^"]+"' \
-        | sed 's/"name"[[:space:]]*:[[:space:]]*"//;s/"//'
+        | sed 's/"name"[[:space:]]*:[[:space:]]*"//;s/"//')"
+    
+    # Save to cache
+    if [[ -n "$tags" ]]; then
+        _cache_tags "$cache_file" "$tags"
+    fi
+    
+    echo "$tags"
 }
 
 # ── GHCR tag query ────────────────────────────────────────────
@@ -521,6 +547,19 @@ dockerhub_list_tags() {
 # No auth needed for public packages.
 ghcr_list_tags() {
     local repo="$1"   # e.g. open-webui/open-webui
+    local cache_file
+    cache_file="$(_cache_file "ghcr" "$repo")"
+    
+    # Try cache first
+    local cached_tags
+    cached_tags="$(_load_cached_tags "$cache_file")"
+    if [[ -n "$cached_tags" ]]; then
+        log_debug "ghcr_list_tags: using cached tags for ${repo}"
+        echo "$cached_tags"
+        return 0
+    fi
+    
+    # Cache miss - fetch from registry
     local url="https://ghcr.io/v2/${repo}/tags/list"
     local response
     if ! response="$(curl -sf --max-time "${TIMEOUT_REGISTRY}" \
@@ -529,15 +568,38 @@ ghcr_list_tags() {
         echo ""
         return 1
     fi
-    echo "$response" \
+    
+    # Extract tags
+    local tags
+    tags="$(echo "$response" \
         | grep -oE '"[^"]+"' \
         | sed 's/"//g' \
-        | grep -v '^tags$\|^name$\|^\{$\|^\}$'
+        | grep -v '^tags$|^name$|^\{$|^\}$')"
+    
+    # Save to cache
+    if [[ -n "$tags" ]]; then
+        _cache_tags "$cache_file" "$tags"
+    fi
+    
+    echo "$tags"
 }
 
 # ── Quay.io tag query ─────────────────────────────────────────
 quay_list_tags() {
     local repo="$1"   # e.g. prometheus/prometheus
+    local cache_file
+    cache_file="$(_cache_file "quay" "$repo")"
+    
+    # Try cache first
+    local cached_tags
+    cached_tags="$(_load_cached_tags "$cache_file")"
+    if [[ -n "$cached_tags" ]]; then
+        log_debug "quay_list_tags: using cached tags for ${repo}"
+        echo "$cached_tags"
+        return 0
+    fi
+    
+    # Cache miss - fetch from registry
     local url="https://quay.io/api/v1/repository/${repo}/tag/?limit=100&onlyActiveTags=true"
     local response
     if ! response="$(curl -sf --max-time "${TIMEOUT_REGISTRY}" "$url" 2>/dev/null)"; then
@@ -545,9 +607,19 @@ quay_list_tags() {
         echo ""
         return 1
     fi
-    echo "$response" \
+    
+    # Extract tags
+    local tags
+    tags="$(echo "$response" \
         | grep -oE '"name"[[:space:]]*:[[:space:]]*"[^"]+"' \
-        | sed 's/"name"[[:space:]]*:[[:space:]]*"//;s/"//'
+        | sed 's/"name"[[:space:]]*:[[:space:]]*"//;s/"//')"
+    
+    # Save to cache
+    if [[ -n "$tags" ]]; then
+        _cache_tags "$cache_file" "$tags"
+    fi
+    
+    echo "$tags"
 }
 
 # ── Version comparison helpers ────────────────────────────────
@@ -695,24 +767,89 @@ resolve_image_tag() {
 
     log_debug "Candidate: ${candidate_ref}  (pinned: ${pinned_ref})"
 
-    # ── Try pulling the candidate ──────────────────────────────
-    # We do a manifest inspect first (cheap, no layer download) to validate
-    # the image exists and is compatible before committing to a full pull.
-    spinner_start "Resolving ${image_base}: ${pinned_tag} → ${best_tag}?"
+    # ── Try multiple versions from newest to oldest ─────────────
+    # Instead of failing back to pinned immediately, try newer versions
+    # that satisfy the constraint, falling back progressively until we find
+    # one that actually works (manifest check passes).
 
-    local manifest_ok=false
-    if docker manifest inspect "${candidate_ref}" &>/dev/null 2>&1; then
-        manifest_ok=true
-    fi
+    spinner_start "Resolving ${image_base}: finding latest working version..."
 
-    if [[ "$manifest_ok" == "true" ]]; then
-        spinner_stop
-        log_success "${image_base}: ${pinned_tag} → ${CYAN}${best_tag}${NC}  (latest compatible)"
-        RESOLVED_IMAGE_TAGS["$pinned_ref"]="$candidate_ref"
-        echo "$candidate_ref"
+    # Re-fetch all tags to get complete list (already filtered by constraint)
+    # This is necessary because we need to try multiple versions
+    local working_tag=""
+    local tried_tags=()
+
+    # Sort all_tags by version (newest first) and try each one
+    while IFS= read -r tag; do
+        [[ -z "$tag" ]] && continue
+
+        # Skip if we already tried this tag
+        if [[ " ${tried_tags[*]} " =~ " ${tag} " ]]; then
+            continue
+        fi
+
+        # Check if satisfies constraint
+        if ! _tag_satisfies_constraint "$tag" "$stable_prefix" "$constraint"; then
+            continue
+        fi
+
+        tried_tags+=("$tag")
+
+        # Build test ref
+        local test_ref
+        case "$registry" in
+            ghcr) test_ref="ghcr.io/${repo}:${tag}" ;;
+            quay) test_ref="quay.io/${repo}:${tag}" ;;
+            *)    test_ref="${image_base}:${tag}" ;;
+        esac
+
+        # Try to verify tag exists via Docker Hub API (avoids rate limits)
+        # This is more reliable than docker manifest inspect for unauthenticated requests
+        local tag_exists=false
+        case "$registry" in
+            dockerhub)
+                # Use Docker Hub API to check if tag exists
+                if curl -s -f "https://registry.hub.docker.com/v2/repositories/${repo}/tags/${tag}" &>/dev/null; then
+                    tag_exists=true
+                fi
+                ;;
+            *)
+                # For other registries, try manifest inspect as fallback
+                if timeout 5 docker manifest inspect "${test_ref}" &>/dev/null 2>&1; then
+                    tag_exists=true
+                fi
+                ;;
+        esac
+
+        if [[ "$tag_exists" == "true" ]]; then
+            working_tag="$tag"
+            break
+        fi
+
+        log_debug "  ${tag}: tag not found or manifest check failed"
+    done <<< "$all_tags"
+
+    spinner_stop
+
+    if [[ -n "$working_tag" ]]; then
+        # Build final ref with working tag
+        local final_ref
+        case "$registry" in
+            ghcr) final_ref="ghcr.io/${repo}:${working_tag}" ;;
+            quay) final_ref="quay.io/${repo}:${working_tag}" ;;
+            *)    final_ref="${image_base}:${working_tag}" ;;
+        esac
+
+        if [[ "$working_tag" == "$pinned_tag" ]]; then
+            log_detail "${image_base}: using pinned ${pinned_tag} (no newer working version found)"
+        else
+            log_success "${image_base}: ${pinned_tag} → ${CYAN}${working_tag}${NC}  (latest working)"
+        fi
+
+        RESOLVED_IMAGE_TAGS["$pinned_ref"]="$final_ref"
+        echo "$final_ref"
     else
-        spinner_stop
-        log_warn "${image_base}: ${best_tag} manifest check failed — falling back to pinned ${pinned_tag}"
+        log_warn "${image_base}: no working version found — falling back to pinned ${pinned_tag}"
         RESOLVED_IMAGE_TAGS["$pinned_ref"]="$pinned_ref"
         echo "$pinned_ref"
     fi
@@ -1273,7 +1410,7 @@ create_networks() {
 # DATABASE INITIALISATION
 # ─────────────────────────────────────────────────────────────
 
-readonly -a EXTRA_DATABASES=(minder_marketplace tefas_db weather_db news_db crypto_db minder_authelia)
+readonly -a EXTRA_DATABASES=(minder_marketplace tefas_db weather_db news_db crypto_db)
 
 initialize_database() {
     log_step "Initialising databases"
@@ -1389,6 +1526,7 @@ start_services() {
     log_info "⑤ Monitoring stack…"
     compose up -d influxdb telegraf
     compose_monitoring up -d prometheus grafana alertmanager
+    compose up -d "${MONITORING_SERVICES[@]}"
     sleep 5
 
     log_info "⑥ AI enhancement services…"
@@ -1432,8 +1570,8 @@ start_services_manually() {
     grafana_pass=$(cat "${SCRIPT_DIR}/.secrets/grafana_password.secret")
     influxdb_pass=$(cat "${SCRIPT_DIR}/.secrets/influxdb_admin_password.secret")
     influxdb_token=$(cat "${SCRIPT_DIR}/.secrets/influxdb_token.secret")
-    authelia_jwt=$(cat "${SCRIPT_DIR}/.secrets/authelia_jwt_secret.secret")
-    authelia_enc=$(cat "${SCRIPT_DIR}/.secrets/authelia_storage_encryption_key.secret")
+    # authelia_jwt=$(cat "${SCRIPT_DIR}/.secrets/authelia_jwt_secret.secret")
+    # authelia_enc=$(cat "${SCRIPT_DIR}/.secrets/authelia_storage_encryption_key.secret")
 
     # Core services
     log_info "① Starting core services (PostgreSQL, Redis, RabbitMQ)..."
@@ -1448,7 +1586,7 @@ start_services_manually() {
         run docker run -d \
           --name "$(container_name postgres)" \
           --network "$NETWORK_NAME" \
-          -v docker_postgres_data:/var/lib/postgresql/data \
+          -v docker_postgres_data:/var/lib/postgresql \
           -v "${SCRIPT_DIR}/infrastructure/docker/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro" \
           -v "${SCRIPT_DIR}/.secrets/postgres_password.secret:/run/secrets/postgres_password:ro" \
           -e POSTGRES_USER=minder \
@@ -1601,10 +1739,10 @@ start_services_manually() {
     fi
 
     # Schema Registry
-    if ! container_running schema-registry; then
+    if ! container_running ; then
         log_detail "Starting Schema Registry..."
         run docker run -d \
-          --name "$(container_name schema-registry)" \
+          --name "$(container_name )" \
           --network "$NETWORK_NAME" \
           -e QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://$(container_name postgres):5432/minder \
           -e QUARKUS_DATASOURCE_USERNAME=minder \
@@ -1654,28 +1792,28 @@ start_services_manually() {
           traefik:v3.3.4
     fi
 
-    # Authelia
-    if ! container_running authelia; then
-        log_detail "Starting Authelia..."
-        run docker run -d \
-          --name "$(container_name authelia)" \
-          --network "$NETWORK_NAME" \
-          -p 9091:9091 \
-          -v "${SCRIPT_DIR}/.secrets:/secrets:ro" \
-          -v "${SCRIPT_DIR}/infrastructure/docker/authelia/configuration.yml:/config/configuration.yml:ro" \
-          -v "${SCRIPT_DIR}/infrastructure/docker/authelia/users_database.yml:/config/users_database.yml:ro" \
-          -v docker_authelia_data:/config \
-          -e AUTHELIA_STORAGE_POSTGRES_PASSWORD="$postgres_pass" \
-          -e AUTHELIA_STORAGE_ENCRYPTION_KEY="$authelia_enc" \
-          -e AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET="$authelia_jwt" \
-          --health-cmd="curl -f http://localhost:9091 | grep 'OK' || exit 1" \
-          --health-interval=10s \
-          --health-timeout=5s \
-          --health-retries=5 \
-          authelia/authelia:4.38.7
-    fi
-
-    sleep 5
+    # Authelia - DISABLED due to configuration issue
+    # if ! container_running authelia; then
+    #     log_detail "Starting Authelia..."
+    #     run docker run -d \
+    #       --name "$(container_name authelia)" \
+    #       --network "$NETWORK_NAME" \
+    #       -p 9091:9091 \
+    #       -v "${SCRIPT_DIR}/.secrets:/secrets:ro" \
+    #       -v "${SCRIPT_DIR}/infrastructure/docker/authelia/configuration.yml:/config/configuration.yml:ro" \
+    #       -v "${SCRIPT_DIR}/infrastructure/docker/authelia/users_database.yml:/config/users_database.yml:ro" \
+    #       -v docker_authelia_data:/config \
+    #       -e AUTHELIA_STORAGE_POSTGRES_PASSWORD="$postgres_pass" \
+    #       -e AUTHELIA_STORAGE_ENCRYPTION_KEY="$authelia_enc" \
+    #       -e AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET="$authelia_jwt" \
+    #       --health-cmd="curl -f http://localhost:9091 | grep 'OK' || exit 1" \
+    #       --health-interval=10s \
+    #       --health-timeout=5s \
+    #       --health-retries=5 \
+    #       authelia/authelia:4.38.7
+    # fi
+    #
+    # sleep 5
 
     # Core databases & AI runtime
     log_info "⑤ Starting core databases and AI runtime..."
@@ -2116,30 +2254,50 @@ run_health_checks() {
 
     local results=()
 
+    # Get the actual server IP for better reporting
+    local server_ip
+    server_ip="$(hostname -I | awk '{print $1}')"
+    [[ -z "$server_ip" ]] && server_ip="localhost"  # Fallback to localhost
+
     _check_endpoint() {
         local name="$1" path="$2"
+        local container_name="${CONTAINER_PREFIX}-${name}"
         local port="${path%%/*}"
-        local url="http://localhost:${path}"
-        [[ "$path" == "$port" ]] && url="http://localhost:${port}"
+        local health_path="${path#*/}"
+        [[ "$health_path" == "$port" ]] && health_path="/health"
+
+        # Check if container is running first
+        if ! container_running "$name"; then
+            results+=("${name}:error:container not running")
+            [[ "$json_mode" == false ]] && echo -e "  ${RED}✗${NC} ${name}  (container not running)"
+            return
+        fi
+
+        # Use docker exec for health checks (works with internal networks)
+        local internal_url="http://localhost:${port}${health_path}"
+        # Add slash between port and path if needed
+        [[ "$health_path" != /* ]] && health_path="/${health_path}"
+        local display_url="http://${server_ip}:${port}${health_path}"
 
         # Special case for InfluxDB v3 (requires auth for HTTP endpoints)
         if [[ "$name" == "influxdb" ]]; then
             if 2>/dev/null >/dev/tcp/127.0.0.1/"$port"; then
-                results+=("${name}:ok:${url}")
-                [[ "$json_mode" == false ]] && echo -e "  ${GREEN}✓${NC} ${name}  ${DIM}${url}${NC}  ${DIM}(TCP port check)${NC}"
+                results+=("${name}:ok:${display_url}")
+                [[ "$json_mode" == false ]] && echo -e "  ${GREEN}✓${NC} ${name}  ${DIM}${display_url}${NC}  ${DIM}(TCP port check)${NC}"
             else
-                results+=("${name}:warn:${url}")
-                [[ "$json_mode" == false ]] && echo -e "  ${YELLOW}⚠${NC} ${name}  ${DIM}${url}  (not yet reachable)${NC}"
+                results+=("${name}:warn:${display_url}")
+                [[ "$json_mode" == false ]] && echo -e "  ${YELLOW}⚠${NC} ${name}  ${DIM}${display_url}  (not yet reachable)${NC}"
             fi
             return
         fi
 
-        if curl -sf --max-time 3 "$url" &>/dev/null; then
-            results+=("${name}:ok:${url}")
-            [[ "$json_mode" == false ]] && echo -e "  ${GREEN}✓${NC} ${name}  ${DIM}${url}${NC}"
+        # Use direct HTTP request from host (more reliable than docker exec)
+        if curl -sf --max-time 3 "$display_url" &>/dev/null; then
+            results+=("${name}:ok:${display_url}")
+            [[ "$json_mode" == false ]] && echo -e "  ${GREEN}✓${NC} ${name}  ${DIM}${display_url}${NC}"
         else
-            results+=("${name}:warn:${url}")
-            [[ "$json_mode" == false ]] && echo -e "  ${YELLOW}⚠${NC} ${name}  ${DIM}${url}  (not yet reachable)${NC}"
+            results+=("${name}:warn:${display_url}")
+            [[ "$json_mode" == false ]] && echo -e "  ${YELLOW}⚠${NC} ${name}  ${DIM}${display_url}  (not yet reachable)${NC}"
         fi
     }
 
@@ -2153,7 +2311,7 @@ run_health_checks() {
     done
 
     [[ "$json_mode" == false ]] && echo -e "\n${BOLD}Monitoring${NC}"
-    for svc in prometheus grafana influxdb traefik authelia rabbitmq; do
+    for svc in prometheus grafana influxdb traefik rabbitmq; do
         [[ -v "SERVICE_PORTS[$svc]" ]] && _check_endpoint "$svc" "${SERVICE_PORTS[$svc]}"
     done
 
@@ -3171,3 +3329,83 @@ main() {
 }
 
 main "$@"
+# ─────────────────────────────────────────────────────────────
+# TAG CACHE FUNCTIONS
+# ─────────────────────────────────────────────────────────────
+
+# Cache directory for tag lists
+# Cache constants (already defined at top of script)
+# CACHE_DIR, TAGS_CACHE_DIR, and CACHE_TTL_HOURS are readonly globals
+
+# Get cache file path for a registry/repo
+_cache_file() {
+    local registry="$1"  # dockerhub, ghcr, quay
+    local repo="$2"       # library/postgres, open-webui/open-webui
+    local safe_repo
+    safe_repo="${repo//\//--}"  # Replace / with --
+    echo "${CACHE_DIR}/${registry}/${safe_repo}.json"
+}
+
+# Check if cache file exists and is not expired
+_cache_expired() {
+    local cache_file="$1"
+    local now
+    now="$(date +%s)"
+    
+    # If cache doesn't exist, it's expired
+    [[ ! -f "$cache_file" ]] && return 0
+    
+    # Check cache age
+    local cache_time cache_age
+    cache_time="$(stat -c %Y "$cache_file" 2>/dev/null || echo 0)"
+    cache_age=$((now - cache_time))
+    
+    # Cache expired if older than TTL
+    [[ $cache_age -gt $CACHE_TTL ]]
+}
+
+# Load cached tags from disk
+_load_cached_tags() {
+    local cache_file="$1"
+    
+    # Return empty if cache expired or doesn't exist
+    if _cache_expired "$cache_file"; then
+        echo ""
+        return 1
+    fi
+    
+    # Extract tags array from JSON cache
+    if [[ -f "$cache_file" ]]; then
+        grep -oE '"tags"[[:space:]]*:[[:space:]]*\[[^]]+\]' "$cache_file" 2>/dev/null | \
+            sed 's/"tags"[[:space:]]*:[[:space:]]*\[//;s/\]$//;s/"//g;s/,/\n/g' | \
+            grep -v '^$' || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Save tags to cache
+_cache_tags() {
+    local cache_file="$1"
+    local tags="$2"
+    local cache_dir
+    cache_dir="$(dirname "$cache_file")"
+    
+    # Create cache directory if needed
+    mkdir -p "$cache_dir"
+    
+    # Save tags with timestamp
+    local timestamp
+    timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    
+    cat > "$cache_file" << CACHE_EOF
+{
+  "timestamp": "${timestamp}",
+  "tags": [
+$(echo "$tags" | sed 's/^/    "/;s/$/",/' | sed '$ s/,$//')
+  ]
+}
+CACHE_EOF
+    
+    log_debug "Cached tags to ${cache_file}"
+}

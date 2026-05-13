@@ -1,0 +1,13 @@
+# Traefik Dynamic SSL Configuration
+# Let's Encrypt certificates with automatic renewal
+
+tls:
+  certificates:
+    - certFile: /letsencrypt/local-host.crt
+      keyFile: /letsencrypt/local-host.key
+      stores:
+        - default
+      
+  # Let's Encrypt ACME configuration
+  # NOTE: For production, replace with real domain and email
+  # For development, using self-signed certificates

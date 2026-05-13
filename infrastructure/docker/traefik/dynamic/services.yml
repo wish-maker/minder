@@ -1,0 +1,41 @@
+# Manual Service Configuration for Traefik
+# This file provides static service definitions when Docker discovery fails
+
+http:
+  services:
+    # API Gateway
+    api-gateway:
+      loadBalancer:
+        servers:
+          - url: "http://minder-api-gateway:8000"
+        healthCheck:
+          path: /health
+          interval: 10s
+          timeout: 5s
+
+    # Plugin Registry
+    plugin-registry:
+      loadBalancer:
+        servers:
+          - url: "http://minder-plugin-registry:8001"
+        healthCheck:
+          path: /health
+          interval: 10s
+
+    # Marketplace
+    marketplace:
+      loadBalancer:
+        servers:
+          - url: "http://minder-marketplace:8002"
+        healthCheck:
+          path: /health
+          interval: 10s
+
+    # Grafana
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://minder-grafana:3000"
+        healthCheck:
+          path: /api/health
+          interval: 10s

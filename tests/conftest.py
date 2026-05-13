@@ -98,7 +98,10 @@ pytest_plugins = ("pytest_asyncio",)
 @pytest.fixture(scope="session")
 def test_database_url():
     """Get test database URL"""
-    return os.getenv("TEST_DATABASE_URL", "postgresql://test:test@localhost:5432/minder_test")
+    # Default to Docker container database URL for tests
+    return os.getenv(
+        "TEST_DATABASE_URL", "postgresql://minder:PG8sjzqq5jqIf8gSkUIsexKioz1RQVSO@minder-postgres:5432/minder_test"
+    )
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -180,7 +183,7 @@ def patch_redis_globally():
     mock_redis.close.return_value = None
 
     # Patch Redis globally to avoid DNS issues
-    with patch('redis.from_url', return_value=mock_redis):
+    with patch("redis.from_url", return_value=mock_redis):
         yield
 
 
@@ -436,12 +439,22 @@ def sample_plugin_list():
             "status": "enabled",
             "enabled": True,
             "dependencies": [],
-            "capabilities": ["fund_data_collection", "historical_analysis", "fund_discovery", "kap_integration", "risk_metrics", "tax_rates", "fund_comparison", "technical_analysis", "fund_screening"],
+            "capabilities": [
+                "fund_data_collection",
+                "historical_analysis",
+                "fund_discovery",
+                "kap_integration",
+                "risk_metrics",
+                "tax_rates",
+                "fund_comparison",
+                "technical_analysis",
+                "fund_screening",
+            ],
             "data_sources": ["TEFAS (via tefas-crawler)", "TEFAS (via borsapy 0.8.7)", "KAP"],
             "databases": ["postgresql", "influxdb"],
             "registered_at": "2026-05-01T06:41:40.555350",
             "health_status": "healthy",
-            "last_health_check": "2026-05-01T09:07:23.594303"
+            "last_health_check": "2026-05-01T09:07:23.594303",
         },
         {
             "name": "weather",
@@ -456,6 +469,6 @@ def sample_plugin_list():
             "databases": ["postgresql", "influxdb"],
             "registered_at": "2026-05-01T06:41:37.654885",
             "health_status": "healthy",
-            "last_health_check": "2026-05-01T09:07:23.559549"
+            "last_health_check": "2026-05-01T09:07:23.559549",
         },
     ]

@@ -12,13 +12,17 @@ authentication_backend:
 
 session:
   name: authelia_session
+  secret: ${AUTHELIA_SESSION_SECRET}
   expiration: 1h
   inactivity: 5m
   remember_me: 1M
   cookies:
     - name: authelia_session
       domain: minder.local
-      authelia_url: https://auth.minder.local
+      authelia_url: https://authelia.minder.local
+      expiration: 1h
+      inactivity: 5m
+      default_redirection_url: https://public.minder.local
 
 regulation:
   max_retries: 5
@@ -26,11 +30,12 @@ regulation:
   ban_time: 5m
 
 storage:
-  encryption_key: AUTHELIA_DEFAULT_ENCRYPTION_KEY
+  encryption_key: ${AUTHELIA_STORAGE_ENCRYPTION_KEY}
   postgres:
     address: tcp://postgres:5432
     database: minder_authelia
     username: minder
+    password: ${AUTHELIA_STORAGE_POSTGRES_PASSWORD}
 
 notifier:
   disable_startup_check: true
@@ -66,4 +71,4 @@ access_control:
 
 identity_validation:
   reset_password:
-    jwt_secret: AUTHELIA_DEFAULT_JWT_SECRET
+    jwt_secret: ${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}

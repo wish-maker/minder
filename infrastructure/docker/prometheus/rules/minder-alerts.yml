@@ -1,0 +1,68 @@
+groups:
+  - name: minder_system
+    interval: 30s
+    rules:
+      # Service Down Alert
+      - alert: ServiceDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "{{ $labels.job }} has been down for more than 5 minutes"
+
+      # High Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: "{{ $labels.name }}"
+        annotations:
+          summary: "High memory usage on {{ $labels.name }}"
+          description: "Container {{ $labels.name }} is using more than 90% memory for 5 minutes"
+
+      # High CPU Usage Alert
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{name!=""}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: "{{ $labels.name }}"
+        annotations:
+          summary: "High CPU usage on {{ $labels.name }}"
+          description: "Container {{ $labels.name }} CPU usage is above 80% for 5 minutes"
+
+      # Disk Space High Alert
+      - alert: DiskSpaceHigh
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space running low"
+          description: "Root disk usage is above 80% on {{ $labels.instance }}"
+
+      # API Gateway High Error Rate
+      - alert: APIGatewayHighErrorRate
+        expr: rate(http_requests_total{job="api-gateway",status=~"5.."}[5m]) / rate(http_requests_total{job="api-gateway"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: "api-gateway"
+        annotations:
+          summary: "API Gateway high error rate"
+          description: "API Gateway error rate is above 5% for 5 minutes"
+
+      # Database Connection Pool Exhausted
+      - alert: DatabaseConnectionPoolHigh
+        expr: pg_stat_activity_count{datname="minder"} > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: "postgres"
+        annotations:
+          summary: "PostgreSQL connection pool nearly exhausted"
+          description: "PostgreSQL has more than 80 active connections"

@@ -1,0 +1,30 @@
+volumes:
+  traefik_letsencrypt:
+    driver: local
+  traefik_logs:
+    driver: local
+  postgres_data:
+    external: true
+  redis_data:
+    external: true
+  rabbitmq_data:
+    external: true
+  minio_data:
+    external: true
+  qdrant_data:
+    external: true
+  neo4j_data:
+    external: true
+  influxdb_data:
+    external: true
+  ollama_data:
+    external: true
+  openwebui_data:
+    external: true
+  otel-collector-data:
+    external: true
+
+networks:
+  minder-network:
+    external: true
+    name: docker_minder-network

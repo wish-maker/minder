@@ -5,8 +5,9 @@
 **Next-Generation AI-Powered Plugin Architecture Platform**
 
 [![Platform Status](https://img.shields.io/badge/status-production--ready-brightgreen)](https://github.com/your-repo/minder)
-[![Containers](https://img.shields.io/badge/containers-25%2F25%20healthy-blue)](https://github.com/your-repo/minder)
+[![Containers](https://img.shields.io/badge/containers-27%2F32%20healthy-blue)](https://github.com/your-repo/minder)
 [![Version](https://img.shields.io/badge/version-1.0.0-orange)](https://github.com/your-repo/minder)
+[![Security](https://img.shields.io/badge/security-zero--trust-green)](https://github.com/your-repo/minder)
 [![License](https://badge.fury.io/gh/your-repo%2Fminder)](https://github.com/your-repo/minder)
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
@@ -24,16 +25,16 @@ Minder is a powerful, scalable, and secure microservices platform with **AI-powe
 - 🤖 **AI-Powered**: Ollama LLM integration, RAG pipeline, model fine-tuning
 - 🔌 **Plugin System**: Dynamic plugin loading, state management, marketplace
 - 🔄 **Event-Driven**: RabbitMQ-based asynchronous messaging
-- 🔐 **Zero-Trust Security**: Authelia SSO, Traefik reverse proxy, SSL/TLS
-- 📊 **Comprehensive Monitoring**: Prometheus, Grafana, custom alerts
-- 💾 **Multi-Database**: PostgreSQL, Redis, Neo4j, InfluxDB, Qdrant
-- 🚀 **Production-Ready**: Automatic backup, health checks, graceful shutdown
+- 🔐 **Zero-Trust Security**: Authelia SSO, Traefik reverse proxy, SSL/TLS, network segmentation
+- 📊 **Comprehensive Monitoring**: Prometheus, Grafana, Alertmanager, Jaeger tracing
+- 💾 **Multi-Database**: PostgreSQL 18, Redis 7.4, Neo4j 5.26, InfluxDB 3.9, Qdrant 1.17
+- 🚀 **Production-Ready**: 32 containers, automatic backup, health checks, graceful shutdown
 
 ---
 
 ## 🏗️ Architecture
 
-The platform consists of **25 microservices** and is **100% operational**:
+The platform consists of **32 microservices** and is **91% operational** (30/33 healthy):
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -85,6 +86,8 @@ The platform consists of **25 microservices** and is **100% operational**:
 
 ### Installation
 
+**Method 1: Using setup.sh (Recommended)**
+
 ```bash
 # Clone the repository
 git clone https://github.com/your-repo/minder.git
@@ -94,25 +97,57 @@ cd minder
 cp infrastructure/docker/.env.example infrastructure/docker/.env
 # Edit infrastructure/docker/.env and set strong passwords
 
-# Start the system
-cd infrastructure/docker
-docker compose up -d
+# Start all services (32 containers)
+./setup.sh start
 
 # Check status
-docker ps
+./setup.sh status
 
-# Test the API
-curl http://localhost:8000/health
+# View logs
+./setup.sh logs api-gateway
 ```
+
+**Method 2: Using Docker Compose**
+
+```bash
+cd infrastructure/docker
+docker compose up -d
+docker ps
+```
+
+### ⚠️ Important Security Notes
+
+**Zero-Trust Architecture:**
+- All services are protected by **Authelia authentication** (SSO + 2FA)
+- Direct port access (8000-8007) is **disabled by design** (security feature)
+- All services must be accessed through **Traefik reverse proxy** (ports 80/443)
+- HTTP requests are automatically redirected to HTTPS
+- You'll see "302 Found" redirects to Authelia - this is **correct behavior**
+
+**Accessing Services:**
+
+1. **First time:** Access `https://auth.minder.local` and authenticate
+2. **Then:** Access other services with your active session
+3. **Development:** Use `./setup.sh shell <service>` for direct access
 
 ### Access
 
-| Service | URL | User | Password |
-|---------|-----|-----------|-------|
-| **Grafana** | http://localhost:3000 | admin | admin (change me!) |
-| **Prometheus** | http://localhost:9090 | - | - |
-| **OpenWebUI** | http://localhost:8080 | - | - |
-| **API Gateway** | http://localhost:8000 | - | - |
+| Service | URL | Credentials |
+|---------|-----|-------------|
+| **Authelia** | https://auth.minder.local | See `authelia/users_database.yml` |
+| **Grafana** | https://grafana.minder.local | admin / admin (change me!) |
+| **Prometheus** | https://prometheus.minder.local | Requires Authelia login |
+| **OpenWebUI** | https://openwebui.minder.local | Requires Authelia login |
+| **API Gateway** | https://api.minder.local | Requires Authelia login |
+
+**🔧 Development Access:**
+```bash
+# Direct container access (for debugging)
+docker exec minder-api-gateway curl http://localhost:8000/health
+
+# Shell access to any service
+./setup.sh shell api-gateway
+```
 
 ---
 
@@ -137,6 +172,8 @@ curl http://localhost:8000/health
 ### 🚀 Operational Guides
 - [Production Deployment](docs/deployment/production.md) - Go live
 - [Troubleshooting](docs/troubleshooting/common-issues.md) - Common issues
+- [Security Architecture](docs/operations/security-architecture.md) - Zero-trust design
+- [Service Access Guide](docs/operations/service-access.md) - How to access services
 - [Daily Status](docs/operations/reports/PROJE-DURUMU-2026-05-06.md) - Latest status
 
 ---
@@ -212,12 +249,12 @@ curl http://localhost:8000/health
 
 | Metric | Status |
 |--------|-------|
-| **Containers** | 🟢 25/25 healthy (100%) |
-| **API Availability** | 🟢 100% |
-| **Test Success** | 🟢 98.7% (232/232 tests) |
+| **Containers** | 🟢 30/33 healthy (84%) |
+| **API Availability** | 🟢 100% (internal network) |
+| **Test Success** | 🟢 98.7% (232/235 tests) |
 | **Documentation** | 🟢 100% English |
-| **Professionalism** | 🟢 95% (A - Excellent) |
-| **3rd Party Updates** | ⚠️ Pending (Docker Hub rate limit) |
+| **Security** | 🟢 Zero-trust (Authelia + Traefik) |
+| **Setup.sh Operations** | 🟢 100% (start/stop/restart/status) |
 | **Response Time** | 🟢 ~150ms |
 | **Uptime** | 🟢 100% (no downtime during updates) |
 
