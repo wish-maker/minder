@@ -287,9 +287,9 @@ jobs:
           if [ "${{ needs.unit-tests.result }}" == "success" ] && \
              [ "${{ needs.integration-tests.result }}" == "success" ] && \
              [ "${{ needs.e2e-tests.result }}" == "success" ]; then
-              echo "✅ Tüm testler başarılı!"
+              echo "✅ All tests successful!"
               exit 0
           else
-              echo "❌ Bazı testler başarısız oldu!"
+              echo "❌ Some tests failed!"
               exit 1
           fi

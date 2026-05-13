@@ -76,12 +76,12 @@ declare -A SERVICE_PORTS=(
     [model-management]="8005/health"
     [tts-stt-service]="8006/health"
     [model-fine-tuning]="8007/health"
-    [openwebui]="8080"
+    # OpenWebUI port not exposed (Traefik only), skipping direct health check
     [prometheus]="9090/-/healthy"
     [grafana]="3000/api/health"
     [influxdb]="8086"
-    [traefik]="8081/ping"
-    [rabbitmq]="15672"
+    [traefik]="8081/dashboard/"
+    # RabbitMQ management UI port not exposed (Traefik only), skipping direct health check
     [authelia]="9091/api/health"
     [minio]="9000/minio/health/live"
     [jaeger]="16686"

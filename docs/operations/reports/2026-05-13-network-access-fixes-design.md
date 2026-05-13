@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Minder platformunda kritik network erişim sorunları tespit edildi ve düzeltme planı hazırlandı. Ana sorun: API servisleri host'a map edilmemiş, sadece Traefik routing üzerinden erişilebilir olacak şekilde tasarlanmış. Bu, local network/VPN erişimini engelliyor.
+Critical network access issues were identified in the Minder platform and a correction plan was prepared. The main problem: API services are not mapped to the host, only designed to be accessible via Traefik routing. This prevents local network/VPN access.
 
 **Server IP:** 192.168.68.14
 **Goal:** Hybrid access pattern - Direct ports + Traefik routing

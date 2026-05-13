@@ -1,113 +1,120 @@
 # Minder Platform - Docker Deployment
 
-Bu dizin Minder platformunun Docker Compose ile deployment yapılandırmasını içerir.
+This directory contains the Docker Compose deployment configuration for the Minder platform.
 
-## 🐳 Hizmetler (25 Konteyner)
+## 🐳 Services (32 Containers)
 
-### Çekirdek Altyapı
-- **Traefik** - Reverse proxy ve load balancer (Port: 80, 443, 8081)
-- **Authelia** - SSO kimlik doğrulama (Port: 9091)
-- **API Gateway** - Merkezi API gateway (Port: 8000)
+### Core Infrastructure
+- **Traefik** - Reverse proxy and load balancer (Port: 80, 443, 8081)
+- **Authelia** - SSO authentication (Port: 9091)
+- **API Gateway** - Central API gateway (Port: 8000)
 
-### Veritabanları
-- **PostgreSQL** - İlişkisel veritabanı (Dahili ağ)
-- **Redis** - Cache ve message broker (Dahili ağ)
-- **Neo4j** - Graf veritabanı (Dahili ağ)
-- **InfluxDB** - Zaman serisi veritabanı (Dahili ağ)
-- **Qdrant** - Vektör veritabanı (Dahili ağ)
+### Databases
+- **PostgreSQL** - Relational database (Internal network)
+- **Redis** - Cache and message broker (Internal network)
+- **Neo4j** - Graph database (Internal network)
+- **InfluxDB** - Time-series database (Internal network)
+- **Qdrant** - Vector database (Internal network)
+- **MinIO** - Object storage (Internal network)
 
-### AI Hizmetleri
-- **Ollama** - LLM inference motoru (Port: 11434)
-- **OpenWebUI** - AI chat arayüzü (Port: 8080)
-- **RAG Pipeline** - Retrieval Augmented Generation (Dahili ağ)
-- **Model Management** - Model yönetimi (Dahili ağ)
-- **TTS-STT Service** - Ses/speech-to-text (Port: 8006)
+### AI Services
+- **Ollama** - LLM inference engine (Port: 11434)
+- **OpenWebUI** - AI chat interface (Port: 8080)
+- **RAG Pipeline** - Retrieval Augmented Generation (Internal network)
+- **Model Management** - Model management (Internal network)
+- **TTS-STT Service** - Speech/speech-to-text (Port: 8006)
 - **Model Fine-tuning** - Model fine-tuning (Port: 8007)
 
-### Mesajlaşma
+### Messaging
 - **RabbitMQ** - Message broker (Port: 15672)
 
-### Gözlemlenebilirlik
-- **Prometheus** - Metrik toplama (Port: 9090)
-- **Grafana** - Görselleştirme (Port: 3000)
-- **Alertmanager** - Alert yönetimi (Port: 9093)
-- **Telegraf** - Metrik toplama aracısı (Dahili ağ)
+### Observability
+- **Prometheus** - Metrics collection (Port: 9090)
+- **Grafana** - Visualization (Port: 3000)
+- **Jaeger** - Distributed tracing (Port: 16686)
+- **Alertmanager** - Alert management (Port: 9093)
+- **Telegraf** - Metrics collection agent (Internal network)
+- **OTel Collector** - OpenTelemetry collector (Internal network)
 
 ### Exporters
-- **PostgreSQL Exporter** - DB metrikleri (Port: 9187)
-- **Redis Exporter** - Cache metrikleri (Port: 9121)
-- **RabbitMQ Exporter** - MQ metrikleri (Port: 9419)
+- **PostgreSQL Exporter** - DB metrics (Port: 9187)
+- **Redis Exporter** - Cache metrics (Port: 9121)
+- **RabbitMQ Exporter** - MQ metrics (Port: 9419)
+- **Node Exporter** - System metrics (Port: 9100)
+- **Blackbox Exporter** - Probe metrics (Port: 9115)
+- **cAdvisor** - Container metrics (Port: 8081)
 
-### Uygulama Hizmetleri
-- **Plugin Registry** - Plugin kayıt (Dahili ağ)
-- **Plugin State Manager** - Plugin durum (Dahili ağ)
-- **Marketplace** - Plugin marketplace (Dahili ağ)
+### Application Services
+- **Plugin Registry** - Plugin registration (Internal network)
+- **Plugin State Manager** - Plugin state (Internal network)
+- **Marketplace** - Plugin marketplace (Internal network)
+- **Schema Registry** - Schema management (Internal network)
 
 ---
 
-## 🚀 Hızlı Başlangıç
+## 🚀 Quick Start
 
-### Sistemi Başlatma
+### Starting the System
 
 ```bash
-# Tüm hizmetleri başlat
+# Start all services
 docker compose up -d
 
-# Servis durumunu kontrol et
+# Check service status
 docker ps
 
-# Logları görüntüle
+# View logs
 docker compose logs -f
 ```
 
-### Sistemi Durdurma
+### Stopping the System
 
 ```bash
-# Tüm hizmetleri durdur
+# Stop all services
 docker compose down
 
-# Volumeleri koruyarak durdur
+# Stop while preserving volumes
 docker compose down --remove-orphans
 ```
 
-### Yeniden Başlatma
+### Restarting
 
 ```bash
-# Tüm hizmetleri yeniden başlat
+# Restart all services
 docker compose restart
 
-# Belirli bir hizmeti yeniden başlat
+# Restart a specific service
 docker compose restart <service-name>
 ```
 
 ---
 
-## 🔧 Yapılandırma
+## 🔧 Configuration
 
-### Ortam Değişkenleri
+### Environment Variables
 
 ```bash
-# .env dosyasını kopyala ve düzenle
+# Copy and edit .env file
 cp .env.example .env
 
-# Güçlü şifreler oluştur
-openssl rand -base64 32  # AUTHELIA_SECRET için
+# Generate strong passwords
+openssl rand -base64 32  # For AUTHELIA_SECRET
 ```
 
-### Gerekli Ortam Değişkenleri
+### Required Environment Variables
 
 ```bash
-# Veritabanı şifreleri
-POSTGRES_PASSWORD=güçlü_şifre
-REDIS_PASSWORD=güçlü_şifre
+# Database passwords
+POSTGRES_PASSWORD=strong_password
+REDIS_PASSWORD=strong_password
 
 # Authelia secrets
-AUTHELIA_STORAGE_ENCRYPTION_KEY=güçlü_secret
-AUTHELIA_JWT_SECRET=güçlü_secret
-AUTHELIA_SESSION_SECRET=güçlü_secret
+AUTHELIA_STORAGE_ENCRYPTION_KEY=strong_secret
+AUTHELIA_JWT_SECRET=strong_secret
+AUTHELIA_SESSION_SECRET=strong_secret
 
 # Neo4j
-NEO4J_AUTH=neo4j/güçlü_şifre
+NEO4J_AUTH=neo4j/strong_password
 ```
 
 ---
@@ -116,104 +123,104 @@ NEO4J_AUTH=neo4j/güçlü_şifre
 
 ### Prometheus
 - **URL:** http://localhost:9090
-- **Ne izler:** Tüm 25 hizmet
-- **Scrape aralığı:** 15 saniye
+- **What it monitors:** All 32 services
+- **Scrape interval:** 15 seconds
 
 ### Grafana
 - **URL:** http://localhost:3000
-- **Varsayılan:** admin/admin (DEĞİŞTİRİN!)
-- **Dashboard'lar:** Sistem genel bakış, servis metrikleri
+- **Default:** admin/admin (CHANGE THIS!)
+- **Dashboards:** System overview, service metrics
 
 ### Alertmanager
 - **URL:** http://localhost:9093
-- **Alert grupları:** 9
-- **Kurallar:** 45+
+- **Alert groups:** 9
+- **Rules:** 45+
 
 ---
 
-## 🗄️ Yedekleme
+## 🗄️ Backup
 
-### Otomatik Yedekler
-- **Sıklık:** Her gün 02:00'de
-- **Saklama:** 7 gün
-- **Konum:** `/root/minder/backups/`
+### Automatic Backups
+- **Frequency:** Daily at 02:00
+- **Retention:** 7 days
+- **Location:** `/root/minder/backups/`
 
-### Manuel Yedekleme
+### Manual Backup
 ```bash
-# Tüm veritabanlarını yedekle
+# Backup all databases
 /root/minder/backups/backup-databases.sh full
 
-# Sadece PostgreSQL'i yedekle
+# Backup only PostgreSQL
 /root/minder/backups/backup-databases.sh postgres
 
-# Yedek istatistiklerini görüntüle
+# View backup statistics
 /root/minder/backups/backup-databases.sh stats
 ```
 
 ---
 
-## 🔐 Güvenlik
+## 🔐 Security
 
-### Zero-Trust Mimarisi
+### Zero-Trust Architecture
 - ✅ Traefik reverse proxy
-- ✅ Authelia SSO kimlik doğrulama
-- ✅ Dahili ağ izolasyonu
-- ✅ SSL/TLS şifreleme
+- ✅ Authelia SSO authentication
+- ✅ Internal network isolation
+- ✅ SSL/TLS encryption
 
-### Erişim Kontrolü
-- **Public erişim:** public.minder.local
-- **Auth gerektirir:** *.minder.local
-- **2FA gerektirir:** admin.minder.local, api.minder.local
+### Access Control
+- **Public access:** public.minder.local
+- **Auth required:** *.minder.local
+- **2FA required:** admin.minder.local, api.minder.local
 
 ---
 
-## 🐛 Sorun Giderme
+## 🐛 Troubleshooting
 
-### Konteyner Başlamıyor
+### Container Not Starting
 ```bash
-# Logları kontrol et
+# Check logs
 docker logs <container-name>
 
-# Yapılandırmayı doğrula
+# Verify configuration
 docker compose config
 
-# Volumeleri kontrol et
+# Check volumes
 docker volume ls
 ```
 
-### Servis Erişilemez
+### Service Unreachable
 ```bash
-# Ağ durumunu kontrol et
+# Check network status
 docker network ls
 docker network inspect minder-network
 
-# Servis sağlık kontrolü
+# Service health check
 curl http://localhost:8000/health
 ```
 
-### Yüksek Kaynak Kullanımı
+### High Resource Usage
 ```bash
-# Kaynak kullanımını görüntüle
+# View resource usage
 docker stats
 
-# Konteyner limitlerini kontrol et
+# Check container limits
 docker inspect <container-name> | grep -A 10 "HostConfig"
 ```
 
 ---
 
-## 📈 Performans Optimizasyonu
+## 📈 Performance Optimization
 
-### Kaynak Limitleri
-Tüm konteynerler için CPU ve bellek limitleri tanımlanmıştır.
-Düzenleme için `docker-compose.yml` içindeki `deploy.resources` bölümünü düzenleyin.
+### Resource Limits
+CPU and memory limits are defined for all containers.
+To adjust, edit the `deploy.resources` section in `docker-compose.yml`.
 
 ### Scaling
 ```bash
-# Bir servisi scale et
+# Scale a service
 docker compose up -d --scale <service-name>=<replicas>
 
-# Örnek: API Gateway'i 3 replica'ya çıkar
+# Example: Scale API Gateway to 3 replicas
 docker compose up -d --scale api-gateway=3
 ```
 
@@ -221,35 +228,35 @@ docker compose up -d --scale api-gateway=3
 
 ## 🔄 Upgrade
 
-### Güvenli Upgrade Prosedürü
-1. Yedek alın: `/root/minder/backups/backup-databases.sh full`
-2. Sistemi durdurun: `docker compose down`
-3. Image'ları çekin: `docker compose pull`
-4. Sistemi başlatın: `docker compose up -d`
-5. Durumu kontrol edin: `docker ps`
+### Safe Upgrade Procedure
+1. Create backup: `/root/minder/backups/backup-databases.sh full`
+2. Stop system: `docker compose down`
+3. Pull images: `docker compose pull`
+4. Start system: `docker compose up -d`
+5. Check status: `docker ps`
 
-Detaylı bilgi için: [UPGRADE-RUNBOOK.md](UPGRADE-RUNBOOK.md)
+For detailed information: [UPGRADE-RUNBOOK.md](UPGRADE-RUNBOOK.md)
 
 ---
 
-## 📚 Ek Dokümantasyon
+## 📚 Additional Documentation
 
-- [Genel Dokümantasyon](../../docs/README.md)
-- [Sorun Giderme](../../docs/troubleshooting/common-issues.md)
+- [General Documentation](../../docs/README.md)
+- [Troubleshooting](../../docs/troubleshooting/common-issues.md)
 - [Production Deployment](../../docs/deployment/production.md)
 - [API Reference](../../docs/api/reference.md)
 
 ---
 
-## 🆘 Destek
+## 🆘 Support
 
-Sorun yaşarsanız:
-1. [Sorun Giderme Kılavuzu](../../docs/troubleshooting/common-issues.md)
-2. [GitHub Issues](https://github.com/your-repo/issues)
-3. [Acil Prosedürler](../../docs/troubleshooting/emergency-procedures.md)
+If you experience issues:
+1. [Troubleshooting Guide](../../docs/troubleshooting/common-issues.md)
+2. [GitHub Issues](https://github.com/wish-maker/issues)
+3. [Emergency Procedures](../../docs/troubleshooting/emergency-procedures.md)
 
 ---
 
-**Son Güncelleme:** 2026-05-06  
-**Sürüm:** 1.0.0  
-**Durum:** 🟢 Production Ready
+**Last Updated:** 2026-05-13
+**Version:** 1.0.0
+**Status:** 🟢 Production Ready

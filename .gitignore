@@ -31,24 +31,35 @@ credentials/
 *.backup
 *_backup
 
+# Database Storage Directories
+**/data/
+**/data/**/*
+
 # ============================================================================
 # 🟢 AUTO-GENERATED FILES (Build & Cache)
 # ============================================================================
 
 # Python
 __pycache__/
+__pycache__/**/*
 *.py[cod]
+*.pyc
+*.pyo
+*.pyd
 *$py.class
 *.so
 .Python
 build/
 dist/
 *.egg-info/
+*.dist-info
 .installed.cfg
 *.egg
 venv/
 env/
 ENV/
+virtualenv/
+.venv/
 htmlcov/
 .tox/
 .coverage
@@ -57,6 +68,14 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .cache/
+.pytest_cache/
+.pytest_cache/**/*
+
+# Build & Setup Cache
+.buildcache/
+.buildcache/**/*
+.setup/
+.setup/**/*
 
 # Node.js
 node_modules/
@@ -93,6 +112,10 @@ build/
 *.pid
 *.seed
 *.pid.lock
+*.lock
+*.state
+*.socket
+*.sock
 tmp/
 temp/
 logs/
@@ -128,6 +151,15 @@ site/
 *.archive
 *.orig
 *~
+*.bak
+*.old
+*.save
+*.tmp
+*.temp
+*.swp
+*.swo
+*.retry
+*.failed
 
 # ============================================================================
 # 🐧 OS-SPECIFIC FILES
@@ -143,12 +175,29 @@ Desktop.ini
 # 🎯 PROJECT SPECIFIC
 # ============================================================================
 
+# Docker Compose Test/Temp Files
+docker-compose.*.test.yml
+docker-compose.*.secrets.yml
+*-secrets.yml
+*-test.yml
+correct-volumes.yml
+volumes-section.yml
+
 # System Backups (contains database dumps & credentials)
 backups/
 backups/**/*
 *.backup
 *.sql
 *.dump
+
+# Configuration Backups
+*.backup.*
+*.backup-*
+.env.backup*
+.env.backup-*
+docker-compose.yml.backup*
+docker-compose.yml.broken*
+docker-compose.yml.old
 
 # Environment Configuration (contains secrets)
 infrastructure/docker/.env
@@ -160,6 +209,7 @@ grafana/data/
 prometheus/data/
 influxdb/data/
 alertmanager/data/
+monitoring-log.txt
 
 # Docker volumes (don't commit data)
 *.volume
@@ -173,6 +223,17 @@ test-reports/
 # AI Agent Working Directories
 docs/superpowers/
 docs/superpowers/**/*
+
+# Historical Analysis Reports (development artifacts)
+docs/archive/reports/
+docs/archive/reports/**/*
+
+# Development & Test Scripts
+test-phase4-*.sh
+validate-fresh-install.sh
+generate-compose.sh
+system_prompt.txt
+monitoring-log.txt
 
 # ============================================================================
 # ✅ TEAM COLLABORATION (Keep These!)

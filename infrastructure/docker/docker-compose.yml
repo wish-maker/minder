@@ -310,7 +310,7 @@ services:
     container_name: minder-neo4j
     restart: on-failure
     environment:
-      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/neo4j_test_password_change_me}
+      NEO4J_AUTH: ${NEO4J_AUTH:-${NEO4J_AUTH:-neo4j/secure_password_change_me}}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_memory_heap_initial__size: 512m
       NEO4J_dbms_memory_heap_max__size: 1G
@@ -379,6 +379,15 @@ services:
       retries: 3
     networks:
     - minder-network
+    # PILLAR 5: Resource limits to prevent resource exhaustion
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
     # PILLAR 1: Expose API via Traefik with Authelia authentication
     labels:
     - traefik.enable=true
@@ -945,8 +954,12 @@ services:
     - REDIS_ADDR=redis://redis:6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
     # PILLAR 4: NO exposed ports - Prometheus scrapes via internal network
-    # NOTE: No healthcheck - minimal image has no HTTP client
-    # Prometheus will detect if service is down via scrape failures
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9121"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     depends_on:
       redis:
         condition: service_healthy
@@ -970,7 +983,11 @@ services:
     - RABBIT_PASSWORD=${RABBITMQ_PASSWORD}
     - RABBIT_CAPABILITIES=sort,bert
     healthcheck:
-      disable: true
+      test: ["CMD", "nc", "-z", "localhost", "9090"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -1109,8 +1126,12 @@ services:
     - "14317:4317"   # OTLP gRPC receiver (changed to avoid conflict with Jaeger)
     - "14318:4318"   # OTLP HTTP receiver (changed to avoid conflict with Jaeger)
     - "18888:8888"   # Prometheus metrics (changed to avoid conflicts)
-    # NOTE: No healthcheck - minimal image has no HTTP client
-    # Service logs show it's running properly. Prometheus will detect if down.
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8888"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     depends_on:
       jaeger:
         condition: service_healthy

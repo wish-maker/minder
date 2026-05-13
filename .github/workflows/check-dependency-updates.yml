@@ -21,7 +21,7 @@ jobs:
           echo "## Available Updates" >> update-report.md
           echo "" >> update-report.md
           
-          # Version kontrol script
+          # Version check script
           cat > /tmp/check.sh << 'CHECKEOF'
           #!/bin/bash
           images=(

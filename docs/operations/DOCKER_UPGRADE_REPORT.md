@@ -9,7 +9,7 @@
 ## 📊 Executive Summary
 
 Successfully modernized the entire Minder platform's Docker infrastructure with:
-- **24 services** upgraded to latest stable versions
+- **32 services** upgraded to latest stable versions
 - **21 image tags** converted from `latest` to semantic versions
 - **9 internal services** upgraded to Python 3.12-slim base image
 - **2 breaking changes** handled automatically (Traefik v3, Grafana v11)

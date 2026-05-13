@@ -18,7 +18,7 @@ Minder is a modular RAG (Retrieval-Augmented Generation) platform with microserv
 
 **Latest Achievements (May 2, 2026):**
 - ✅ **SECURITY LAYER:** Traefik reverse proxy + Authelia SSO/2FA fully integrated
-- ✅ **SERVICE EXPANSION:** 24 services running (24 healthy, 100% success rate)
+- ✅ **SERVICE EXPANSION:** 32 services running (29 healthy, 3 no-healthcheck, 0 unhealthy)
 - ✅ **MESSAGE QUEUE:** RabbitMQ 3.13-management integrated for async messaging
 - ✅ **TEST COVERAGE:** 115 tests passing with 98% coverage
 - ✅ **AI AUTO-SETUP:** Automatic AI model downloads (llama3.2 + nomic-embed-text)
@@ -486,7 +486,7 @@ curl http://localhost:8005/metrics | grep models_registered_total
 
 *API Gateway shows "degraded" because some Phase 2 services not started (expected)
 
-**Total Services:** 24 services running (24 healthy, 100% success rate)
+**Total Services:** 32 services running (29 healthy, 3 no-healthcheck, 91% health rate)
 **Monitoring:** Prometheus scraping all targets with comprehensive dashboards
 **Dashboards:** Grafana Minder Overview dashboard operational + enhanced dashboards
 

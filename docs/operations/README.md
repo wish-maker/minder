@@ -23,7 +23,7 @@ This guide covers operational tasks for managing the Minder Platform in producti
 - Creates environment configuration
 - Sets up Docker networks
 - Initializes databases
-- Starts all 24 services
+- Starts all 32 services
 - Downloads AI models automatically
 - Verifies health of all services
 

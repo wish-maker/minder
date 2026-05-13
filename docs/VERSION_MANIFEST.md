@@ -192,7 +192,7 @@
 - ✅ PostgreSQL Init: Fixed SQL syntax for database creation (DO $$ blocks)
 - ✅ Plugin Registry: Removed borsapy due to httpx 0.25.2 compatibility conflict
 - ✅ RAG Pipeline: Fixed ollama version (>=0.3.0 → 0.1.7) for httpx 0.25.2 compatibility
-- ✅ All 24 services now running successfully (22 healthy)
+- ✅ All 32 services now running successfully (29 healthy)
 
 **Standardization:**
 - ✅ All Python services now use FastAPI 0.115.0

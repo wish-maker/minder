@@ -95,9 +95,11 @@ active_plugins_gauge = Gauge("active_plugins_total", "Number of active plugins")
 # ============================================================================
 
 # CORS Middleware
+# Parse CORS_ALLOWED_ORIGINS from environment (comma-separated)
+cors_origins = settings.CORS_ALLOWED_ORIGINS.split(",") if settings.CORS_ALLOWED_ORIGINS else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure properly for production
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

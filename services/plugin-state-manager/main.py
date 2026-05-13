@@ -1,19 +1,13 @@
 # services/plugin-state-manager/main.py
 """
 Plugin State Manager Service
-Merkezi plugin yönetimi, state kontrolü, ve AI tools execution
+Central plugin management, state control, and AI tools execution
 """
 
-import os
-import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
-from typing import Dict, List, Optional
 
-import asyncpg
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 from routes import licensing, state, tools
 
@@ -30,7 +24,7 @@ class Settings(BaseSettings):
     # Server
     APP_NAME: str = "Plugin State Manager"
     VERSION: str = "2.1.0"
-    HOST: str = "0.0.0.0"
+    HOST: str = "127.0.0.1"
     PORT: int = 8003
 
     # Database
@@ -102,7 +96,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.VERSION,
-    description="Merkezi plugin yönetimi ve AI tools execution",
+    description="Central plugin management and AI tools execution",
     lifespan=lifespan,
 )
 

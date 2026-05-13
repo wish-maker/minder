@@ -2,13 +2,15 @@
 
 <div align="center">
 
+<img src="docs/images/logo.png" alt="Minder Platform Logo" width="200" height="200"/>
+
 **Next-Generation AI-Powered Plugin Architecture Platform**
 
-[![Platform Status](https://img.shields.io/badge/status-production--ready-brightgreen)](https://github.com/your-repo/minder)
-[![Containers](https://img.shields.io/badge/containers-27%2F32%20healthy-blue)](https://github.com/your-repo/minder)
-[![Version](https://img.shields.io/badge/version-1.0.0-orange)](https://github.com/your-repo/minder)
-[![Security](https://img.shields.io/badge/security-zero--trust-green)](https://github.com/your-repo/minder)
-[![License](https://badge.fury.io/gh/your-repo%2Fminder)](https://github.com/your-repo/minder)
+[![Platform Status](https://img.shields.io/badge/status-production--ready-brightgreen)](https://github.com/wish-maker/minder)
+[![Containers](https://img.shields.io/badge/containers-27%2F32%20healthy-blue)](https://github.com/wish-maker/minder)
+[![Version](https://img.shields.io/badge/version-1.0.0-orange)](https://github.com/wish-maker/minder)
+[![Security](https://img.shields.io/badge/security-zero--trust-green)](https://github.com/wish-maker/minder)
+[![License](https://badge.fury.io/gh/your-repo%2Fminder)](https://github.com/wish-maker/minder)
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
 
@@ -90,7 +92,7 @@ The platform consists of **32 microservices** and is **91% operational** (30/33 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/minder.git
+git clone https://github.com/wish-maker/minder.git
 cd minder
 
 # Configure environment variables
@@ -307,8 +309,8 @@ This project is licensed under the MIT License. For more information, see the [L
 ## 🆘 Support
 
 - 📖 [Documentation](docs/README.md)
-- 🐛 [Bug Report](https://github.com/your-repo/minder/issues)
-- 💬 [Discussions](https://github.com/your-repo/minder/discussions)
+- 🐛 [Bug Report](https://github.com/wish-maker/minder/issues)
+- 💬 [Discussions](https://github.com/wish-maker/minder/discussions)
 - 📧 [Email](mailto:support@minder.local)
 
 ---
