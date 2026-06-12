@@ -60,7 +60,7 @@ SUPPORTED_LANGUAGES = {
 # ============================================================================
 
 app = FastAPI(
-    title="Minder TTS/STT Service",
+    title="Minder TTS/STT",
     description="Text-to-Speech and Speech-to-Text service",
     version="1.0.0",
 )

@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI app
 app = FastAPI(
-    title="Minder AI Services",
+    title="Minder AI Service",
     description="Unified AI Services combining RAG, Model Management, and TTS/STT",
     version="2.1.0",
     lifespan=lifespan,

@@ -70,7 +70,7 @@ graph_retriever: GraphRetriever = None
 # ============================================================================
 
 app = FastAPI(
-    title="Minder Graph RAG Service",
+    title="Minder Graph RAG",
     description="Entity extraction and knowledge graph construction for RAG",
     version="1.0.0",
     docs_url="/docs",
