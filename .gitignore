@@ -14,6 +14,7 @@
 .env.test.local
 .env.production.local
 .env.marketplace
+.env.influxdb
 
 # SSL Certificates & Keys
 *.key
@@ -28,12 +29,30 @@ credentials/
 *.db
 *.sqlite
 *.sqlite3
+
+# ============================================================================
+# 📁 RUNTIME DATA (Never Commit)
+# ============================================================================
+
+# Data Directory (Runtime Data)
+data/
+data/backups/
+data/logs/
+data/cache/
+
+# Build & Cache Directories
+.buildcache/
+cache/
+*.cache/
+
+# Log Files
+*.log
+monitoring-log.txt
+logs/
+
+# Backup Files
 *.backup
 *_backup
-
-# Database Storage Directories
-**/data/
-**/data/**/*
 
 # ============================================================================
 # 🟢 AUTO-GENERATED FILES (Build & Cache)
