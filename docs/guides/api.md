@@ -414,7 +414,7 @@ GET /health
 **Response:**
 ```json
 {
-  "service": "tts-service",
+  "service": "tts-stt",
   "status": "healthy",
   "version": "1.0.0",
   "checks": {

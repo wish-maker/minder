@@ -876,12 +876,12 @@ services:
       retries: 3
     networks:
     - minder-network
-  tts-service:
+  tts-stt:
     build:
       context: ../../
-      dockerfile: services/tts-service/Dockerfile
-    image: minder/tts-service:1.0.0
-    container_name: minder-tts-service
+      dockerfile: services/tts-stt/Dockerfile
+    image: minder/tts-stt:1.0.0
+    container_name: minder-tts-stt
     restart: on-failure
     # PILLAR 3: GPU Passthrough - Hardware acceleration for TTS/STT processing (when available)
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available

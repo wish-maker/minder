@@ -299,10 +299,10 @@ docker exec minder-api-gateway python /tmp/test_config.py
 - `GET /v1/constraints` - List model constraints
 
 **Files:**
-- `services/model-management/main.py`
-- `services/model-management/config.py`
-- `services/model-management/requirements.txt`
-- `services/model-management/Dockerfile`
+- `services/model-management-service/main.py`
+- `services/model-management-service/config.py`
+- `services/model-management-service/requirements.txt`
+- `services/model-management-service/Dockerfile`
 
 #### 2.3 Qdrant Integration ✅
 - Collection creation and management verified
@@ -318,7 +318,7 @@ curl http://localhost:8004/health
 
 # Model Management health
 curl http://localhost:8005/health
-# {"service": "model-management", "status": "healthy", "models": 0}
+# {"service": "model-management-service", "status": "healthy", "models": 0}
 
 # Qdrant health
 curl http://localhost:6333/health

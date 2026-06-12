@@ -60,9 +60,9 @@ scrape_configs:
   #     metrics_path: '/metrics'
 
   # TTS-STT Service
-  - job_name: 'tts-service'
+  - job_name: 'tts-stt'
     static_configs:
-      - targets: ['tts-service:8006']
+      - targets: ['tts-stt:8006']
     metrics_path: '/metrics'
 
   # Model Fine-tuning

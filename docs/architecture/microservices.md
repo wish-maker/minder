@@ -282,7 +282,7 @@ traefik
   ├── state-manager
   │   ├── postgres
   │   └── redis
-  ├── ai-services
+  ├── ai-service
   │   ├── qdrant
   │   ├── ollama
   │   └── postgres
@@ -292,7 +292,7 @@ traefik
   ├── openwebui
   │   ├── postgres
   │   ├── ollama
-  │   └── ai-services
+  │   └── ai-service
   └── monitoring (prometheus, grafana, influxdb, etc.)
 ```
 

@@ -62,7 +62,7 @@ readonly MONITORING_NETWORK_NAME="minder-monitoring"
 readonly -a SECURITY_SERVICES=(traefik authelia)
 readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq )
 readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management)
-readonly -a AI_SERVICES=(openwebui tts-stt-service model-fine-tuning)
+readonly -a AI_SERVICES=(openwebui tts-stt model-fine-tuning)
 readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager jaeger otel-collector)
 readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter rabbitmq-exporter blackbox-exporter cadvisor node-exporter)
 
@@ -74,7 +74,7 @@ declare -A SERVICE_PORTS=(
     [plugin-state-manager]="8003/health"
     [rag-pipeline]="8004/health"
     [model-management]="8005/health"
-    [tts-stt-service]="8006/health"
+    [tts-stt]="8006/health"
     [model-fine-tuning]="8007/health"
     # OpenWebUI port not exposed (Traefik only), skipping direct health check
     [prometheus]="9090/-/healthy"
