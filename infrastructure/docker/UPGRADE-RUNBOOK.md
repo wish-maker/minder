@@ -47,7 +47,7 @@ cd /root/minder/infrastructure/docker
 # Stop all services except databases and monitoring
 docker compose stop api-gateway plugin-registry plugin-state-manager
 docker compose stop rag-pipeline model-management marketplace
-docker compose stop model-fine-tuning tts-stt-service openwebui
+docker compose stop model-fine-tuning tts-service openwebui
 ```
 
 **Verify:**

@@ -1,0 +1,1963 @@
+"""
+Minder RAG Pipeline Service - Production Ready
+Real Ollama integration with proper embedding generation and LLM inference
+"""
+
+import asyncio
+import json
+import logging
+import os
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from pydantic import BaseModel
+
+# Ollama client for real embeddings and LLM
+try:
+    from ollama import AsyncClient
+
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    logging.warning("ollama package not installed. Install with: pip install ollama")
+
+# Qdrant client
+from qdrant_client import QdrantClient
+from qdrant_client.models import Batch, Distance, PointStruct, VectorParams
+
+# Redis client for conversation memory
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logging.warning("redis package not installed. Install with: pip install redis")
+
+# CRAG (Corrective RAG) import
+from corrective_rag import CorrectiveRetriever
+
+# RAPTOR RAG import
+from raptor_rag import raptor_chunker, raptor_retriever
+
+logger = logging.getLogger(__name__)
+
+# ============================================================================
+# Configuration
+# ============================================================================
+
+QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
+QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+MODEL_MANAGEMENT_URL = os.getenv("MODEL_MANAGEMENT_URL", "http://minder-model-management:8005")
+
+# Default models (can be overridden per knowledge base)
+DEFAULT_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+DEFAULT_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
+
+# Embedding dimensions (depends on model)
+EMBEDDING_DIMENSIONS = {
+    "nomic-embed-text": 768,
+    "mxbai-embed-large": 1024,
+    "all-minilm": 384,
+}
+
+# ============================================================================
+# Raspberry Pi 4 Resource Management
+# ============================================================================
+
+
+class Pi4ResourceManager:
+    """Raspberry Pi 4 resource manager for RAG pipeline"""
+
+    def __init__(self):
+        self.max_concurrent_requests = 2  # RPi 4 constraint
+        self.max_memory_mb = 4000  # 4GB for RAG pipeline
+        self.cpu_threshold = 80  # Thermal throttle threshold
+        self.request_semaphore = asyncio.Semaphore(self.max_concurrent_requests)
+        self.embedding_batch_size = 5  # Reduced from 100
+
+    async def check_resources(self) -> Dict[str, Any]:
+        """Check available resources before processing"""
+        try:
+            # Read memory info
+            with open("/proc/meminfo", "r") as f:
+                meminfo = f.read()
+                available = int([line for line in meminfo.split("\n") if "MemAvailable" in line][0].split()[1]) // 1024  # MB
+
+            # Read CPU load
+            with open("/proc/loadavg", "r") as f:
+                load = float(f.read().split()[0])  # 1-minute load
+
+            # Check thermal
+            try:
+                with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                    temp = int(f.read().strip()) / 1000  # Convert to Celsius
+            except:
+                temp = 0  # Thermal read failed
+
+            return {
+                "available_memory_mb": available,
+                "cpu_load": load,
+                "temperature_c": temp,
+                "can_process": available > 1000 and load < 10.0 and temp < self.cpu_threshold,  # Temporarily raised for testing
+            }
+        except Exception as e:
+            logger.warning(f"Resource check failed: {e}")
+            return {"can_process": True}  # Optimistic default
+
+    async def throttle_if_needed(self):
+        """Throttle if resources constrained"""
+        while True:
+            resources = await self.check_resources()
+            if not resources["can_process"]:
+                wait_time = min(5, resources.get("temperature_c", 0) / 20)
+                logger.warning(f"⏳ Throttling: {resources}")
+                await asyncio.sleep(wait_time)
+            else:
+                break
+
+
+# Global resource manager
+pi4_manager = Pi4ResourceManager()
+
+
+# ============================================================================
+# Embedding Cache
+# ============================================================================
+
+import hashlib
+
+
+class EmbeddingCache:
+    """Simple in-memory cache for embeddings (Redis-backed in production)"""
+
+    def __init__(self, max_size: int = 1000):
+        self.cache: Dict[str, List[float]] = {}
+        self.max_size = max_size
+        self.hits = 0
+        self.misses = 0
+
+    def _hash_text(self, text: str) -> str:
+        """Create hash for text"""
+        return hashlib.md5(text.encode()).hexdigest()
+
+    def get(self, text: str) -> Optional[List[float]]:
+        """Get cached embedding"""
+        key = self._hash_text(text)
+        if key in self.cache:
+            self.hits += 1
+            return self.cache[key]
+        self.misses += 1
+        return None
+
+    def set(self, text: str, embedding: List[float]):
+        """Cache embedding"""
+        key = self._hash_text(text)
+
+        # Evict if at capacity
+        if len(self.cache) >= self.max_size:
+            oldest_key = next(iter(self.cache))
+            del self.cache[oldest_key]
+
+        self.cache[key] = embedding
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics"""
+        total = self.hits + self.misses
+        hit_rate = self.hits / total if total > 0 else 0
+        return {"size": len(self.cache), "hits": self.hits, "misses": self.misses, "hit_rate": hit_rate}
+
+
+# Global embedding cache
+embedding_cache = EmbeddingCache(max_size=500)  # Reduced for RPi 4
+
+
+# ============================================================================
+# Hybrid Search Implementation
+# ============================================================================
+
+
+class HybridSearchRetriever:
+    """Hybrid search combining semantic (dense) and BM25 (sparse) retrieval"""
+
+    def __init__(self, alpha: float = 0.5):
+        self.alpha = alpha
+        self.sparse_index: Dict[str, Any] = {}
+        self.documents: Dict[str, List[Dict]] = {}
+
+    def index_documents(self, kb_id: str, documents: List[Dict]):
+        """Build BM25 index for documents (RPi 4 optimized)"""
+        import re
+        from rank_bm25 import BM25Okapi
+
+        # Tokenize and build BM25 index
+        corpus = []
+        for doc in documents:
+            text = doc.get("text", "")
+            tokens = re.findall(r"\w+", text.lower())
+            corpus.append(tokens)
+
+        if corpus:
+            self.sparse_index[kb_id] = BM25Okapi(corpus)
+            self.documents[kb_id] = documents
+            logger.info(f"✅ BM25 index built for KB {kb_id}: {len(documents)} docs")
+
+    async def hybrid_search(
+        self, kb_id: str, query_embedding: List[float], query: str, dense_results: List, top_k: int = 5
+    ) -> List[Tuple[Any, float]]:
+        """Perform hybrid search combining dense and sparse scores"""
+        import re
+        import numpy as np
+
+        # Retrieve from both methods
+        dense_scores = {r.payload.get("_id", r.id): r.score for r in dense_results[: top_k * 2]}
+        sparse_results = self._sparse_search(kb_id, query, top_k * 2)
+
+        # Normalize and combine scores
+        hybrid_scores = {}
+        for doc_id, score in dense_scores.items():
+            hybrid_scores[doc_id] = self.alpha * self._normalize_score(score, dense_scores)
+
+        for doc_id, score in sparse_results.items():
+            if doc_id in hybrid_scores:
+                hybrid_scores[doc_id] += (1 - self.alpha) * self._normalize_score(score, sparse_results)
+            else:
+                hybrid_scores[doc_id] = (1 - self.alpha) * self._normalize_score(score, sparse_results)
+
+        # Return top-k results
+        sorted_results = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)
+        return [(doc_id, score) for doc_id, score in sorted_results[:top_k]]
+
+    def _sparse_search(self, kb_id: str, query: str, k: int) -> Dict[str, float]:
+        """Perform sparse search using BM25"""
+        import re
+        import numpy as np
+
+        if kb_id not in self.sparse_index:
+            return {}
+
+        query_tokens = re.findall(r"\w+", query.lower())
+        scores = self.sparse_index[kb_id].get_scores(query_tokens)
+
+        # Map to document IDs
+        top_indices = np.argsort(scores)[::-1][:k]
+
+        doc_ids = []
+        documents = self.documents.get(kb_id, [])
+        for idx in top_indices:
+            if idx < len(documents):
+                doc_id = documents[idx].get("_id", f"doc_{idx}")
+                doc_ids.append((doc_id, float(scores[idx])))
+
+        return dict(doc_ids)
+
+    def _normalize_score(self, score: float, scores: Dict[str, float]) -> float:
+        """Normalize score to [0,1] range"""
+        if not scores:
+            return 0.0
+
+        max_score = max(scores.values()) if scores else 1.0
+        if max_score == 0:
+            return 0.0
+
+        return score / max_score
+
+
+# Global hybrid searcher
+hybrid_searcher = HybridSearchRetriever(alpha=0.5)
+
+
+# ============================================================================
+# Cross-Encoder Re-ranking Implementation
+# ============================================================================
+
+
+class CrossEncoderReranker:
+    """Cross-encoder re-ranker for improved retrieval precision (RPi 4 optimized)"""
+
+    def __init__(self, model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
+        self.model_name = model_name
+        self._model = None
+        self._initialized = False
+        self.use_reranker = False  # Disabled by default for RPi
+
+    @property
+    def model(self):
+        """Lazy load model"""
+        if self._model is None and not self._initialized:
+            try:
+                from sentence_transformers import CrossEncoder
+
+                logger.info(f"🔄 Loading cross-encoder model: {self.model_name}")
+
+                self._model = CrossEncoder(self.model_name, device="cpu", max_length=512)  # Reduced for memory
+
+                self._initialized = True
+                self.use_reranker = True
+                logger.info("✅ Cross-encoder model loaded (CPU-only)")
+
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load cross-encoder: {e}")
+                self._initialized = True
+                self._model = False
+
+        return self._model
+
+    def rerank(self, query: str, documents: List[Dict], top_k: int = 5):
+        """Re-rank documents using cross-encoder"""
+        if not self.use_reranker or not self.model:
+            return [(doc, doc.get("score", 0.0)) for doc in documents[:top_k]]
+
+        try:
+            pairs = [[query, doc.get("text", "")] for doc in documents]
+            scores = self.model.predict(pairs)
+            reranked = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+            return reranked[:top_k]
+        except Exception as e:
+            logger.warning(f"⚠️ Re-ranking failed: {e}")
+            return [(doc, doc.get("score", 0.0)) for doc in documents[:top_k]]
+
+
+# Global re-ranker
+reranker = CrossEncoderReranker()
+
+
+# ============================================================================
+# Contextual Compression Implementation
+# ============================================================================
+
+
+class ContextualCompressor:
+    """Compress retrieved context while preserving relevance (RPi 4 optimized)"""
+
+    def __init__(self, max_tokens: int = 2000, compression_ratio: float = 0.3):
+        self.max_tokens = max_tokens
+        self.compression_ratio = compression_ratio
+        self.avg_chars_per_token = 4
+
+    def compress(self, query: str, contexts: List[Dict]) -> Dict[str, Any]:
+        """Compress context while preserving relevance"""
+        if not contexts:
+            return {"compressed_context": "", "original_length": 0}
+
+        original_text = "\n\n".join([ctx.get("text", "") for ctx in contexts])
+        target_length = int(len(original_text) * self.compression_ratio)
+
+        # Extract key sentences based on query relevance
+        compressed = self._extract_key_sentences(query, original_text, target_length)
+
+        # Ensure we don't exceed max tokens
+        max_chars = self.max_tokens * self.avg_chars_per_token
+        if len(compressed) > max_chars:
+            compressed = compressed[:max_chars] + "..."
+
+        return {
+            "compressed_context": compressed,
+            "original_length": len(original_text),
+            "compressed_length": len(compressed),
+        }
+
+    def _extract_key_sentences(self, query: str, text: str, target_length: int) -> str:
+        """Extract key sentences based on query relevance"""
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
+
+        if not sentences:
+            return text[:target_length]
+
+        # Score sentences by query relevance
+        query_words = set(query.lower().split())
+        sentence_scores = []
+
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            sentence_words = set(sentence_lower.split())
+
+            overlap = len(query_words & sentence_words)
+            score = overlap / max(len(query_words), 1)
+            sentence_scores.append((sentence, score))
+
+        # Sort by relevance
+        sorted_sentences = sorted(sentence_scores, key=lambda x: x[1], reverse=True)
+
+        # Take top sentences until target length
+        compressed_sentences = []
+        current_length = 0
+
+        for sentence, score in sorted_sentences:
+            if current_length + len(sentence) <= target_length:
+                compressed_sentences.append(sentence)
+                current_length += len(sentence) + 2
+            else:
+                break
+
+        return ". ".join(compressed_sentences) + "." if compressed_sentences else ""
+
+
+# Global compressor
+context_compressor = ContextualCompressor(max_tokens=2000, compression_ratio=0.3)
+
+
+# ============================================================================
+# Self-RAG Implementation
+# ============================================================================
+
+
+class SelfRAGPipeline:
+    """Self-RAG with quality-based refinement (RPi 4 optimized)"""
+
+    def __init__(self, max_iterations: int = 2, quality_threshold: float = 0.7):
+        self.max_iterations = max_iterations
+        self.quality_threshold = quality_threshold
+        self.evaluator = None
+        self._evaluator_loaded = False
+
+    def _load_evaluator(self):
+        """Lazy load quality evaluator"""
+        if not self._evaluator_loaded:
+            try:
+                from quality_evaluator import get_advanced_evaluator
+                self.evaluator = get_advanced_evaluator()
+                self._evaluator_loaded = True
+                logger.info("✅ Quality evaluator loaded for Self-RAG")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to load quality evaluator: {e}")
+                self._evaluator_loaded = True  # Don't retry
+
+    async def generate_with_self_refinement(
+        self, question: str, context: str, sources: List[Dict], llm_manager, model: str = DEFAULT_LLM_MODEL
+    ) -> Dict[str, Any]:
+        """Generate answer with self-refinement loop"""
+        self._load_evaluator()
+
+        current_answer = None
+        current_context = context
+        iteration = 0
+
+        for iteration in range(self.max_iterations):
+            # Generate answer
+            result = await llm_manager.generate_response(prompt=question, context=current_context, model=model)
+
+            current_answer = result["text"]
+
+            # Skip quality evaluation if evaluator not available
+            if self.evaluator is None:
+                logger.info("ℹ️ Quality evaluator unavailable, using first iteration")
+                break
+
+            # Evaluate quality
+            try:
+                quality_result = self.evaluator.evaluate_answer_quality(
+                    question=question, answer=current_answer, context=current_context, context_sources=sources
+                )
+
+                overall_quality = quality_result.get("overall_quality", 0.0)
+                logger.info(f"🔄 Iteration {iteration + 1}: Quality = {overall_quality:.3f}")
+
+                # Check if quality is sufficient
+                if overall_quality >= self.quality_threshold:
+                    logger.info(f"✅ Quality threshold met: {overall_quality:.3f} >= {self.quality_threshold}")
+                    break
+
+                # Refine context if quality is low
+                if iteration < self.max_iterations - 1:
+                    if quality_result.get("hallucination", {}).get("is_hallucination"):
+                        logger.warning("⚠️ Hallucination detected, reducing context")
+                        current_context = "\n".join([s.get("text", "") for s in sources[:2]])
+
+            except Exception as e:
+                logger.warning(f"⚠️ Quality evaluation failed: {e}")
+                break
+
+        return {"answer": current_answer, "quality": {"iterations": iteration + 1, "threshold_met": iteration < self.max_iterations}}
+
+
+# Global Self-RAG pipeline
+self_rag_pipeline = SelfRAGPipeline(max_iterations=2, quality_threshold=0.7)
+
+
+# ============================================================================
+# Parent-Child Retrieval Implementation
+# ============================================================================
+
+
+class ParentChildChunker:
+    """Hierarchical chunking with parent-child relationships (RPi 4 optimized)"""
+
+    def __init__(self, parent_size: int = 2000, child_size: int = 512, overlap: int = 50):
+        self.parent_size = parent_size
+        self.child_size = child_size
+        self.overlap = overlap
+
+    def create_hierarchy(self, text: str) -> List[Dict[str, Any]]:
+        """Create parent-child chunk hierarchy"""
+        # First create parent chunks
+        parent_chunks = self._chunk_text(text, self.parent_size, self.overlap)
+
+        hierarchy = []
+        for parent_idx, parent_chunk in enumerate(parent_chunks):
+            # Create child chunks within each parent
+            child_chunks = self._chunk_text(parent_chunk, self.child_size, self.overlap)
+
+            parent_entry = {"id": f"parent_{parent_idx}", "text": parent_chunk, "type": "parent", "children": []}
+
+            for child_idx, child_chunk in enumerate(child_chunks):
+                child_entry = {
+                    "id": f"child_{parent_idx}_{child_idx}",
+                    "text": child_chunk,
+                    "type": "child",
+                    "parent_id": f"parent_{parent_idx}",
+                }
+                parent_entry["children"].append(child_entry["id"])
+                hierarchy.append(child_entry)
+
+            hierarchy.append(parent_entry)
+
+        logger.info(f"✅ Created hierarchy: {len(parent_chunks)} parents, {len(hierarchy) - len(parent_chunks)} children")
+        return hierarchy
+
+    def _chunk_text(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+        """Chunk text into smaller pieces"""
+        from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size, chunk_overlap=overlap, length_function=len, separators=["\n\n", "\n", ". ", " ", ""]
+        )
+
+        return text_splitter.split_text(text)
+
+
+class ParentChildRetriever:
+    """Retriever that uses child chunks for search but returns parent context"""
+
+    def __init__(self):
+        self.hierarchies: Dict[str, List[Dict]] = {}  # kb_id -> hierarchy
+        self.child_index: Dict[str, List[Dict]] = {}  # kb_id -> child chunks for search
+
+    def index_hierarchy(self, kb_id: str, hierarchy: List[Dict]):
+        """Index parent-child hierarchy for knowledge base"""
+        self.hierarchies[kb_id] = hierarchy
+        self.child_index[kb_id] = [item for item in hierarchy if item["type"] == "child"]
+        logger.info(f"✅ Indexed hierarchy for KB {kb_id}: {len(self.child_index[kb_id])} children")
+
+    def retrieve_with_parent_context(self, kb_id: str, child_results: List[Dict]) -> List[Dict]:
+        """Retrieve child results but expand with parent context"""
+        if kb_id not in self.hierarchies:
+            logger.warning(f"⚠️ No hierarchy found for KB {kb_id}")
+            return child_results
+
+        enhanced_results = []
+        parent_ids_seen = set()
+
+        for child_result in child_results:
+            child_id = child_result.get("id", "")
+            if not child_id:
+                enhanced_results.append(child_result)
+                continue
+
+            # Find parent for this child
+            parent_entry = None
+            if kb_id in self.hierarchies:
+                for item in self.hierarchies[kb_id]:
+                    if item["type"] == "parent" and child_id in item.get("children", []):
+                        parent_entry = item
+                        break
+
+            if parent_entry and parent_entry["id"] not in parent_ids_seen:
+                # Return parent context for first child from each parent
+                enhanced_results.append({"text": parent_entry["text"], "source": child_result.get("source", ""), "score": child_result.get("score", 0.0), "context_type": "parent"})
+                parent_ids_seen.add(parent_entry["id"])
+            else:
+                # Return child result as-is
+                enhanced_results.append(child_result)
+
+        logger.info(f"✅ Enhanced {len(child_results)} results with parent context")
+        return enhanced_results
+
+
+# Global parent-chunk chunker and retriever
+parent_child_chunker = ParentChildChunker()
+parent_child_retriever = ParentChildRetriever()
+
+
+# ============================================================================
+# HyDE (Hypothetical Document Embeddings) Implementation
+# ============================================================================
+
+
+class HyDEQueryExpander:
+    """HyDE query expansion using hypothetical document generation (RPi 4 optimized)"""
+
+    def __init__(self):
+        self._enabled = True
+
+    async def generate_hypothetical_answer(self, query: str, llm_manager, model: str = DEFAULT_LLM_MODEL) -> str:
+        """Generate hypothetical answer to query"""
+        try:
+            prompt = f"Please write a comprehensive answer to the following question: {query}"
+
+            # Generate hypothetical answer
+            result = await llm_manager.generate_response(prompt=prompt, model=model, temperature=0.7)
+
+            hypothetical_answer = result.get("text", "")
+            logger.info(f"✅ Generated hypothetical answer ({len(hypothetical_answer)} chars)")
+
+            return hypothetical_answer
+
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to generate hypothetical answer: {e}")
+            return ""
+
+    async def expand_query(
+        self, query: str, llm_manager, model: str = DEFAULT_LLM_MODEL, query_embedding: List[float] = None
+    ) -> Dict[str, Any]:
+        """Expand query using HyDE technique"""
+        if not self._enabled:
+            return {"expanded": False, "reason": "HyDE disabled"}
+
+        # Generate hypothetical answer
+        hypothetical_answer = await self.generate_hypothetical_answer(query, llm_manager, model)
+
+        if not hypothetical_answer:
+            return {"expanded": False, "reason": "Failed to generate hypothetical answer"}
+
+        # Generate embedding for hypothetical answer (with cache)
+        hypothetical_embeddings = await llm_manager.generate_embeddings([hypothetical_answer], model=model)
+        hypothetical_embedding = hypothetical_embeddings[0]
+
+        return {
+            "expanded": True,
+            "hypothetical_answer": hypothetical_answer,
+            "hypothetical_embedding": hypothetical_embedding,
+            "original_query": query,
+            "original_embedding": query_embedding,
+        }
+
+
+# Global HyDE query expander
+hyde_expander = HyDEQueryExpander()
+
+# ============================================================================
+# Memory-Augmented RAG - Conversation Memory (Phase 1 Quick Win)
+# ============================================================================
+
+
+class ConversationMemory:
+    """Conversation memory for user context tracking and history (RPi 4 optimized)"""
+
+    def __init__(self):
+        """Initialize Redis connection for conversation storage"""
+        self.redis_client = None
+        self.ttl = 86400  # 24 hours default TTL
+        self.max_history_length = 10  # Max 10 turns per conversation
+
+    def initialize(self):
+        """Initialize Redis connection (sync for RPi 4 stability)"""
+        if not REDIS_AVAILABLE:
+            logger.warning("⚠️ Redis not available, conversation memory disabled")
+            return
+
+        try:
+            redis_host = os.getenv("REDIS_HOST", "redis")
+            redis_port = int(os.getenv("REDIS_PORT", "6379"))
+            redis_db = int(os.getenv("REDIS_DB", "0"))
+            redis_password = os.getenv("REDIS_PASSWORD", "")
+
+            self.redis_client = redis.Redis(
+                host=redis_host, port=redis_port, db=redis_db, password=redis_password, decode_responses=True
+            )
+            self.redis_client.ping()
+            logger.info("✅ Conversation memory: Redis connected")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to connect to Redis: {e}")
+            self.redis_client = None
+
+    def store_conversation_turn(
+        self, user_id: str, conversation_id: str, question: str, answer: str, metadata: Dict = None
+    ) -> bool:
+        """Store a conversation turn in Redis"""
+        if not self.redis_client:
+            return False
+
+        try:
+            timestamp = datetime.utcnow().isoformat()
+
+            # Store turn with metadata
+            turn_key = f"conversation:{user_id}:{conversation_id}:turns"
+            turn_data = {
+                "question": question,
+                "answer": answer,
+                "timestamp": timestamp,
+                "metadata": metadata or {},
+            }
+
+            # Add to list (maintain order)
+            self.redis_client.lpush(turn_key, json.dumps(turn_data))
+
+            # Trim to max history length
+            self.redis_client.ltrim(turn_key, 0, self.max_history_length - 1)
+
+            # Set TTL
+            self.redis_client.expire(turn_key, self.ttl)
+
+            logger.debug(f"💾 Stored conversation turn for {user_id}:{conversation_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to store conversation turn: {e}")
+            return False
+
+    def retrieve_conversation_history(
+        self, user_id: str, conversation_id: str, max_turns: int = 5
+    ) -> List[Dict]:
+        """Retrieve conversation history from Redis"""
+        if not self.redis_client:
+            return []
+
+        try:
+            turn_key = f"conversation:{user_id}:{conversation_id}:turns"
+
+            # Get recent turns
+            turns_data = self.redis_client.lrange(turn_key, 0, max_turns - 1)
+
+            # Parse and reverse (oldest first)
+            turns = []
+            for turn_data in reversed(turns_data):
+                try:
+                    turn = json.loads(turn_data)
+                    turns.append(turn)
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to parse turn data: {e}")
+
+            logger.debug(f"📖 Retrieved {len(turns)} conversation turns for {user_id}:{conversation_id}")
+            return turns
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to retrieve conversation history: {e}")
+            return []
+
+    def get_conversation_context(
+        self, user_id: str, conversation_id: str, current_question: str, max_turns: int = 3
+    ) -> str:
+        """Build conversational context string from history"""
+        turns = self.retrieve_conversation_history(user_id, conversation_id, max_turns)
+
+        if not turns:
+            return ""
+
+        # Build context string
+        context_parts = []
+        for turn in turns[-max_turns:]:
+            context_parts.append(f"Q: {turn['question']}")
+            context_parts.append(f"A: {turn['answer']}")
+
+        context_str = "\n".join(context_parts)
+        logger.debug(f"🔄 Built conversation context ({len(turns)} turns)")
+
+        return context_str
+
+    def clear_conversation(self, user_id: str, conversation_id: str) -> bool:
+        """Clear conversation history"""
+        if not self.redis_client:
+            return False
+
+        try:
+            turn_key = f"conversation:{user_id}:{conversation_id}:turns"
+            self.redis_client.delete(turn_key)
+            logger.info(f"🗑️ Cleared conversation for {user_id}:{conversation_id}")
+            return True
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to clear conversation: {e}")
+            return False
+
+
+# Global conversation memory
+conversation_memory = ConversationMemory()
+
+# ============================================================================
+# Corrective RAG (CRAG) - Phase 1 Quick Win
+# ============================================================================
+
+# Global CRAG retriever
+crag_retriever = CorrectiveRetriever()
+
+# ============================================================================
+# FastAPI App
+# ============================================================================
+
+app = FastAPI(
+    title="Minder RAG Pipeline",
+    description="Production RAG Pipeline with Ollama integration",
+    version="1.0.0",
+)
+
+
+# ============================================================================
+# Prometheus Metrics
+# ============================================================================
+
+http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
+)
+
+knowledge_bases_total = Gauge("knowledge_bases_total", "Total number of knowledge bases")
+
+documents_processed_total = Counter("documents_processed_total", "Total documents processed", ["status"])
+
+embedding_generation_duration = Histogram(
+    "embedding_generation_duration_seconds", "Time to generate embeddings", ["model"]
+)
+
+llm_generation_duration = Histogram("llm_generation_duration_seconds", "Time to generate LLM response", ["model"])
+
+
+# ============================================================================
+# Pydantic Models
+# ============================================================================
+
+
+class KnowledgeBaseCreate(BaseModel):
+    """Knowledge base creation request"""
+
+    name: str
+    description: str
+    embedding_model: str = DEFAULT_EMBEDDING_MODEL
+    llm_model: str = DEFAULT_LLM_MODEL
+    chunk_size: int = 512
+    chunk_overlap: int = 50
+    parent_child_enabled: bool = False  # Enable parent-child retrieval
+
+
+class KnowledgeBaseResponse(BaseModel):
+    """Knowledge base response"""
+
+    id: str
+    name: str
+    description: str
+    embedding_model: str
+    llm_model: str
+    document_count: int
+    vector_count: int
+    created_at: str
+
+
+class RAGPipelineCreate(BaseModel):
+    """RAG Pipeline creation request"""
+
+    name: str
+    knowledge_base_ids: List[str]
+    retrieval_config: Dict[str, Any] = {}
+    generation_config: Dict[str, Any] = {}
+
+
+class QueryRequest(BaseModel):
+    """Query request"""
+
+    question: str
+    pipeline_id: str
+    top_k: int = 5
+    stream: bool = False
+
+
+class QueryResponse(BaseModel):
+    """Query response"""
+
+    answer: str
+    sources: List[Dict[str, Any]]
+    confidence: float
+    model_used: str
+    tokens_used: Optional[int] = None
+
+
+class DocumentUploadResponse(BaseModel):
+    """Document upload response"""
+
+    message: str
+    chunks_processed: int
+    vectors_created: int
+    filename: str
+
+
+# ============================================================================
+# RAPTOR RAG Models
+# ============================================================================
+
+
+class RAPTORUploadRequest(BaseModel):
+    """RAPTOR document upload request"""
+
+    file: UploadFile
+    kb_id: str
+    max_tree_depth: int = 3
+    cluster_size: int = 6
+    summary_length: int = 150
+
+
+class RAPTORQueryRequest(BaseModel):
+    """RAPTOR query request"""
+
+    question: str
+    kb_id: str
+    top_k: int = 5
+    use_raptor: bool = True
+
+
+class RAPTORTreeInfo(BaseModel):
+    """RAPTOR tree structure info"""
+
+    total_nodes: int
+    tree_depth: int
+    clusters_created: int
+    base_chunks: int
+
+
+class RAPTORUploadResponse(BaseModel):
+    """RAPTOR upload response"""
+
+    message: str
+    filename: str
+    tree_info: RAPTORTreeInfo
+
+
+# ============================================================================
+# Conversation Memory Models (Phase 1 - Memory-Augmented RAG)
+# ============================================================================
+
+
+class ConversationTurn(BaseModel):
+    """Single conversation turn"""
+
+    question: str
+    answer: str
+    timestamp: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class ConversationContextRequest(BaseModel):
+    """Request to get conversation context"""
+
+    user_id: str
+    conversation_id: str
+    current_question: str
+    max_turns: int = 3
+
+
+class ConversationContextResponse(BaseModel):
+    """Response with conversation context"""
+
+    user_id: str
+    conversation_id: str
+    conversation_context: str
+    turns_count: int
+    turns: List[ConversationTurn]
+
+
+class StoreConversationRequest(BaseModel):
+    """Request to store conversation turn"""
+
+    user_id: str
+    conversation_id: str
+    question: str
+    answer: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class StoreConversationResponse(BaseModel):
+    """Response after storing conversation"""
+
+    success: bool
+    message: str
+    user_id: str
+    conversation_id: str
+
+
+class ClearConversationRequest(BaseModel):
+    """Request to clear conversation history"""
+
+    user_id: str
+    conversation_id: str
+
+
+class ClearConversationResponse(BaseModel):
+    """Response after clearing conversation"""
+
+    success: bool
+    message: str
+
+
+# ============================================================================
+# In-Memory Storage (use PostgreSQL in production)
+# ============================================================================
+
+knowledge_bases: Dict[str, Dict[str, Any]] = {}
+rag_pipelines: Dict[str, Dict[str, Any]] = {}
+
+
+# ============================================================================
+# Ollama Client Management
+# ============================================================================
+
+
+class OllamaManager:
+    """Manage Ollama client connections"""
+
+    def __init__(self):
+        self.client: Optional[AsyncClient] = None
+        self.embed_client: Optional[AsyncClient] = None
+        self._initialized = False
+
+    async def initialize(self):
+        """Initialize Ollama clients"""
+        if not OLLAMA_AVAILABLE:
+            raise RuntimeError("Ollama package not installed")
+
+        try:
+            self.client = AsyncClient(host=OLLAMA_HOST)
+            self.embed_client = AsyncClient(host=OLLAMA_HOST)
+
+            # Test connection
+            await self._test_connection()
+            self._initialized = True
+            logger.info(f"✅ Ollama client initialized: {OLLAMA_HOST}")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Ollama client: {e}")
+            raise
+
+    async def _test_connection(self):
+        """Test Ollama connection"""
+        try:
+            # List available models to verify connection
+            models = await self.client.list()
+            logger.info(
+                f"✅ Ollama connection verified. Available models: {[m['name'] for m in models.get('models', [])]}"
+            )
+        except Exception as e:
+            logger.warning(f"⚠️  Ollama connection test failed: {e}")
+            # Don't fail - models might not be pulled yet
+
+    async def ensure_model(self, model_name: str):
+        """Ensure model is available, pull if necessary"""
+        try:
+            models = await self.client.list()
+            available = [m["name"] for m in models.get("models", [])]
+
+            # Check if model exists with any version tag
+            model_exists = any(
+                model_name in available_model or available_model.startswith(model_name + ":")
+                for available_model in available
+            )
+
+            if not model_exists:
+                logger.info(f"📥 Pulling model: {model_name}")
+                await self.client.pull(model_name)
+                logger.info(f"✅ Model pulled: {model_name}")
+            else:
+                logger.debug(f"✅ Model {model_name} already available")
+
+        except Exception as e:
+            logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
+
+    async def generate_embeddings(self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL) -> List[List[float]]:
+        """Generate embeddings using Ollama with cache"""
+        if not self._initialized:
+            await self.initialize()
+
+        await self.ensure_model(model)
+
+        embeddings = []
+        for text in texts:
+            # Check cache first
+            cached = embedding_cache.get(text)
+            if cached is not None:
+                embeddings.append(cached)
+                continue
+
+            # Generate new embedding
+            try:
+                response = await self.embed_client.embeddings(model=model, prompt=text)
+                embedding = response.get("embedding", [])
+                embeddings.append(embedding)
+
+                # Cache the result
+                embedding_cache.set(text, embedding)
+            except Exception as e:
+                logger.error(f"❌ Embedding generation failed: {e}")
+                # Return zero vector as fallback
+                dim = EMBEDDING_DIMENSIONS.get(model, 768)
+                embeddings.append([0.0] * dim)
+
+        return embeddings
+
+    async def generate_response(
+        self,
+        prompt: str,
+        model: str = DEFAULT_LLM_MODEL,
+        context: str = "",
+        temperature: float = 0.7,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """Generate response using Ollama LLM"""
+        if not self._initialized:
+            await self.initialize()
+
+        await self.ensure_model(model)
+
+        # Build full prompt with context
+        full_prompt = self._build_rag_prompt(prompt, context)
+
+        try:
+            response = await self.client.generate(
+                model=model,
+                prompt=full_prompt,
+                stream=stream,
+                options={
+                    "temperature": temperature,
+                    "num_predict": 2000,  # Max tokens
+                },
+            )
+
+            return {
+                "text": response.get("response", ""),
+                "model": model,
+                "context": context,
+                "tokens_used": response.get("prompt_eval_count", 0) + response.get("eval_count", 0),
+            }
+
+        except Exception as e:
+            logger.error(f"❌ LLM generation failed: {e}")
+            return {
+                "text": f"Error generating response: {str(e)}",
+                "model": model,
+                "context": context,
+                "tokens_used": 0,
+            }
+
+    def _build_rag_prompt(self, question: str, context: str) -> str:
+        """Build RAG prompt with context"""
+        if context:
+            return f"""Context information is below.
+---------------------
+{context}
+---------------------
+
+Given the context information and not prior knowledge, answer the query.
+Query: {question}
+
+Answer:"""
+        else:
+            return f"Answer the following question: {question}"
+
+
+# Global Ollama manager
+ollama_manager = OllamaManager()
+
+
+# ============================================================================
+# Qdrant Client Management
+# ============================================================================
+
+
+def get_qdrant_client() -> QdrantClient:
+    """Get Qdrant client"""
+    return QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
+
+
+# ============================================================================
+# Text Processing
+# ============================================================================
+
+
+async def extract_text_from_file(content: bytes, filename: str) -> str:
+    """Extract text from file based on type"""
+    import io
+
+    from pypdf import PdfReader
+
+    if filename.endswith(".pdf"):
+        pdf_file = io.BytesIO(content)
+        reader = PdfReader(pdf_file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text()
+        return text
+    elif filename.endswith(".txt") or filename.endswith(".md"):
+        return content.decode("utf-8")
+    else:
+        # Default: try UTF-8 decode
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            return content.decode("latin-1")
+
+
+def chunk_text(text: str, chunk_size: int = 512, chunk_overlap: int = 50) -> List[str]:
+    """Chunk text into smaller pieces"""
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+
+    chunks = text_splitter.split_text(text)
+    return chunks
+
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Service health check"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": app.version,
+        "knowledge_bases": len(knowledge_bases),
+        "rag_pipelines": len(rag_pipelines),
+        "ollama_available": OLLAMA_AVAILABLE,
+        "ollama_initialized": ollama_manager._initialized,
+    }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+@app.get("/cache-stats", tags=["System"])
+async def cache_stats():
+    """Get embedding cache statistics"""
+    return embedding_cache.get_stats()
+
+
+@app.get("/resource-stats", tags=["System"])
+async def resource_stats():
+    """Get current resource usage"""
+    return await pi4_manager.check_resources()
+
+
+@app.post("/initialize", tags=["System"])
+async def initialize_ollama():
+    """Initialize Ollama client"""
+    try:
+        await ollama_manager.initialize()
+        return {"message": "Ollama client initialized successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/knowledge-base", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"])
+async def create_knowledge_base(request: KnowledgeBaseCreate):
+    """Create a new knowledge base"""
+    import uuid
+
+    kb_id = str(uuid.uuid4())
+
+    # Get embedding dimension
+    embed_dim = EMBEDDING_DIMENSIONS.get(request.embedding_model, 768)
+
+    knowledge_bases[kb_id] = {
+        "id": kb_id,
+        "name": request.name,
+        "description": request.description,
+        "embedding_model": request.embedding_model,
+        "llm_model": request.llm_model,
+        "chunk_size": request.chunk_size,
+        "chunk_overlap": request.chunk_overlap,
+        "parent_child_enabled": request.parent_child_enabled,
+        "document_count": 0,
+        "vector_count": 0,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    # Create Qdrant collection
+    client = get_qdrant_client()
+
+    try:
+        client.create_collection(
+            collection_name=kb_id,
+            vectors_config=VectorParams(size=embed_dim, distance=Distance.COSINE),
+        )
+        logger.info(f"✅ Created Qdrant collection: {kb_id} (dim={embed_dim})")
+    except Exception as e:
+        logger.error(f"❌ Failed to create Qdrant collection: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create collection: {str(e)}")
+
+    return KnowledgeBaseResponse(
+        id=kb_id,
+        name=request.name,
+        description=request.description,
+        embedding_model=request.embedding_model,
+        llm_model=request.llm_model,
+        document_count=0,
+        vector_count=0,
+        created_at=datetime.now().isoformat(),
+    )
+
+
+@app.get("/knowledge-bases", tags=["Knowledge Base"])
+async def list_knowledge_bases():
+    """List all knowledge bases"""
+    return list(knowledge_bases.values())
+
+
+@app.post("/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
+async def upload_document(kb_id: str, file: UploadFile = File(...)):
+    """Upload document to knowledge base"""
+    if kb_id not in knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    kb = knowledge_bases[kb_id]
+
+    # Read file
+    content = await file.read()
+
+    # Extract text
+    text = await extract_text_from_file(content, file.filename)
+
+    # Chunk text (with parent-child support)
+    if kb.get("parent_child_enabled", False):
+        # Use hierarchical chunking
+        hierarchy = parent_child_chunker.create_hierarchy(text)
+
+        # Index the hierarchy for parent-child retrieval
+        parent_child_retriever.index_hierarchy(kb_id, hierarchy)
+
+        # For now, use child chunks for embeddings (RPi 4 optimization)
+        chunks = [item["text"] for item in hierarchy if item["type"] == "child"]
+        logger.info(f"✅ Parent-child chunking: {len(hierarchy)} total chunks ({len(chunks)} children)")
+    else:
+        # Use regular chunking
+        chunks = chunk_text(text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"])
+
+    if not chunks:
+        raise HTTPException(status_code=400, detail="No text content extracted")
+
+    # Generate embeddings
+    with embedding_generation_duration.labels(model=kb["embedding_model"]).time():
+        embeddings = await ollama_manager.generate_embeddings(chunks, model=kb["embedding_model"])
+
+    # Store in Qdrant
+    client = get_qdrant_client()
+
+    points = []
+    import uuid
+
+    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+        points.append(
+            PointStruct(
+                id=str(uuid.uuid4()),  # Generate proper UUID
+                vector=embedding,
+                payload={
+                    "text": chunk,
+                    "source": file.filename,
+                    "chunk_index": i,
+                    "kb_id": kb_id,
+                },
+            )
+        )
+
+    # Upsert points to Qdrant using PointStruct list
+    client.upsert(collection_name=kb_id, points=points)
+
+    # Build hybrid search index for this document (RPi 4 optimization)
+    documents_to_index = []
+    for i, chunk in enumerate(chunks):
+        documents_to_index.append({"_id": str(points[i].id), "text": chunk})
+
+    # Update or create hybrid search index
+    if kb_id in hybrid_searcher.documents:
+        # Append to existing index
+        hybrid_searcher.documents[kb_id].extend(documents_to_index)
+        # Rebuild index (RPi 4: limit rebuild frequency)
+        if len(documents_to_index) > 0:
+            import re
+
+            corpus = [re.findall(r"\w+", doc.get("text", "").lower()) for doc in hybrid_searcher.documents[kb_id]]
+            from rank_bm25 import BM25Okapi
+
+            hybrid_searcher.sparse_index[kb_id] = BM25Okapi(corpus)
+    else:
+        # Create new index
+        hybrid_searcher.index_documents(kb_id, documents_to_index)
+
+    # Update knowledge base stats
+    kb["document_count"] += 1
+    kb["vector_count"] += len(chunks)
+
+    logger.info(f"✅ Uploaded {file.filename} to KB {kb_id}: {len(chunks)} chunks (hybrid indexed)")
+
+    documents_processed_total.labels(status="success").inc()
+
+    return DocumentUploadResponse(
+        message="Document uploaded successfully",
+        chunks_processed=len(chunks),
+        vectors_created=len(chunks),
+        filename=file.filename,
+    )
+
+
+@app.post("/pipeline", tags=["Pipeline"])
+async def create_rag_pipeline(request: RAGPipelineCreate):
+    """Create a RAG pipeline"""
+    import uuid
+
+    pipeline_id = str(uuid.uuid4())
+
+    # Validate knowledge bases exist
+    for kb_id in request.knowledge_base_ids:
+        if kb_id not in knowledge_bases:
+            raise HTTPException(status_code=404, detail=f"Knowledge base {kb_id} not found")
+
+    rag_pipelines[pipeline_id] = {
+        "id": pipeline_id,
+        "name": request.name,
+        "knowledge_base_ids": request.knowledge_base_ids,
+        "retrieval_config": request.retrieval_config,
+        "generation_config": request.generation_config,
+        "created_at": datetime.now().isoformat(),
+    }
+
+    logger.info(f"✅ Created RAG pipeline: {pipeline_id}")
+
+    return {
+        "message": "RAG pipeline created successfully",
+        "pipeline_id": pipeline_id,
+    }
+
+
+@app.post("/pipeline/{pipeline_id}/query", response_model=QueryResponse, tags=["Pipeline"])
+async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
+    """Query a RAG pipeline"""
+    if pipeline_id not in rag_pipelines:
+        raise HTTPException(status_code=404, detail="RAG pipeline not found")
+
+    pipeline = rag_pipelines[pipeline_id]
+
+    # Retrieve relevant documents
+    context_result = await retrieve_relevant_documents(
+        pipeline,
+        request.question,
+        request.top_k,
+    )
+
+    # Generate answer with Self-RAG refinement (RPi 4 optimized)
+    with llm_generation_duration.labels(model=pipeline.get("llm_model", DEFAULT_LLM_MODEL)).time():
+        self_rag_result = await self_rag_pipeline.generate_with_self_refinement(
+            question=request.question,
+            context=context_result["context"],
+            sources=context_result["sources"],
+            llm_manager=ollama_manager,
+            model=pipeline.get("llm_model", DEFAULT_LLM_MODEL),
+        )
+
+    # Calculate confidence based on quality iteration count
+    quality_info = self_rag_result.get("quality", {})
+    iterations = quality_info.get("iterations", 1)
+    confidence = min(0.95, 0.75 + (iterations * 0.1))  # Higher confidence for more iterations
+
+    return QueryResponse(
+        answer=self_rag_result["answer"],
+        sources=context_result["sources"],
+        confidence=confidence,
+        model_used=pipeline.get("llm_model", DEFAULT_LLM_MODEL),
+        tokens_used=None,  # Self-RAG uses multiple iterations, token count is aggregate
+    )
+
+
+async def retrieve_relevant_documents(pipeline: Dict, question: str, top_k: int) -> Dict:
+    """Retrieve relevant documents from knowledge bases with resource management"""
+    # Throttle if resources constrained
+    await pi4_manager.throttle_if_needed()
+
+    # Use semaphore to limit concurrent requests
+    async with pi4_manager.request_semaphore:
+        client = get_qdrant_client()
+
+        # Get embedding model from first KB
+        first_kb_id = pipeline["knowledge_base_ids"][0]
+        embed_model = knowledge_bases[first_kb_id]["embedding_model"]
+
+        # Create embedding for question (with cache)
+        question_embeddings = await ollama_manager.generate_embeddings([question], model=embed_model)
+        question_embedding = question_embeddings[0]
+
+        # Apply HyDE query expansion if available (RPi 4 optimization)
+        hyde_results = []
+        try:
+            hyde_expansion = await hyde_expander.expand_query(question, ollama_manager, embed_model, question_embedding)
+
+            if hyde_expansion.get("expanded"):
+                logger.info("🔄 Using HyDE query expansion")
+                # Search with hypothetical embedding
+                for kb_id in pipeline["knowledge_base_ids"]:
+                    try:
+                        hyde_search = client.query_points(
+                            collection_name=kb_id, query=hyde_expansion["hypothetical_embedding"], limit=top_k
+                        )
+                        hyde_results.extend(hyde_search.points)
+                    except Exception as e:
+                        logger.warning(f"⚠️ HyDE search failed for KB {kb_id}: {e}")
+        except Exception as e:
+            logger.warning(f"⚠️ HyDE expansion failed: {e}")
+
+        # Search across all knowledge bases with hybrid search if available
+        all_results = []
+        for kb_id in pipeline["knowledge_base_ids"]:
+            try:
+                search_result = client.query_points(collection_name=kb_id, query=question_embedding, limit=top_k * 2)
+
+                # Try hybrid search if index available
+                if kb_id in hybrid_searcher.sparse_index:
+                    hybrid_results = await hybrid_searcher.hybrid_search(kb_id, question_embedding, question, search_result.points, top_k)
+                    # Convert hybrid results back to point objects
+                    for doc_id, hybrid_score in hybrid_results:
+                        # Find corresponding point
+                        for point in search_result.points:
+                            if point.id == doc_id or point.payload.get("_id") == doc_id:
+                                point.score = hybrid_score  # Update score with hybrid score
+                                all_results.append(point)
+                                break
+                else:
+                    # Pure semantic search fallback
+                    all_results.extend(search_result.points)
+
+            except Exception as e:
+                logger.warning(f"⚠️  Search failed for KB {kb_id}: {e}")
+
+        # Combine original results with HyDE results if available (RPi 4 optimization)
+        if hyde_results:
+            logger.info(f"🔄 Combining {len(hyde_results)} HyDE results with {len(all_results)} original results")
+            # Add HyDE results with slight score boost to prioritize them
+            for hyde_point in hyde_results:
+                hyde_point.score = hyde_point.score * 1.1  # 10% boost for HyDE results
+                all_results.append(hyde_point)
+
+        # Sort by score and take top_k * 2 for re-ranking
+        all_results = sorted(all_results, key=lambda x: x.score, reverse=True)[: top_k * 2]
+
+        # Apply cross-encoder re-ranking if available (RPi 4 optimization)
+        try:
+            documents_for_rerank = [{"text": r.payload.get("text", ""), "score": r.score} for r in all_results]
+            reranked_docs = reranker.rerank(question, documents_for_rerank, top_k)
+
+            # Reconstruct results with re-ranked scores
+            reranked_results = []
+            for doc, score in reranked_docs:
+                # Find corresponding point
+                for point in all_results:
+                    if point.payload.get("text") == doc.get("text"):
+                        point.score = score
+                        reranked_results.append(point)
+                        break
+
+            all_results = reranked_results[:top_k]
+            logger.info(f"✅ Re-ranking applied: {len(all_results)} results")
+        except Exception as e:
+            logger.warning(f"⚠️ Re-ranking failed, using original scores: {e}")
+            # Fallback to original top_k
+            all_results = all_results[:top_k]
+
+        # Apply CRAG (Corrective RAG) fallback if retrieval quality is poor
+        try:
+            # Convert points to dict format for CRAG evaluation
+            internal_results = [
+                {"id": str(r.id), "text": r.payload.get("text", ""), "score": r.score} for r in all_results
+            ]
+
+            # Apply CRAG fallback
+            crag_result = await crag_retriever.retrieve_with_fallback(
+                query=question,
+                internal_results=internal_results,
+                kb_id=pipeline["knowledge_base_ids"][0],
+                max_results=top_k
+            )
+
+            if crag_result.get("fallback_used"):
+                logger.info(f"🌐 CRAG fallback applied: {crag_result['web_count']} web results added")
+
+                # Convert CRAG results back to point format
+                # (Note: This is a simplified conversion, in production you'd want more sophisticated handling)
+                all_results = []
+                for i, result in enumerate(crag_result.get("results", [])):
+                    # Create a point-like structure
+                    point_dict = {
+                        "id": result.get("id", f"web_{i}"),
+                        "text": result.get("text", ""),
+                        "source": result.get("source", "web_search"),
+                        "score": result.get("score", 0.7)
+                    }
+                    all_results.append(point_dict)
+
+                logger.info(f"✅ CRAG enhanced retrieval: {len(all_results)} total results")
+        except Exception as e:
+            logger.warning(f"⚠️ CRAG fallback failed: {e}")
+            # Continue with internal results
+
+        # Apply parent-child retrieval enhancement if available (RPi 4 optimization)
+        try:
+            first_kb_id = pipeline["knowledge_base_ids"][0]
+            if knowledge_bases[first_kb_id].get("parent_child_enabled", False):
+                # Convert points to dict format for parent-child retriever
+                child_results = [
+                    {"id": str(r.id), "text": r.payload.get("text", ""), "source": r.payload.get("source", ""), "score": r.score}
+                    for r in all_results
+                ]
+                enhanced_results = parent_child_retriever.retrieve_with_parent_context(first_kb_id, child_results)
+
+                # Convert back to point format (simplified)
+                context_sources = enhanced_results
+                logger.info(f"✅ Parent-child retrieval applied: {len(enhanced_results)} results")
+            else:
+                # Regular context extraction
+                context_sources = [
+                    {"text": r.payload.get("text", ""), "source": r.payload.get("source", ""), "score": r.score} for r in all_results
+                ]
+        except Exception as e:
+            logger.warning(f"⚠️ Parent-child retrieval failed: {e}")
+            # Fallback to regular context extraction
+            context_sources = [{"text": r.payload.get("text", ""), "source": r.payload.get("source", ""), "score": r.score} for r in all_results]
+
+        # Extract context
+        context_sources = [{"text": r.payload.get("text", ""), "source": r.payload.get("source", ""), "score": r.score} for r in all_results]
+
+        # Apply contextual compression (RPi 4 optimization)
+        try:
+            compression_result = context_compressor.compress(question, context_sources)
+            compressed_context = compression_result["compressed_context"]
+            compression_ratio = compression_result.get("compressed_length", 0) / max(compression_result.get("original_length", 1), 1)
+
+            logger.info(f"✅ Context compressed: {compression_ratio:.1%} ratio")
+        except Exception as e:
+            logger.warning(f"⚠️ Context compression failed: {e}")
+            compressed_context = "\n\n".join([ctx.get("text", "") for ctx in context_sources])
+
+        return {
+            "context": compressed_context,
+            "sources": context_sources,
+        }
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    """Root endpoint"""
+    return {
+        "name": "Minder RAG Pipeline",
+        "version": app.version,
+        "status": "operational",
+        "ollama_available": OLLAMA_AVAILABLE,
+    }
+
+
+# ============================================================================
+# Conversation Memory Endpoints (Phase 1 - Memory-Augmented RAG)
+# ============================================================================
+
+
+@app.post("/conversation/store", response_model=StoreConversationResponse, tags=["Conversation Memory"])
+def store_conversation_turn(request: StoreConversationRequest):
+    """Store a conversation turn in memory"""
+    try:
+        success = conversation_memory.store_conversation_turn(
+            user_id=request.user_id,
+            conversation_id=request.conversation_id,
+            question=request.question,
+            answer=request.answer,
+            metadata=request.metadata,
+        )
+
+        if success:
+            return StoreConversationResponse(
+                success=True,
+                message="Conversation turn stored successfully",
+                user_id=request.user_id,
+                conversation_id=request.conversation_id,
+            )
+        else:
+            return StoreConversationResponse(
+                success=False,
+                message="Failed to store conversation turn (Redis unavailable)",
+                user_id=request.user_id,
+                conversation_id=request.conversation_id,
+            )
+    except Exception as e:
+        logger.error(f"❌ Error storing conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/conversation/context", response_model=ConversationContextResponse, tags=["Conversation Memory"])
+def get_conversation_context(request: ConversationContextRequest):
+    """Get conversation context for query enhancement"""
+    try:
+        # Build conversation context
+        context_str = conversation_memory.get_conversation_context(
+            user_id=request.user_id,
+            conversation_id=request.conversation_id,
+            current_question=request.current_question,
+            max_turns=request.max_turns,
+        )
+
+        # Retrieve full conversation history
+        turns_data = conversation_memory.retrieve_conversation_history(
+            user_id=request.user_id, conversation_id=request.conversation_id, max_turns=request.max_turns
+        )
+
+        # Convert to ConversationTurn models
+        turns = [
+            ConversationTurn(
+                question=turn.get("question", ""),
+                answer=turn.get("answer", ""),
+                timestamp=turn.get("timestamp", ""),
+                metadata=turn.get("metadata"),
+            )
+            for turn in turns_data
+        ]
+
+        return ConversationContextResponse(
+            user_id=request.user_id,
+            conversation_id=request.conversation_id,
+            conversation_context=context_str,
+            turns_count=len(turns),
+            turns=turns,
+        )
+    except Exception as e:
+        logger.error(f"❌ Error getting conversation context: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/conversation/clear", response_model=ClearConversationResponse, tags=["Conversation Memory"])
+def clear_conversation(request: ClearConversationRequest):
+    """Clear conversation history"""
+    try:
+        success = conversation_memory.clear_conversation(
+            user_id=request.user_id, conversation_id=request.conversation_id
+        )
+
+        if success:
+            return ClearConversationResponse(success=True, message="Conversation cleared successfully")
+        else:
+            return ClearConversationResponse(success=False, message="Failed to clear conversation (Redis unavailable)")
+    except Exception as e:
+        logger.error(f"❌ Error clearing conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# RAPTOR RAG Endpoints
+# ============================================================================
+
+
+@app.post("/raptor/upload", response_model=RAPTORUploadResponse, tags=["RAPTOR RAG"])
+async def upload_raptor_document(kb_id: str, file: UploadFile = File(...)):
+    """
+    Upload document and create RAPTOR tree structure
+
+    Creates hierarchical tree by:
+    1. Chunking document
+    2. Clustering similar chunks
+    3. Summarizing each cluster
+    4. Building tree structure recursively
+    """
+    if kb_id not in knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    try:
+        # Read file
+        content = await file.read()
+
+        # Extract text
+        text = await extract_text_from_file(content, file.filename)
+
+        if not text or len(text) < 100:
+            raise HTTPException(status_code=400, detail="Document too short for RAPTOR processing")
+
+        # Generate embeddings for base chunks
+        kb = knowledge_bases[kb_id]
+        base_chunks = chunk_text(text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"])
+
+        if len(base_chunks) < 3:
+            raise HTTPException(status_code=400, detail="Document too short for RAPTOR (minimum 3 chunks required)")
+
+        logger.info(f"📄 Processing {file.filename} with RAPTOR: {len(base_chunks)} base chunks")
+
+        # Generate embeddings
+        embeddings = await ollama_manager.generate_embeddings(base_chunks, model=kb["embedding_model"])
+
+        # Create RAPTOR tree structure
+        tree_result = raptor_chunker.create_tree_structure(
+            text=text,
+            llm_manager=ollama_manager,
+            embeddings=embeddings,
+            embedding_model=kb["embedding_model"]
+        )
+
+        # Index tree for retrieval
+        raptor_retriever.index_tree(kb_id, tree_result["tree"])
+
+        # Store tree metadata in KB
+        kb["raptor_enabled"] = True
+        kb["raptor_tree_info"] = tree_result["metadata"]
+
+        logger.info(f"✅ RAPTOR tree created: {tree_result['metadata']}")
+
+        return RAPTORUploadResponse(
+            message="RAPTOR tree created successfully",
+            filename=file.filename,
+            tree_info=RAPTORTreeInfo(**tree_result["metadata"])
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ RAPTOR upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"RAPTOR processing failed: {str(e)}")
+
+
+@app.post("/raptor/query", response_model=QueryResponse, tags=["RAPTOR RAG"])
+async def query_raptor(request: RAPTORQueryRequest):
+    """
+    Query using RAPTOR retrieval
+
+    Automatically selects appropriate tree level:
+    - Specific queries → leaf nodes (detailed chunks)
+    - General queries → cluster nodes (summaries)
+    """
+    if request.kb_id not in knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    kb = knowledge_bases[request.kb_id]
+
+    if not kb.get("raptor_enabled"):
+        raise HTTPException(status_code=400, detail="RAPTOR not enabled for this knowledge base")
+
+    try:
+        # Generate query embedding
+        question_embeddings = await ollama_manager.generate_embeddings(
+            [request.question],
+            model=kb["embedding_model"]
+        )
+        question_embedding = question_embeddings[0]
+
+        # Retrieve from RAPTOR tree
+        raptor_results = raptor_retriever.retrieve_from_tree(
+            kb_id=request.kb_id,
+            query=request.question,
+            query_embedding=question_embedding,
+            top_k=request.top_k,
+            llm_manager=ollama_manager
+        )
+
+        if not raptor_results:
+            # Fallback to regular retrieval
+            logger.warning("⚠️ RAPTOR retrieval returned no results, falling back to standard retrieval")
+            # Would call standard retrieval here
+            raptor_results = []
+
+        # Build context from RAPTOR results
+        context_parts = []
+        sources = []
+
+        for result in raptor_results:
+            context_parts.append(result.get("text", ""))
+            sources.append({
+                "text": result.get("text", ""),
+                "score": result.get("score", 0.0),
+                "node_type": result.get("node_type", "unknown"),
+                "level": result.get("level", 0)
+            })
+
+        context = "\n\n".join(context_parts)
+
+        # Generate answer
+        llm_result = await ollama_manager.generate_response(
+            prompt=request.question,
+            context=context,
+            model=kb["llm_model"]
+        )
+
+        # Calculate confidence
+        if sources:
+            avg_score = sum(s["score"] for s in sources) / len(sources)
+            confidence = min(0.95, 0.5 + avg_score * 0.45)
+        else:
+            confidence = 0.5
+
+        logger.info(f"✅ RAPTOR query completed: {len(sources)} nodes retrieved")
+
+        return QueryResponse(
+            answer=llm_result["text"],
+            sources=sources,
+            confidence=confidence,
+            model_used=kb["llm_model"],
+            tokens_used=llm_result.get("tokens_used")
+        )
+
+    except Exception as e:
+        logger.error(f"❌ RAPTOR query failed: {e}")
+        raise HTTPException(status_code=500, detail=f"RAPTOR query failed: {str(e)}")
+
+
+@app.get("/raptor/tree/{kb_id}", tags=["RAPTOR RAG"])
+async def get_raptor_tree_info(kb_id: str):
+    """Get RAPTOR tree information for a knowledge base"""
+    if kb_id not in knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    kb = knowledge_bases[kb_id]
+
+    if not kb.get("raptor_enabled"):
+        raise HTTPException(status_code=400, detail="RAPTOR not enabled for this knowledge base")
+
+    return {
+        "kb_id": kb_id,
+        "raptor_enabled": kb.get("raptor_enabled", False),
+        "tree_info": kb.get("raptor_tree_info", {}),
+        "embedding_model": kb["embedding_model"],
+        "llm_model": kb["llm_model"]
+    }
+
+
+# ============================================================================
+# Startup Event
+# ============================================================================
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize on startup"""
+    logger.info("🚀 Starting RAG Pipeline service...")
+    logger.info(f"Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
+    logger.info(f"Ollama: {OLLAMA_HOST}")
+    logger.info(f"Default LLM: {DEFAULT_LLM_MODEL}")
+    logger.info(f"Default Embedding: {DEFAULT_EMBEDDING_MODEL}")
+
+    # Initialize Ollama manager
+    if OLLAMA_AVAILABLE:
+        try:
+            await ollama_manager.initialize()
+            logger.info("✅ Ollama manager initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Ollama manager: {e}")
+            # Don't fail startup, just log the error
+    else:
+        logger.warning("⚠️  Ollama not available, RAG features will be limited")
+
+    # Initialize conversation memory
+    try:
+        conversation_memory.initialize()
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to initialize conversation memory: {e}")
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8004)

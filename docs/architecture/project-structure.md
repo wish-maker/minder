@@ -39,7 +39,7 @@ minder/                              # Project root
 │   ├── plugin-state-manager/     # State Manager (port 8003)
 │   ├── rag-pipeline/             # AI Services (port 8004)
 │   ├── model-management/         # Model Management (port 8005)
-│   ├── tts-stt-service/          # TTS/STT Service (port 8006)
+│   ├── tts-service/              # TTS/STT Service (port 8006)
 │   ├── model-fine-tuning/        # Fine-tuning (port 8007)
 │   └── openwebui/               # Web UI (port 8080)
 │

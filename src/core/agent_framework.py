@@ -448,7 +448,7 @@ class AgentManager:
         self.registry.register_service(
             service_id="tts-stt",
             name="TTS/STT Service",
-            base_url="http://minder-tts-stt-service:8006",
+            base_url="http://minder-tts-service:8006",
             auth_type="none",
             endpoints=[
                 {"path": "/tts", "method": "POST", "description": "Text-to-speech"},

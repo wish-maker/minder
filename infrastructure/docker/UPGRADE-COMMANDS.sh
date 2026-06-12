@@ -62,7 +62,7 @@ log_info "Stopping application services..."
 cd /root/minder/infrastructure/docker
 docker compose stop api-gateway plugin-registry plugin-state-manager \
     rag-pipeline model-management marketplace \
-    model-fine-tuning tts-stt-service openwebui
+    model-fine-tuning tts-service openwebui
 
 log_info "Dumping PostgreSQL database..."
 docker exec minder-postgres pg_dumpall -U minder > "$BACKUP_DIR/postgres_full_dump.sql"

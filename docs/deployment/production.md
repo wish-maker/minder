@@ -104,7 +104,7 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d api-gateway plu
 docker compose -f infrastructure/docker/docker-compose.yml up -d rag-pipeline model-management
 
 # Start AI enhancement and monitoring
-docker compose -f infrastructure/docker/docker-compose.yml up -d openwebui tts-stt-service model-fine-tuning prometheus grafana alertmanager telegraf
+docker compose -f infrastructure/docker/docker-compose.yml up -d openwebui tts-service model-fine-tuning prometheus grafana alertmanager telegraf
 
 # Start metrics exporters
 docker compose -f infrastructure/docker/docker-compose.yml up -d postgres-exporter redis-exporter
