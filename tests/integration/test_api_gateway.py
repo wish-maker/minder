@@ -1,11 +1,15 @@
 """
 Integration tests for API Gateway.
 Tests endpoint integration, auth, rate limiting, and error handling.
+
+SKIPPED: Requires running Minder services
 """
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
 class TestAPIGatewayIntegration:

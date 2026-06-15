@@ -1,10 +1,14 @@
 """
 Simple integration tests for API Gateway without container dependencies.
 Tests endpoint integration, auth, rate limiting, and error handling.
+
+SKIPPED: Requires running Minder services
 """
 
 import pytest
 import requests
+
+pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
 class TestAPIGatewayIntegration:

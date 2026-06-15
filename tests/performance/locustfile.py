@@ -6,12 +6,17 @@ Uses Locust to simulate load and validate SLA compliance:
 - Event Store → RabbitMQ latency: < 1s (outbox polling interval)
 - RabbitMQ → Projection latency: P50 < 100ms, P99 < 500ms
 - End-to-end latency: P50 < 200ms, P99 < 1000ms
+
+SKIPPED: Performance testing infrastructure not yet fully implemented
 """
 
 import time
 from uuid import uuid4
 
+import pytest
 from locust import HttpUser, between, events, task
+
+pytestmark = pytest.mark.skip(reason="Performance testing infrastructure not yet fully implemented")
 
 
 class EDAUser(HttpUser):

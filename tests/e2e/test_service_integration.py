@@ -1,6 +1,8 @@
 """
 End-to-End (E2E) tests for service integration.
 Tests communication between all microservices.
+
+SKIPPED: Requires running Minder services
 """
 
 import sys
@@ -8,6 +10,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+
+pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent.parent

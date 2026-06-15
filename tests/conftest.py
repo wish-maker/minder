@@ -17,12 +17,18 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root / "src" / "services"))
 
 try:
-    # Add project root to path for imports
-    project_root = Path(__file__).parent.parent
-    sys.path.insert(0, str(project_root))
+    # Additional path mapping for test compatibility
+    # Map legacy test imports to actual service structure
+
+    # Skip module loading to avoid errors
+    pass
 
     # Import from services with correct module names
     def load_service_module(service_path, module_name=None):
@@ -39,7 +45,7 @@ try:
         spec.loader.exec_module(module)
         return module
 
-    services_base = project_root / "services"
+    services_base = project_root / "src" / "services"
 
     # Load services individually to avoid one failure blocking all
     gateway_app = None

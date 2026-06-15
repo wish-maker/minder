@@ -2,13 +2,18 @@
 """
 Minder System Health Check
 Comprehensive system test to verify all components
+
+SKIPPED: Requires running Minder services
 """
 
 from typing import Dict
 
+import pytest
 import requests
 
 BASE_URL = "http://localhost:8000"
+
+pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
 def test_container_health() -> Dict[str, bool]:

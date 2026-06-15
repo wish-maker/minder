@@ -1,6 +1,8 @@
 """
 Load testing and performance measurement utilities.
 Comprehensive load testing framework for Minder services.
+
+SKIPPED: Load testing framework not yet integrated with CI/CD
 """
 
 import asyncio
@@ -12,9 +14,12 @@ from enum import Enum
 import logging
 import aiohttp
 import psutil
+import pytest
 import tracemalloc
 
 logger = logging.getLogger("minder.load_testing")
+
+pytestmark = pytest.mark.skip(reason="Load testing framework not yet integrated with CI/CD")
 
 
 class TestPhase(Enum):

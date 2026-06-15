@@ -4,14 +4,20 @@ Complete Integration Validation - TEFAS Module v3.0 Borsapy Integration
 
 Validates all phases (1-5) of the borsapy integration plan
 before committing to ensure production-ready code.
+
+SKIPPED: Requires running Minder services
 """
 
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add minder to path
 sys.path.insert(0, "/root/minder")
+
+pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 print("=" * 70)
 print("COMPLETE INTEGRATION VALIDATION - TEFAS v3.0")

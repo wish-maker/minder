@@ -93,8 +93,6 @@ htmlcov/
 # Build & Setup Cache
 .buildcache/
 .buildcache/**/*
-.setup/
-.setup/**/*
 
 # Node.js
 node_modules/
@@ -219,9 +217,9 @@ docker-compose.yml.broken*
 docker-compose.yml.old
 
 # Environment Configuration (contains secrets)
-infrastructure/docker/.env
-infrastructure/docker/.env.local
-infrastructure/**/.env
+docker/compose/.env
+docker/compose/.env.local
+docker/**/.env
 
 # Monitoring Data
 grafana/data/
@@ -239,20 +237,16 @@ test-results/
 test-reports/
 *.test.log
 
-# AI Agent Working Directories
-docs/superpowers/
-docs/superpowers/**/*
+# AI Agent Working Directories (if needed in future)
+# docs/superpowers/
+# docs/superpowers/**/*
 
-# Historical Analysis Reports (development artifacts)
-docs/archive/reports/
-docs/archive/reports/**/*
-
-# Development & Test Scripts
-test-phase4-*.sh
-validate-fresh-install.sh
-generate-compose.sh
-system_prompt.txt
-monitoring-log.txt
+# Development & Test Scripts (if needed in future)
+# test-phase4-*.sh
+# validate-fresh-install.sh
+# generate-compose.sh
+# system_prompt.txt
+# monitoring-log.txt
 
 # ============================================================================
 # ✅ TEAM COLLABORATION (Keep These!)
@@ -260,6 +254,7 @@ monitoring-log.txt
 # .github/          → CI/CD workflows
 # *.example         → Template files
 # docs/             → Documentation
-# infrastructure/    → Docker configuration
+# docker/           → Docker configuration
+# src/              → Source code
 # tests/            → Test suite
-# services/         → Source code
+# scripts/          → Setup and utility scripts

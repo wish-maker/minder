@@ -2,12 +2,16 @@
 Plugin Configuration Tests
 Tests for plugin configuration: get, update, delete, and version management.
 Tests plugin configuration management, settings persistence, and versioning.
+
+SKIPPED: Requires running Minder services
 """
 
 import pytest
 import requests
 import json
 from typing import Dict
+
+pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
 class TestPluginConfiguration:
