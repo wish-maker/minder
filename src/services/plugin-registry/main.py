@@ -28,7 +28,7 @@ from routes.plugins import ProxyRouter
 
 # Import AI tool validator
 from shared.ai.tool_validator import validate_ai_tools
-from shared.auth.jwt_middleware import JWT_EXPIRATION_MINUTES, enforce_rate_limit, get_current_user
+from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -438,74 +438,9 @@ async def track_requests(request, call_next):
 
 
 # ============================================================================
-# API Endpoints - Authentication
-# ============================================================================
-
-
-class LoginRequest(BaseModel):
-    """Login request model"""
-
-    username: str
-    password: str
-
-
-@app.post("/v1/auth/login")
-async def login(request: LoginRequest):
-    """
-    Authenticate and get JWT token
-
-    NOTE: This is a simplified authentication for demonstration.
-    In production, integrate with proper user database and
-    password hashing (bcrypt/argon2).
-    """
-    # TODO: Integrate with proper user database
-    # For now, accept any non-empty credentials for testing
-    if not request.username or not request.password:
-        raise HTTPException(status_code=400, detail="Username and password required")
-
-    # Simple validation (replace with proper authentication in production)
-    if len(request.username) < 3 or len(request.password) < 8:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    # Create user payload
-    user_payload = {
-        "sub": request.username,
-        "username": request.username,
-        "role": "user",
-    }  # user ID  # Default role
-
-    # Assign admin role to specific users (configure as needed)
-    admin_users = os.environ.get("ADMIN_USERS", "admin").split(",")
-    if request.username in admin_users:
-        user_payload["role"] = "admin"
-
-    # Generate JWT token
-    from shared.auth.jwt_middleware import create_user_token
-
-    token = create_user_token(user_id=user_payload["sub"], username=request.username, role=user_payload["role"])
-
-    logger.info(f"User logged in: {request.username} ({user_payload['role']})")
-
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "expires_in": JWT_EXPIRATION_MINUTES * 60,
-        "user": {"username": request.username, "role": user_payload["role"]},
-    }
-
-
-@app.get("/v1/auth/me")
-async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
-    """Get current authenticated user information"""
-    return {
-        "username": current_user.get("username"),
-        "role": current_user.get("role"),
-        "user_id": current_user.get("sub"),
-    }
-
-
-# ============================================================================
 # API Endpoints - Plugin Management
+# NOTE: Authentication is handled by api-gateway.
+# This service validates JWT tokens for protected endpoints.
 # ============================================================================
 
 

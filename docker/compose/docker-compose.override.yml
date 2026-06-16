@@ -1,0 +1,49 @@
+# ============================================================================
+# Docker Compose Override - Development Only
+# ============================================================================
+# This file provides development convenience overrides.
+# It opens direct port access to services for local testing.
+#
+# Usage (development with direct port access):
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up
+#
+# Usage (production - no direct port access):
+#   docker compose up
+# ============================================================================
+
+services:
+  # Open plugin-registry port 8001 for direct testing
+  plugin-registry:
+    ports:
+      - "8001:8001"  # Dev only - for direct API testing without gateway
+
+  # Optionally open other services for debugging
+  # Comment out services you don't need direct access to:
+
+  # api-gateway:
+  #   ports:
+  #     - "8000:8000"
+
+  # marketplace:
+  #   ports:
+  #     - "8002:8002"
+
+  # plugin-state-manager:
+  #   ports:
+  #     - "8003:8003"
+
+  # rag-pipeline:
+  #   ports:
+  #     - "8004:8004"
+
+  # model-management:
+  #   ports:
+  #     - "8005:8005"
+
+  # tts-stt:
+  #   ports:
+  #     - "8006:8006"
+
+  # model-fine-tuning:
+  #   ports:
+  #     - "8007:8007"

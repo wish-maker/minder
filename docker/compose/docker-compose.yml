@@ -346,6 +346,11 @@ services:
     container_name: minder-api-gateway
     restart: on-failure
     environment:
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=minder
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=minder
     - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
     - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
@@ -422,6 +427,9 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     - MARKETPLACE_URL=http://minder-marketplace:8002
+    - JWT_SECRET=${JWT_SECRET}
+    - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+    - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
     env_file:
     - .env
     volumes:
@@ -429,9 +437,8 @@ services:
     - ../../src/shared:/app/src/shared:ro
     - ../../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
-    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
-    ports:
-    - "8001:8001"
+    # PILLAR 1: No direct port access - internal network only
+    # Use docker-compose.override.yml for development access
     depends_on:
       postgres:
         condition: service_healthy
