@@ -425,6 +425,8 @@ services:
     env_file:
     - .env
     volumes:
+    - ../../src/services/plugin-registry:/app/services/plugin-registry:ro
+    - ../../src/shared:/app/src/shared:ro
     - ../../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing

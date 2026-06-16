@@ -1072,6 +1072,12 @@ async def startup_event():
     # Initialize PostgreSQL connection
     await get_postgres_connection()
 
+    # Create plugins table if not exists (CRITICAL: prevents startup failures)
+    await create_plugins_table_if_not_exists()
+
+    # Load services from Redis into memory (CRITICAL: prevents service loss on restart)
+    await load_services_from_redis()
+
     # Load plugins from database
     await load_plugins_from_database()
 
@@ -1087,7 +1093,7 @@ async def startup_event():
     # Start automatic data collection scheduler
     asyncio.create_task(data_collection_scheduler())
 
-    logger.info(f"Loaded {len(plugins_db)} plugins")
+    logger.info(f"✅ Startup complete: {len(plugins_db)} plugins, {len(services_db)} services loaded")
 
 
 async def auto_enable_plugins():
@@ -1181,6 +1187,88 @@ if __name__ == "__main__":
 # ============================================================================
 
 
+async def create_plugins_table_if_not_exists():
+    """Create plugins table if it doesn't exist"""
+    try:
+        pool = await get_postgres_connection()
+
+        create_table_query = """
+            CREATE TABLE IF NOT EXISTS plugins (
+                name VARCHAR(255) PRIMARY KEY,
+                version VARCHAR(50) NOT NULL DEFAULT '1.0.0',
+                description TEXT,
+                author VARCHAR(255),
+                status VARCHAR(50) NOT NULL DEFAULT 'registered',
+                enabled BOOLEAN NOT NULL DEFAULT FALSE,
+                dependencies TEXT,
+                capabilities JSONB,
+                data_sources JSONB,
+                databases JSONB,
+                health_status VARCHAR(50) DEFAULT 'unknown',
+                last_health_check TIMESTAMP WITH TIME ZONE,
+                registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        """
+
+        async with pool.acquire() as conn:
+            await conn.execute(create_table_query)
+
+        logger.info("✅ Plugins table verified/created in PostgreSQL")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to create plugins table: {e}")
+        raise
+
+
+async def load_services_from_redis():
+    """Load registered services from Redis into memory cache"""
+    global services_db
+
+    try:
+        # Get all service keys from Redis
+        service_keys = redis_client.keys("service:*")
+
+        if not service_keys:
+            logger.info("No services found in Redis")
+            return
+
+        loaded_count = 0
+
+        for service_key in service_keys:
+            try:
+                # Extract service name from key (format: service:service_name)
+                service_name = service_key.replace("service:", "")
+
+                # Get service data from Redis hash
+                service_data = redis_client.hgetall(service_key)
+
+                if not service_data:
+                    logger.warning(f"Service data empty for {service_name}")
+                    continue
+
+                # Parse service data
+                service_registration = ServiceRegistration(
+                    service_name=service_name,
+                    service_type=service_data.get("service_type", "unknown"),
+                    host=service_data.get("host", "unknown"),
+                    port=int(service_data.get("port", 0)),
+                    health_check_url=service_data.get("health_check_url", "/health"),
+                    metadata=json.loads(service_data.get("metadata", "{}")),
+                )
+
+                services_db[service_name] = service_registration
+                loaded_count += 1
+
+            except Exception as e:
+                logger.error(f"Failed to load service {service_key}: {e}")
+
+        logger.info(f"✅ Loaded {loaded_count} services from Redis into memory")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to load services from Redis: {e}")
+        raise
+
+
 async def load_plugins_from_database():
     """Load plugins from PostgreSQL database into memory cache"""
     global plugins_db
@@ -1215,10 +1303,11 @@ async def load_plugins_from_database():
             )
             plugins_db[row["name"]] = plugin_info
 
-        logger.info(f"Loaded {len(plugins_db)} plugins from database")
+        logger.info(f"✅ Loaded {len(plugins_db)} plugins from database")
 
     except Exception as e:
-        logger.error(f"Failed to load plugins from database: {e}")
+        logger.error(f"❌ Failed to load plugins from database: {e}")
+        # Don't raise - allow startup to continue with empty plugins_db
 
 
 async def update_plugin_in_database(plugin_name: str, **updates):
