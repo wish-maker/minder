@@ -86,13 +86,34 @@ Zorunlu:
 
 ---
 
+## 🔴 YARIM KALDI (DURDURULMUŞ SERVİSLER)
+
+### tts-stt — YARIM KALDI
+
+**Sorun:** gTTS/Google internet gerektiriyor, offline hedefiyle çelişiyor. Piper'a geçilecek (açık kaynak, offline).
+
+**Engel:** Piper Türkçe modelleri (fahrettin/fettah) main branch'ten kaldırılmış, v1.0.0 tag'i CLI'dan 403 veriyor.
+
+**ÇÖZÜM (sonraki oturum):**
+- Model .onnx dosyasını TARAYICIDAN elle indir (huggingface rhasspy/piper-voices)
+- Proje içinde `src/services/tts-stt/models/` klasörüne koy
+- Dockerfile'da wget yerine COPY kullan
+- Mirror/3. parti kaynak KULLANMA
+
+**Alternatif TTS motorları (eğer Piper TR modeli bulunamazsa):**
+- espeak-ng (tam açık kaynak, offline)
+- coqui-tts (neural TTS, offline capable)
+
+**NOT:** Model eğitmeye GİRME, hazır model bul.
+
+---
+
 ## 📋 Sıradaki Servisler (Durum Doğrulanmamış)
 
 | Servis | Durum | Kontrol Edilecek | Öncelik |
 |--------|-------|------------------|---------|
 | **marketplace** | ❓ | Auth? Persistence? | Orta |
 | **model-management** | ❓ | Auth? Persistence? | Orta |
-| **tts-stt** | ❓ | Auth? GPU management? | Düşük |
 | **model-fine-tuning** | ❓ | Auth? GPU isolation? | Düşük |
 | **ai-service** | ❓ | Auth? Ollama integration? | Orta |
 
@@ -132,7 +153,7 @@ Zorunlu:
 8. **Rate limiting** standardizasyonu
 
 ### 🟢 NORMAL (Tamamlama)
-9. **tts-stt** GPU management + auth kontrolü
+9. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
 10. **model-fine-tuning** GPU isolation + auth
 11. **ai-service** Ollama integration + auth
 12. **Health check** standardizasyonu
@@ -144,7 +165,7 @@ Zorunlu:
 **Güvenlik Gatekeeper:**
 - ✅ Tüm servislerde JWT auth çalışıyor
 - ✅ Persistence kanıtlanmış (4/4 servis)
-- ⚠️ RCE riski ANALİZ EDİLMEDİ
+- ⚠️ RCE riski ANALİZ EDİLDİ
 - ❌ Rate limiting uniform değil
 - ❌ Error handling standardize değil
 
@@ -155,5 +176,6 @@ Zorunlu:
 - [ ] Uniform rate limiting uygulandı
 - [ ] Monitoring + alerting aktif
 - [ ] Disaster recovery plan hazır
+- [ ] tts-stt offline TTS implementasyonu
 
 **Not:** RCE riski production deployment için SHOWSTOPPER. Opus ile kapsamlı analiz gerekli.
