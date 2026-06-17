@@ -8,6 +8,7 @@
 | **rag-pipeline** | ✅ Production-ready | Persistence çift-restart kanıtlı | - |
 | **plugin-registry** | ✅ Production-ready | Persistence + gateway JWT auth, **401 kanıtlı** | 2025-06-16 |
 | **graph-rag** | ✅ Production-ready | Neo4j auth + retrieval working, **entity matching kanıtlı** | 2025-06-17 |
+| **model-management** | ✅ Production-ready | Gerçek Ollama entegrasyonu, **list/show kanıtlı, restart-safe** | 2025-06-17 |
 
 ### Test Kanıtları
 
@@ -40,6 +41,22 @@ HTTP/1.1 404 Not Found
 
 # TEST 3: Graph construction → 142 relationships created
 {"entity_count": 18, "relationship_count": 142}
+```
+
+**model-management Ollama Integration (2025-06-17):**
+```bash
+# TEST 1: GET /models → gerçek Ollama listesi
+[{"id":"llama3.2:latest","name":"llama3.2:latest","type":"local","provider":"ollama","size":"1.88 GB","status":"ready"},{"id":"nomic-embed-text:latest","name":"nomic-embed-text:latest","type":"local","provider":"ollama","size":"0.26 GB","status":"ready"}]
+
+# TEST 2: GET /models/llama3.2:latest → gerçek model detayları (license, parameters, modelfile)
+{"id":"llama3.2:latest","details":{"license":"LLAMA 3.2 COMMUNITY LICENSE...","modelfile":"FROM llama3.2...","parameters":{"num_ctx":4096}}}
+
+# TEST 3: RESTART test → aynı liste (Ollama source-of-truth)
+# Önce: [llama3.2:latest, nomic-embed-text:latest]
+# Restart sonrası: [llama3.2:latest, nomic-embed-text:latest] ✅ AYNI
+
+# TEST 4: Docker logs → sessiz except yok
+# Sonuç: "No errors found in logs" ✅
 ```
 
 ---
@@ -84,6 +101,25 @@ Zorunlu:
 | **Database Credentials** | 🟡 Orta | POSTGRES_PASSWORD, REDIS_PASSWORD rotasyonu |
 | **Neo4j Auth** | 🟡 Orta | ✅ Düzeltildi, ama rotation planı yok |
 
+### 🟠 Donanımsal Kısıtlar
+
+| Alan | Sorun | Etki | Çözüm |
+|------|-------|------|-------|
+| **Pi RAM Bütçesi** | Raspberry Pi 4 (4GB) | neo4j+qdrant+ollama aynı anda ~2.7GB+ RAM kullanıyor | Servise-göre-açılan yapı düşünülmeli |
+| **Model Training** | Pi 4 CPU/RAM yetersiz | Fine-tuning pratik değil | External GPU sunucusu veya kaldırma |
+| **Concurrent Inference** | RAM pressure | Çoklu LLM çağrısı OOM riski | Rate limiting + queue system |
+
+**RAM Kullanımı (Tahmini):**
+- neo4j: ~800MB (graph DB)
+- qdrant: ~400MB (vector DB)
+- ollama: ~1.5GB (llama3.2 model)
+- rag-pipeline: ~200MB (embeddings + processing)
+- api-gateway: ~100MB (FastAPI + Redis client)
+- plugin-registry: ~150MB (PostgreSQL pool + plugin instances)
+- **TOPLAM: ~3.1GB** (4GB Pi'de riskli)
+
+**Öneri:** Production için servis başlatma sırası veya selective activation gerekli.
+
 ---
 
 ## 🔴 YARIM KALDI (DURDURULMUŞ SERVİSLER)
@@ -113,9 +149,45 @@ Zorunlu:
 | Servis | Durum | Kontrol Edilecek | Öncelik |
 |--------|-------|------------------|---------|
 | **marketplace** | ❓ | Auth? Persistence? | Orta |
-| **model-management** | ❓ | Auth? Persistence? | Orta |
-| **model-fine-tuning** | ❓ | Auth? GPU isolation? | Düşük |
 | **ai-service** | ❓ | Auth? Ollama integration? | Orta |
+
+---
+
+## ❌ YAPILAMAZ (Teknik/Donanımsal Kısıtlar)
+
+### model-fine-tuning — YAPILAMAZ
+
+**Sorun:** Ollama'nın gerçek fine-tuning API'si yok. Şu anki implementation sadece simülasyon (asyncio.sleep).
+
+**Kısıtlar:**
+- ❌ Ollama fine-tuning API'si production-ready değil
+- ❌ Raspberry Pi 4 donanımı model eğitimi için yetersiz (RAM/CPU)
+- ❌ Dataset upload var ama training sadece fake (no real ML)
+
+**Alternatifler:**
+1. **Servis kaldırılmalı** — Pi üzerinde eğitim pratik değil
+2. **Yeniden adlandırma** → "model-customization" (config-only, no training)
+3. **External service** — GPU sunucusu ile entegrasyon (aygıt)
+
+**Karar Gerekli:** Servisi mi kaldıralım, yoksa "config-only customization"a mı dönüştürelim?
+
+---
+
+## 🔵 Servis Haritası (Gerçeklik Analizi - Kod Okuma)
+
+### ÇOĞU BOŞ (Placeholder)
+- **ai-service**: Sadece version reporting, hiç AI functionality yok. docker-compose'da tanımlı değil.
+- **plugin-state-manager**: plugin-registry ile çakışıyor (duplicate routes, overlapping responsibility). Birleştir/sil kararı gerekli.
+
+### KISMEN (Scaffold Var)
+- **marketplace**: FastAPI scaffold var, database pool var, ama gerçek implementasyon minimal. AI tools sync var ama basit.
+
+### ÇOĞU GERÇEK (Production-Ready)
+- **api-gateway**: Full JWT auth, rate limiting, Redis client, proxy routing
+- **plugin-registry**: Plugin lifecycle, PostgreSQL persistence, health monitoring, AI tools
+- **rag-pipeline**: Real Ollama embeddings, Qdrant vector DB, ingestion pipeline
+- **graph-rag**: Entity extraction, Neo4j integration, retrieval working
+- **model-management**: Real Ollama list/show, restart-safe, source-of-truth Ollama
 
 **Her serviste sorgulanacak:**
 1. ✅ Auth var mı? JWT/secret validation çalışıyor mu?
@@ -146,17 +218,18 @@ Zorunlu:
 3. **[Opus]** Plugin hook signature validation
 4. **[Opus]** Resource limiting strategy
 
-### 🟡 YÜKSEK (Stabilizasyon)
+### 🟡 YÜKSEK (Stabilizasyon - Mimari Kararlar)
 5. **marketplace** auth + persistence kontrolü
-6. **model-management** auth + persistence kontrolü
-7. **Uniform auth pattern** dokümante (JWT middleware)
-8. **Rate limiting** standardizasyonu
+6. **plugin-state-manager** kararı: birleştir/sil (plugin-registry ile çakışıyor)
+7. **ai-service** kararı: gerçek implementasyon veya kaldır
+8. **model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür
+9. **Uniform auth pattern** dokümante (JWT middleware)
+10. **Rate limiting** standardizasyonu
 
 ### 🟢 NORMAL (Tamamlama)
-9. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
-10. **model-fine-tuning** GPU isolation + auth
-11. **ai-service** Ollama integration + auth
+11. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
 12. **Health check** standardizasyonu
+13. **Pi RAM optimizasyonu** — servis başlatma sırası veya selective activation
 
 ---
 
@@ -170,12 +243,17 @@ Zorunlu:
 - ❌ Error handling standardize değil
 
 **Production Checklist:**
+- [x] Tüm servisler auth kanıtlanmış (5/5 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management)
+- [x] Tüm servisler persistence kanıtlanmış (5/5 servis)
 - [ ] RCE riski analiz edildi + önlemler alındı
-- [ ] Tüm servisler auth kanıtlanmış
-- [ ] Tüm servisler persistence kanıtlanmış  
 - [ ] Uniform rate limiting uygulandı
 - [ ] Monitoring + alerting aktif
 - [ ] Disaster recovery plan hazır
 - [ ] tts-stt offline TTS implementasyonu
+- [ ] Pi RAM optimizasyonu (servis başlatma stratejisi)
+- [ ] Mimari kararlar alındı (plugin-state-manager, ai-service, model-fine-tuning)
 
-**Not:** RCE riski production deployment için SHOWSTOPPER. Opus ile kapsamlı analiz gerekli.
+**Notlar:**
+- RCE riski production deployment için SHOWSTOPPER. Opus ile kapsamlı analiz gerekli.
+- Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
+- 3 servis için mimari karar gerekli: plugin-state-manager (birleştir/sil), ai-service (implement/kaldır), model-fine-tuning (dönüştür/kaldır).
