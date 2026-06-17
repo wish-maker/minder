@@ -17,6 +17,9 @@ RUN python -m spacy download en_core_web_sm
 
 # Copy application code
 COPY src/services/graph-rag/main.py .
+COPY src/services/graph-rag/core ./core
+COPY src/services/graph-rag/routes ./routes
+COPY src/services/graph-rag/models ./models
 
 # Expose port
 EXPOSE 8008

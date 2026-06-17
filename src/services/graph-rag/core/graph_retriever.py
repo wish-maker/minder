@@ -56,14 +56,20 @@ class GraphRetriever:
                     """
                     params = {"entity_name": entity_name, "rel_type": relationship_type, "limit": limit}
                 else:
-                    query = """
-                    MATCH path = (e:Entity {text: $entity_name})-[*1..$max_depth]-(related:Entity)
+                    # Neo4j 5.x doesn't support parameterized path lengths
+                    # Use string formatting for depth value
+                    # Use CONTAINS for partial matching (e.g., "Apple" matches "Apple Computer")
+                    query = f"""
+                    MATCH (e:Entity)
+                    WHERE e.text CONTAINS $entity_name
+                    MATCH path = (e)-[*1..{max_depth}]-(related:Entity)
+                    WHERE related.text <> e.text
                     WITH nodes(path) as entities
                     UNWIND entities as entity
-                    RETURN entity.text as entity, entity.label as label
+                    RETURN DISTINCT entity.text as entity, entity.label as label
                     LIMIT $limit
                     """
-                    params = {"entity_name": entity_name, "max_depth": max_depth, "limit": limit}
+                    params = {"entity_name": entity_name, "limit": limit}
 
                 result = await session.run(query, **params)
 

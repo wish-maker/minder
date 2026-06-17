@@ -34,9 +34,6 @@ from models.schemas import (
     KnowledgeGraphRequest,
 )
 
-# Import shared components
-from services.shared.models import HealthCheckResponse
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_AUTH = os.getenv("NEO4J_AUTH", "neo4j/neo4j_test_password_change_me")
+NEO4J_AUTH = os.getenv("NEO4J_AUTH", "neo4j/secure_password_change_me")
 
 # Parse NEO4J_AUTH to extract password (format: "user/password")
 if "/" in NEO4J_AUTH:
@@ -121,8 +118,8 @@ async def shutdown_event():
 # Health Check Endpoints
 # ============================================================================
 
-@app.get("/health", response_model=HealthCheckResponse, tags=["Health"])
-async def health_check() -> HealthCheckResponse:
+@app.get("/health", tags=["Health"])
+async def health_check():
     """
     Health check endpoint
 
@@ -132,7 +129,7 @@ async def health_check() -> HealthCheckResponse:
         "entity_extractor": "initialized" if entity_extractor else "not_initialized",
         "graph_constructor": "initialized" if graph_constructor else "not_initialized",
         "graph_retriever": "initialized" if graph_retriever else "not_initialized",
-        "neo4j": NEOO4J_URI,
+        "neo4j": NEO4J_URI,
         "spacy_model": SPACY_MODEL,
     }
 
@@ -140,12 +137,12 @@ async def health_check() -> HealthCheckResponse:
     if not all([entity_extractor, graph_constructor, graph_retriever]):
         overall_status = "degraded"
 
-    return HealthCheckResponse(
-        service="graph-rag",
-        status=overall_status,
-        version=app.version,
-        checks=checks,
-    )
+    return {
+        "service": "graph-rag",
+        "status": overall_status,
+        "version": app.version,
+        "checks": checks,
+    }
 
 # ============================================================================
 # API Endpoints
@@ -162,49 +159,35 @@ async def root():
             "Entity extraction (spaCy)",
             "Knowledge graph construction",
             "Graph-based retrieval",
+            "Entity context enhancement"
         ],
         "docs": "/docs",
         "health": "/health",
     }
-            "Entity context enhancement"
-        ]
-    }
 
 
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "service": "graph-rag",
-        "status": "healthy",
-        "neo4j_connected": graph_constructor is not None,
-        "entity_extractor_loaded": entity_extractor is not None,
-        "graph_retriever_ready": graph_retriever is not None
-    }
-
-
-@app.post("/extract", response_model=Dict, tags=["Entity Extraction"])
+@app.post("/extract", tags=["Entity Extraction"])
 async def extract_entities(request: EntityExtractionRequest):
     """Extract entities and relationships from text"""
-    return await extract_entities_handler(request)
+    return await extract_entities_handler(request, entity_extractor)
 
 
-@app.post("/construct-graph", response_model=Dict, tags=["Knowledge Graph"])
+@app.post("/construct-graph", tags=["Knowledge Graph"])
 async def construct_knowledge_graph(request: KnowledgeGraphRequest):
     """Build knowledge graph from document"""
-    return await construct_knowledge_graph_handler(request)
+    return await construct_knowledge_graph_handler(request, entity_extractor, graph_constructor)
 
 
-@app.post("/retrieve", response_model=Dict, tags=["Graph Retrieval"])
+@app.post("/retrieve", tags=["Graph Retrieval"])
 async def retrieve_with_graph(request: GraphRetrievalRequest):
     """Graph-based retrieval for RAG enhancement"""
-    return await retrieve_with_graph_handler(request)
+    return await retrieve_with_graph_handler(request, entity_extractor, graph_retriever)
 
 
-@app.post("/entity-context", response_model=Dict, tags=["Entity Context"])
+@app.post("/entity-context", tags=["Entity Context"])
 async def get_entity_context(request: EntityContextRequest):
     """Get detailed context for an entity"""
-    return await get_entity_context_handler(request)
+    return await get_entity_context_handler(request, graph_retriever)
 
 
 # ============================================================================
@@ -213,4 +196,4 @@ async def get_entity_context(request: EntityContextRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8009)
+    uvicorn.run(app, host="0.0.0.0", port=8008)

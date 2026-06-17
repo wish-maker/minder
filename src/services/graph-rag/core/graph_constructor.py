@@ -26,6 +26,50 @@ class KnowledgeGraphConstructor:
         """Close Neo4j connection"""
         await self.driver.close()
 
+    async def create_document_node(
+        self,
+        document_id: str,
+        title: str = None,
+        source: str = None,
+        metadata: Dict[str, Any] = None
+    ) -> bool:
+        """
+        Create a document node in Neo4j
+
+        Args:
+            document_id: Document identifier
+            title: Document title
+            source: Document source
+            metadata: Additional metadata
+
+        Returns:
+            True if successful
+        """
+        async with self.driver.session() as session:
+            try:
+                query = """
+                MERGE (d:Document {id: $document_id})
+                ON CREATE SET d.created_at = datetime(),
+                              d.title = $title,
+                              d.source = $source,
+                              d.metadata = $metadata
+                RETURN d
+                """
+
+                result = await session.run(
+                    query,
+                    document_id=document_id,
+                    title=title,
+                    source=source,
+                    metadata=metadata
+                )
+
+                return await result.single() is not None
+
+            except Exception as e:
+                logger.warning(f"⚠️  Failed to create document node: {e}")
+                return False
+
     async def create_entity_nodes(
         self,
         document_id: str,
