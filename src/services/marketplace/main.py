@@ -20,6 +20,13 @@ async def lifespan(app: FastAPI):
     await get_pool()  # Initialize database pool
     logger.info("Database pool initialized")
 
+    # Run database migrations (idempotent schema initialization)
+    from services.marketplace.migrations import run_migrations
+
+    pool = await get_pool()
+    await run_migrations(pool)
+    logger.info("Database migrations completed")
+
     yield
 
     # Shutdown
