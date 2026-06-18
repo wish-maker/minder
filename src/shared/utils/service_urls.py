@@ -23,7 +23,6 @@ class ServiceURLs:
     RAG_PIPELINE: str = "http://minder-rag-pipeline:8004"
     TTS_STT_SERVICE: str = "http://minder-tts-service:8006"
     MODEL_MANAGEMENT: str = "http://minder-model-management:8005"
-    MODEL_FINE_TUNING: str = "http://minder-model-fine-tuning:8007"
     GRAPH_RAG: str = "http://minder-graph-rag:8009"
 
     # ============================================================================

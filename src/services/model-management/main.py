@@ -49,10 +49,6 @@ http_request_duration_seconds = Histogram(
 
 models_registered_total = Gauge("models_registered_total", "Total number of registered models")
 
-fine_tuning_jobs_total = Counter(
-    "fine_tuning_jobs_total", "Total fine-tuning jobs", ["status"]  # started, completed, failed
-)
-
 
 # Pydantic models
 class ModelInfo(BaseModel):
@@ -64,15 +60,6 @@ class ModelInfo(BaseModel):
     provider: str
     size: str
     status: str
-
-
-class FineTuneRequest(BaseModel):
-    """Fine-tuning request"""
-
-    base_model: str
-    training_data: List[str]  # knowledge base IDs
-    output_name: str
-    hyperparameters: Dict[str, Any]
 
 
 class ModelConstraints(BaseModel):

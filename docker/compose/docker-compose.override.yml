@@ -43,7 +43,3 @@ services:
   # tts-stt:
   #   ports:
   #     - "8006:8006"
-
-  # model-fine-tuning:
-  #   ports:
-  #     - "8007:8007"

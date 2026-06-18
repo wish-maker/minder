@@ -212,16 +212,3 @@ groups:
         annotations:
           summary: "No models registered"
           description: "Model Management has 0 models registered"
-      
-      # Fine-tuning job stuck
-      - alert: FineTuningJobStuck
-        expr: |
-          increase(fine_tuning_jobs_total{status="running"}[1h]) == 0
-          and fine_tuning_jobs_total{status="running"} > 0
-        for: 2h
-        labels:
-          severity: warning
-          category: models
-        annotations:
-          summary: "Fine-tuning job appears stuck"
-          description: "Fine-tuning job {{ $labels.job_id }} has been running for 2+ hours"

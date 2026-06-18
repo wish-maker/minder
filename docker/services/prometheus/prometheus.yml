@@ -65,12 +65,6 @@ scrape_configs:
       - targets: ['tts-stt:8006']
     metrics_path: '/metrics'
 
-  # Model Fine-tuning
-  - job_name: 'model-fine-tuning'
-    static_configs:
-      - targets: ['model-fine-tuning:8007']
-    metrics_path: '/metrics'
-
   # OpenWebUI - No metrics endpoint available
   # - job_name: 'openwebui'
   #   static_configs:
