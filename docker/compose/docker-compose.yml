@@ -250,6 +250,7 @@ services:
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
     volumes:
     - ollama_data:/root/.ollama
+    - ./ollama/docker-entrypoint.sh:/docker-entrypoint.sh:ro
     - ./ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
     environment:
     - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
@@ -269,16 +270,7 @@ services:
     #           count: all
     #           capabilities: [gpu]
     shm_size: '16gb'
-    entrypoint:
-    - /bin/bash
-    - -c
-    - "#!/bin/bash\nset -e\n# Start Ollama server in background\n/usr/bin/ollama serve\
-      \ &\nOLLAMA_PID=$!\n\n# Wait for Ollama to be ready\necho \"Waiting for Ollama\
-      \ to start...\"\nwhile ! curl -s http://localhost:11434/api/tags > /dev/null\
-      \ 2>&1; do\n    sleep 2\ndone\necho \"Ollama is ready\"\n\n# Run init script\
-      \ if exists\nif [ -f /docker-entrypoint-initdb.d/init-models.sh ]; then\n  \
-      \  echo \"Running automatic model download...\"\n    /bin/bash /docker-entrypoint-initdb.d/init-models.sh\n\
-      fi\n\n# Keep container running\nwait $OLLAMA_PID\n"
+    entrypoint: ["/bin/bash", "/docker-entrypoint.sh"]
     healthcheck:
       test:
       - CMD-SHELL
