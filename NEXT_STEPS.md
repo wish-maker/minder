@@ -63,34 +63,44 @@ HTTP/1.1 404 Not Found
 
 ## 🚨 KRİTİK GÜVENLİK RİSKLERİ
 
-### ⚠️ RCE Riski: 3rd-Party Plugin Execution
+### ✅ RCE Riski: ÇÖZÜLDÜ (Manifest-Based Plugins - Option B)
 
-| Risk Alanı | Şiddet | Vektör | Durum |
-|-------------|---------|--------|-------|
-| **Plugin Installation** | 🔴 Kritik | Git clone + kod çalıştırma | 501 - yazılmadı |
-| **Plugin Activation** | 🔴 Kritik | 3rd-party kod workdir'de çalışır | Sandbox yok |
-| **Plugin Hooks** | 🟡 Yüksek | User input → system command | Validation yok |
+**Karar:** Arbitrary code execution (Option A) yerine manifest-based plugins (Option B) seçildi.
 
-**RCE Saldiri Vektörleri:**
-1. **Malicious Git Repo**: Plugin install URL'si zararlı kod içeriyor
-2. **Hook Injection**: Plugin hook'larında system command çalıştırma
-3. **Dependency Confusion**: Zararlı package name collision
-4. **File Write**: Plugin disk'e dosya yazabiliyor (path traversal?)
+| Önce (Option A) | Sonra (Option B - MVP) |
+|-----------------|------------------------|
+| Git clone + kod çalıştırma | Manifest YAML/JSON upload |
+| `exec()` / `eval()` / dynamic import | Regex template substitution only |
+| User code çalışıyor | Fixed handler functions (manifest → params only) |
 
-**Güvenlik Kontrolleri GEREKLİ:**
-```yaml
-Zorunlu:
-  - Plugin sandbox/chroot isolasyonu
-  - Hook signature validation
-  - System command block/whitelist
-  - Resource limits (CPU, memory, disk)
-  - Network isolation (private Docker network)
-  
-İleri Seviye:
-  - Plugin code scanning/static analysis
-  - Runtime behavioral monitoring
-  - Automatic suspicious activity detection
+**MVP End-to-End Kanıtı (2026-06-18):**
+```bash
+# TEST 1: Webhook trigger → template rendering → Ollama embedding → Qdrant storage
+# Before: points_count = 1
+# After webhook POST: points_count = 2
+
+# TEST 2: Vector retrieval → original text intact
+{"text": "REAL webhook test - end to end proof", "author": "realtestuser"}
+
+# TEST 3: Security check → NO exec/eval/dynamic-import in codebase
+# TemplateEngine: regex substitution (TEMPLATE_PATTERN)
+# ExecutionEngine: fixed _handle_store_vector() function
+# Manifest: parameters only (collection, template strings)
 ```
+
+**RCE Risk by Design:**
+- ❌ Plugin code does NOT execute (no git clone, no import)
+- ❌ Template engine does NOT eval/exec (regex substitution only)
+- ❌ Action handlers are NOT dynamic (fixed functions, manifest supplies parameters)
+- ✅ Risk eliminated by architectural choice, NOT sandboxing
+
+**MVP Kapsamı:**
+- 1 trigger type: `webhook`
+- 1 action type: `store-vector`
+- Template syntax: `{{ .field.name }}` (no code execution)
+
+**Açış (NORMAL - below):**
+- Plugin system expansion - more triggers/actions (keep no-code-execution rule)
 
 ### 🟡 Diğer Güvenlik Alanları
 
@@ -213,23 +223,25 @@ Zorunlu:
 ## Sonraki Adımlar
 
 ### 🔴 KRİTİK (Güvenlik)
-1. **[Opus]** Plugin installation güvenli tasarım (sandbox/chroot)
-2. **[Opus]** RCE vektör analizi + önlem planı
-3. **[Opus]** Plugin hook signature validation
-4. **[Opus]** Resource limiting strategy
+*RCE riski ÇÖZÜLDÜ - manifest-based plugins (Option B). Kritik güvenlik kalemi yok.*
 
 ### 🟡 YÜKSEK (Stabilizasyon - Mimari Kararlar)
-5. **marketplace** auth + persistence kontrolü
-6. **plugin-state-manager** kararı: birleştir/sil (plugin-registry ile çakışıyor)
-7. **ai-service** kararı: gerçek implementasyon veya kaldır
-8. **model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür
-9. **Uniform auth pattern** dokümante (JWT middleware)
-10. **Rate limiting** standardizasyonu
+1. **plugin-state-manager** kararı: birleştir/sil (plugin-registry ile çakışıyor)
+2. **ai-service** kararı: gerçek implementasyon veya kaldır
+3. **model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür
+4. **marketplace** auth + persistence kontrolü
+5. **Uniform auth pattern** dokümante (JWT middleware)
+6. **Rate limiting** standardizasyonu
 
 ### 🟢 NORMAL (Tamamlama)
-11. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
-12. **Health check** standardizasyonu
-13. **Pi RAM optimizasyonu** — servis başlatma sırası veya selective activation
+7. **Plugin system expansion** - MVP trigger/action set genişletme (NOT urgent)
+   - Ek trigger'lar: `schedule`, `event-bus`
+   - Ek action'lar: `store-graph` (Neo4j), `query-llm` (Ollama chat), `transform` (data processing)
+   - Expression language: nested fields, conditionals, loops
+   - **Kural:** Her yeni action = fixed handler function, manifest params only (no-code-execution koru)
+8. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
+9. **Health check** standardizasyonu
+10. **Pi RAM optimizasyonu** — servis başlatma sırası veya selective activation
 
 ---
 
@@ -237,15 +249,15 @@ Zorunlu:
 
 **Güvenlik Gatekeeper:**
 - ✅ Tüm servislerde JWT auth çalışıyor
-- ✅ Persistence kanıtlanmış (4/4 servis)
-- ⚠️ RCE riski ANALİZ EDİLDİ
+- ✅ Persistence kanıtlanmış (5/5 servis)
+- ✅ RCE riski ÇÖZÜLDÜ (manifest-based plugins, no-code-execution by design)
 - ❌ Rate limiting uniform değil
 - ❌ Error handling standardize değil
 
 **Production Checklist:**
 - [x] Tüm servisler auth kanıtlanmış (5/5 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management)
 - [x] Tüm servisler persistence kanıtlanmış (5/5 servis)
-- [ ] RCE riski analiz edildi + önlemler alındı
+- [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
 - [ ] Uniform rate limiting uygulandı
 - [ ] Monitoring + alerting aktif
 - [ ] Disaster recovery plan hazır
@@ -254,6 +266,6 @@ Zorunlu:
 - [ ] Mimari kararlar alındı (plugin-state-manager, ai-service, model-fine-tuning)
 
 **Notlar:**
-- RCE riski production deployment için SHOWSTOPPER. Opus ile kapsamlı analiz gerekli.
+- ✅ RCE riski architectural choice ile çözüldü (Option B: manifest-based plugins).
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
 - 3 servis için mimari karar gerekli: plugin-state-manager (birleştir/sil), ai-service (implement/kaldır), model-fine-tuning (dönüştür/kaldır).
