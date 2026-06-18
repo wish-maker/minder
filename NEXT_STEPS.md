@@ -6,9 +6,12 @@
 |--------|-------|-------|------------|
 | **api-gateway** | ✅ Production-ready | 9 E2E test geçti | - |
 | **rag-pipeline** | ✅ Production-ready | Persistence çift-restart kanıtlı | - |
-| **plugin-registry** | ✅ Production-ready | Persistence + gateway JWT auth, **401 kanıtlı** | 2025-06-16 |
+| **plugin-registry** | ✅ Production-ready | Persistence + gateway JWT auth, **401 kanıtlı**, **manifest MVP webhook→Qdrant kanıtlı** | 2025-06-16 / 2026-06-18 |
 | **graph-rag** | ✅ Production-ready | Neo4j auth + retrieval working, **entity matching kanıtlı** | 2025-06-17 |
 | **model-management** | ✅ Production-ready | Gerçek Ollama entegrasyonu, **list/show kanıtlı, restart-safe** | 2025-06-17 |
+| **tts-stt** | ⚠️ Partial | gTTS works (internet gerektiriyor), Piper offline geçişi durduruldu | - |
+
+**Toplam: 6 gerçek servis kanıtlanmış.** + plugin-state-manager (çalışıyor, rolü belirsiz).
 
 ### Test Kanıtları
 
@@ -58,6 +61,22 @@ HTTP/1.1 404 Not Found
 # TEST 4: Docker logs → sessiz except yok
 # Sonuç: "No errors found in logs" ✅
 ```
+
+---
+
+## ❌ Kaldırılan Servisler (Non-Functional Placeholders)
+
+### ai-service — KALDIRILDI (2026-06-18, commit 5eb193f0)
+**Neden:** Sadece `/version` endpoint'i olan saf placeholder. docker-compose.yml'da tanımlı bile değildi.
+**Durum:** Gerçek AI functionality yok - sadece version string döndürüyor.
+**Eylem:** Tüm kod (5 dosya) silindi, hiçbir şeyi kırmadı.
+
+### model-fine-tuning — KALDIRILDI (2026-06-18, commit 5eb193f0)
+**Neden:** Fake ML training (`asyncio.sleep` ile simülasyon), gerçek Ollama fine-tuning API'si yok. Raspberry Pi 4 donanımı model eğitimi için yetersiz.
+**Durum:** Dataset upload var ama training sadece sahte - no real ML.
+**Eylem:** Tüm kod (9 dosya) + compose/prometheus/alerts referansları silindi, hiçbir şeyi kırmadı.
+
+**Not:** Pi üzerinde gerçek model eğitimi pratik değil. İhtiyaç duyulursa external GPU sunucusu ile entegrasyon düşünülebilir (ayrı cihaz).
 
 ---
 
@@ -226,9 +245,9 @@ HTTP/1.1 404 Not Found
 *RCE riski ÇÖZÜLDÜ - manifest-based plugins (Option B). Kritik güvenlik kalemi yok.*
 
 ### 🟡 YÜKSEK (Stabilizasyon - Mimari Kararlar)
-1. **plugin-state-manager** kararı: birleştir/sil (plugin-registry ile çakışıyor)
-2. **ai-service** kararı: gerçek implementasyon veya kaldır
-3. **model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür
+1. **plugin-state-manager** — **DEFERRED** (gerçek kod + PostgreSQL schema var, plugin-registry ile birleştirmek riskli refactor. Eğer overlap gerçek problem yaratırsa revisited edilecek. Değilse şimdiden rahatsız etme.)
+2. ~~**ai-service** kararı: gerçek implementasyon veya kaldır~~ — **KALDIRILDI**
+3. ~~**model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür~~ — **KALDIRILDI**
 4. **marketplace** auth + persistence kontrolü
 5. **Uniform auth pattern** dokümante (JWT middleware)
 6. **Rate limiting** standardizasyonu
@@ -255,17 +274,18 @@ HTTP/1.1 404 Not Found
 - ❌ Error handling standardize değil
 
 **Production Checklist:**
-- [x] Tüm servisler auth kanıtlanmış (5/5 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management)
-- [x] Tüm servisler persistence kanıtlanmış (5/5 servis)
+- [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, tts-stt)
+- [x] Tüm servisler persistence kanıtlanmış (6/6 servis)
 - [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
 - [ ] Uniform rate limiting uygulandı
 - [ ] Monitoring + alerting aktif
 - [ ] Disaster recovery plan hazır
-- [ ] tts-stt offline TTS implementasyonu
+- [ ] tts-stt offline TTS implementasyonu (Piper)
 - [ ] Pi RAM optimizasyonu (servis başlatma stratejisi)
-- [ ] Mimari kararlar alındı (plugin-state-manager, ai-service, model-fine-tuning)
+- [x] Mimari kararlar alındı (ai-service KALDIRILDI, model-fine-tuning KALDIRILDI, plugin-state-manager DEFERRED)
 
 **Notlar:**
 - ✅ RCE riski architectural choice ile çözüldü (Option B: manifest-based plugins).
+- ✅ ai-service ve model-fine-tuning kaldırıldı (2026-06-18, commit 5eb193f0).
+- ⏸️ plugin-state-manager deferred — gerçek kodu var, merge riskli, sorun yaratmadığı sürece dokunma.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
-- 3 servis için mimari karar gerekli: plugin-state-manager (birleştir/sil), ai-service (implement/kaldır), model-fine-tuning (dönüştür/kaldır).
