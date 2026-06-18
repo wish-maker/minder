@@ -1,5 +1,71 @@
 # Minder Platform - Next Steps
 
+## 🎯 NEXT SESSION — FIRST TASK
+
+### Clean from-scratch install test (the real deploy-readiness test)
+
+**Prereqs DONE:**
+- ✅ marketplace DB auto-init (DROP→restart proven)
+- ✅ postgres init.sql (schema initialization working)
+- ✅ Neo4j auth hardcoded (neo4j/minder_secure_password_2024)
+- ✅ Ollama auto-pull (delete+restart proven, committed 3a9cf113)
+
+**TEST PROCEDURE:**
+1. **docker compose down -v** → Complete wipe (all volumes, all data)
+2. **./setup.sh start** → Fresh install from zero
+3. **NO manual steps allowed** — If something fails, that's a real bug
+
+**What to expect:**
+- ~2GB model re-download (llama3.2 + nomic-embed-text via Ollama auto-pull)
+- Takes time (models are large, be patient)
+- All services should start automatically
+
+**PROVE each service works after clean boot (raw output, not assumptions):**
+
+```bash
+# TEST 1: All 6 services healthy
+docker ps | grep "minder.*healthy"
+
+# TEST 2: rag-pipeline - create KB + upload + query
+curl -X POST http://localhost:8004/knowledge-base \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test-kb","description":"Clean install test"}'
+# Upload document → query returns relevant answer
+
+# TEST 3: graph-rag - construct + retrieve (Neo4j auth holds)
+curl -X POST http://localhost:8008/graph/construct \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Bill Gates founded Microsoft in 1975"}'
+curl -X POST http://localhost:8008/graph/query \
+  -H "Content-Type: application/json" \
+  -d '{"text":"Bill Gates Microsoft"}'
+# Expected: Related entities returned
+
+# TEST 4: marketplace - CRUD + persistence
+curl -X POST http://localhost:8002/plugins \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test-plugin","display_name":"Test Plugin"}'
+# Verify plugin exists → restart marketplace → verify still exists
+
+# TEST 5: model-management - GET /models shows auto-pulled models
+curl http://localhost:8005/models
+# Expected: llama3.2:latest + nomic-embed-text:latest
+
+# TEST 6: plugin-registry - webhook → vector in Qdrant
+# Register webhook trigger plugin → POST test data → check Qdrant count
+```
+
+**Critical Rule:**
+- If ANY step needs a manual fix, that's a real deploy bug → fix + automate it
+- This test must be run start-to-finish in one sitting (don't interrupt mid-wipe)
+
+**Success Criteria:**
+- All services healthy without manual intervention
+- All CRUD operations work end-to-end
+- No "oops, I forgot to X" moments — everything automated
+
+---
+
 ## ✅ Tamamlanan (Production-Ready Kanıtlı)
 
 | Servis | Durum | Kanıt | Test Tarihi |
@@ -77,6 +143,64 @@ HTTP/1.1 404 Not Found
 **Eylem:** Tüm kod (9 dosya) + compose/prometheus/alerts referansları silindi, hiçbir şeyi kırmadı.
 
 **Not:** Pi üzerinde gerçek model eğitimi pratik değil. İhtiyaç duyulursa external GPU sunucusu ile entegrasyon düşünülebilir (ayrı cihaz).
+
+---
+
+## 🔧 Altyapı Düzeltmeleri (Infrastructure Fixes)
+
+### Ollama Auto-Pull Mechanism — DÜZELTİLDİ (2026-06-18, commit 3a9cf113)
+
+**Sorun:** `docker compose down -v` ile temiz kurulum yaptığında Ollama container'ı başlatılıyor ama hiçbir model yoktu. RAG pipeline, graph-rag, model-management servisleri kullanılacak modelleri bulamıyordu (llama3.2, nomic-embed-text).
+
+**Kök Sebepler:**
+1. **docker-entrypoint-initdb.d pattern desteklenmiyor** — Bu database-specific (PostgreSQL) bir pattern, Ollama image'ı bunu tanımıyor
+2. **curl mevcut değil** — Ollama official image minimal ve curl içermiyor, entrypoint'teki curl komutları başarısız oluyordu
+3. **Boş init scripti** — `docker/compose/ollama/init-models.sh` dizin olarak yaratılmış, içi boştu
+
+**Çözüm:**
+1. **Custom docker-entrypoint.sh** — Ollama'yı background'da başlat, TCP check ile hazır olmasını bekle (bash built-in `</dev/tcp/127.0.0.1/11434`)
+2. **Düzeltilmiş init-models.sh** — `ollama list` CLI kullan (curl yok), portable bash loop (IFS comma-parse)
+3. **docker-compose.yml güncellemesi** — Custom entrypoint mount + simplified configuration
+
+**Kanıt (Delete+Restart Test):**
+```bash
+# TEST 1: Model sil → restart → otomatik geri gel
+$ docker exec minder-ollama ollama rm nomic-embed-text
+deleted 'nomic-embed-text'
+
+$ docker compose restart ollama
+# Loglar:
+# Running automatic model download...
+# Checking model: llama3.2
+# ✅ Model llama3.2:latest already exists, skipping download
+# Checking model: nomic-embed-text
+# ❌ Model nomic-embed-text:latest not found, pulling...
+# ✅ Successfully pulled nomic-embed-text
+# ✅ All required models are available
+
+# TEST 2: Temiz kurulum (down -v) → tüm modeller otomatik iniyor
+$ docker compose down -v && docker compose up -d
+# Ollama başlıyor, init script çalışıyor:
+# Required models: llama3.2,nomic-embed-text
+# Auto-pulling required models...
+# ✅ Successfully pulled llama3.2 (2.0 GB)
+# ✅ Successfully pulled nomic-embed-text (274 MB)
+```
+
+**Özellikler:**
+- ✅ `OLLAMA_MODELS` environment variable'dan okuyor (default: llama3.2,nomic-embed-text)
+- ✅ `OLLAMA_AUTOMATIC_PULL=true/false` ile enable/disable
+- ✅ Mevcut modelleri atlıyor (skip if exists)
+- ✅ Eksik modelleri otomatik indiriyor
+- ✅ No curl dependency — bash built-in + ollama CLI
+- ✅ Production-ready — temiz kurulumda bile çalışıyor
+
+**Değiştirilen Dosyalar:**
+- `docker/compose/ollama/docker-entrypoint.sh` (NEW)
+- `docker/compose/ollama/init-models.sh` (UPDATED — no curl, portable bash)
+- `docker/compose/docker-compose.yml` (UPDATED — entrypoint config)
+
+**Etki:** Artık `docker compose down -v` sonrası platform kendi kendine all modelleri indiriyor. RAG pipeline, graph-rag, model-management servisleri gereken modelleri bulabiliyor.
 
 ---
 
