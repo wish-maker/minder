@@ -11,7 +11,7 @@
 | **model-management** | ✅ Production-ready | Gerçek Ollama entegrasyonu, **list/show kanıtlı, restart-safe** | 2025-06-17 |
 | **tts-stt** | ⚠️ Partial | gTTS works (internet gerektiriyor), Piper offline geçişi durduruldu | - |
 
-**Toplam: 6 gerçek servis kanıtlanmış.** + plugin-state-manager (çalışıyor, rolü belirsiz).
+**Toplam: 6 gerçek servis kanıtlanmış.** + marketplace (çalışıyor ama UNAUTHENTICATED), plugin-state-manager (çalışıyor, rolü belirsiz).
 
 ### Test Kanıtları
 
@@ -177,7 +177,7 @@ HTTP/1.1 404 Not Found
 
 | Servis | Durum | Kontrol Edilecek | Öncelik |
 |--------|-------|------------------|---------|
-| **marketplace** | ❓ | Auth? Persistence? | Orta |
+| **marketplace** | ⚠️ UNAUTHENTICATED | Schema fixed, DB+schema auto-init (DROP→restart proven), CRUD+persistence working. JWT auth next | YÜKSEK |
 | **ai-service** | ❓ | Auth? Ollama integration? | Orta |
 
 ---
@@ -244,23 +244,28 @@ HTTP/1.1 404 Not Found
 ### 🔴 KRİTİK (Güvenlik)
 *RCE riski ÇÖZÜLDÜ - manifest-based plugins (Option B). Kritik güvenlik kalemi yok.*
 
+### 🔴 KRİTİK (Güvenlik)
+1. **marketplace JWT auth** — Apply the proven plugin-registry gateway-centered JWT pattern. MUST prove with raw output: invalid/fake token → 401, no token → 401, valid gateway token → 200. Endpoints are currently fully open (licensing, install, plugins) — security gap.
+
 ### 🟡 YÜKSEK (Stabilizasyon - Mimari Kararlar)
-1. **plugin-state-manager** — **DEFERRED** (gerçek kod + PostgreSQL schema var, plugin-registry ile birleştirmek riskli refactor. Eğer overlap gerçek problem yaratırsa revisited edilecek. Değilse şimdiden rahatsız etme.)
-2. ~~**ai-service** kararı: gerçek implementasyon veya kaldır~~ — **KALDIRILDI**
-3. ~~**model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür~~ — **KALDIRILDI**
-4. **marketplace** auth + persistence kontrolü
+2. **plugin-state-manager** — **DEFERRED** (gerçek kod + PostgreSQL schema var, plugin-registry ile birleştirmek riskli refactor. Eğer overlap gerçek problem yaratırsa revisited edilecek. Değilse şimdiden rahatsız etme.)
+3. ~~**ai-service** kararı: gerçek implementasyon veya kaldır~~ — **KALDIRILDI**
+4. ~~**model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür~~ — **KALDIRILDI**
 5. **Uniform auth pattern** dokümante (JWT middleware)
 6. **Rate limiting** standardizasyonu
 
 ### 🟢 NORMAL (Tamamlama)
-7. **Plugin system expansion** - MVP trigger/action set genişletme (NOT urgent)
+8. **Plugin system expansion** - MVP trigger/action set genişletme (NOT urgent)
    - Ek trigger'lar: `schedule`, `event-bus`
    - Ek action'lar: `store-graph` (Neo4j), `query-llm` (Ollama chat), `transform` (data processing)
    - Expression language: nested fields, conditionals, loops
    - **Kural:** Her yeni action = fixed handler function, manifest params only (no-code-execution koru)
-8. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
-9. **Health check** standardizasyonu
-10. **Pi RAM optimizasyonu** — servis başlatma sırası veya selective activation
+9. **tts-stt** Piper TTS offline implementasyonu (manuel model indirme + alternatif motorlar)
+10. **Health check** standardizasyonu
+11. **Pi RAM optimizasyonu** — servis başlatma sırası veya selective activation
+
+### 🔵 Daha Sonra (Normal - Low Priority)
+12. **marketplace FK ilişkileri testi** — marketplace ID'leri SERIAL→UUID'ya değişti. FK relationships (licenses↔plugins, installations↔plugins, versions↔plugins) henüz gerçek ilişkili veri ile test edilmedi. İlk real-world kullanımda verify et.
 
 ---
 
