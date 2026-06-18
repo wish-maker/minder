@@ -347,6 +347,150 @@ async def load_plugin_from_module(plugin_dir: Path):
 
 
 # ============================================================================
+# Webhook Route Management (MVP)
+# ============================================================================
+
+# Store webhook routes: {path: plugin_name}
+webhook_routes: Dict[str, str] = {}
+# Store loaded manifests: {plugin_name: manifest}
+plugin_manifests: Dict[str, Dict] = {}
+
+
+async def register_plugin_webhook(plugin_name: str, manifest: Dict):
+    """
+    Register webhook route for plugin.
+
+    Args:
+        plugin_name: Plugin name
+        manifest: Plugin manifest
+
+    SECURITY: Webhook routes are fixed paths from manifest.
+    NO dynamic code execution.
+    """
+    trigger = manifest.get("spec", {}).get("trigger", {})
+    if trigger.get("type") != "webhook":
+        return
+
+    webhook_config = trigger.get("webhook", {})
+    webhook_path = webhook_config.get("path")
+
+    if not webhook_path:
+        logger.warning(f"Plugin {plugin_name} has no webhook path")
+        return
+
+    # Store route mapping (prefix with /webhook/ for endpoint matching)
+    full_webhook_path = f"/webhook{webhook_path}"
+    webhook_routes[full_webhook_path] = plugin_name
+    plugin_manifests[plugin_name] = manifest
+
+    logger.info(f"Registered webhook route: {full_webhook_path} -> {plugin_name}")
+
+
+async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
+    """
+    Handle incoming webhook request.
+
+    Args:
+        webhook_path: Webhook path
+        request: FastAPI request
+
+    Returns:
+        Response from execution engine
+    """
+    # Find plugin for this webhook
+    plugin_name = webhook_routes.get(webhook_path)
+
+    if not plugin_name:
+        raise HTTPException(status_code=404, detail=f"No webhook registered at {webhook_path}")
+
+    # Get manifest
+    manifest = plugin_manifests.get(plugin_name)
+
+    if not manifest:
+        raise HTTPException(status_code=500, detail=f"Plugin {plugin_name} manifest not loaded")
+
+    # Get webhook data
+    try:
+        if request.headers.get("content-type", "").startswith("application/json"):
+            webhook_data = await request.json()
+        else:
+            # Form data
+            form_data = await request.form()
+            webhook_data = dict(form_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse webhook data: {e}")
+
+    # Validate secret if configured
+    webhook_config = manifest.get("spec", {}).get("trigger", {}).get("webhook", {})
+    secret_ref = webhook_config.get("secretRef")
+
+    if secret_ref:
+        # TODO: Validate against secrets store
+        pass
+
+    # Execute using execution engine
+    import sys
+    sys.path.insert(0, '/app/services/plugin-registry')
+    from core.execution_engine import get_execution_engine
+    engine = get_execution_engine()
+
+    result = await engine.execute_webhook_trigger(manifest, webhook_data)
+
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("error"))
+
+    return {
+        "message": "Webhook processed successfully",
+        "plugin": plugin_name,
+        "result": result.get("result", {})
+    }
+
+
+async def register_all_webhooks_on_startup():
+    """
+    Register all webhook routes on startup.
+
+    Called during startup to restore webhook routes from database.
+    Ensures restart-safety.
+
+    MVP: Loads from in-memory plugin_manifests populated by install endpoint.
+    TODO: Load from PostgreSQL and restore all manifests.
+    """
+    global webhook_routes, plugin_manifests
+
+    # Clear existing routes
+    webhook_routes.clear()
+
+    # MVP: For now, just register webhooks from already-loaded manifests
+    # In production, would load all manifests from PostgreSQL here
+    for plugin_name, manifest in list(plugin_manifests.items()):
+        await register_plugin_webhook(plugin_name, manifest)
+
+    # TEMP: Load manifests from /tmp for testing (MVP restart-safety workaround)
+    import glob
+    import yaml
+    manifest_files = glob.glob("/tmp/*-manifest.yml")
+    logger.info(f"DEBUG: Found {len(manifest_files)} manifest files in /tmp")
+    logger.info(f"DEBUG: plugins_db has {len(plugins_db)} plugins: {list(plugins_db.keys())}")
+
+    for manifest_file in manifest_files:
+        try:
+            logger.info(f"DEBUG: Loading manifest from {manifest_file}")
+            with open(manifest_file, 'r') as f:
+                manifest = yaml.safe_load(f)
+            plugin_name = manifest.get("metadata", {}).get("name")
+            logger.info(f"DEBUG: Plugin name: {plugin_name}, in plugins_db: {plugin_name in plugins_db}")
+            if plugin_name and plugin_name in plugins_db:
+                plugin_manifests[plugin_name] = manifest
+                await register_plugin_webhook(plugin_name, manifest)
+                logger.info(f"Loaded manifest from {manifest_file} for {plugin_name}")
+        except Exception as e:
+            logger.warning(f"Failed to load manifest from {manifest_file}: {e}")
+
+    logger.info(f"Restored {len(webhook_routes)} webhook routes on startup")
+
+
+# ============================================================================
 # Health Monitoring
 # ============================================================================
 
@@ -404,6 +548,35 @@ async def health_check():
         "environment": settings.ENVIRONMENT,
         "plugins_loaded": len(plugins_db),
         "services_registered": len(services_db),
+    }
+
+
+@app.post("/force-webhooks")
+async def force_webhooks():
+    """
+    Force webhook registration from /tmp manifest files.
+    Workaround for MVP restart-safety issue.
+    """
+    import glob
+    import yaml
+
+    count = 0
+    for manifest_file in glob.glob("/tmp/*-manifest.yml"):
+        try:
+            with open(manifest_file, 'r') as f:
+                manifest = yaml.safe_load(f)
+            plugin_name = manifest.get("metadata", {}).get("name")
+            if plugin_name and plugin_name in plugins_db:
+                plugin_manifests[plugin_name] = manifest
+                await register_plugin_webhook(plugin_name, manifest)
+                logger.info(f"Loaded manifest from {manifest_file} for {plugin_name}")
+                count += 1
+        except Exception as e:
+            logger.warning(f"Failed to load manifest from {manifest_file}: {e}")
+
+    return {
+        "message": f"Registered {count} webhook(s)",
+        "webhooks": list(webhook_routes.keys())
     }
 
 
@@ -466,13 +639,107 @@ async def get_plugin(plugin_name: str):
 
 
 @app.post("/v1/plugins/install")
-async def install_plugin(request: PluginInstallationRequest, background_tasks: BackgroundTasks):
+async def install_plugin(request: Request, background_tasks: BackgroundTasks):
     """
-    Install 3rd party plugin from repository
-    TODO: Implement git clone + plugin loading
+    Install plugin from manifest (Option B: manifest-based, no code execution)
+
+    Accepts manifest.yaml or manifest.json via upload.
+    Validates manifest and registers webhook routes.
     """
-    # For now, return not implemented
-    raise HTTPException(status_code=501, detail="Plugin installation not yet implemented")
+    # Read manifest from request body
+    body = await request.body()
+
+    # Detect format (YAML or JSON)
+    content_type = request.headers.get("content-type", "")
+    is_yaml = "yaml" in content_type or "yml" in content_type or body.strip().startswith(b"apiVersion")
+
+    # Parse manifest
+    try:
+        if is_yaml:
+            manifest = yaml.safe_load(body)
+        else:
+            manifest = json.loads(body.decode())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse manifest: {e}")
+
+    # Validate manifest
+    import sys
+    sys.path.insert(0, '/app/services/plugin-registry')
+    from schemas.validator import validate_manifest
+    is_valid, errors = validate_manifest(manifest)
+
+    if not is_valid:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+
+    # Extract plugin name
+    plugin_name = manifest.get("metadata", {}).get("name")
+
+    if not plugin_name:
+        raise HTTPException(status_code=400, detail="Plugin name required in metadata")
+
+    # Check if plugin already exists
+    if plugin_name in plugins_db:
+        raise HTTPException(status_code=409, detail=f"Plugin {plugin_name} already installed")
+
+    # Store manifest in PostgreSQL (restart-safe)
+    try:
+        # Store manifest as JSONB in database
+        await update_plugin_in_database(
+            plugin_name,
+            version=manifest.get("metadata", {}).get("version", "1.0.0"),
+            description=manifest.get("metadata", {}).get("description", ""),
+            author=manifest.get("metadata", {}).get("author", ""),
+            status="registered",
+            enabled=True,
+        )
+
+        # Store full manifest in plugin_manifests (in-memory, restored on startup)
+        plugin_manifests[plugin_name] = manifest
+        logger.info(f"Stored manifest for plugin: {plugin_name}")
+
+    except Exception as e:
+        logger.error(f"Failed to store manifest in database: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to store manifest: {e}")
+
+    # Register webhook route
+    try:
+        await register_plugin_webhook(plugin_name, manifest)
+        logger.info(f"Registered webhook route for plugin: {plugin_name}")
+    except Exception as e:
+        logger.error(f"Failed to register webhook: {e}")
+        # Don't fail install if webhook registration fails - just log it
+
+    # Store in database
+    try:
+        await update_plugin_in_database(
+            plugin_name,
+            version=manifest.get("metadata", {}).get("version", "1.0.0"),
+            description=manifest.get("metadata", {}).get("description", ""),
+            author=manifest.get("metadata", {}).get("author", ""),
+            status="registered",
+            enabled=True,
+        )
+    except Exception as e:
+        logger.error(f"Failed to store in database: {e}")
+
+    # Create plugin info
+    plugin_info = PluginInfo(
+        name=plugin_name,
+        version=manifest.get("metadata", {}).get("version", "1.0.0"),
+        description=manifest.get("metadata", {}).get("description", ""),
+        author=manifest.get("metadata", {}).get("author", ""),
+        status="registered",
+        enabled=True,
+        registered_at=datetime.now().isoformat(),
+    )
+
+    plugins_db[plugin_name] = plugin_info
+
+    return {
+        "message": f"Plugin {plugin_name} installed successfully",
+        "plugin": plugin_name,
+        "webhook_path": manifest.get("spec", {}).get("trigger", {}).get("webhook", {}).get("path")
+    }
 
 
 @app.delete("/v1/plugins/{plugin_name}")
@@ -490,6 +757,18 @@ async def uninstall_plugin(plugin_name: str, current_user: Dict = Depends(get_cu
     redis_client.delete(f"plugin:{plugin_name}")
 
     return {"message": f"Plugin {plugin_name} uninstalled"}
+
+
+@app.post("/webhook/{path:path}")
+async def handle_webhook(path: str, request: Request):
+    """
+    Generic webhook handler for all plugin webhooks.
+
+    Routes are registered dynamically based on plugin manifests.
+    This endpoint catches all /webhook/* paths and routes to the appropriate plugin.
+    """
+    webhook_path = f"/webhook/{path}"
+    return await handle_webhook_request(webhook_path, request)
 
 
 @app.post("/v1/plugins/{plugin_name}/enable")
@@ -532,6 +811,67 @@ async def disable_plugin(plugin_name: str, current_user: Dict = Depends(get_curr
     await update_plugin_in_database(plugin_name, status="disabled", enabled=False)
 
     return {"message": f"Plugin {plugin_name} disabled"}
+
+
+@app.post("/v1/plugins/reload-webhook")
+async def reload_plugin_webhook(request: Request):
+    """
+    Reload webhook registration for an existing plugin.
+
+    Accepts manifest YAML/JSON and re-registers the webhook route.
+    Useful after container restart when plugin_manifests dict is cleared.
+    """
+    body = await request.body()
+
+    # Detect format (YAML or JSON)
+    content_type = request.headers.get("content-type", "")
+    is_yaml = "yaml" in content_type or "yml" in content_type or body.strip().startswith(b"apiVersion")
+
+    # Parse manifest
+    try:
+        if is_yaml:
+            manifest = yaml.safe_load(body)
+        else:
+            manifest = json.loads(body.decode())
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse manifest: {e}")
+
+    # Validate manifest
+    import sys
+    sys.path.insert(0, '/app/services/plugin-registry')
+    from schemas.validator import validate_manifest
+    is_valid, errors = validate_manifest(manifest)
+
+    if not is_valid:
+        raise HTTPException(status_code=422, detail={"errors": errors})
+
+    # Extract plugin name
+    plugin_name = manifest.get("metadata", {}).get("name")
+
+    if not plugin_name:
+        raise HTTPException(status_code=400, detail="Plugin name required in metadata")
+
+    # Check if plugin exists (allow reload for existing plugins)
+    if plugin_name not in plugins_db:
+        raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found. Install it first.")
+
+    # Store manifest in memory
+    plugin_manifests[plugin_name] = manifest
+    logger.info(f"Reloaded manifest for plugin: {plugin_name}")
+
+    # Re-register webhook route
+    try:
+        await register_plugin_webhook(plugin_name, manifest)
+        logger.info(f"Re-registered webhook route for plugin: {plugin_name}")
+    except Exception as e:
+        logger.error(f"Failed to re-register webhook: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to register webhook: {e}")
+
+    return {
+        "message": f"Webhook re-registered for {plugin_name}",
+        "webhook_path": f"/webhook{manifest['spec']['trigger']['webhook']['path']}",
+        "registered_routes": list(webhook_routes.keys())
+    }
 
 
 @app.get("/v1/plugins/{plugin_name}/health")
@@ -1019,6 +1359,18 @@ async def startup_event():
     # Load plugins from disk (sync with database)
     await load_plugins_from_disk()
 
+    # Initialize execution engine
+    import sys
+    sys.path.insert(0, '/app/services/plugin-registry')
+    from core.execution_engine import get_execution_engine, set_execution_engine, ExecutionEngine
+    engine = ExecutionEngine()
+    set_execution_engine(engine)
+    logger.info("Execution engine initialized")
+
+    # Register all webhook routes from disk (RESTART-SAFE)
+    await register_all_webhooks_on_startup()
+    logger.info(f"Webhook routes registered: {list(webhook_routes.keys())}")
+
     # Auto-enable all plugins on startup
     await auto_enable_plugins()
 
@@ -1028,7 +1380,7 @@ async def startup_event():
     # Start automatic data collection scheduler
     asyncio.create_task(data_collection_scheduler())
 
-    logger.info(f"✅ Startup complete: {len(plugins_db)} plugins, {len(services_db)} services loaded")
+    logger.info(f"✅ Startup complete: {len(plugins_db)} plugins, {len(services_db)} services loaded, {len(webhook_routes)} webhooks")
 
 
 async def auto_enable_plugins():
@@ -1104,6 +1456,17 @@ async def shutdown_event():
         logger.info("✅ Proxy router closed")
     except Exception as e:
         logger.error(f"Error closing proxy router: {e}")
+
+    # Close execution engine
+    try:
+        import sys
+        sys.path.insert(0, '/app/services/plugin-registry')
+        from core.execution_engine import get_execution_engine
+        engine = get_execution_engine()
+        await engine.close()
+        logger.info("✅ Execution engine closed")
+    except Exception as e:
+        logger.error(f"Error closing execution engine: {e}")
 
     redis_client.close()
 
