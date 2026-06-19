@@ -116,7 +116,7 @@ services:
       POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
     volumes:
     - postgres_data:/var/lib/postgresql
-    - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    - ../services/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     # PILLAR 1: NO exposed ports - Internal network only
     healthcheck:
       test:
@@ -1132,23 +1132,23 @@ volumes:
   docker_traefik_logs:
     driver: local
   postgres_data:
-    external: true
+    driver: local
   redis_data:
-    external: true
+    driver: local
   rabbitmq_data:
-    external: true
+    driver: local
   minio_data:
-    external: true
+    driver: local
   ollama_data:
-    external: true
+    driver: local
   openwebui_data:
-    external: true
+    driver: local
   neo4j_data:
-    external: true
+    driver: local
   qdrant_data:
-    external: true
+    driver: local
   influxdb_data:
-    external: true
+    driver: local
   docker_otel-collector-data:
     driver: local
   docker_plugins_data:
