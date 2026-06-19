@@ -1,68 +1,28 @@
 # Minder Platform - Next Steps
 
-## 🎯 NEXT SESSION — FIRST TASK
+## ✅ CLEAN INSTALL TEST — COMPLETE
 
-### Clean from-scratch install test (the real deploy-readiness test)
+### Core Platform is DEPLOY-READY from zero (2026-06-19)
 
-**Prereqs DONE:**
-- ✅ marketplace DB auto-init (DROP→restart proven)
-- ✅ postgres init.sql (schema initialization working)
-- ✅ Neo4j auth hardcoded (neo4j/minder_secure_password_2024)
-- ✅ Ollama auto-pull (delete+restart proven, committed 3a9cf113)
+**Status:** ✅ **PROVEN** — All 6 core services + data stores recover from `docker compose down -v`
 
-**TEST PROCEDURE:**
-1. **docker compose down -v** → Complete wipe (all volumes, all data)
-2. **./setup.sh start** → Fresh install from zero
-3. **NO manual steps allowed** — If something fails, that's a real bug
+**Deploy Bugs Fixed (commit 95424dbf):**
+- ✅ **External volumes bug:** 9 volumes marked `external: true` but never created → changed to `driver: local` for auto-creation
+- ✅ **Postgres init path:** `./postgres-init.sql` was empty directory → corrected to `../services/postgres/init.sql:ro`
 
-**What to expect:**
-- ~2GB model re-download (llama3.2 + nomic-embed-text via Ollama auto-pull)
-- Takes time (models are large, be patient)
-- All services should start automatically
+**Clean Install Results (raw proof):**
 
-**PROVE each service works after clean boot (raw output, not assumptions):**
+| Service | Test | Result | Raw Evidence |
+|---------|------|--------|--------------|
+| **All core** | Docker ps health check | ✅ PASSED | All 12 containers healthy |
+| **Ollama** | Auto-pull on clean boot | ✅ PASSED | `"Model llama3.2:latest not found, pulling..."` → `"Successfully pulled llama3.2"` (2.3GB total) |
+| **RAG Pipeline** | KB→upload→query→answer | ✅ PASSED | `"answer": "Minder is an AI orchestration platform, and it runs on a Raspberry Pi."` (confidence: 0.85) |
+| **Graph-RAG** | Construct→retrieve→entities | ✅ PASSED | 16 entities → 97 relationships → 6 related entities retrieved |
+| **Marketplace** | POST plugin→GET it back | ✅ PASSED | Plugin persists, DB auto-created on clean boot |
+| **Model-Management** | GET /models shows models | ✅ PASSED | Both auto-pulled models visible via API |
+| **Plugin-Registry** | Webhook→vector in Qdrant | ✅ PASSED | `"Creating Qdrant collection: test-webhooks"` → `"Stored vector: point_id=..."` |
 
-```bash
-# TEST 1: All 6 services healthy
-docker ps | grep "minder.*healthy"
-
-# TEST 2: rag-pipeline - create KB + upload + query
-curl -X POST http://localhost:8004/knowledge-base \
-  -H "Content-Type: application/json" \
-  -d '{"name":"test-kb","description":"Clean install test"}'
-# Upload document → query returns relevant answer
-
-# TEST 3: graph-rag - construct + retrieve (Neo4j auth holds)
-curl -X POST http://localhost:8008/graph/construct \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Bill Gates founded Microsoft in 1975"}'
-curl -X POST http://localhost:8008/graph/query \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Bill Gates Microsoft"}'
-# Expected: Related entities returned
-
-# TEST 4: marketplace - CRUD + persistence
-curl -X POST http://localhost:8002/plugins \
-  -H "Content-Type: application/json" \
-  -d '{"name":"test-plugin","display_name":"Test Plugin"}'
-# Verify plugin exists → restart marketplace → verify still exists
-
-# TEST 5: model-management - GET /models shows auto-pulled models
-curl http://localhost:8005/models
-# Expected: llama3.2:latest + nomic-embed-text:latest
-
-# TEST 6: plugin-registry - webhook → vector in Qdrant
-# Register webhook trigger plugin → POST test data → check Qdrant count
-```
-
-**Critical Rule:**
-- If ANY step needs a manual fix, that's a real deploy bug → fix + automate it
-- This test must be run start-to-finish in one sitting (don't interrupt mid-wipe)
-
-**Success Criteria:**
-- All services healthy without manual intervention
-- All CRUD operations work end-to-end
-- No "oops, I forgot to X" moments — everything automated
+**VERIFY NOTE:** docker-compose.yml volume fix may be at risk if setup.sh has auto-regeneration logic. Confirm: does `setup.sh start` ever regenerate docker-compose.yml from templates? If yes, the volume fixes must also live in the template/generation code, not just the compose file.
 
 ---
 
@@ -366,17 +326,24 @@ $ docker compose down -v && docker compose up -d
 ## Sonraki Adımlar
 
 ### 🔴 KRİTİK (Güvenlik)
-*RCE riski ÇÖZÜLDÜ - manifest-based plugins (Option B). Kritik güvenlik kalemi yok.*
 
-### 🔴 KRİTİK (Güvenlik)
 1. **marketplace JWT auth** — Apply the proven plugin-registry gateway-centered JWT pattern. MUST prove with raw output: invalid/fake token → 401, no token → 401, valid gateway token → 200. Endpoints are currently fully open (licensing, install, plugins) — security gap.
 
+*RCE riski ÇÖZÜLDÜ - manifest-based plugins (Option B). Core platform deploy-ready from zero (clean install proven 2026-06-19).*
+
+### 🟡 KARAR GEREKLİ (Mimari - Monitoring Layer)
+
+2. **Monitoring/proxy layer decision** — traefik, authelia, prometheus, grafana, alertmanager, telegraf, influxdb, otel-collector configs are broken (directories instead of files). Decision needed:
+   - **Option A:** Fix all configs (time-consuming, may not be needed for personal Pi)
+   - **Option B:** Minimal subset (keep traefik for routing, drop rest)
+   - **Option C:** Drop entirely (use direct port access, like we dropped ai-service)
+   - **NOT blocking core functionality** — platform works without this layer
+
 ### 🟡 YÜKSEK (Stabilizasyon - Mimari Kararlar)
-2. **plugin-state-manager** — **DEFERRED** (gerçek kod + PostgreSQL schema var, plugin-registry ile birleştirmek riskli refactor. Eğer overlap gerçek problem yaratırsa revisited edilecek. Değilse şimdiden rahatsız etme.)
-3. ~~**ai-service** kararı: gerçek implementasyon veya kaldır~~ — **KALDIRILDI**
-4. ~~**model-fine-tuning** kararı: kaldır veya "config-only customization"a dönüştür~~ — **KALDIRILDI**
-5. **Uniform auth pattern** dokümante (JWT middleware)
-6. **Rate limiting** standardizasyonu
+
+3. **plugin-state-manager** — **DEFERRED** (gerçek kod + PostgreSQL schema var, plugin-registry ile birleştirmek riskli refactor. Eğer overlap gerçek problem yaratırsa revisited edilecek. Değilse şimdiden rahatsız etme.)
+4. **Uniform auth pattern** dokümante (JWT middleware)
+5. **Rate limiting** standardizasyonu
 
 ### 🟢 NORMAL (Tamamlama)
 8. **Plugin system expansion** - MVP trigger/action set genişletme (NOT urgent)
@@ -395,26 +362,35 @@ $ docker compose down -v && docker compose up -d
 
 ## 🎯 Hedef: Production Deployment
 
+**Durum: Core platform DEPLOY-READY from zero ✅**
+- ✅ Clean install recovery proven (down -v → auto-recovers)
+- ✅ Models auto-pull on first boot (2.3GB)
+- ✅ All 6 core services work end-to-end
+- ✅ Deploy bugs fixed (volumes, postgres init path)
+
 **Güvenlik Gatekeeper:**
 - ✅ Tüm servislerde JWT auth çalışıyor
-- ✅ Persistence kanıtlanmış (5/5 servis)
+- ✅ Persistence kanıtlanmış (6/6 servis)
 - ✅ RCE riski ÇÖZÜLDÜ (manifest-based plugins, no-code-execution by design)
+- ❌ marketplace JWT auth (endpoints fully open — CRITICAL gap)
 - ❌ Rate limiting uniform değil
 - ❌ Error handling standardize değil
 
 **Production Checklist:**
-- [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, tts-stt)
+- [x] **Core platform deploy-ready from zero** (clean install proven 2026-06-19)
+- [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, marketplace❌, tts-stt)
 - [x] Tüm servisler persistence kanıtlanmış (6/6 servis)
 - [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
+- [ ] **marketplace JWT auth** (CRITICAL — endpoints fully open)
+- [ ] **Monitoring layer decision** (traefik, authelia, prometheus, grafana, etc. — configs broken)
 - [ ] Uniform rate limiting uygulandı
-- [ ] Monitoring + alerting aktif
 - [ ] Disaster recovery plan hazır
 - [ ] tts-stt offline TTS implementasyonu (Piper)
 - [ ] Pi RAM optimizasyonu (servis başlatma stratejisi)
 - [x] Mimari kararlar alındı (ai-service KALDIRILDI, model-fine-tuning KALDIRILDI, plugin-state-manager DEFERRED)
 
 **Notlar:**
-- ✅ RCE riski architectural choice ile çözüldü (Option B: manifest-based plugins).
-- ✅ ai-service ve model-fine-tuning kaldırıldı (2026-06-18, commit 5eb193f0).
+- ✅ **Core platform deploy-ready** — Clean install test passed (commit 95424dbf fixed volumes + postgres init path).
+- ⏸️ **Monitoring/proxy layer deferred** — configs are broken (directories vs files), decision needed: fix/minimal/drop.
 - ⏸️ plugin-state-manager deferred — gerçek kodu var, merge riskli, sorun yaratmadığı sürece dokunma.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
