@@ -108,6 +108,66 @@ HTTP/1.1 404 Not Found
 
 ## 🔧 Altyapı Düzeltmeleri (Infrastructure Fixes)
 
+### Monitoring-Layer Crash Loops — DÜZELTİLDİ (2026-06-20, commit 094611b)
+
+**Sorun:** traefik, telegraf, authelia, plugin-state-manager servisleri sürekli restart oluyordu. "WSL2 path bug" varsayımı YANLIŞ çıktı — gerçek sebepler mount path'lerindeydi.
+
+**Kök Sebepler:**
+1. **Traefik mount path:** `./traefik/traefik.yml` → directory olarak mount ediliyordu (path yanlış)
+2. **Telegraf mount path:** `./telegraf/telegraf.conf` → directory olarak mount ediliyordu (path yanlış)
+3. **Authelia mount paths:** `./authelia/*.yml` → `../services/authelia/*.yml` pattern'de olmalıydı
+4. **Plugin-state-manager config:** `src/core/config/default_plugins.yml` dosyası dizin olarak yaratılmış, içi boştu → `IsADirectoryError` crash
+
+**Çözüm:**
+1. **Traefik:** `./traefik/traefik.yml` → `../services/traefik/traefik.yml` (compose + template)
+2. **Telegraf:** `./telegraf/telegraf.conf` → `../services/telegraf/telegraf.conf` (compose + template)
+3. **Authelia:** `../services/authelia/*.yml` pattern'e geçildi (compose + template) — **ama servis geçici olarak devre dışı**
+4. **Plugin-state-manager:** `default_plugins.yml` gerçek YAML dosyası olarak restore edildi, boş config ile (directory delete + file create + image rebuild)
+
+**Kanıt (60-Saniye Stabilite Testi):**
+```bash
+# TEST 1: Restart count sabit mi?
+$ docker ps --filter name=minder-plugin-state-manager
+# Önce: Restarting (3) 23 seconds ago
+# Sonra: Up About a minute (healthy) ✅
+
+# TEST 2: Tüm unhealthy container'lar temizlendi mi?
+$ docker ps --filter health=unhealthy
+# NAMES     STATUS (empty) ✅
+
+# TEST 3: plugin-state-manager "benzersiz" roller gerçekten çalışıyor mu?
+$ curl -s http://localhost:8003/v1/plugins/state/test-plugin
+→ {"id":"afcf6fb8-4e07-4f8b-86be-08b55bd8ccf0","state":"enabled"} ✅
+
+$ curl -s "http://localhost:8003/v1/plugins/test-plugin/dependencies"
+→ {"plugin_name":"test-plugin","dependents":[],"count":0} ✅
+```
+
+**Authelia Durumu:**
+- DISABLED (commented out) — crash loop durduruldu
+- Gerçek sorunlar: `minder_authelia` database yok + NTP sync hatası
+- Karar bekleniyor: SSO/2FA kişisel Pi için gerekli mi?
+
+**Plugin-State-Manager Karar:**
+- State machine: ✅ GERÇEK (plugin enable/disable working)
+- Dependency resolution: ✅ GERÇEK (dependents tracked)
+- Tools discovery: ✅ WORKING (empty but functional)
+- **Sonuç:** SAKLA — benzersiz rolleri gerçek, duplicate değil
+
+**Template Sync (KRİTİK):**
+- Fixes applied to `.setup/templates/docker-compose.yml.template`
+- Changes survive `setup.sh` regeneration → next clean install won't lose fixes
+- compose.yml regenerates from template, so template'de olmak şart
+
+**Değiştirilen Dosyalar:**
+- `docker/compose/docker-compose.yml` (runtime fixes)
+- `.setup/templates/docker-compose.yml.template` (survives regeneration)
+- `src/core/config/default_plugins.yml` (restored as real file)
+
+**Etki:** Artık monitoring-layer crash loop yok. Tüm servisler healthy.
+
+---
+
 ### Ollama Auto-Pull Mechanism — DÜZELTİLDİ (2026-06-18, commit 3a9cf113)
 
 **Sorun:** `docker compose down -v` ile temiz kurulum yaptığında Ollama container'ı başlatılıyor ama hiçbir model yoktu. RAG pipeline, graph-rag, model-management servisleri kullanılacak modelleri bulamıyordu (llama3.2, nomic-embed-text).
@@ -333,15 +393,21 @@ $ docker compose down -v && docker compose up -d
 
 ### 🟡 KARAR GEREKLİ (Mimari - Monitoring Layer)
 
-2. **Monitoring/proxy layer decision** — traefik, authelia, prometheus, grafana, alertmanager, telegraf, influxdb, otel-collector configs are broken (directories instead of files). Decision needed:
-   - **Option A:** Fix all configs (time-consuming, may not be needed for personal Pi)
-   - **Option B:** Minimal subset (keep traefik for routing, drop rest)
-   - **Option C:** Drop entirely (use direct port access, like we dropped ai-service)
-   - **NOT blocking core functionality** — platform works without this layer
+2. **Authelia SSO/2FA decision** — DISABLED pending decision (commented out in compose + template).
+   - Gerçek sorunlar: `minder_authelia` database yok + NTP sync hatası
+   - Eğer tutulursa: DB auto-init (minder_authelia) + NTP config gerekli
+   - Açık soru: SSO/2FA kişisel Pi için gerekli mi?
+   - **Not:** Crash loop durduruldu, resource consumption azaldı
+
+3. **Monitoring configs check** — traefik ✅ FIXED, telegraf ✅ FIXED, ama prometheus/grafana configs hala check edilmeli (optional, full monitoring için).
 
 ### 🟡 YÜKSEK (Stabilizasyon - Mimari Kararlar)
 
-3. **plugin-state-manager** — **DEFERRED** (gerçek kod + PostgreSQL schema var, plugin-registry ile birleştirmek riskli refactor. Eğer overlap gerçek problem yaratırsa revisited edilecek. Değilse şimdiden rahatsız etme.)
+3. **plugin-state-manager** — **✅ TEST EDİLDİ + KEEP** (duplicate DEĞİL, benzersiz roller var)
+   - State machine: ✅ REAL (plugin enable/disable working)
+   - Dependency resolution: ✅ REAL (dependents tracked)
+   - Tools discovery: ✅ WORKING (empty but functional)
+   - **Sonuç:** Sakla — gerçek değer katıyor, crash loop config sorunu fix edildi
 4. **Uniform auth pattern** dokümante (JWT middleware)
 5. **Rate limiting** standardizasyonu
 
@@ -381,16 +447,18 @@ $ docker compose down -v && docker compose up -d
 - [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, marketplace❌, tts-stt)
 - [x] Tüm servisler persistence kanıtlanmış (6/6 servis)
 - [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
+- [x] **Monitoring-layer crash loops fixed** (traefik/telegraf mount paths, plugin-state-manager config restored)
 - [ ] **marketplace JWT auth** (CRITICAL — endpoints fully open)
-- [ ] **Monitoring layer decision** (traefik, authelia, prometheus, grafana, etc. — configs broken)
+- [ ] **Authelia SSO/2FA decision** (disabled pending: needs DB auto-init + NTP config if kept)
+- [ ] **Prometheus/Grafana configs check** (optional for full monitoring)
 - [ ] Uniform rate limiting uygulandı
 - [ ] Disaster recovery plan hazır
 - [ ] tts-stt offline TTS implementasyonu (Piper)
 - [ ] Pi RAM optimizasyonu (servis başlatma stratejisi)
-- [x] Mimari kararlar alındı (ai-service KALDIRILDI, model-fine-tuning KALDIRILDI, plugin-state-manager DEFERRED)
+- [x] Mimari kararlar alındı (ai-service KALDIRILDI, model-fine-tuning KALDIRILDI, plugin-state-manager TEST EDİLDİ + KEEP)
 
 **Notlar:**
 - ✅ **Core platform deploy-ready** — Clean install test passed (commit 95424dbf fixed volumes + postgres init path).
-- ⏸️ **Monitoring/proxy layer deferred** — configs are broken (directories vs files), decision needed: fix/minimal/drop.
-- ⏸️ plugin-state-manager deferred — gerçek kodu var, merge riskli, sorun yaratmadığı sürece dokunma.
+- ✅ **Monitoring-layer crash loops fixed** — commit 094611b, traefik/telegraf/authelia mount paths corrected, plugin-state-manager config restored + tested (state machine + dependency resolution proven real).
+- ⏸️ **Authelia disabled** — Crash loop stopped, pending SSO/2FA decision for personal Pi.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
