@@ -387,7 +387,7 @@ $ docker compose down -v && docker compose up -d
 
 ### 🔴 KRİTİK (Güvenlik)
 
-1. **marketplace JWT auth** — Apply the proven plugin-registry gateway-centered JWT pattern. MUST prove with raw output: invalid/fake token → 401, no token → 401, valid gateway token → 200. Endpoints are currently fully open (licensing, install, plugins) — security gap.
+✅ **marketplace JWT auth — DONE (2026-06-20)** — All state-changing endpoints (POST/DELETE/PATCH) protected with plugin-registry gateway JWT pattern. GET catalog endpoints remain public. **Raw output proven:** no token → 401, invalid token → 401, valid gateway token → 200/201. JWT_SECRET verified shared with api-gateway. Auth-only (no role checks yet). **No critical security gaps remain.**
 
 *RCE riski ÇÖZÜLDÜ - manifest-based plugins (Option B). Core platform deploy-ready from zero (clean install proven 2026-06-19).*
 
@@ -435,22 +435,23 @@ $ docker compose down -v && docker compose up -d
 - ✅ Deploy bugs fixed (volumes, postgres init path)
 
 **Güvenlik Gatekeeper:**
-- ✅ Tüm servislerde JWT auth çalışıyor
+- ✅ Tüm servislerde JWT auth çalışıyor (marketplace complete 2026-06-20)
 - ✅ Persistence kanıtlanmış (6/6 servis)
 - ✅ RCE riski ÇÖZÜLDÜ (manifest-based plugins, no-code-execution by design)
-- ❌ marketplace JWT auth (endpoints fully open — CRITICAL gap)
+- ✅ marketplace JWT auth (state-changing endpoints protected, GET public, proven 401/200)
 - ❌ Rate limiting uniform değil
 - ❌ Error handling standardize değil
 
 **Production Checklist:**
 - [x] **Core platform deploy-ready from zero** (clean install proven 2026-06-19)
-- [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, marketplace❌, tts-stt)
+- [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, marketplace✅, tts-stt)
 - [x] Tüm servisler persistence kanıtlanmış (6/6 servis)
 - [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
 - [x] **Monitoring-layer crash loops fixed** (traefik/telegraf mount paths, plugin-state-manager config restored)
-- [ ] **marketplace JWT auth** (CRITICAL — endpoints fully open)
+- [x] **marketplace JWT auth** (DONE 2026-06-20 — state-changing endpoints protected, GET public, JWT_SECRET shared, proven 401/200)
 - [ ] **Authelia SSO/2FA decision** (disabled pending: needs DB auto-init + NTP config if kept)
 - [ ] **Prometheus/Grafana configs check** (optional for full monitoring)
+- [ ] **Role-based auth** (deferred — auth-only sufficient for now)
 - [ ] Uniform rate limiting uygulandı
 - [ ] Disaster recovery plan hazır
 - [ ] tts-stt offline TTS implementasyonu (Piper)
@@ -460,5 +461,7 @@ $ docker compose down -v && docker compose up -d
 **Notlar:**
 - ✅ **Core platform deploy-ready** — Clean install test passed (commit 95424dbf fixed volumes + postgres init path).
 - ✅ **Monitoring-layer crash loops fixed** — commit 094611b, traefik/telegraf/authelia mount paths corrected, plugin-state-manager config restored + tested (state machine + dependency resolution proven real).
+- ✅ **Marketplace JWT auth complete** — commit ac1421a8, all state-changing endpoints protected, GET public, JWT_SECRET shared with gateway, proven (401/200 raw output).
 - ⏸️ **Authelia disabled** — Crash loop stopped, pending SSO/2FA decision for personal Pi.
+- **Cleanup (leftover untracked dirs):** `docker/compose/authelia/`, `src/services/plugin-state-manager/core/config/` — from previous sessions, not part of current work. Can be removed sometime.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
