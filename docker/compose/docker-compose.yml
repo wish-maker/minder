@@ -47,7 +47,7 @@ services:
     - 8081:8080  # Traefik Dashboard (LAN access only - use IP whitelist)
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
-    - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+    - ../services/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
     - ./traefik/dynamic:/etc/traefik/dynamic:ro
     - docker_traefik_letsencrypt:/letsencrypt
     - docker_traefik_logs:/var/log/traefik
@@ -68,43 +68,45 @@ services:
     - traefik.http.routers.traefik-dashboard.middlewares=ipwhitelist
     # PILLAR 1: Expanded IP whitelist for local network access (LAN + VPN)
     - traefik.http.middlewares.ipwhitelist.ipwhitelist.trustedIPs=${TRAEFIK_TRUSTED_IPS:-192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1/32}
-  authelia:
-    image: authelia/authelia:4.38.7
-    container_name: minder-authelia
-    restart: on-failure
-    environment:
-    - AUTHELIA_STORAGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    - AUTHELIA_DEFAULT_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
-    - AUTHELIA_DEFAULT_JWT_SECRET=${AUTHELIA_JWT_SECRET}
-    volumes:
-    - ./authelia/configuration.yml:/config/configuration.yml:ro
-    - ./authelia/users_database.yml:/config/users_database.yml:ro
-    # PILLAR 1: NO exposed ports - Traefik routing only
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test:
-      - CMD
-      - wget
-      - --quiet
-      - --tries=1
-      - --spider
-      - http://localhost:9091/api/health
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-    - minder-network
-    # PILLAR 1: Expose via Traefik with Authelia middleware
-    labels:
-    - traefik.enable=true
-    - traefik.http.routers.authelia.rule=Host(`authelia.minder.local`)
-    - traefik.http.routers.authelia.service=authelia
-    - traefik.http.routers.authelia.entrypoints=websecure
-    - traefik.http.services.authelia.loadbalancer.server.port=9091
+  # TEMPORARILY DISABLED: Crash loop due to missing database and NTP sync issues
+  # Decision deferred: Evaluate if SSO/2FA needed for personal Pi deployment
+  # authelia:
+  #   image: authelia/authelia:4.38.7
+  #   container_name: minder-authelia
+  #   restart: on-failure
+  #   environment:
+  #   - AUTHELIA_STORAGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+  #   - AUTHELIA_DEFAULT_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+  #   - AUTHELIA_DEFAULT_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+  #   volumes:
+  #   - ../services/authelia/configuration.yml:/config/configuration.yml:ro
+  #   - ../services/authelia/users_database.yml:/config/users_database.yml:ro
+  #   # PILLAR 1: NO exposed ports - Traefik routing only
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test:
+  #     - CMD
+  #     - wget
+  #     - --quiet
+  #     - --tries=1
+  #     - --spider
+  #     - http://localhost:9091/api/health
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   networks:
+  #   - minder-network
+  #   # PILLAR 1: Expose via Traefik with Authelia middleware
+  #   labels:
+  #   - traefik.enable=true
+  #   - traefik.http.routers.authelia.rule=Host(`authelia.minder.local`)
+  #   - traefik.http.routers.authelia.service=authelia
+  #   - traefik.http.routers.authelia.entrypoints=websecure
+  #   - traefik.http.services.authelia.loadbalancer.server.port=9091
   postgres:
     image: postgres:18.3-trixie
     container_name: minder-postgres
@@ -471,7 +473,6 @@ services:
     - JWT_ALGORITHM=HS256
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
-    - DEFAULT_PLUGINS_CONFIG=/app/src/core/config/default_plugins.yml
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "8003:8003"
@@ -482,8 +483,7 @@ services:
         condition: service_healthy
       plugin-registry:
         condition: service_healthy
-    volumes:
-    - ../../src/core/config/default_plugins.yml:/app/src/core/config/default_plugins.yml:ro
+    # Note: DEFAULT_PLUGINS_CONFIG not set - will use empty default
     healthcheck:
       test:
       - CMD
@@ -639,7 +639,7 @@ services:
     container_name: minder-telegraf
     restart: on-failure
     volumes:
-    - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    - ../services/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     - /proc:/host/proc:ro
     - /sys:/host/sys:ro
     - /var/run/docker.sock:/var/run/docker.sock:ro

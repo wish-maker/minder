@@ -1,0 +1,5 @@
+# Default Plugins Configuration
+# This file defines which plugins should be bootstrapped into the system
+
+default_plugins: []
+dependencies: []
