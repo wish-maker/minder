@@ -2,11 +2,12 @@
 import logging
 from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.ai_tools_importer import sync_plugin_tools
 from services.marketplace.core.database import get_pool
+from shared.auth.jwt_middleware import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,7 @@ async def get_ai_tool_details(tool_name: str):
 
 
 @router.post("/sync")
-async def sync_ai_tools(request: AIToolsSyncRequest):
+async def sync_ai_tools(request: AIToolsSyncRequest, current_user: dict = Depends(get_current_user)):
     """
     Sync AI tools from plugin manifest
 
@@ -226,7 +227,7 @@ async def sync_ai_tools(request: AIToolsSyncRequest):
 
 
 @router.delete("/plugins/{plugin_id}/tools")
-async def deactivate_plugin_tools(plugin_id: str):
+async def deactivate_plugin_tools(plugin_id: str, current_user: dict = Depends(get_current_user)):
     """
     Deactivate all AI tools for a plugin
 

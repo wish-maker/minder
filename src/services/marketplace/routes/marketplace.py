@@ -2,11 +2,12 @@
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.database import get_pool
 from services.marketplace.models.plugin import PluginCreate, PluginListResponse, PluginResponse
+from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
 
@@ -205,7 +206,7 @@ async def search_plugins(
 
 
 @router.post("/plugins", response_model=PluginResponse, status_code=201)
-async def create_plugin(plugin_data: PluginCreate):
+async def create_plugin(plugin_data: PluginCreate, current_user: dict = Depends(get_current_user)):
     """
     Create a new plugin in marketplace
 

@@ -1,8 +1,9 @@
 # services/marketplace/routes/licensing.py
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.licensing import create_license, get_user_licenses, validate_license
+from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace/licenses", tags=["Licensing"])
 
@@ -23,7 +24,7 @@ class LicenseActivateRequest(BaseModel):
 
 
 @router.post("/validate")
-async def validate_license_endpoint(request: LicenseValidateRequest):
+async def validate_license_endpoint(request: LicenseValidateRequest, current_user: dict = Depends(get_current_user)):
     """Validate a license key"""
     result = await validate_license(license_key=request.license_key, plugin_id=request.plugin_id)
 
@@ -31,7 +32,7 @@ async def validate_license_endpoint(request: LicenseValidateRequest):
 
 
 @router.post("/activate")
-async def activate_license(request: LicenseActivateRequest):
+async def activate_license(request: LicenseActivateRequest, current_user: dict = Depends(get_current_user)):
     """Activate a license for a user and plugin"""
     try:
         license_data = await create_license(

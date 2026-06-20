@@ -1,9 +1,10 @@
 # services/marketplace/routes/management.py
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.database import get_pool
 from services.marketplace.models.installation import InstallationCreate, InstallationResponse
+from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
@@ -15,7 +16,7 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/{plugin_id}/install", response_model=InstallationResponse)
-async def install_plugin(plugin_id: str, request: InstallRequest):
+async def install_plugin(plugin_id: str, request: InstallRequest, current_user: dict = Depends(get_current_user)):
     """
     Install a plugin for a user
 
@@ -96,7 +97,7 @@ async def install_plugin(plugin_id: str, request: InstallRequest):
 
 
 @router.delete("/{plugin_id}/uninstall")
-async def uninstall_plugin(plugin_id: str, user_id: str = Query(...)):
+async def uninstall_plugin(plugin_id: str, user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
     """Uninstall a plugin for a user"""
     pool = await get_pool()
 
@@ -128,7 +129,7 @@ async def uninstall_plugin(plugin_id: str, user_id: str = Query(...)):
 
 
 @router.post("/{plugin_id}/enable")
-async def enable_plugin(plugin_id: str, user_id: str = Query(...)):
+async def enable_plugin(plugin_id: str, user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
     """Enable a plugin for a user"""
     pool = await get_pool()
 
@@ -160,7 +161,7 @@ async def enable_plugin(plugin_id: str, user_id: str = Query(...)):
 
 
 @router.post("/{plugin_id}/disable")
-async def disable_plugin(plugin_id: str, user_id: str = Query(...)):
+async def disable_plugin(plugin_id: str, user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
     """Disable a plugin for a user"""
     pool = await get_pool()
 

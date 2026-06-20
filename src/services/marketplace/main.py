@@ -1,6 +1,10 @@
 # services/marketplace/main.py
 import logging
+import sys
 from contextlib import asynccontextmanager
+
+# Add src to path for shared module imports (MUST be before other imports)
+sys.path.insert(0, "/app/src")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

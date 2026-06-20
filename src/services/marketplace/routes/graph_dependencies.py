@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from services.marketplace.config import settings
 from services.marketplace.core.neo4j_client import Neo4jClient, get_neo4j_client
+from shared.auth.jwt_middleware import get_current_user
 
 logger = logging.getLogger("minder.graph_dependencies")
 
@@ -50,6 +51,7 @@ async def add_plugin_dependency(
     depends_on: str,
     dependency_type: str = "requires",
     neo4j: Neo4jClient = Depends(get_neo4j_client),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Add a dependency relationship between two plugins
@@ -99,7 +101,7 @@ async def get_plugin_conflicts(plugin_id: str, neo4j: Neo4jClient = Depends(get_
 
 @router.post("/recommendations")
 async def get_plugin_recommendations(
-    installed_plugins: List[str], limit: int = 5, neo4j: Neo4jClient = Depends(get_neo4j_client)
+    installed_plugins: List[str], limit: int = 5, neo4j: Neo4jClient = Depends(get_neo4j_client), current_user: dict = Depends(get_current_user)
 ):
     """
     Get plugin recommendations based on installed plugins

@@ -846,6 +846,10 @@ services:
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "8002:8002"
+    volumes:
+    - ../../src/services/marketplace:/app/services/marketplace:ro
+    - ../../src/shared:/app/src/shared:ro
+    - docker_marketplace_data:/var/lib/marketplace
     depends_on:
       postgres:
         condition: service_healthy
@@ -1162,6 +1166,8 @@ volumes:
   influxdb_config:
     driver: local
   docker_prometheus_data:
+    driver: local
+  docker_marketplace_data:
     driver: local
   docker_grafana_data:
     driver: local
