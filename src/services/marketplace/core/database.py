@@ -51,7 +51,7 @@ async def get_pool() -> asyncpg.Pool:
                     host=settings.MARKETPLACE_DATABASE_HOST,
                     port=settings.MARKETPLACE_DATABASE_PORT,
                     user=settings.MARKETPLACE_DATABASE_USER,
-                    password=settings.MARKETPLACE_DATABASE_PASSWORD,
+                    password=settings.POSTGRES_PASSWORD,
                     database=settings.MARKETPLACE_DATABASE_NAME,
                     min_size=2,
                     max_size=10,
@@ -67,7 +67,7 @@ async def get_pool() -> asyncpg.Pool:
                     host=settings.MARKETPLACE_DATABASE_HOST,
                     port=settings.MARKETPLACE_DATABASE_PORT,
                     user=settings.MARKETPLACE_DATABASE_USER,
-                    password=settings.MARKETPLACE_DATABASE_PASSWORD,
+                    password=settings.POSTGRES_PASSWORD,
                     database='postgres'
                 )
 
@@ -84,7 +84,7 @@ async def get_pool() -> asyncpg.Pool:
                     host=settings.MARKETPLACE_DATABASE_HOST,
                     port=settings.MARKETPLACE_DATABASE_PORT,
                     user=settings.MARKETPLACE_DATABASE_USER,
-                    password=settings.MARKETPLACE_DATABASE_PASSWORD,
+                    password=settings.POSTGRES_PASSWORD,
                     database=settings.MARKETPLACE_DATABASE_NAME,
                     min_size=2,
                     max_size=10,

@@ -13,7 +13,26 @@ from typing import Any, Dict, List, Optional
 
 from neo4j import AsyncGraphDatabase
 
+from services.marketplace.config import settings
+
 logger = logging.getLogger("minder.neo4j_client")
+
+
+def _parse_neo4j_auth(auth_string: str) -> tuple[str, str]:
+    """
+    Parse NEO4J_AUTH string (format: neo4j/password) into user and password.
+
+    Args:
+        auth_string: Auth string in format "user/password"
+
+    Returns:
+        Tuple of (username, password)
+    """
+    if "/" in auth_string:
+        user, password = auth_string.split("/", 1)
+        return user, password
+    # Fallback to default if format is wrong
+    return "neo4j", auth_string
 
 
 class Neo4jClient:
@@ -23,7 +42,7 @@ class Neo4jClient:
         self,
         uri: str = "bolt://neo4j:7687",
         user: str = "neo4j",
-        password: str = "neo4j_test_password_change_me",
+        password: str = "",
     ):
         """
         Initialize Neo4j client
@@ -33,6 +52,13 @@ class Neo4jClient:
             user: Neo4j username
             password: Neo4j password
         """
+        # If password not provided, use from settings (platform standard)
+        if not password and hasattr(settings, "NEO4J_AUTH"):
+            user, password = _parse_neo4j_auth(settings.NEO4J_AUTH)
+        elif not password:
+            # Last resort: should not happen in production
+            password = "secure_password_change_me"
+
         self.driver = AsyncGraphDatabase.driver(uri, auth=(user, password))
 
     async def close(self):
@@ -192,8 +218,17 @@ async def get_neo4j_client() -> Neo4jClient:
     global _neo4j_client
 
     if _neo4j_client is None:
-        _neo4j_client = Neo4jClient(
-            uri="bolt://neo4j:7687", user="neo4j", password="neo4j_test_password_change_me"
-        )
+        # Use settings.NEO4J_URI if available, otherwise default
+        uri = getattr(settings, "NEO4J_URI", "bolt://neo4j:7687")
+
+        # Parse user/password from NEO4J_AUTH
+        if hasattr(settings, "NEO4J_AUTH") and settings.NEO4J_AUTH:
+            user, password = _parse_neo4j_auth(settings.NEO4J_AUTH)
+        else:
+            # Fallback - should not happen in production
+            user = "neo4j"
+            password = "secure_password_change_me"
+
+        _neo4j_client = Neo4jClient(uri=uri, user=user, password=password)
 
     return _neo4j_client

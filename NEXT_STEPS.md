@@ -575,6 +575,9 @@ $ docker ps --filter name=minder-alertmanager
 ### 🔵 Daha Sonra (Normal - Low Priority)
 12. **marketplace FK ilişkileri testi** — marketplace ID'leri SERIAL→UUID'ya değişti. FK relationships (licenses↔plugins, installations↔plugins, versions↔plugins) henüz gerçek ilişkili veri ile test edilmedi. İlk real-world kullanımda verify et.
 
+### 🔧 Bilinen Buglar (Loose Ends - Fix When Feature Used)
+13. **marketplace graph-dependencies endpoint broken** — Neo4j driver `.list()` API incompatibility causes `AsyncResult has no attribute 'list'` error. Neo4j auth fixed (2026-06-21) — now connects with real NEO4J_AUTH — but graph feature was never actually working end-to-end. Fix when marketplace graph dependencies are actually used. Rate limiter dead code (not wired in main.py, hardcoded localhost can't work in-container).
+
 ---
 
 ## 🎯 Hedef: Production Deployment
