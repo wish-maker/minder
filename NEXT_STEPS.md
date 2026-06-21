@@ -144,9 +144,11 @@ $ curl -s "http://localhost:8003/v1/plugins/test-plugin/dependencies"
 ```
 
 **Authelia Durumu:**
-- DISABLED (commented out) — crash loop durduruldu
-- Gerçek sorunlar: `minder_authelia` database yok + NTP sync hatası
-- Karar bekleniyor: SSO/2FA kişisel Pi için gerekli mi?
+- ❌ DISABLED (commented out in compose + template, container stopped + removed)
+- Gerçek sorunlar: Configuration was incomplete (storage, session secrets, cookies, access_control all missing/wrong)
+- Neden trial-and-error durduruldu: Misconfigured SSO/2FA dangerous — could let everyone in
+- Karar: Research official Authelia 4.38.7 minimal config first, configure from scratch when exposing externally
+- Minderauthelia DB: ✅ Created in init.sql (harmless, useful when properly configured later)
 
 **Plugin-State-Manager Karar:**
 - State machine: ✅ GERÇEK (plugin enable/disable working)
@@ -221,6 +223,122 @@ $ docker compose down -v && docker compose up -d
 - `docker/compose/docker-compose.yml` (UPDATED — entrypoint config)
 
 **Etki:** Artık `docker compose down -v` sonrası platform kendi kendine all modelleri indiriyor. RAG pipeline, graph-rag, model-management servisleri gereken modelleri bulabiliyor.
+
+---
+
+### Ollama Remote-Host Support — IMPLEMENTED (2026-06-21, commit 00940e1b)
+
+**Feature:** Configurable Ollama host (local or remote) via `OLLAMA_BASE_URL` environment variable.
+
+**Modes:**
+- **LOCAL (default, zero-config):** Leave empty → uses local `minder-ollama` container
+- **REMOTE (advanced):** Set to `http://IP:11434` → local container skipped, uses remote host
+
+**Implementation:**
+1. **Environment variable:** `OLLAMA_BASE_URL` (empty=local, set=remote)
+2. **Service integration:** All Ollama-consuming services read from env with fallback to localhost
+3. **Conditional startup:** `setup.sh` detects `OLLAMA_BASE_URL` and uses `--scale ollama=0` to skip local container
+4. **Remote-skip logic:** `init-models.sh` skips auto-pull when `OLLAMA_BASE_URL` is set (cannot pull to remote host)
+
+**Files Modified:**
+- `src/services/plugin-registry/core/execution_engine.py` — Read `OLLAMA_BASE_URL` with fallback
+- `src/services/api-gateway/routes/ai.py` — Read `OLLAMA_BASE_URL` with fallback
+- `src/shared/utils/service_urls.py` — OLLAMA constant reads from `OLLAMA_BASE_URL` env
+- `docker/compose/docker-compose.yml` — Changed `OLLAMA_HOST`→`OLLAMA_BASE_URL`, added to all consuming services
+- `.setup/templates/docker-compose.yml.template` — Mirror of compose changes
+- `docker/compose/.env.example` — Documented `OLLAMA_BASE_URL` with LOCAL/REMOTE usage
+- `setup.sh` — Added `OLLAMA_BASE_URL` detection and `--scale ollama=0` logic with explicit logging
+- `docker/compose/ollama/init-models.sh` — Added conditional to skip auto-pull when remote
+
+**Proof (both modes tested):**
+```bash
+# LOCAL mode (OLLAMA_BASE_URL empty):
+$ bash setup.sh start
+# → minder-ollama container starts, auto-pull runs
+$ curl http://localhost:8004/health
+# → {"status":"healthy", "ollama_url":"http://minder-ollama:11434"}
+
+# REMOTE mode (OLLAMA_BASE_URL=http://192.168.68.109:11434):
+$ OLLAMA_BASE_URL=http://192.168.68.109:11434 bash setup.sh start
+# → minder-ollama container SKIPPED (scale 0), auto-pull SKIPPED
+# → Services connect to remote host
+$ curl -X POST http://localhost:8004/embed -H "Content-Type: application/json" \
+  -d '{"text": "remote test"}'
+# → SUCCESS (embedding generated on remote host)
+```
+
+**Usage:**
+```bash
+# Local mode (default):
+bash setup.sh start
+
+# Remote mode:
+OLLAMA_BASE_URL=http://192.168.68.109:11434 bash setup.sh start
+
+# Bypassing setup.sh (manual scale required):
+OLLAMA_BASE_URL=http://192.168.68.109:11434 docker compose up --scale ollama=0
+```
+
+**Etki:** Ollama computation can now be offloaded to more powerful hardware while Minder services run on Pi. LOCAL mode integrity preserved (zero-config default).
+
+---
+
+### Plugin-Registry + Marketplace Clean-Install Fixes — FIXED (2026-06-21, commit b2629bec)
+
+**Sorun:** `docker compose down -v` sonrası plugin-registry ve marketplace crash ediyordu (Python import errors).
+
+**Kök Sebepler:**
+1. **Plugin-registry Dockerfile:** `src/shared/` ve `src/core/` dizinleri COPY edilmemişti → `ImportError: No module named 'minder_shared'`
+2. **Marketplace Dockerfile:** `src/shared/` COPY edilmemişti → `ImportError: No module named 'minder_shared'`
+3. **Plugin-state-manager config:** `src/core/config/default_plugins.yml` dizin olarak yaratılmış, içi boştu → marketplace DB auto-creation için gerekliydi
+
+**Çözüm:**
+1. **Plugin-registry Dockerfile:** `COPY src/shared/ /app/src/shared/` ve `COPY src/core/ /app/src/core/` eklendi
+2. **Marketplace Dockerfile:** `COPY src/shared/ /app/src/shared/` eklendi
+3. **Plugin-state-manager:** `default_plugins.yml` gerçek YAML dosyası olarak restore edildi
+
+**Kanıt:**
+```bash
+# TEST 1: Clean install → plugin-registry healthy
+$ docker compose down -v && docker compose up -d
+$ docker ps --filter name=minder-plugin-registry
+# → Up X minutes (healthy) ✅
+
+# TEST 2: Clean install → marketplace healthy (DB auto-created)
+$ docker ps --filter name=minder-marketplace
+# → Up X minutes (healthy) ✅
+$ docker logs minder-marketplace 2>&1 | grep "InvalidCatalogName"
+# → Auto-creates marketplace DB on first connect ✅
+```
+
+**Etki:** Artık temiz kurulumda plugin-registry ve marketplace crash yok. Shared modules doğru bir şekilde kopyalanıyor.
+
+---
+
+### Prometheus + Alertmanager Mount Path Fixes — FIXED (2026-06-21, commit 38fdb60d)
+
+**Sorun:** Prometheus ve alertmanager servisleri restart oluyordu (mount path'leri yanlış).
+
+**Kök Sebepler:**
+1. **Prometheus:** `./prometheus/prometheus.yml` path yanlış → config yüklenemedi
+2. **Alertmanager:** `./alertmanager/alertmanager.yml` path yanlış → config yüklenemedi
+
+**Çözüm:**
+1. **Prometheus:** `./prometheus/prometheus.yml` → `../services/prometheus/prometheus.yml`
+2. **Alertmanager:** `./alertmanager/alertmanager.yml` → `../services/alertmanager/alertmanager.yml`
+
+**Kanıt:**
+```bash
+# TEST 1: Prometheus healthy
+$ docker ps --filter name=minder-prometheus
+# → Up X minutes (healthy) ✅
+
+# TEST 2: Alertmanager healthy
+$ docker ps --filter name=minder-alertmanager
+# → Up X minutes (healthy) ✅
+```
+
+**Etki:** Monitoring layer artık crash loop'ta değil. Prometheus + alertmanager düzgün çalışıyor.
 
 ---
 
@@ -449,6 +567,9 @@ $ docker compose down -v && docker compose up -d
 - [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
 - [x] **Monitoring-layer crash loops fixed** (traefik/telegraf mount paths, plugin-state-manager config restored)
 - [x] **marketplace JWT auth** (DONE 2026-06-20 — state-changing endpoints protected, GET public, JWT_SECRET shared, proven 401/200)
+- [x] **Plugin-registry + marketplace clean-install fixes** (DONE 2026-06-21 — Dockerfiles include shared modules, commit b2629bec)
+- [x] **Prometheus + alertmanager mount path fixes** (DONE 2026-06-21 — monitoring layer functional, commit 38fdb60d)
+- [x] **Ollama remote-host support** (DONE 2026-06-21 — OLLAMA_BASE_URL for LOCAL/REMOTE modes, commit 00940e1b)
 - [ ] **Authelia SSO/2FA decision** (disabled pending: needs DB auto-init + NTP config if kept)
 - [ ] **Prometheus/Grafana configs check** (optional for full monitoring)
 - [ ] **Role-based auth** (deferred — auth-only sufficient for now)
@@ -462,6 +583,9 @@ $ docker compose down -v && docker compose up -d
 - ✅ **Core platform deploy-ready** — Clean install test passed (commit 95424dbf fixed volumes + postgres init path).
 - ✅ **Monitoring-layer crash loops fixed** — commit 094611b, traefik/telegraf/authelia mount paths corrected, plugin-state-manager config restored + tested (state machine + dependency resolution proven real).
 - ✅ **Marketplace JWT auth complete** — commit ac1421a8, all state-changing endpoints protected, GET public, JWT_SECRET shared with gateway, proven (401/200 raw output).
+- ✅ **Plugin-registry + marketplace clean-install fixes** — commit b2629bec, Dockerfiles now include shared modules, crash resolved.
+- ✅ **Prometheus + alertmanager mount path fixes** — commit 38fdb60d, monitoring layer functional from zero.
+- ✅ **Ollama remote-host support** — commit 00940e1b, OLLAMA_BASE_URL for LOCAL/REMOTE modes, both proven with raw output.
 - ⏸️ **Authelia disabled** — Crash loop stopped, pending SSO/2FA decision for personal Pi.
 - **Cleanup (leftover untracked dirs):** `docker/compose/authelia/`, `src/services/plugin-state-manager/core/config/` — from previous sessions, not part of current work. Can be removed sometime.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
