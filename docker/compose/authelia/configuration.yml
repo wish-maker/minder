@@ -1,0 +1,72 @@
+theme: dark
+
+server:
+  address: tcp://0.0.0.0:9091
+
+log:
+  level: info
+
+authentication_backend:
+  file:
+    path: /config/users_database.yml
+
+session:
+  name: authelia_session
+  secret: ${AUTHELIA_SESSION_SECRET}
+  expiration: 1h
+  inactivity: 5m
+  remember_me: 1M
+  cookies:
+    - name: authelia_session
+      domain: minder.local
+      authelia_url: https://authelia.minder.local
+      expiration: 1h
+      inactivity: 5m
+      default_redirection_url: https://public.minder.local
+
+regulation:
+  max_retries: 5
+  find_time: 2m
+  ban_time: 5m
+
+storage:
+  encryption_key: ${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+  postgres:
+    address: tcp://postgres:5432
+    database: minder_authelia
+    username: minder
+    password: ${AUTHELIA_STORAGE_POSTGRES_PASSWORD}
+
+notifier:
+  disable_startup_check: true
+  filesystem:
+    filename: /config/notification.txt
+
+access_control:
+  default_policy: one_factor
+  rules:
+    - domain:
+        - public.minder.local
+      policy: bypass
+
+    - domain:
+        - "*.minder.local"
+      resources:
+        - "^/health(.*)"
+      policy: bypass
+
+    - domain:
+        - admin.minder.local
+      subject:
+        - ["group:admins"]
+      policy: two_factor
+
+    - domain:
+        - api.minder.local
+      policy: two_factor
+
+    - domain:
+        - app.minder.local
+      policy: one_factor
+
+identity_validation: reset_password: { disabled: true }

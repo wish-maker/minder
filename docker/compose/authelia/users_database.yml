@@ -1,0 +1,31 @@
+# Authelia Users Database
+# https://www.authelia.com/configuration/authentication/file/
+
+users:
+  # Default Admin User
+  admin:
+    disabled: false
+    displayname: Admin User
+    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
+    email: admin@minder.local
+    groups:
+      - admins
+      - developers
+
+  # Developer User
+  developer:
+    disabled: false
+    displayname: Developer User
+    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
+    email: developer@minder.local
+    groups:
+      - developers
+
+  # Regular User
+  user:
+    disabled: false
+    displayname: Regular User
+    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
+    email: user@minder.local
+    groups:
+      - users

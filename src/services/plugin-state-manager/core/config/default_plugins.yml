@@ -1,0 +1,59 @@
+# config/default_plugins.yml
+# Default plugins configuration for Minder
+
+default_plugins:
+  # Cryptocurrency analysis module
+  - name: crypto
+    priority: 100
+    auto_enable: true
+    required: false
+    min_tier: free
+    description: "Cryptocurrency price tracking and market analysis"
+    version: "1.0.0"
+
+  # Weather data module
+  - name: weather
+    priority: 90
+    auto_enable: true
+    required: false
+    min_tier: free
+    description: "Weather information and forecasts"
+    version: "1.0.0"
+
+  # Network monitoring (required for system health)
+  - name: network
+    priority: 80
+    auto_enable: true
+    required: true
+    min_tier: community
+    description: "Network performance monitoring and security analysis"
+    version: "1.0.0"
+
+  # News aggregation
+  - name: news
+    priority: 70
+    auto_enable: true
+    required: false
+    min_tier: free
+    description: "News aggregation with sentiment analysis"
+    version: "1.0.0"
+
+  # Turkish investment funds (TEFAS)
+  - name: tefas
+    priority: 60
+    auto_enable: true
+    required: false
+    min_tier: community
+    description: "Turkish investment fund analysis"
+    version: "1.0.0"
+
+dependencies:
+  # Advanced analytics depends on crypto and network
+  - plugin: advanced_analytics
+    depends_on: [crypto, network]
+    required: false
+
+  # AI-powered insights depend on news
+  - plugin: ai_insights
+    depends_on: [news]
+    required: false

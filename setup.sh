@@ -65,7 +65,7 @@ readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq )
 # - OLLAMA_BASE_URL empty/unset → local mode, ollama container starts
 # - OLLAMA_BASE_URL set → remote mode, ollama container skipped
 readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management)
-readonly -a AI_SERVICES=(openwebui tts-stt model-fine-tuning)
+readonly -a AI_SERVICES=(openwebui tts-stt)
 readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager jaeger otel-collector)
 readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter rabbitmq-exporter blackbox-exporter cadvisor node-exporter)
 
@@ -78,7 +78,6 @@ declare -A SERVICE_PORTS=(
     [rag-pipeline]="8004/health"
     [model-management]="8005/health"
     [tts-stt]="8006/health"
-    [model-fine-tuning]="8007/health"
     # OpenWebUI port not exposed (Traefik only), skipping direct health check
     [prometheus]="9090/-/healthy"
     [grafana]="3000/api/health"
@@ -2272,31 +2271,6 @@ start_services_manually() {
           --health-retries=3 \
           minder/tts-stt-service:1.0.0
     fi
-
-    # Model Fine-tuning
-    if ! container_running model-fine-tuning; then
-        log_detail "Starting Model Fine-tuning..."
-        run docker run -d \
-          --name "$(container_name model-fine-tuning)" \
-          --network "$NETWORK_NAME" \
-          -p 8007:8007 \
-          -e POSTGRES_HOST="$(container_name postgres)" \
-          -e POSTGRES_PORT=5432 \
-          -e POSTGRES_USER=minder \
-          -e POSTGRES_PASSWORD="$postgres_pass" \
-          -e POSTGRES_DB=minder \
-          -e QDRANT_HOST="$(container_name qdrant)" \
-          -e QDRANT_PORT=6333 \
-          --restart unless-stopped \
-          --health-cmd="curl -f http://localhost:8007/health || exit 1" \
-          --health-interval=30s \
-          --health-timeout=10s \
-          --health-retries=3 \
-          minder/model-fine-tuning:1.0.0
-    fi
-
-    sleep 5
-
     # Observability services
     log_info "⑧ Starting observability services..."
 
@@ -2475,7 +2449,7 @@ run_health_checks() {
     done
 
     [[ "$json_mode" == false ]] && echo -e "\n${BOLD}AI Services${NC}"
-    for svc in openwebui tts-stt-service model-fine-tuning; do
+    for svc in openwebui tts-stt-service; do
         [[ -v "SERVICE_PORTS[$svc]" ]] && _check_endpoint "$svc" "${SERVICE_PORTS[$svc]}"
     done
 
