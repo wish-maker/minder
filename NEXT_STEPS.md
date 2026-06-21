@@ -559,8 +559,27 @@ $ docker ps --filter name=minder-alertmanager
    - Dependency resolution: ✅ REAL (dependents tracked)
    - Tools discovery: ✅ WORKING (empty but functional)
    - **Sonuç:** Sakla — gerçek değer katıyor, crash loop config sorunu fix edildi
-4. **Uniform auth pattern** dokümante (JWT middleware)
-5. **Rate limiting** standardizasyonu
+4. **Fail-fast validators for required env vars** — NEXT TASK (not urgent, real secrets already in .env)
+   - **Purpose:** Prevent silent fallback to weak defaults if an env var is missed (raise clear error instead)
+   - **Pattern:** Env var required, no weak default, raise "X must be set" if missing/empty
+   - **Files to modify (7):**
+     - `src/shared/config/base_settings.py` — REDIS_PASSWORD, JWT_SECRET validators
+     - `src/shared/auth/jwt_middleware.py` — JWT_SECRET validator
+     - `src/services/api-gateway/config.py` — REDIS_PASSWORD, POSTGRES_PASSWORD, JWT_SECRET validators
+     - `src/services/plugin-registry/config.py` — POSTGRES_PASSWORD, REDIS_PASSWORD validators
+     - `src/services/plugin-state-manager/main.py` — REDIS_PASSWORD, JWT_SECRET validators
+     - `src/services/marketplace/config.py` — POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET validators (Phase 1 unified vars)
+     - `src/services/graph-rag/main.py` — NEO4J_AUTH validator (remove fallback)
+   - **Docker templates (2):**
+     - `docker/compose/docker-compose.yml:317` — Remove NEO4J_AUTH default (:-neo4j/secure_password_change_me)
+     - `.setup/templates/docker-compose.yml.template:313` — Same as above
+   - **Verification required:**
+     1. Clean install test: `docker compose down -v → bash setup.sh start` → all services start (setup.sh generates real .env)
+     2. Fail-fast test: `mv .env .env.bak → docker compose restart` → services fail with clear "X must be set" errors
+     3. Recovery test: `mv .env.bak .env → docker compose restart` → all services recover
+   - **Note:** Real secrets already in .env and working (marketplace Neo4j auth fixed 2026-06-21). This is defense-in-depth: fail-fast if a required var is ever missed, not a current security gap.
+5. **Uniform auth pattern** dokümante (JWT middleware)
+6. **Rate limiting** standardizasyonu
 
 ### 🟢 NORMAL (Tamamlama)
 8. **Plugin system expansion** - MVP trigger/action set genişletme (NOT urgent)
