@@ -24,7 +24,36 @@ $ docker ps              # All services healthy
 $ git status             # NO changes (clean install proven)
 ```
 
-**Final Status:** All 32 services running, otel-collector + exporters working, zero interventions needed.
+**Final Status:** 25 healthy + 3 no-healthcheck (redis-exporter, rabbitmq-exporter, otel-collector) = 28 total minder services. All working, zero interventions needed.
+
+---
+
+## ⚠️ DEPLOY WARNING — Resource Constraints
+
+**Full Stack Size:** 28 containers (6 core API + 7 datastores + 15 monitoring)
+
+**Current Deployment Target:** Raspberry Pi 4 (4GB RAM)
+
+**Risk:** OOM (Out of Memory) — Full stack may exceed available RAM, especially with LLM models loaded (~1.5GB for llama3.2)
+
+**Deploy Options:**
+
+| Option | Approach | Trade-off |
+|--------|----------|-----------|
+| **A. Core-only** | Skip heavy monitoring stack (Prometheus, Grafana, Jaeger, exporters, otel-collector, Telegraf, InfluxDB) | Saves ~1-2GB RAM, loses observability |
+| **B. Higher-RAM device** | Deploy on device with 8GB+ RAM | Full observability, higher cost |
+| **C. Compose profiles** | Add `--profile monitoring` to make monitoring stack optional | Flexible deployment, requires compose refactoring |
+
+**Estimated RAM Breakdown (full stack):**
+- Core APIs: ~800MB (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management)
+- Datastores: ~1.2GB (postgres, redis, qdrant, neo4j, rabbitmq, minio)
+- Ollama: ~1.5GB (llama3.2 model)
+- Monitoring: ~1GB (prometheus, grafana, jaeger, 6 exporters, otel-collector, telegraf, influxdb)
+- **Total: ~4.5GB** (exceeds 4GB Pi capacity)
+
+**Recommendation for Pi 4 deployment:** Use Option A (core-only) or Option C (compose profiles) until higher-RAM hardware available.
+
+---
 
 **Clean Install Results (raw proof):**
 
