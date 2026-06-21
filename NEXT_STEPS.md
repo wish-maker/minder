@@ -587,5 +587,6 @@ $ docker ps --filter name=minder-alertmanager
 - ✅ **Prometheus + alertmanager mount path fixes** — commit 38fdb60d, monitoring layer functional from zero.
 - ✅ **Ollama remote-host support** — commit 00940e1b, OLLAMA_BASE_URL for LOCAL/REMOTE modes, both proven with raw output.
 - ⏸️ **Authelia disabled** — Crash loop stopped, pending SSO/2FA decision for personal Pi.
+- ✅ **Pre-commit hook removed** — Broken hook (config never committed) removed 2026-06-21. Future: proper pre-commit setup for secret scanning, linting.
 - **Cleanup (leftover untracked dirs):** `docker/compose/authelia/`, `src/services/plugin-state-manager/core/config/` — from previous sessions, not part of current work. Can be removed sometime.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
