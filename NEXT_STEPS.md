@@ -4,7 +4,7 @@
 
 ### Core Platform is DEPLOY-READY from zero (2026-06-21)
 
-**Status:** ✅ **PROVEN** — All 6 core services + data stores recover from `docker compose down -v` with ZERO mid-test changes
+**Status:** ✅ **PROVEN** — All 6 core services + data stores recover from `docker compose down -v` with ZERO mid-test changes (TRULY untouched run, 2026-06-21 19:16-19:20)
 
 **Deploy Bugs Fixed:**
 - ✅ **External volumes bug:** 9 volumes marked `external: true` but never created → changed to `driver: local` for auto-creation (commit 95424dbf)
@@ -12,7 +12,9 @@
 - ✅ **model-fine-tuning orphan references:** Service removed but references remained in compose + template + setup.sh → all removed (commit 3e7f90ed)
 - ✅ **blackbox-exporter mount:** `./prometheus/blackbox.yml` pointed to non-existent → fixed to `../services/prometheus/blackbox.yml` (commit c29684e9)
 - ✅ **Ollama entrypoint curl:** Inline entrypoint used curl (not in ollama image) → fixed to bash TCP check (commit d4f68283)
-- ✅ **otel-collector mount + exporter healthchecks:** Bogus empty directory + invalid nc checks → removed directory + removed invalid healthchecks (commit fac2d27e)
+- ✅ **otel-collector mount + bogus directory:** Empty dir mounted as file → removed directory (commit fac2d27e)
+- ✅ **rabbitmq-exporter built-in healthcheck:** Image has healthcheck on port 9419 (doesn't work) → explicitly disabled with `healthcheck: disable: true` (commit fd3fa915)
+- ✅ **otel-collector prometheus endpoint:** Config had port 18888 but mapping expected 8888 → fixed endpoint (commit fd3fa915)
 
 **Clean Install Proof (2026-06-21 - ZERO changes):**
 ```bash
@@ -584,7 +586,7 @@ $ docker ps --filter name=minder-alertmanager
 - [x] **Plugin-registry + marketplace clean-install fixes** (DONE 2026-06-21 — Dockerfiles include shared modules, commit b2629bec)
 - [x] **Prometheus + alertmanager mount path fixes** (DONE 2026-06-21 — monitoring layer functional, commit 38fdb60d)
 - [x] **Ollama remote-host support** (DONE 2026-06-21 — OLLAMA_BASE_URL for LOCAL/REMOTE modes, commit 00940e1b)
-- [x] **Deploy bug fixes + otel-collector/exporters** (DONE 2026-06-21 — model-fine-tuning orphan refs, blackbox mount, Ollama entrypoint, otel-collector bogus dir + exporter healthchecks, commits 3e7f90ed/c29684e9/d4f68283/fac2d27e)
+- [x] **Deploy bug fixes + otel-collector/exporters** (DONE 2026-06-21 — model-fine-tuning orphan refs, blackbox mount, Ollama entrypoint, otel-collector bogus dir + exporter healthchecks + prometheus endpoint, commits 3e7f90ed/c29684e9/d4f68283/fac2d27e/fd3fa915)
 - [ ] **Authelia SSO/2FA decision** (disabled pending: needs DB auto-init + NTP config if kept)
 - [ ] **Prometheus/Grafana configs check** (optional for full monitoring)
 - [ ] **Role-based auth** (deferred — auth-only sufficient for now)
