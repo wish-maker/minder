@@ -258,6 +258,7 @@ services:
     - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
     - OLLAMA_AUTOMATIC_PULL=${OLLAMA_AUTOMATIC_PULL:-true}
     - OLLAMA_HOST=0.0.0.0
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
     - OLLAMA_ORIGINS=*
     - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
     - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
@@ -352,6 +353,7 @@ services:
     - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
     - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -414,6 +416,7 @@ services:
     - POSTGRES_USER=minder
     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     - POSTGRES_DB=minder
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - SERVICE_REGISTRY_BACKEND=redis
     - REDIS_HOST=redis
     - REDIS_PORT=6379
@@ -507,7 +510,7 @@ services:
     environment:
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=6333
-    - OLLAMA_HOST=http://ollama:11434
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2}
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
@@ -738,7 +741,7 @@ services:
     container_name: minder-openwebui
     restart: on-failure
     environment:
-    - OLLAMA_BASE_URL=http://ollama:11434
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
     - RAG_ENABLED=true
     - MINDER_API_GATEWAY_URL=http://minder-api-gateway:8000
@@ -839,7 +842,7 @@ services:
     # PILLAR 3: GPU Passthrough - Hardware acceleration for model training (when available)
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
     environment:
-    - OLLAMA_HOST=http://ollama:11434
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - DEFAULT_BASE_MODEL=${DEFAULT_BASE_MODEL:-llama3.2}
     - TRAINING_DATA_PATH=/app/training-data
     - MODELS_OUTPUT_PATH=/app/models

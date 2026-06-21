@@ -6,6 +6,7 @@ NO code execution - only template substitution and fixed action handlers.
 """
 
 import logging
+import os
 import re
 import uuid
 from typing import Dict, Any, Optional, List
@@ -15,6 +16,9 @@ from datetime import datetime
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Ollama URL from environment or default to local
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://minder-ollama:11434")
 
 
 class TemplateEngine:
@@ -114,16 +118,16 @@ class ExecutionEngine:
     """
 
     def __init__(self, qdrant_url: str = "http://minder-qdrant:6333",
-                 ollama_url: str = "http://minder-ollama:11434"):
+                 ollama_url: str = None):
         """
         Initialize execution engine.
 
         Args:
             qdrant_url: Qdrant server URL
-            ollama_url: Ollama server URL
+            ollama_url: Ollama server URL (defaults to OLLAMA_BASE_URL env or local)
         """
         self.qdrant_url = qdrant_url
-        self.ollama_url = ollama_url
+        self.ollama_url = ollama_url or OLLAMA_BASE_URL
         self.template_engine = TemplateEngine()
         self.http_client = None  # Created on first use
 

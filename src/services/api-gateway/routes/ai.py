@@ -4,6 +4,7 @@ Provides OpenAI-compatible API for tool calling
 """
 
 import logging
+import os
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -14,6 +15,9 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/ai", tags=["ai"])
+
+# Ollama URL from environment or default to local
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://minder-ollama:11434")
 
 # Tool cache (refresh every 60 seconds)
 _tools_cache: Optional[Dict] = None
@@ -127,7 +131,7 @@ async def chat_completions(request: Request):
 
     # For now, route to Ollama
     # TODO: Implement proper function calling flow
-    ollama_url = "http://minder-ollama:11434/api/chat"
+    ollama_url = f"{OLLAMA_BASE_URL}/api/chat"
 
     try:
         async with httpx.AsyncClient() as client:

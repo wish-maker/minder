@@ -2,8 +2,12 @@
 Service URL configuration utilities
 Central management of internal service URLs and endpoints
 """
+import os
 from typing import Optional
 from urllib.parse import urljoin
+
+# Ollama URL from environment or default to local
+_OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://minder-ollama:11434")
 
 
 class ServiceURLs:
@@ -35,7 +39,7 @@ class ServiceURLs:
     NEO4J: str = "bolt://neo4j:7687"
     MINIO: str = "http://minio:9000"
     RABBITMQ: str = "amqp://rabbitmq:5672"
-    OLLAMA: str = "http://ollama:11434"
+    OLLAMA: str = _OLLAMA_BASE_URL
 
     # ============================================================================
     # Observability Services

@@ -7,6 +7,17 @@
 
 set -e
 
+# Check for remote Ollama mode
+# If OLLAMA_BASE_URL is set, we're using a remote host - skip auto-pull
+if [ -n "$OLLAMA_BASE_URL" ]; then
+    echo "========================================"
+    echo "REMOTE OLLAMA MODE DETECTED"
+    echo "OLLAMA_BASE_URL is set to: $OLLAMA_BASE_URL"
+    echo "Skipping model auto-pull (cannot pull to remote host)"
+    echo "========================================"
+    exit 0
+fi
+
 # Wait for Ollama service to be ready (using TCP check)
 echo "Waiting for Ollama service to be ready..."
 while ! timeout 5 bash -c '</dev/tcp/127.0.0.1/11434' 2>/dev/null; do

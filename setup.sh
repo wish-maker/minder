@@ -59,8 +59,11 @@ readonly CONTAINER_PREFIX="minder"
 readonly NETWORK_NAME="docker_minder-network"
 readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
-readonly -a SECURITY_SERVICES=(traefik authelia)
+readonly -a SECURITY_SERVICES=(traefik)
 readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq )
+# Note: ollama uses conditional profiles in docker-compose.yml
+# - OLLAMA_BASE_URL empty/unset → local mode, ollama container starts
+# - OLLAMA_BASE_URL set → remote mode, ollama container skipped
 readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management)
 readonly -a AI_SERVICES=(openwebui tts-stt model-fine-tuning)
 readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager jaeger otel-collector)
@@ -82,7 +85,8 @@ declare -A SERVICE_PORTS=(
     [influxdb]="8086"
     [traefik]="8081/dashboard/"
     # RabbitMQ management UI port not exposed (Traefik only), skipping direct health check
-    [authelia]="9091/api/health"
+    # authelia disabled pending proper configuration
+    # [authelia]="9091/api/health"
     [minio]="9000/minio/health/live"
     [jaeger]="16686"
     [otel-collector]="18888/metrics"
@@ -120,7 +124,8 @@ readonly -a THIRD_PARTY_IMAGE_SPECS=(
     "prom/prometheus:v3.1.0|v3|none"
     "grafana/grafana:11.6.0|11|none"
     "prom/alertmanager:latest|v0|none"
-    "authelia/authelia:4.38.7|4|none"
+    # authelia disabled pending proper configuration
+    # "authelia/authelia:4.38.7|4|none"
     "traefik:v3.7.0|v3|none"
     "influxdb:3.9.1-core|3|none"
     "telegraf:1.34.0|1|none"
@@ -413,9 +418,10 @@ generate_secrets() {
     openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/grafana_password.secret"
     openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/influxdb_admin_password.secret"
     openssl rand -base64 64 | tr -d '=+/' | head -c 64 > "$secrets_dir/influxdb_token.secret"
-    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_jwt_secret.secret"
-    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_session_secret.secret"
-    openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_storage_encryption_key.secret"
+    # authelia disabled pending proper configuration
+    # openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_jwt_secret.secret"
+    # openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_session_secret.secret"
+    # openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/authelia_storage_encryption_key.secret"
     openssl rand -base64 32 | tr -d '=+/' | head -c 32 > "$secrets_dir/minio_root_password.secret"
 
     # Set permissions
@@ -1647,12 +1653,25 @@ start_services() {
 
     log_step "Starting all services"
 
+    # Detect Ollama mode
+    if [[ -n "${OLLAMA_BASE_URL:-}" ]]; then
+        log_info "🌐 Remote Ollama mode DETECTED"
+        log_info "   OLLAMA_BASE_URL: $OLLAMA_BASE_URL"
+        log_info "   Local ollama container will NOT start (--scale ollama=0)"
+        log_info "   ⚠️  If you bypass setup.sh, you MUST manually use: docker compose up --scale ollama=0"
+        COMPOSE_OLLAMA_SCALE=("--scale" "ollama=0")
+    else
+        log_info "🏠 Local Ollama mode (default, zero-config)"
+        log_info "   OLLAMA_BASE_URL: (empty, using local minder-ollama container)"
+        COMPOSE_OLLAMA_SCALE=()
+    fi
+
     log_info "① Security layer…"
     compose up -d "${SECURITY_SERVICES[@]}"
     sleep 5
 
     log_info "② Infrastructure (DB, cache, vector store, AI runtime)…"
-    compose up -d "${CORE_SERVICES[@]}"
+    compose up -d "${CORE_SERVICES[@]}" "${COMPOSE_OLLAMA_SCALE[@]}"
     sleep 8
 
     log_info "③ Message broker (RabbitMQ)…"
