@@ -277,11 +277,11 @@ services:
     - /bin/bash
     - -c
     - "#!/bin/bash\nset -e\n# Start Ollama server in background\n/usr/bin/ollama serve\
-      \ &\nOLLAMA_PID=$!\n\n# Wait for Ollama to be ready\necho \"Waiting for Ollama\
-      \ to start...\"\nwhile ! curl -s http://localhost:11434/api/tags > /dev/null\
-      \ 2>&1; do\n    sleep 2\ndone\necho \"Ollama is ready\"\n\n# Run init script\
-      \ if exists\nif [ -f /docker-entrypoint-initdb.d/init-models.sh ]; then\n  \
-      \  echo \"Running automatic model download...\"\n    /bin/bash /docker-entrypoint-initdb.d/init-models.sh\n\
+      \ &\nOLLAMA_PID=$!\n\n# Wait for Ollama to be ready (bash TCP check - no curl)\necho\
+      \ \"Waiting for Ollama to start...\"\nwhile ! timeout 5 bash -c '</dev/tcp/127.0.0.1/11434'\
+      \ 2>/dev/null; do\n    sleep 2\ndone\necho \"Ollama is ready\"\n\n# Run init\
+      \ script if exists\nif [ -f /docker-entrypoint-initdb.d/init-models.sh ]; then\
+      \ \n    echo \"Running automatic model download...\"\n    /bin/bash /docker-entrypoint-initdb.d/init-models.sh\n\
       fi\n\n# Keep container running\nwait $OLLAMA_PID\n"
     healthcheck:
       test:
