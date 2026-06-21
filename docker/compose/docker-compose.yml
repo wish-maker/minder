@@ -76,8 +76,9 @@ services:
   #   restart: on-failure
   #   environment:
   #   - AUTHELIA_STORAGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-  #   - AUTHELIA_DEFAULT_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
-  #   - AUTHELIA_DEFAULT_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+  #   - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+  #   - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+  #   - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
   #   volumes:
   #   - ../services/authelia/configuration.yml:/config/configuration.yml:ro
   #   - ../services/authelia/users_database.yml:/config/users_database.yml:ro
@@ -118,7 +119,7 @@ services:
       POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
     volumes:
     - postgres_data:/var/lib/postgresql
-    - ../services/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    - ./postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
     # PILLAR 1: NO exposed ports - Internal network only
     healthcheck:
       test:
@@ -252,7 +253,6 @@ services:
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
     volumes:
     - ollama_data:/root/.ollama
-    - ./ollama/docker-entrypoint.sh:/docker-entrypoint.sh:ro
     - ./ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
     environment:
     - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
@@ -272,7 +272,16 @@ services:
     #           count: all
     #           capabilities: [gpu]
     shm_size: '16gb'
-    entrypoint: ["/bin/bash", "/docker-entrypoint.sh"]
+    entrypoint:
+    - /bin/bash
+    - -c
+    - "#!/bin/bash\nset -e\n# Start Ollama server in background\n/usr/bin/ollama serve\
+      \ &\nOLLAMA_PID=$!\n\n# Wait for Ollama to be ready\necho \"Waiting for Ollama\
+      \ to start...\"\nwhile ! curl -s http://localhost:11434/api/tags > /dev/null\
+      \ 2>&1; do\n    sleep 2\ndone\necho \"Ollama is ready\"\n\n# Run init script\
+      \ if exists\nif [ -f /docker-entrypoint-initdb.d/init-models.sh ]; then\n  \
+      \  echo \"Running automatic model download...\"\n    /bin/bash /docker-entrypoint-initdb.d/init-models.sh\n\
+      fi\n\n# Keep container running\nwait $OLLAMA_PID\n"
     healthcheck:
       test:
       - CMD-SHELL
@@ -304,7 +313,7 @@ services:
     container_name: minder-neo4j
     restart: on-failure
     environment:
-      NEO4J_AUTH: neo4j/minder_secure_password_2024
+      NEO4J_AUTH: ${NEO4J_AUTH:-${NEO4J_AUTH:-neo4j/secure_password_change_me}}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_memory_heap_initial__size: 512m
       NEO4J_dbms_memory_heap_max__size: 1G
@@ -340,11 +349,6 @@ services:
     container_name: minder-api-gateway
     restart: on-failure
     environment:
-    - POSTGRES_HOST=postgres
-    - POSTGRES_PORT=5432
-    - POSTGRES_USER=minder
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    - POSTGRES_DB=minder
     - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
     - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
@@ -421,18 +425,14 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     - MARKETPLACE_URL=http://minder-marketplace:8002
-    - JWT_SECRET=${JWT_SECRET}
-    - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-    - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
     env_file:
     - .env
     volumes:
-    - ../../src/services/plugin-registry:/app/services/plugin-registry:ro
-    - ../../src/shared:/app/src/shared:ro
     - ../../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
-    # PILLAR 1: No direct port access - internal network only
-    # Use docker-compose.override.yml for development access
+    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
+    ports:
+    - "8001:8001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -473,6 +473,7 @@ services:
     - JWT_ALGORITHM=HS256
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
+    # Note: DEFAULT_PLUGINS_CONFIG not set - will use empty default
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "8003:8003"
@@ -483,7 +484,8 @@ services:
         condition: service_healthy
       plugin-registry:
         condition: service_healthy
-    # Note: DEFAULT_PLUGINS_CONFIG not set - will use empty default
+    volumes:
+    - ../../src/core/config/default_plugins.yml:/app/src/core/config/default_plugins.yml:ro
     healthcheck:
       test:
       - CMD
@@ -511,11 +513,6 @@ services:
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
-    - POSTGRES_HOST=postgres
-    - POSTGRES_PORT=5432
-    - POSTGRES_DB=minder
-    - POSTGRES_USER=minder
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-minder}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "8004:8004"
@@ -523,8 +520,6 @@ services:
       qdrant:
         condition: service_healthy
       ollama:
-        condition: service_healthy
-      postgres:
         condition: service_healthy
     healthcheck:
       test:
@@ -535,36 +530,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-    - minder-network
-  graph-rag:
-    build:
-      context: ../../
-      dockerfile: src/services/graph-rag/Dockerfile
-    image: minder/graph-rag:1.0.0
-    container_name: minder-graph-rag
-    restart: on-failure
-    environment:
-    - NEO4J_URI=bolt://neo4j:7687
-    - NEO4J_USER=neo4j
-    - NEO4J_AUTH=neo4j/minder_secure_password_2024
-    - SPACY_MODEL=en_core_web_sm
-    - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    - ENVIRONMENT=${ENVIRONMENT:-development}
-    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
-    ports:
-    - "8008:8008"
-    depends_on:
-      neo4j:
-        condition: service_healthy
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8008/health').read()"
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s  # Give spaCy model time to initialize
     networks:
     - minder-network
   model-management:
@@ -680,8 +645,8 @@ services:
     container_name: minder-prometheus
     restart: on-failure
     volumes:
-    - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    - ../services/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - ../services/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     - docker_prometheus_data:/prometheus
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
@@ -712,7 +677,7 @@ services:
     container_name: minder-alertmanager
     restart: on-failure
     volumes:
-    - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    - ../services/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     - docker_alertmanager_data:/alertmanager
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
@@ -846,10 +811,6 @@ services:
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "8002:8002"
-    volumes:
-    - ../../src/services/marketplace:/app/services/marketplace:ro
-    - ../../src/shared:/app/src/shared:ro
-    - docker_marketplace_data:/var/lib/marketplace
     depends_on:
       postgres:
         condition: service_healthy
@@ -863,6 +824,56 @@ services:
       - curl
       - -f
       - http://localhost:8002/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+    - minder-network
+  model-fine-tuning:
+    build:
+      context: ../../
+      dockerfile: src/services/model-fine-tuning/Dockerfile
+    image: minder/model-fine-tuning:1.0.0
+    container_name: minder-model-fine-tuning
+    restart: on-failure
+    # PILLAR 3: GPU Passthrough - Hardware acceleration for model training (when available)
+    # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
+    environment:
+    - OLLAMA_HOST=http://ollama:11434
+    - DEFAULT_BASE_MODEL=${DEFAULT_BASE_MODEL:-llama3.2}
+    - TRAINING_DATA_PATH=/app/training-data
+    - MODELS_OUTPUT_PATH=/app/models
+    - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    - ENVIRONMENT=${ENVIRONMENT:-development}
+    - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
+    - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
+    - GPU_DEVICE_COUNT=${GPU_DEVICE_COUNT:-all}
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '6.0'
+    #       memory: 16G
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu, compute, utility]
+    shm_size: '16gb'
+    volumes:
+    - docker_model_fine_tuning_data:/app/training-data
+    - docker_fine_tuned_models:/app/models
+    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
+    ports:
+    - "8007:8007"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8007/health
       interval: 30s
       timeout: 10s
       retries: 3
@@ -1161,13 +1172,15 @@ volumes:
     driver: local
   docker_models_cache:
     driver: local
+  docker_model_fine_tuning_data:
+    driver: local
+  docker_fine_tuned_models:
+    driver: local
   tts_stt_data:
     driver: local
   influxdb_config:
     driver: local
   docker_prometheus_data:
-    driver: local
-  docker_marketplace_data:
     driver: local
   docker_grafana_data:
     driver: local
