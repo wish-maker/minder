@@ -933,7 +933,9 @@ services:
     - RABBIT_USER=minder
     - RABBIT_PASSWORD=${RABBITMQ_PASSWORD}
     - RABBIT_CAPABILITIES=sort,bert
-    # NOTE: No healthcheck - image lacks nc/wget/curl/shell for CMD-based checks
+    # NOTE: Disabled image's built-in healthcheck (port 9419 check doesn't work - metrics on 9090)
+    healthcheck:
+      disable: true
     depends_on:
       rabbitmq:
         condition: service_healthy

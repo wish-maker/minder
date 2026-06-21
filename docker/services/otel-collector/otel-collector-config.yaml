@@ -37,7 +37,7 @@ exporters:
 
   # Export metrics to Prometheus
   prometheus:
-    endpoint: "0.0.0.0:18888"
+    endpoint: "0.0.0.0:8888"
     const_labels:
       environment: "production"
       service: "otel-collector"
