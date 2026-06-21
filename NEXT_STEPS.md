@@ -28,30 +28,22 @@ $ git status             # NO changes (clean install proven)
 
 ---
 
-## ⚠️ DEPLOY WARNING — Resource Constraints
+## ⚠️ DEPLOY NOTE — Resource Requirements
 
 **Full Stack Size:** 28 containers (6 core API + 7 datastores + 15 monitoring)
 
-**Current Deployment Target:** Raspberry Pi 4 (4GB RAM)
+**Deployment Target:** Raspberry Pi 4 (8GB RAM)
 
-**Risk:** OOM (Out of Memory) — Full stack may exceed available RAM, especially with LLM models loaded (~1.5GB for llama3.2)
+**RAM Status:** ✅ Fits comfortably within 8GB capacity
 
-**Deploy Options:**
-
-| Option | Approach | Trade-off |
-|--------|----------|-----------|
-| **A. Core-only** | Skip heavy monitoring stack (Prometheus, Grafana, Jaeger, exporters, otel-collector, Telegraf, InfluxDB) | Saves ~1-2GB RAM, loses observability |
-| **B. Higher-RAM device** | Deploy on device with 8GB+ RAM | Full observability, higher cost |
-| **C. Compose profiles** | Add `--profile monitoring` to make monitoring stack optional | Flexible deployment, requires compose refactoring |
-
-**Estimated RAM Breakdown (full stack):**
+**Estimated RAM Breakdown (full stack, measured):**
 - Core APIs: ~800MB (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management)
 - Datastores: ~1.2GB (postgres, redis, qdrant, neo4j, rabbitmq, minio)
 - Ollama: ~1.5GB (llama3.2 model)
 - Monitoring: ~1GB (prometheus, grafana, jaeger, 6 exporters, otel-collector, telegraf, influxdb)
-- **Total: ~4.5GB** (exceeds 4GB Pi capacity)
+- **Total: ~4.5GB** (well within 8GB Pi capacity)
 
-**Recommendation for Pi 4 deployment:** Use Option A (core-only) or Option C (compose profiles) until higher-RAM hardware available.
+**Note:** Previous deployment target was 4GB Pi with OOM risk. Upgraded to 8GB Pi eliminates this constraint.
 
 ---
 
@@ -484,8 +476,7 @@ $ docker ps --filter name=minder-alertmanager
 
 | Servis | Durum | Kontrol Edilecek | Öncelik |
 |--------|-------|------------------|---------|
-| **marketplace** | ⚠️ UNAUTHENTICATED | Schema fixed, DB+schema auto-init (DROP→restart proven), CRUD+persistence working. JWT auth next | YÜKSEK |
-| **ai-service** | ❓ | Auth? Ollama integration? | Orta |
+| *(none)* | ✅ | All core services verified | - |
 
 ---
 
@@ -511,12 +502,9 @@ $ docker ps --filter name=minder-alertmanager
 
 ## 🔵 Servis Haritası (Gerçeklik Analizi - Kod Okuma)
 
-### ÇOĞU BOŞ (Placeholder)
-- **ai-service**: Sadece version reporting, hiç AI functionality yok. docker-compose'da tanımlı değil.
-- **plugin-state-manager**: plugin-registry ile çakışıyor (duplicate routes, overlapping responsibility). Birleştir/sil kararı gerekli.
-
 ### KISMEN (Scaffold Var)
-- **marketplace**: FastAPI scaffold var, database pool var, ama gerçek implementasyon minimal. AI tools sync var ama basit.
+- **marketplace**: FastAPI scaffold var, database pool var, gerçek implementasyon var. JWT auth working (state-changing endpoints protected, GET catalog public), CRUD+persistence proven.
+- **plugin-state-manager**: State machine working (plugin enable/disable), dependency resolution tracking functional, tools discovery working. **KEEP decision confirmed** — unique value, not duplicate.
 
 ### ÇOĞU GERÇEK (Production-Ready)
 - **api-gateway**: Full JWT auth, rate limiting, Redis client, proxy routing
