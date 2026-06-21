@@ -910,12 +910,7 @@ services:
     - REDIS_ADDR=redis://redis:6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
     # PILLAR 4: NO exposed ports - Prometheus scrapes via internal network
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9121"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    # NOTE: No healthcheck - image lacks nc/wget/curl/shell for CMD-based checks
     depends_on:
       redis:
         condition: service_healthy
@@ -938,12 +933,7 @@ services:
     - RABBIT_USER=minder
     - RABBIT_PASSWORD=${RABBITMQ_PASSWORD}
     - RABBIT_CAPABILITIES=sort,bert
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9090"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    # NOTE: No healthcheck - image lacks nc/wget/curl/shell for CMD-based checks
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -1076,18 +1066,13 @@ services:
     command:
     - --config=/etc/otel-collector-config.yaml
     volumes:
-    - ./otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    - ../services/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     - docker_otel-collector-data:/etc/otelcol
     ports:
     - "14317:4317"   # OTLP gRPC receiver (changed to avoid conflict with Jaeger)
     - "14318:4318"   # OTLP HTTP receiver (changed to avoid conflict with Jaeger)
     - "18888:8888"   # Prometheus metrics (changed to avoid conflicts)
-    healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "8888"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    # NOTE: No healthcheck - image lacks nc for CMD-based check (config validates on startup)
     depends_on:
       jaeger:
         condition: service_healthy
