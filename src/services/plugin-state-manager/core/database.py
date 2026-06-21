@@ -27,24 +27,61 @@ def get_db_config() -> dict:
 
 
 async def get_db_pool() -> asyncpg.Pool:
-    """Get or create database connection pool"""
+    """Get or create database connection pool
+
+    Auto-creates the database if it doesn't exist (same pattern as marketplace)
+    """
     global _pool
 
     if _pool is None:
         config = get_db_config()
         logger.info(f"Creating database connection pool for {config['database']}")
 
-        _pool = await asyncpg.create_pool(
-            host=config["host"],
-            port=config["port"],
-            user=config["user"],
-            password=config["password"],
-            database=config["database"],
-            min_size=2,
-            max_size=10,
-        )
+        try:
+            _pool = await asyncpg.create_pool(
+                host=config["host"],
+                port=config["port"],
+                user=config["user"],
+                password=config["password"],
+                database=config["database"],
+                min_size=2,
+                max_size=10,
+                command_timeout=60,
+            )
+            logger.info("Database connection pool created successfully")
+        except asyncpg.InvalidCatalogNameError:
+            # Database doesn't exist, create it first
+            logger.warning(f"Database {config['database']} does not exist, creating...")
 
-        logger.info("Database connection pool created successfully")
+            # Connect to 'postgres' database to create new database
+            admin_conn = await asyncpg.connect(
+                host=config["host"],
+                port=config["port"],
+                user=config["user"],
+                password=config["password"],
+                database="postgres",
+            )
+
+            try:
+                await admin_conn.execute(
+                    f'CREATE DATABASE {config["database"]}'
+                )
+                logger.info(f"✅ Database {config['database']} created")
+            finally:
+                await admin_conn.close()
+
+            # Now create the pool to the new database
+            _pool = await asyncpg.create_pool(
+                host=config["host"],
+                port=config["port"],
+                user=config["user"],
+                password=config["password"],
+                database=config["database"],
+                min_size=2,
+                max_size=10,
+                command_timeout=60,
+            )
+            logger.info("Database connection pool created successfully after database creation")
 
     return _pool
 

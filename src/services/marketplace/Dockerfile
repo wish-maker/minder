@@ -24,6 +24,10 @@ COPY src/services/marketplace/ .
 # Copy the services package structure
 COPY src/services/ ./services/
 
+# Copy shared libraries
+COPY src/shared /app/src/shared
+COPY src/core /app/src/core
+
 # Create non-root user
 RUN useradd -m -u 1000 marketplace && \
     chown -R marketplace:marketplace /app

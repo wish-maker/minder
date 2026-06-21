@@ -31,6 +31,8 @@ RUN pip install --no-cache-dir \
 COPY src/services/plugin-registry/main.py .
 COPY src/services/plugin-registry/config.py .
 COPY src/services/plugin-registry/routes /app/routes
+COPY src/services/plugin-registry/core /app/core
+COPY src/services/plugin-registry/schemas /app/schemas
 
 # Copy shared core library and plugins (from build context)
 COPY src/core /app/src/core
