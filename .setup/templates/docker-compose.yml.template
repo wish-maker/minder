@@ -1011,7 +1011,7 @@ services:
     container_name: minder-blackbox-exporter
     restart: on-failure
     volumes:
-    - ./prometheus/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    - ../services/prometheus/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
     command:
     - '--config.file=/etc/blackbox_exporter/config.yml'
     healthcheck:
