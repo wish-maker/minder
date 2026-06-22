@@ -634,6 +634,38 @@ $ docker ps --filter name=minder-alertmanager
 
 ## 🎯 Hedef: Production Deployment
 
+---
+
+## 🔍 Known / Deferred (Low Priority) — Updated 2026-06-22
+
+**Filesystem Cleanup:**
+- ✅ `docker/services/authelia/configuration.yml;C/` — Windows artifact directory removed (2026-06-22)
+
+**Security Items (Low Priority — Strong Passwords Provide Real Protection):**
+- ⏸️ **Weak default usernames** (informational, not critical)
+  - `POSTGRES_USER` (default: postgres) — username, not password
+  - `POSTGRES_DB` (default: minder) — database name, not credential
+  - `RABBITMQ_DEFAULT_USER` (default: guest) — container-internal only
+  - `INFLUXDB_ORG` (default: minder) — organization name, not credential
+  - `GRAFANA_ADMIN_USER` (default: admin) — documented, easily changed
+  - **Note:** All actual passwords are strong/random. Usernames are informational only.
+  - **Risk:** Low — attacker needs passwords to exploit; usernames are guessable anyway.
+  - **When to fix:** If enforcing security audit requirements or hardening beyond "reasonable defaults."
+
+**.env Permissions:**
+- ✅ **setup.sh IS CORRECT** — Sets `chmod 600` on .env creation (line 1316) and restore (line 2757)
+- ⚠️ **Windows Git Bash limitation** — Current .env shows 644 in `ls -la` due to how Git Bash reads Windows ACLs
+- **Actual security:** Windows ACLs have been restricted to owner-only (icacls applied)
+- **Fresh installs on Linux:** Will get 600 permissions correctly (script verified)
+
+**Version Drift (14 updates available — informational, optional):**
+- Images with newer compatible versions detected by `bash setup.sh doctor`
+- Updates are optional — current pinned versions are stable and proven
+- Apply when ready: `bash setup.sh update` (smart pull + rolling restart)
+- See doctor output for full list (postgres, redis, qdrant, neo4j, ollama, prometheus, grafana, etc.)
+
+---
+
 **Durum: Core platform DEPLOY-READY from zero ✅**
 - ✅ Clean install recovery proven (down -v → auto-recovers)
 - ✅ Models auto-pull on first boot (2.3GB)
