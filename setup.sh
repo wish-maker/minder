@@ -2388,9 +2388,14 @@ run_health_checks() {
 
     local results=()
 
-    # Get the actual server IP for better reporting
+    # Get the actual server IP for better reporting (cross-platform)
     local server_ip
-    server_ip="$(hostname -I | awk '{print $1}')"
+    if command hostname &>/dev/null; then
+        # Try hostname -I (Linux), fall back to hostname -i (macOS/BSD), then hostname (Windows)
+        server_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+        [[ -z "$server_ip" ]] && server_ip="$(hostname -i 2>/dev/null | awk '{print $1}')"
+        [[ -z "$server_ip" ]] && server_ip="$(hostname 2>/dev/null)"
+    fi
     [[ -z "$server_ip" ]] && server_ip="localhost"  # Fallback to localhost
 
     _check_endpoint() {
