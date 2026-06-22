@@ -64,7 +64,7 @@ readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq )
 # Note: ollama uses conditional profiles in docker-compose.yml
 # - OLLAMA_BASE_URL empty/unset → local mode, ollama container starts
 # - OLLAMA_BASE_URL set → remote mode, ollama container skipped
-readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management)
+readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management graph-rag)
 readonly -a AI_SERVICES=(openwebui tts-stt)
 readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager jaeger otel-collector)
 readonly -a EXPORTER_SERVICES=(postgres-exporter redis-exporter rabbitmq-exporter blackbox-exporter cadvisor node-exporter)
@@ -78,6 +78,7 @@ declare -A SERVICE_PORTS=(
     [rag-pipeline]="8004/health"
     [model-management]="8005/health"
     [tts-stt]="8006/health"
+    [graph-rag]="8008/health"
     # OpenWebUI port not exposed (Traefik only), skipping direct health check
     [prometheus]="9090/-/healthy"
     [grafana]="3000/api/health"
