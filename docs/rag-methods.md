@@ -40,6 +40,19 @@ These methods are **implemented, wired, and proven via manual end-to-end test** 
 | **API Endpoints** | `POST /extract` — Extract entities from text<br>`POST /construct-graph` — Build knowledge graph<br>`POST /retrieve` — Graph-based retrieval<br>`POST /entity-context` — Get entity context |
 | **Config** | Neo4j URI, auth credentials, spaCy model |
 
+### Conversational RAG (Multi-turn with Context)
+
+| Attribute | Value |
+|-----------|-------|
+| **Status** | ✅ **PRODUCTION READY** — Active in `minder-rag-pipeline:8004` |
+| **Implementation** | `src/services/rag-pipeline/main.py` (query endpoint) + `repositories/conversation_repository.py` |
+| **Test Status** | ✅ Proven via 3-turn test + clean install: Turn 1 → Turn 2 (pronoun "it") → Turn 3 (pronoun "that") → 3 rows verified in `conversation_turns` table |
+| **Pipeline** | 1. Query with optional `conversation_id`<br>2. Fetch last 3 turns from PostgreSQL (per conversation)<br>3. Build context: "Previous conversation: Q1/A1\nQ2/A2\nQ3/A3"<br>4. Combine with RAG context → LLM prompt<br>5. Store new Q&A turn after response |
+| **API Endpoints** | `POST /pipeline/{id}/query` — Set `conversation_id` to enable conversation history |
+| **Config** | `max_turns=3` (conversation context limit), uses same embedding/LLM models as Standard RAG |
+| **Database Schema** | `conversation_turns` table: `id, user_id, conversation_id, question, answer, timestamp, metadata` with index on `(user_id, conversation_id, timestamp DESC)` |
+| **Known Limitations** | • `user_id="default"` hardcode — single-user only; future multi-user would need real user_id<br>• Token budget — `max_turns=3` helps but long conversations could overflow Llama3.2 context window |
+
 ---
 
 ## Bucket 2: Partial / Infrastructure Available
@@ -152,7 +165,6 @@ These methods are **not implemented** but could be built using existing infrastr
 
 | Method | What Would Be Needed | Feasibility |
 |--------|----------------------|--------------|
-| **Conversational RAG** | `ConversationRepository` exists (296 lines) — just needs wiring into query prompt | **HIGH** — Add `build_context()` call to RAG prompt |
 | **Multi-Query RAG** | LLM query expansion (Ollama) + multi-query fusion | **MEDIUM** — Use Llama3.2 to generate query variants |
 | **Decomposition RAG** | Query decomposition logic + sub-question routing | **MEDIUM** — Similar to Multi-Query, more complex orchestration |
 | **Metadata Filtering** | Qdrant supports it, just need API exposure | **HIGH** — Add filter params to query endpoint |
@@ -177,9 +189,9 @@ These would require **fundamentally different architecture** or are outside proj
 
 ### Conversation Memory
 - **File**: `src/services/rag-pipeline/repositories/conversation_repository.py` (296 lines)
-- **Status**: Implemented but unused
-- **Features**: PostgreSQL-backed, TTL-based expiration, turn ordering, `build_context()` method
-- **Could Enable**: Conversational RAG by feeding history into prompt
+- **Status**: ✅ **IMPLEMENTED AND ACTIVE** — Used by Conversational RAG
+- **Features**: PostgreSQL-backed (`conversation_turns` table), turn ordering, `build_context()` method, `store_turn()` method
+- **Enables**: Conversational RAG multi-turn conversations with context continuity
 
 ### Clean Architecture (V2)
 - **File**: `src/services/rag-pipeline/api_v2.py` (238 lines)
@@ -193,9 +205,9 @@ These would require **fundamentally different architecture** or are outside proj
 
 | Bucket | Count | Methods |
 |--------|-------|---------|
-| **Supported (Production)** | 2 | Standard RAG, Graph RAG |
+| **Supported (Production)** | 3 | Standard RAG, Graph RAG, Conversational RAG |
 | **Partial (Unwired Modules)** | 8 | RAPTOR (tested), HyDE, Hybrid, Cross-Encoder, Self-RAG, Contextual Compression, Parent-Child, CRAG |
-| **Buildable** | 5 | Conversational, Multi-Query, Decomposition, Metadata Filtering, Modular |
+| **Buildable** | 4 | Multi-Query, Decomposition, Metadata Filtering, Modular |
 | **Out of Scope** | 4 | Agentic, Streaming, Federated, Long-Context |
 
 **Total methods covered**: 19
