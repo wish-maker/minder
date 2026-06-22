@@ -97,7 +97,7 @@ class ConversationRepository:
         if not answer:
             raise ValueError("answer cannot be empty")
 
-        timestamp = datetime.now().isoformat()
+        timestamp = datetime.now()  # datetime object, not string
         metadata_json = json.dumps(metadata or {})
 
         try:

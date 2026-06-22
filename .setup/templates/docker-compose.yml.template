@@ -519,6 +519,11 @@ services:
     - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2}
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=minder
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=minder
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing

@@ -28,6 +28,15 @@ from qdrant_client.models import Batch, Distance, PointStruct, VectorParams
 
 logger = logging.getLogger(__name__)
 
+# Configure logging to output INFO level logs to stdout
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -122,9 +131,9 @@ class QueryRequest(BaseModel):
     """Query request"""
 
     question: str
-    pipeline_id: str
     top_k: int = 5
     stream: bool = False
+    conversation_id: Optional[str] = None  # For conversational RAG - enables conversation history
 
 
 class QueryResponse(BaseModel):
@@ -152,44 +161,56 @@ class DocumentUploadResponse(BaseModel):
 
 # Import PostgreSQL client functions
 try:
-    from .pg_client import (
-        save_kb_to_postgres,
-        load_kb_from_postgres,
-        save_pipeline_to_postgres,
-        load_pipelines_from_postgres,
-        initialize_schema
-    )
+    from . import pg_client
+    save_kb_to_postgres = pg_client.save_kb_to_postgres
+    load_kb_from_postgres = pg_client.load_kb_from_postgres
+    save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
+    load_pipelines_from_postgres = pg_client.load_pipelines_from_postgres
+    initialize_schema = pg_client.initialize_schema
     PG_AVAILABLE = True
     logger.info("✅ PostgreSQL persistence available")
 except ImportError:
     try:
-        from pg_client import (
-            save_kb_to_postgres,
-            load_kb_from_postgres,
-            save_pipeline_to_postgres,
-            load_pipelines_from_postgres,
-            initialize_schema
-        )
+        import pg_client
+        save_kb_to_postgres = pg_client.save_kb_to_postgres
+        load_kb_from_postgres = pg_client.load_kb_from_postgres
+        save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
+        load_pipelines_from_postgres = pg_client.load_pipelines_from_postgres
+        initialize_schema = pg_client.initialize_schema
         PG_AVAILABLE = True
         logger.info("✅ PostgreSQL persistence available")
     except ImportError:
         PG_AVAILABLE = False
         try:
-            from pg_client import (
-                save_kb_to_postgres,
-                load_kb_from_postgres,
-                save_pipeline_to_postgres,
-                load_pipelines_from_postgres,
-                initialize_schema
-            )
+            import pg_client
+            save_kb_to_postgres = pg_client.save_kb_to_postgres
+            load_kb_from_postgres = pg_client.load_kb_from_postgres
+            save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
+            load_pipelines_from_postgres = pg_client.load_pipelines_from_postgres
+            initialize_schema = pg_client.initialize_schema
             PG_AVAILABLE = True
             logger.info("✅ PostgreSQL persistence available")
         except ImportError:
             PG_AVAILABLE = False
             logger.warning("⚠️  pg_client not available, using in-memory storage")
 
+# Conversation Repository for conversational RAG
+try:
+    from .repositories.conversation_repository import ConversationRepository
+    CONVERSATION_REPO_AVAILABLE = True
+except ImportError:
+    try:
+        from repositories.conversation_repository import ConversationRepository
+        CONVERSATION_REPO_AVAILABLE = True
+    except ImportError:
+        CONVERSATION_REPO_AVAILABLE = False
+        logger.warning("⚠️  ConversationRepository not available")
+
 knowledge_bases: Dict[str, Dict[str, Any]] = {}
 rag_pipelines: Dict[str, Dict[str, Any]] = {}
+
+# Global conversation repository instance
+conversation_repository: Optional[ConversationRepository] = None
 
 
 # ============================================================================
@@ -618,13 +639,55 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         request.top_k,
     )
 
+    # Fetch conversation context if conversation_id provided (Conversational RAG)
+    conversation_context = ""
+    if request.conversation_id and conversation_repository:
+        try:
+            conversation_context = await conversation_repository.build_context(
+                user_id="default",  # TODO: Single-user limitation - add real user_id when multi-user support needed
+                conversation_id=request.conversation_id,
+                max_turns=3
+            )
+            if conversation_context:
+                logger.info(f"🔄 Loaded conversation context for {request.conversation_id}")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to load conversation context: {e}")
+            conversation_context = ""
+
+    # Combine conversation context with RAG context
+    combined_context = ""
+    if conversation_context:
+        combined_context = f"Previous conversation:\n{conversation_context}\n\n"
+    if context_result["context"]:
+        combined_context += f"Relevant documents:\n{context_result['context']}"
+
     # Generate answer
     with llm_generation_duration.labels(model=pipeline.get("llm_model", DEFAULT_LLM_MODEL)).time():
         answer_result = await ollama_manager.generate_response(
             prompt=request.question,
-            context=context_result["context"],
+            context=combined_context,
             **pipeline.get("generation_config", {}),
         )
+
+    # Store conversation turn if conversation_id provided (Conversational RAG)
+    if request.conversation_id and conversation_repository:
+        try:
+            await conversation_repository.store_turn(
+                user_id="default",  # TODO: Single-user limitation
+                conversation_id=request.conversation_id,
+                question=request.question,
+                answer=answer_result["text"],
+                metadata={
+                    "pipeline_id": pipeline_id,
+                    "model_used": answer_result.get("model", "unknown"),
+                    "sources_count": len(context_result.get("sources", [])),
+                    "timestamp": None  # Will be set by DB default
+                }
+            )
+            logger.info(f"💾 Stored conversation turn for {request.conversation_id}")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to store conversation turn: {e}")
+            # Don't fail the request if storage fails
 
     return QueryResponse(
         answer=answer_result["text"],
@@ -720,6 +783,19 @@ async def startup_event():
             loaded_pipelines = await load_pipelines_from_postgres()
             rag_pipelines.update(loaded_pipelines)
             logger.info(f"✅ Loaded {len(loaded_pipelines)} RAG pipelines from PostgreSQL")
+
+            # Initialize ConversationRepository for conversational RAG
+            global conversation_repository
+            if CONVERSATION_REPO_AVAILABLE and pg_client.pg_pool:
+                try:
+                    conversation_repository = ConversationRepository(pg_client.pg_pool)
+                    logger.info("✅ ConversationRepository initialized")
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize ConversationRepository: {e}")
+                    conversation_repository = None
+            else:
+                logger.warning("⚠️  ConversationRepository not available (pg_pool or module missing)")
+                conversation_repository = None
         except Exception as e:
             logger.error(f"❌ Failed to load from PostgreSQL: {e}")
     else:

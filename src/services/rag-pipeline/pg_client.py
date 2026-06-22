@@ -37,15 +37,14 @@ PG_DATABASE = os.getenv("POSTGRES_DATABASE", "minder")
 
 async def get_pg_connection():
     """Get PostgreSQL connection from pool"""
-    global pg_pool
-
     if not ASYNCPG_AVAILABLE:
         return None
 
-    if pg_pool is None:
+    # Use globals() to explicitly access and update the module-level variable
+    if globals()['pg_pool'] is None:
         try:
             # Create connection pool
-            pg_pool = await asyncpg.create_pool(
+            pool = await asyncpg.create_pool(
                 host=PG_HOST,
                 port=int(PG_PORT),
                 user=PG_USER,
@@ -54,12 +53,14 @@ async def get_pg_connection():
                 min_size=2,
                 max_size=10
             )
+            # Explicitly update the module-level variable using globals()
+            globals()['pg_pool'] = pool
             logger.info(f"✅ PostgreSQL connection pool created: {PG_HOST}:{PG_PORT}/{PG_DATABASE}")
         except Exception as e:
             logger.error(f"❌ Failed to create PostgreSQL connection pool: {e}")
             raise
 
-    return pg_pool
+    return globals()['pg_pool']
 
 
 async def initialize_schema():
@@ -97,6 +98,18 @@ async def initialize_schema():
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW()
         );
+
+        CREATE TABLE IF NOT EXISTS conversation_turns (
+            id SERIAL PRIMARY KEY,
+            user_id VARCHAR(255) NOT NULL,
+            conversation_id VARCHAR(255) NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
+            metadata JSONB DEFAULT '{}'::jsonb
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_conversation_turns_lookup ON conversation_turns(user_id, conversation_id, timestamp DESC);
         """
 
         async with conn.acquire() as connection:
