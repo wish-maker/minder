@@ -4,18 +4,21 @@ Detailed microservices architecture for Minder Platform.
 
 ## Current Service Status
 
-**Total Services:** 32
-**Healthy Services:** 29 (90.6% with health checks)
-**No-Healthcheck Services:** 3 (minimal exporters - normal)
+**Total Containers:** 31
+**Healthy Containers:** 28 (90.3% with health checks)
+**No-Healthcheck Services:** 3 (redis-exporter, rabbitmq-exporter, otel-collector)
 **Unhealthy Services:** 0
-**Test Coverage:** 98.7% (116 passing tests)
 **Cold Start Time:** ~5 minutes (sequential startup)
 **AI Models:** Ollama runtime with local LLM support
-**Production Readiness:** 99%
+
+**Core Services (7):**
+- api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, graph-rag
+
+**Deploy Status:** Clean install proven from zero (docker compose down -v → bash setup.sh start)
 
 ## Overview
 
-Minder Platform implements a microservices architecture with 32 independent services, each running in its own Docker container across 8 architectural layers.
+Minder Platform provides a local AI orchestration platform with 7 core services running in Docker containers, backed by data stores and monitoring infrastructure.
 
 ## Service Communication
 

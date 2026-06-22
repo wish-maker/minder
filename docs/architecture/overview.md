@@ -3,29 +3,31 @@
 ## Current Status
 
 **Platform Version:** 1.0.0
-**Last Updated:** 2026-05-13
-**Services Running:** 32 (29 healthy, 3 no-healthcheck, 0 unhealthy)
-**Container Health:** 91% healthy (29/32 with health checks)
-**Test Coverage:** 98.7% (116 passing, comprehensive test suite)
-**API Endpoints:** 8 core services (all operational)
-**Databases:** 7 storage systems (all operational)
-**Plugins:** 5 active plugins (working)
+**Last Updated:** 2026-06-22
+**Containers Running:** 31 (28 healthy, 3 no-healthcheck, 0 unhealthy)
+**Container Health:** 90.3% healthy (28/31 with health checks)
+**Core API Services:** 7 (all operational: api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, graph-rag)
+**Data Stores:** 7 (all operational: PostgreSQL, Redis, Qdrant, Neo4j, RabbitMQ, MinIO, InfluxDB)
 **Deployment Time:** ~5 minutes cold start (sequential startup)
 **AI Models:** Ollama runtime with local LLM support
-**Production Ready:** ✅ Yes (99% ready)
+**Deploy Status:** ✅ Clean install proven from zero (docker compose down -v → bash setup.sh start)
+
+**Deferred Features:**
+- ⏸️ Authelia SSO/2FA — Disabled pending configuration
+- ⏸️ Role-based auth — Auth-only (JWT) implemented
 
 ## Architecture Overview
 
-Minder is a production-ready microservices-based AI platform with enterprise-grade security and comprehensive monitoring.
+Minder provides a local AI orchestration platform with JWT authentication, RAG pipelines, and monitoring infrastructure.
 
 ### System Capabilities
 
 **Core Features:**
-- ✅ **Plugin Management** - Dynamic plugin loading and lifecycle
-- ✅ **AI Integration** - RAG pipeline, embeddings, LLM inference
-- ✅ **Enterprise Security** - SSO, 2FA, role-based access control
-- ✅ **Comprehensive Monitoring** - Prometheus, Grafana, InfluxDB, Alertmanager
-- ✅ **Scalability** - Horizontal scaling with Docker Compose
+- ✅ **Plugin Management** - Manifest-based plugins with lifecycle management
+- ✅ **AI Integration** - RAG pipeline, embeddings, local LLM inference
+- ✅ **Authentication** - JWT-based auth on all core services
+- ✅ **Comprehensive Monitoring** - Prometheus, Grafana, InfluxDB, Alertmanager, Jaeger
+- ✅ **Fail-Fast Validation** - Required environment variables enforced
 
 ## Service Architecture Diagram
 
@@ -76,7 +78,7 @@ Minder is a production-ready microservices-based AI platform with enterprise-gra
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
 └─────────────────────────────────────────────────────────────────┘
 
-Total: 32 microservices across 8 architectural layers
+Total: 31 containers across core services, data stores, and monitoring layers
 ```
 
 ## Service Descriptions
@@ -92,14 +94,10 @@ Total: 32 microservices across 8 architectural layers
   - Rate limiting
   - Forward auth integration
 
-#### Authelia (Port 9091)
+#### Authelia (Port 9091) — ⏸️ DISABLED
 - **Purpose**: SSO and 2FA authentication
-- **Responsibilities**:
-  - Single Sign-On (SSO)
-  - Two-Factor Authentication (TOTP, WebAuthn)
-  - User management
-  - Access control
-  - Session management
+- **Current Status**: Disabled pending configuration (needs DB auto-init + NTP config)
+- **Note**: Container stopped and removed from docker-compose.yml
 
 ### Core APIs
 

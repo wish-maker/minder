@@ -176,38 +176,26 @@ curl -X POST http://localhost:11434/api/generate \
 
 ## 🏗️ **Architecture Overview**
 
-Minder uses a **production-ready microservices architecture** with 30+ specialized services:
+Minder provides a **local AI orchestration platform** with 7 core services:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     API Gateway Layer                        │
-│                 (minder-api-gateway :8000)                    │
-│              Authentication + Rate Limiting + Routing         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-┌───────▼────────┐  ┌────────▼────────┐  ┌────────▼────────┐
-│  Plugin Layer  │  │   Model Layer   │  │    RAG Layer    │
-│  Registry:8001 │  │ Management:8005 │  │  Pipeline:8004  │
-│  Market:8002   │  │ Fine-tune:8007  │  │                 │
-│  StateM:8003   │  │                 │  │                 │
-└────────────────┘  └─────────────────┘  └─────────────────┘
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
-                              │
-┌─────────────────────────────▼─────────────────────────────┐
-│                     Storage Layer                           │
-│  PostgreSQL | Redis | Qdrant | Neo4j | MinIO | InfluxDB    │
-│  (Relational)  (Cache)   (Vector)   (Graph)   (Object)  (TSDB) │
-└─────────────────────────────────────────────────────────────┘
-                              │
-┌─────────────────────────────▼─────────────────────────────┐
-│                  Infrastructure Layer                       │
-│  RabbitMQ | Traefik | Authelia | Monitoring Services       │
-│  (Messaging) (Proxy)  (SSO/2FA)  (Prometheus/Grafana)      │
-└─────────────────────────────────────────────────────────────┘
-```
+**Core API Services:**
+- `api-gateway` (:8000) — Authentication, routing, rate limiting
+- `plugin-registry` (:8001) — Plugin lifecycle management
+- `marketplace` (:8002) — Plugin/package marketplace
+- `plugin-state-manager` (:8003) — State machine and hook dispatch
+- `rag-pipeline` (:8004) — Chunking, embedding, vector retrieval
+- `model-management` (:8005) — Model versioning and deployment
+- `graph-rag` (:8008) — Knowledge graph construction (Neo4j)
+
+**Data Stores:**
+- PostgreSQL (relational), Redis (cache), Qdrant (vector), Neo4j (graph)
+- RabbitMQ (messaging), MinIO (object storage), InfluxDB (time-series)
+
+**Infrastructure:**
+- Ollama (local LLM runtime), Traefik (reverse proxy)
+- Monitoring: Prometheus, Grafana, Jaeger, Alertmanager, OpenTelemetry
+
+**Total:** 31 containers (7 core APIs + 6 data stores + 1 AI runtime + 17 monitoring/infra)
 
 ---
 
@@ -281,15 +269,18 @@ Minder uses a **production-ready microservices architecture** with 30+ specializ
 | **Database Queries** | <20ms | 50-100ms |
 | **Plugin Loading** | <2s hot reload | 10-30s |
 
-### 🎯 **System Status**
+### 🎯 **Current Status**
 
-| Metric | Current Status | Target |
-|--------|----------------|--------|
-| **Containers** | 🟢 30/33 healthy (91%) | >90% |
-| **API Availability** | 🟢 100% | >99.9% |
-| **Test Success** | 🟢 98.7% (232/235) | >95% |
-| **Response Time** | 🟢 ~150ms | <200ms |
-| **Uptime** | 🟢 100% | >99.5% |
+**Deploy-Ready Services (Proven):**
+- ✅ Clean install recovery: `docker compose down -v → bash setup.sh start` → all services healthy
+- ✅ All 7 core APIs: JWT auth, persistence, end-to-end functionality proven
+- ✅ 28/31 containers healthy (3 no-healthcheck: redis-exporter, rabbitmq-exporter, otel-collector)
+- ✅ 11/11 endpoints reachable (api-gateway + monitoring + AI services)
+
+**Deferred (NOT production-ready yet):**
+- ⏸️ Authelia SSO/2FA — Disabled pending configuration
+- ⏸️ Role-based auth — Auth-only (JWT) implemented
+- ⏸️ Uniform rate limiting — Service-specific, not standardized
 
 ### 💾 **Resource Requirements**
 
