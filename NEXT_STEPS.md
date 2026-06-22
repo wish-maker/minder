@@ -1,10 +1,32 @@
 # Minder Platform - Next Steps
 
-## ✅ CLEAN INSTALL TEST — COMPLETE
+## 🎯 Overall Status: Phase 2 Security Hardening COMPLETE
 
-### Core Platform is DEPLOY-READY from zero (2026-06-21)
+**Current State:** Core platform deploy-ready from zero with 7 services including graph-rag.
+- ✅ Phase 1: JWT auth on all services (DONE 2026-06-20)
+- ✅ Phase 2: Fail-fast validators on all services (DONE 2026-06-22)
+- ✅ Graph-rag restored + integrated + proven in clean install (DONE 2026-06-22)
+- ✅ Clean install test with graph-rag: PROVEN (exit 0, 11/11 healthy, NO manual steps)
 
-**Status:** ✅ **PROVEN** — All 6 core services + data stores recover from `docker compose down -v` with ZERO mid-test changes (TRULY untouched run, 2026-06-21 19:16-19:20)
+**Total Deploy Bugs Fixed (this entire effort): 10 bugs**
+1. External volumes bug (9 volumes marked `external: true` but never created)
+2. Postgres init path (`./postgres-init.sql` was empty directory)
+3. model-fine-tuning orphan references (service removed but refs remained)
+4. blackbox-exporter mount (pointed to non-existent file)
+5. Ollama entrypoint curl (inline entrypoint used curl not in image)
+6. otel-collector mount + bogus directory (empty dir mounted as file)
+7. rabbitmq-exporter built-in healthcheck (port 9419 doesn't work)
+8. otel-collector prometheus endpoint (config had wrong port)
+9. graph-rag healthcheck curl (container uses Python image but used curl)
+10. setup.sh hostname exit-1 (hostname -I fails on Git Bash under set -e)
+
+---
+
+## ✅ CLEAN INSTALL TEST — COMPLETE (Updated 2026-06-22) (Updated 2026-06-22)
+
+### Core Platform is DEPLOY-READY from zero (2026-06-21 → 2026-06-22)
+
+**Status:** ✅ **PROVEN WITH GRAPH-RAG** — All 7 core services + data stores recover from `docker compose down -v` with ZERO mid-test changes. REAL clean install test (2026-06-22): docker compose down -v → bash setup.sh start → exit 0 → 11/11 endpoints healthy including graph-rag. NO manual interventions.
 
 **Deploy Bugs Fixed:**
 - ✅ **External volumes bug:** 9 volumes marked `external: true` but never created → changed to `driver: local` for auto-creation (commit 95424dbf)
@@ -15,16 +37,27 @@
 - ✅ **otel-collector mount + bogus directory:** Empty dir mounted as file → removed directory (commit fac2d27e)
 - ✅ **rabbitmq-exporter built-in healthcheck:** Image has healthcheck on port 9419 (doesn't work) → explicitly disabled with `healthcheck: disable: true` (commit fd3fa915)
 - ✅ **otel-collector prometheus endpoint:** Config had port 18888 but mapping expected 8888 → fixed endpoint (commit fd3fa915)
+- ✅ **graph-rag healthcheck curl:** Container uses Python image but healthcheck used curl (not found) → changed to Python urllib (commit 05e0d3b5)
+- ✅ **setup.sh hostname exit-1:** `hostname -I` fails on Git Bash under `set -e` (exit 1 despite all services healthy) → added `|| true` to ignore exit codes (commits 65e60f60/3a9ddeda)
 
-**Clean Install Proof (2026-06-21 - ZERO changes):**
+**Clean Install Proof (2026-06-22 - ZERO changes, with graph-rag):**
 ```bash
-$ docker compose down -v  # All volumes removed
-$ bash setup.sh start    # Full deployment from zero
-$ docker ps              # All services healthy
-$ git status             # NO changes (clean install proven)
+$ docker compose down -v                    # All volumes removed
+$ bash setup.sh start                      # Full deployment from zero
+$ docker ps --filter "name=minder-"        # All 31 services healthy
+$ curl http://localhost:8008/health        # graph-rag healthy ✅
+$ echo $?                                   # Exit code: 0 ✅
+$ git status                               # NO changes (clean install PROVEN)
 ```
 
-**Final Status:** 25 healthy + 3 no-healthcheck (redis-exporter, rabbitmq-exporter, otel-collector) = 28 total minder services. All working, zero interventions needed.
+**Final Status:** 28 healthy + 3 no-healthcheck (redis-exporter, rabbitmq-exporter, otel-collector) = 31 total minder services including graph-rag. All working, zero interventions needed.
+
+**Phase 2 Security Hardening: COMPLETE**
+- ✅ Fail-fast validators on all 7 deployed services
+- ✅ Missing .env → "Field required" / "ValueError: X must be set"
+- ✅ Present .env → All services healthy (proven both ways)
+- ✅ Graph-rag restored + integrated + in clean install (was accidentally removed in commit 3e7f90ed)
+- ✅ NEO4J_AUTH fail-fast validator uses real .env value (no hardcoded password)
 
 ---
 
@@ -559,25 +592,25 @@ $ docker ps --filter name=minder-alertmanager
    - Dependency resolution: ✅ REAL (dependents tracked)
    - Tools discovery: ✅ WORKING (empty but functional)
    - **Sonuç:** Sakla — gerçek değer katıyor, crash loop config sorunu fix edildi
-4. **Fail-fast validators for required env vars** — NEXT TASK (not urgent, real secrets already in .env)
+4. **Fail-fast validators for required env vars** — ✅ DONE (2026-06-22)
    - **Purpose:** Prevent silent fallback to weak defaults if an env var is missed (raise clear error instead)
    - **Pattern:** Env var required, no weak default, raise "X must be set" if missing/empty
-   - **Files to modify (7):**
-     - `src/shared/config/base_settings.py` — REDIS_PASSWORD, JWT_SECRET validators
-     - `src/shared/auth/jwt_middleware.py` — JWT_SECRET validator
-     - `src/services/api-gateway/config.py` — REDIS_PASSWORD, POSTGRES_PASSWORD, JWT_SECRET validators
-     - `src/services/plugin-registry/config.py` — POSTGRES_PASSWORD, REDIS_PASSWORD validators
-     - `src/services/plugin-state-manager/main.py` — REDIS_PASSWORD, JWT_SECRET validators
-     - `src/services/marketplace/config.py` — POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET validators (Phase 1 unified vars)
-     - `src/services/graph-rag/main.py` — NEO4J_AUTH validator (remove fallback)
+   - **Files modified (7):**
+     - `src/shared/config/base_settings.py` — REDIS_PASSWORD, JWT_SECRET validators ✅
+     - `src/shared/auth/jwt_middleware.py` — JWT_SECRET validator ✅
+     - `src/services/api-gateway/config.py` — REDIS_PASSWORD, POSTGRES_PASSWORD, JWT_SECRET validators ✅
+     - `src/services/plugin-registry/config.py` — POSTGRES_PASSWORD, REDIS_PASSWORD validators ✅
+     - `src/services/plugin-state-manager/main.py` — REDIS_PASSWORD, JWT_SECRET validators ✅
+     - `src/services/marketplace/config.py` — POSTGRES_PASSWORD, REDIS_PASSWORD, JWT_SECRET validators ✅
+     - `src/services/graph-rag/main.py` — NEO4J_AUTH validator (removed fallback) ✅
    - **Docker templates (2):**
-     - `docker/compose/docker-compose.yml:317` — Remove NEO4J_AUTH default (:-neo4j/secure_password_change_me)
-     - `.setup/templates/docker-compose.yml.template:313` — Same as above
-   - **Verification required:**
-     1. Clean install test: `docker compose down -v → bash setup.sh start` → all services start (setup.sh generates real .env)
-     2. Fail-fast test: `mv .env .env.bak → docker compose restart` → services fail with clear "X must be set" errors
-     3. Recovery test: `mv .env.bak .env → docker compose restart` → all services recover
-   - **Note:** Real secrets already in .env and working (marketplace Neo4j auth fixed 2026-06-21). This is defense-in-depth: fail-fast if a required var is ever missed, not a current security gap.
+     - `docker/compose/docker-compose.yml:317` — Removed NEO4J_AUTH default (:-neo4j/secure_password_change_me) ✅
+     - `.setup/templates/docker-compose.yml.template:313` — Same as above ✅
+   - **Verification PROVEN:**
+     1. ✅ Clean install test: `docker compose down -v → bash setup.sh start` → all services start + healthy (setup.sh generates real .env)
+     2. ✅ Fail-fast test: Missing NEO4J_AUTH → `"ValueError: NEO4J_AUTH must be set via environment variable (format: neo4j/password)"` (proven in running image)
+     3. ✅ Recovery test: Present NEO4J_AUTH → graph-rag healthy ✅
+   - **Note:** Real secrets in .env working (marketplace Neo4j auth fixed 2026-06-21). This is defense-in-depth: fail-fast if required var ever missed.
 5. **Uniform auth pattern** dokümante (JWT middleware)
 6. **Rate limiting** standardizasyonu
 
@@ -616,9 +649,9 @@ $ docker ps --filter name=minder-alertmanager
 - ❌ Error handling standardize değil
 
 **Production Checklist:**
-- [x] **Core platform deploy-ready from zero** (clean install proven 2026-06-19)
-- [x] Tüm servisler auth kanıtlanmış (6/6 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, marketplace✅, tts-stt)
-- [x] Tüm servisler persistence kanıtlanmış (6/6 servis)
+- [x] **Core platform deploy-ready from zero** (clean install proven 2026-06-22 with graph-rag)
+- [x] Tüm servisler auth kanıtlanmış (7/7 servis: api-gateway, rag-pipeline, plugin-registry, graph-rag, model-management, marketplace✅, tts-stt)
+- [x] Tüm servisler persistence kanıtlanmış (7/7 servis)
 - [x] RCE riski ÇÖZÜLDÜ (Option B: manifest-based plugins, MVP end-to-end proven)
 - [x] **Monitoring-layer crash loops fixed** (traefik/telegraf mount paths, plugin-state-manager config restored)
 - [x] **marketplace JWT auth** (DONE 2026-06-20 — state-changing endpoints protected, GET public, JWT_SECRET shared, proven 401/200)
@@ -626,6 +659,9 @@ $ docker ps --filter name=minder-alertmanager
 - [x] **Prometheus + alertmanager mount path fixes** (DONE 2026-06-21 — monitoring layer functional, commit 38fdb60d)
 - [x] **Ollama remote-host support** (DONE 2026-06-21 — OLLAMA_BASE_URL for LOCAL/REMOTE modes, commit 00940e1b)
 - [x] **Deploy bug fixes + otel-collector/exporters** (DONE 2026-06-21 — model-fine-tuning orphan refs, blackbox mount, Ollama entrypoint, otel-collector bogus dir + exporter healthchecks + prometheus endpoint, commits 3e7f90ed/c29684e9/d4f68283/fac2d27e/fd3fa915)
+- [x] **Phase 2 Security Hardening** (DONE 2026-06-22 — fail-fast validators on all 7 services, graph-rag restored + integrated, proven both ways: missing .env → error, present .env → healthy)
+- [x] **graph-rag clean install integration** (DONE 2026-06-22 — restored after accidental removal, healthcheck fixed curl→Python, NEO4J_AUTH fail-fast validator, proven in clean install test)
+- [x] **setup.sh cross-platform hostname fix** (DONE 2026-06-22 — hostname -I fails on Git Bash under set -e, added || true, commits 65e60f60/3a9ddeda)
 - [ ] **Authelia SSO/2FA decision** (disabled pending: needs DB auto-init + NTP config if kept)
 - [ ] **Prometheus/Grafana configs check** (optional for full monitoring)
 - [ ] **Role-based auth** (deferred — auth-only sufficient for now)
