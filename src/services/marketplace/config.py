@@ -1,5 +1,6 @@
 # services/marketplace/config.py
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 
 class MarketplaceSettings(BaseSettings):
@@ -19,27 +20,55 @@ class MarketplaceSettings(BaseSettings):
     MARKETPLACE_DATABASE_USER: str = "minder"
     MARKETPLACE_DATABASE_NAME: str = "minder_marketplace"
     # Use platform-standard POSTGRES_PASSWORD (set via env)
-    POSTGRES_PASSWORD: str = "dev_password_change_me"
+    POSTGRES_PASSWORD: str  # Required: must be set via environment variable
+
+    @field_validator("POSTGRES_PASSWORD")
+    @classmethod
+    def check_postgres_password(cls, v: str) -> str:
+        if not v:
+            raise ValueError("POSTGRES_PASSWORD must be set via environment variable")
+        return v
 
     # Redis
     MARKETPLACE_REDIS_HOST: str = "minder-redis"
     MARKETPLACE_REDIS_PORT: int = 6379
     MARKETPLACE_REDIS_DB: int = 1  # Use separate DB for marketplace
     # Use platform-standard REDIS_PASSWORD (set via env)
-    REDIS_PASSWORD: str = "dev_password_change_me"
+    REDIS_PASSWORD: str  # Required: must be set via environment variable
+
+    @field_validator("REDIS_PASSWORD")
+    @classmethod
+    def check_redis_password(cls, v: str) -> str:
+        if not v:
+            raise ValueError("REDIS_PASSWORD must be set via environment variable")
+        return v
 
     # Security
     LICENSE_SECRET: str = "dev_license_secret_change_me_in_production"
-    JWT_SECRET: str = "dev_jwt_secret_change_me"
+    JWT_SECRET: str  # Required: must be set via environment variable
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 60
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def check_jwt_secret(cls, v: str) -> str:
+        if not v:
+            raise ValueError("JWT_SECRET must be set via environment variable")
+        return v
 
     # Plugin Registry integration
     PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
 
     # Neo4j Graph Database - use platform-standard NEO4J_AUTH (format: neo4j/password)
     NEO4J_URI: str = "bolt://neo4j:7687"
-    NEO4J_AUTH: str = "neo4j/secure_password_change_me"
+    NEO4J_AUTH: str  # Required: must be set via environment variable (format: neo4j/password)
+
+    @field_validator("NEO4J_AUTH")
+    @classmethod
+    def check_neo4j_auth(cls, v: str) -> str:
+        if not v:
+            raise ValueError("NEO4J_AUTH must be set via environment variable (format: neo4j/password)")
+        return v
 
     # Application
     LOG_LEVEL: str = "INFO"

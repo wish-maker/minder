@@ -44,7 +44,11 @@ logger = logging.getLogger(__name__)
 
 NEO4J_URI = os.getenv("NEO4J_URI", "bolt://neo4j:7687")
 NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_AUTH = os.getenv("NEO4J_AUTH", "neo4j/secure_password_change_me")
+
+# NEO4J_AUTH is required — fail-fast if not set
+NEO4J_AUTH = os.getenv("NEO4J_AUTH")
+if not NEO4J_AUTH:
+    raise ValueError("NEO4J_AUTH must be set via environment variable (format: neo4j/password)")
 
 # Parse NEO4J_AUTH to extract password (format: "user/password")
 if "/" in NEO4J_AUTH:

@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from routes import licensing, state, tools
 
 from core.database import close_db_pool, get_db_pool, initialize_database
@@ -37,15 +38,29 @@ class Settings(BaseSettings):
     # Redis
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str = "minder"
+    REDIS_PASSWORD: str  # Required: must be set via environment variable
+
+    @field_validator("REDIS_PASSWORD")
+    @classmethod
+    def check_redis_password(cls, v: str) -> str:
+        if not v:
+            raise ValueError("REDIS_PASSWORD must be set via environment variable")
+        return v
 
     # Services
     MARKETPLACE_URL: str = "http://minder-marketplace:8002"
     PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
 
     # Security
-    JWT_SECRET: str = "dev_jwt_secret_change_me"
+    JWT_SECRET: str  # Required: must be set via environment variable
     JWT_ALGORITHM: str = "HS256"
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def check_jwt_secret(cls, v: str) -> str:
+        if not v:
+            raise ValueError("JWT_SECRET must be set via environment variable")
+        return v
 
     # Application
     LOG_LEVEL: str = "INFO"

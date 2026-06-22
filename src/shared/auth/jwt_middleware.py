@@ -17,7 +17,11 @@ from functools import wraps
 # Configuration
 # ============================================================================
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
+# JWT_SECRET is required — fail-fast if not set
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not JWT_SECRET:
+    raise ValueError("JWT_SECRET must be set via environment variable")
+
 JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "60"))
 

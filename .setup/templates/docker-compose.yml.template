@@ -314,7 +314,7 @@ services:
     container_name: minder-neo4j
     restart: on-failure
     environment:
-      NEO4J_AUTH: ${NEO4J_AUTH:-${NEO4J_AUTH:-neo4j/secure_password_change_me}}
+      NEO4J_AUTH: ${NEO4J_AUTH}  # Required: must be set via .env (format: neo4j/password)
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_memory_heap_initial__size: 512m
       NEO4J_dbms_memory_heap_max__size: 1G
@@ -357,6 +357,11 @@ services:
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=minder
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=minder
     - JWT_SECRET=${JWT_SECRET}
     - JWT_ALGORITHM=HS256
     - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
@@ -872,6 +877,40 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    networks:
+    - minder-network
+  # ==========================================================================
+  # PILLAR 3: Core AI Services (Knowledge Graph)
+  # ==========================================================================
+
+  graph-rag:
+    build:
+      context: ../../
+      dockerfile: src/services/graph-rag/Dockerfile
+    image: minder/graph-rag:1.0.0
+    container_name: minder-graph-rag
+    restart: on-failure
+    environment:
+    - NEO4J_URI=bolt://neo4j:7687
+    - NEO4J_USER=neo4j
+    - NEO4J_AUTH=${NEO4J_AUTH}  # Required: must be set via .env (format: neo4j/password)
+    - SPACY_MODEL=${SPACY_MODEL:-en_core_web_sm}
+    - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    - ENVIRONMENT=${ENVIRONMENT:-development}
+    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
+    ports:
+    - "8008:8008"
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - python -c "import urllib.request; urllib.request.urlopen('http://localhost:8008/health').read()" || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
     - minder-network
   # ==========================================================================
