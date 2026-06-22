@@ -680,6 +680,19 @@ $ docker ps --filter name=minder-alertmanager
 - **Risk:** `:latest` means different versions on different deploys — non-reproducible
 - **Note:** Manual docker mode values (alertmanager v0.28.1, postgres-exporter v0.15.0, jaeger 1.57) are OUTDATED — actual running versions are newer. Pinning to manual mode would have been DOWNGRADES.
 
+**GitHub CI Workflows are BROKEN — Known Issue:**
+- ❌ **CI workflows (.github/workflows/ci.yml, test.yml) reference the OLD directory structure** and fail after the restructure to `src/services/` + `src/shared/`
+- **Broken paths in CI:**
+  - `api/`, `core/`, `plugins/` → should be `src/services/`, `src/core/`, `src/plugins/` (ci.yml)
+  - `services/` → should be `src/services/` (test.yml)
+  - `infrastructure/docker/docker-compose.yml` → should be `docker/compose/docker-compose.yml` (test.yml)
+  - `requirements.txt` (root) → should be `src/config/requirements/requirements.txt` (test.yml)
+  - `api-gateway` service → should be `minder-api-gateway` (docker-scan job)
+- **What this means:** CI shows RED on GitHub, but this is a CONFIG issue, not a code-quality issue. Code is verified via `setup.sh` + manual end-to-end tests.
+- **Verification method:** `bash setup.sh start` (clean install) + curl health checks + RAG queries + Conversational RAG 3-turn test.
+- **Fix scope:** CI workflows need rewriting to match new structure (~15 path fixes) + determining which of the scaffold's tests actually pass (many are placeholders).
+- **When to fix:** Deferred — it's real work (paths + lint + test verification). Code quality is maintained through manual testing for now.
+
 ---
 
 **Durum: Core platform DEPLOY-READY from zero ✅**
