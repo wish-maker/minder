@@ -658,11 +658,27 @@ $ docker ps --filter name=minder-alertmanager
 - **Actual security:** Windows ACLs have been restricted to owner-only (icacls applied)
 - **Fresh installs on Linux:** Will get 600 permissions correctly (script verified)
 
-**Version Drift (14 updates available — informational, optional):**
-- Images with newer compatible versions detected by `bash setup.sh doctor`
-- Updates are optional — current pinned versions are stable and proven
-- Apply when ready: `bash setup.sh update` (smart pull + rolling restart)
-- See doctor output for full list (postgres, redis, qdrant, neo4j, ollama, prometheus, grafana, etc.)
+**CRITICAL: `setup.sh update` is BROKEN — DO NOT USE**
+- ❌ **Version resolution is broken** — proposes dangerous changes:
+  - postgres 18.3 → 14.23 (DOWNGRADE — would corrupt database)
+  - alertmanager/postgres-exporter → "v0" (broken tag, not a real version)
+  - qdrant → "v1-unprivileged" (variant, not a version)
+- ❌ **Running `bash setup.sh update` blindly could break the deployment**
+- ✅ **Current pinned versions are PROVEN WORKING** — clean install + RAG verified
+- **Manual updates only:** Pin specific versions in compose files + THIRD_PARTY_IMAGE_SPECS, never use auto-update
+
+**Pinned Images (using specific versions — reproducible deploys):**
+- ✅ **3 images NOW PINNED** (2026-06-22) — updated in compose.yml + template + THIRD_PARTY_IMAGE_SPECS:
+  1. `ollama/ollama:0.30.10` ✅ (confirmed running version via API, tag verified)
+  2. `prom/alertmanager:v0.33.0` ✅ (confirmed running version via API, tag verified)
+  3. `prometheuscommunity/postgres-exporter:v0.19.1` ✅ (confirmed running version via binary --version, tag verified)
+
+**Unpinned Images (still using "latest" — non-reproducible deploys):**
+- ⏸️ **2 images remain unpinned** — require research to pin to specific releases:
+  1. `jaegertracing/all-in-one:latest` — pulled 2025-12-03, exact version unknown (image has no version label)
+  2. `ghcr.io/open-webui/open-webui:latest` — running `main` dev branch (not a release)
+- **Risk:** `:latest` means different versions on different deploys — non-reproducible
+- **Note:** Manual docker mode values (alertmanager v0.28.1, postgres-exporter v0.15.0, jaeger 1.57) are OUTDATED — actual running versions are newer. Pinning to manual mode would have been DOWNGRADES.
 
 ---
 

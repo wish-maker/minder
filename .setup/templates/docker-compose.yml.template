@@ -246,7 +246,7 @@ services:
     networks:
     - minder-network
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.30.10
     container_name: minder-ollama
     restart: on-failure
     # PILLAR 3: GPU Passthrough - Hardware acceleration for AI inference (when available)
@@ -681,7 +681,7 @@ services:
     - --web.enable-lifecycle
     - --web.enable-admin-api
   alertmanager:
-    image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.33.0
     container_name: minder-alertmanager
     restart: on-failure
     volumes:
@@ -918,7 +918,7 @@ services:
   # ==========================================================================
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:latest
+    image: prometheuscommunity/postgres-exporter:v0.19.1
     container_name: minder-postgres-exporter
     restart: on-failure
     environment:
