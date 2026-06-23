@@ -6,6 +6,10 @@ on:
     - cron: '0 9 * * 1'
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   check-updates:
     runs-on: ubuntu-latest
@@ -13,7 +17,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+
       - name: Check Docker Hub for updates
         run: |
           echo "# Docker Image Updates - $(date +%Y-%m-%d)" > update-report.md
@@ -60,6 +69,8 @@ jobs:
           
       - name: Create Issue if updates found
         if: hashFiles('update-report.md') != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if grep -q "Available Updates" update-report.md; then
             gh issue create \
