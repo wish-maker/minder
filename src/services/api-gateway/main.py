@@ -343,29 +343,6 @@ async def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
-# ============================================================================
-# JWT Authentication
-# ============================================================================
-
-
-def create_jwt_token(data: Dict) -> str:
-    """Create JWT access token"""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
-    return encoded_jwt
-
-
-def verify_jwt_token(token: str) -> Dict:
-    """Verify and decode JWT token"""
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 # Optional: Authentication dependency for protected routes
