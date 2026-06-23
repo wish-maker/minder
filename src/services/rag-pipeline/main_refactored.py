@@ -25,13 +25,13 @@ from domain.rerankers.cross_encoder import CrossEncoderReranker
 from domain.retrievers.hybrid import HybridSearchRetriever
 from domain.retrievers.parent_child import ParentChildRetriever
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
-from pydantic import BaseModel
 from infrastructure.cache import EmbeddingCache
 
 # Infrastructure Layer
 from infrastructure.ollama import OLLAMA_AVAILABLE, OllamaManager
 from infrastructure.resource_manager import Pi4ResourceManager
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from pydantic import BaseModel
 
 # Service Layer
 from services.knowledge_base_service import KnowledgeBaseService
