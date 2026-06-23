@@ -13,13 +13,22 @@ from core.entity_extractor import EntityExtractor
 from core.graph_constructor import KnowledgeGraphConstructor
 from core.graph_retriever import GraphRetriever
 from fastapi import FastAPI
+
 # Import request/response models
-from models.schemas import (EntityContextRequest, EntityExtractionRequest,
-                            GraphRetrievalRequest, KnowledgeGraphRequest)
+from models.schemas import (
+    EntityContextRequest,
+    EntityExtractionRequest,
+    GraphRetrievalRequest,
+    KnowledgeGraphRequest,
+)
+
 # Import API routes
-from routes.api import (construct_knowledge_graph_handler,
-                        extract_entities_handler, get_entity_context_handler,
-                        retrieve_with_graph_handler)
+from routes.api import (
+    construct_knowledge_graph_handler,
+    extract_entities_handler,
+    get_entity_context_handler,
+    retrieve_with_graph_handler,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

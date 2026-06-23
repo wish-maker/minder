@@ -14,11 +14,15 @@ from typing import Dict, List, Optional
 
 import redis
 import yaml
-from fastapi import (BackgroundTasks, Depends, FastAPI, HTTPException, Request,
-                     Response)
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge, Histogram,
-                               generate_latest)
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel
 
 from config import settings

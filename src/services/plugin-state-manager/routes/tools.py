@@ -7,10 +7,13 @@ import logging
 
 from core.execution import discover_plugin_tools, discover_tools, execute_tool
 from fastapi import APIRouter, HTTPException, Query
-from models.tool_execution import (LicenseValidationRequest,
-                                   LicenseValidationResponse,
-                                   ToolDiscoveryResponse, ToolExecutionRequest,
-                                   ToolExecutionResponse)
+from models.tool_execution import (
+    LicenseValidationRequest,
+    LicenseValidationResponse,
+    ToolDiscoveryResponse,
+    ToolExecutionRequest,
+    ToolExecutionResponse,
+)
 
 logger = logging.getLogger(__name__)
 

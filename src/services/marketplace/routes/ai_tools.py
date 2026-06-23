@@ -243,8 +243,7 @@ async def deactivate_plugin_tools(
 
     Called when a plugin is disabled or uninstalled.
     """
-    from services.marketplace.core.ai_tools_importer import \
-        deactivate_plugin_ai_tools
+    from services.marketplace.core.ai_tools_importer import deactivate_plugin_ai_tools
 
     pool = await get_pool()
 

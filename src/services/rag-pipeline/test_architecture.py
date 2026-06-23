@@ -19,8 +19,7 @@ print("🔍 Testing layer imports...")
 
 try:
     # Domain layer
-    from domain import (ContextualCompressor, CrossEncoderReranker,
-                        HybridSearchRetriever)
+    from domain import ContextualCompressor, CrossEncoderReranker, HybridSearchRetriever
 
     print("✅ Domain layer imports successful")
 

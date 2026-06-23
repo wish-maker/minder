@@ -8,8 +8,7 @@ Replaces static query processing with adaptive agent decision making.
 import logging
 from typing import Any, Dict, Optional
 
-from agent.decision_engine import (AgentDecisionEngine, PipelineDecision,
-                                   QueryAnalysis)
+from agent.decision_engine import AgentDecisionEngine, PipelineDecision, QueryAnalysis
 from fastapi import HTTPException
 from pydantic import BaseModel
 

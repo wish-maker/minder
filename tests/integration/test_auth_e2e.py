@@ -19,7 +19,6 @@ from config import settings
 # pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
-
 @pytest_asyncio.fixture(scope="session")
 async def verify_postgres_running():
     """

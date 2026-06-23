@@ -1,8 +1,13 @@
 """Rate Limiting Service"""
 
-from .rate_limiter import (ENDPOINT_LIMITS, RATE_LIMITS, WINDOW_SIZE,
-                           RateLimitMiddleware, RedisRateLimiter,
-                           add_rate_limiting)
+from .rate_limiter import (
+    ENDPOINT_LIMITS,
+    RATE_LIMITS,
+    WINDOW_SIZE,
+    RateLimitMiddleware,
+    RedisRateLimiter,
+    add_rate_limiting,
+)
 
 __all__ = [
     "RedisRateLimiter",

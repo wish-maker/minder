@@ -329,8 +329,7 @@ class KnowledgeBaseService:
 
             # Regular chunking
             else:
-                from langchain_text_splitters import \
-                    RecursiveCharacterTextSplitter
+                from langchain_text_splitters import RecursiveCharacterTextSplitter
 
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=kb["chunk_size"],

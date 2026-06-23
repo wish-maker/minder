@@ -69,22 +69,26 @@ print("  ✅ TEFAS Module v3.0 present")
 print("\n[4/7] Testing imports...")
 try:
     from plugins.tefas.unified_data_api import (  # noqa: F401
-        BORSAPY_AVAILABLE, TEFAS_CRAWLER_AVAILABLE, UnifiedDataAPI)
+        BORSAPY_AVAILABLE,
+        TEFAS_CRAWLER_AVAILABLE,
+        UnifiedDataAPI,
+    )
 
     print("  ✅ UnifiedDataAPI import successful")
 
-    from plugins.tefas.collectors.risk_metrics_collector import \
-        RiskMetricsCollector  # noqa: F401
+    from plugins.tefas.collectors.risk_metrics_collector import (
+        RiskMetricsCollector,
+    )  # noqa: F401
 
     print("  ✅ RiskMetricsCollector import successful")
 
-    from plugins.tefas.collectors.allocation_collector import \
-        AllocationCollector  # noqa: F401
+    from plugins.tefas.collectors.allocation_collector import (
+        AllocationCollector,
+    )  # noqa: F401
 
     print("  ✅ AllocationCollector import successful")
 
-    from plugins.tefas.collectors.tax_collector import \
-        TaxCollector  # noqa: F401
+    from plugins.tefas.collectors.tax_collector import TaxCollector  # noqa: F401
 
     print("  ✅ TaxCollector import successful")
 

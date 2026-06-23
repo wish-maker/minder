@@ -17,10 +17,17 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from jose import jwt
+
 # Import auth functions
 from modules.auth import create_jwt_token, verify_jwt_token
-from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge, Histogram,
-                               generate_latest)
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
+
 # Import AI integration router
 from routes.ai import router as ai_router
 
@@ -382,8 +389,12 @@ async def get_current_user(request: Request):
 # ============================================================================
 
 
-from modules.auth import (close_pg_pool, create_user, init_users_table,
-                          verify_user_credentials)
+from modules.auth import (
+    close_pg_pool,
+    create_user,
+    init_users_table,
+    verify_user_credentials,
+)
 
 
 @app.on_event("startup")

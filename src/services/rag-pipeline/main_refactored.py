@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 # Legacy imports (will be removed after full migration)
 from corrective_rag import CorrectiveRetriever
 from domain.compressors.contextual import ContextualCompressor
+
 # Domain Layer
 from domain.expansion.hyde import HyDEQueryExpander
 from domain.pipelines.self_rag import SelfRAGPipeline
@@ -25,11 +26,12 @@ from domain.retrievers.hybrid import HybridSearchRetriever
 from domain.retrievers.parent_child import ParentChildRetriever
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
 from infrastructure.cache import EmbeddingCache
+
 # Infrastructure Layer
 from infrastructure.ollama import OLLAMA_AVAILABLE, OllamaManager
 from infrastructure.resource_manager import Pi4ResourceManager
-from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Histogram,
-                               generate_latest)
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+
 # Service Layer
 from services.knowledge_base_service import KnowledgeBaseService
 from services.retrieval_service import RetrievalService
@@ -37,9 +39,6 @@ from services.retrieval_service import RetrievalService
 # ============================================================================
 # Clean Architecture Imports
 # ============================================================================
-
-
-
 
 
 logger = logging.getLogger(__name__)
