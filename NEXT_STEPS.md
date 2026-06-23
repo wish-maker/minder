@@ -826,10 +826,10 @@ The lint cleanup (120-file Black reformat + autoflake + auth dupes) is a careful
 ---
 
 **Phase 3 (deferred — separate task):**
-- Trivy: no build step, just scan
-- Hadolint: linting Dockerfiles (not compose file)
-- TruffleHog: single-commit logic check
-- check-updates: jq for dependency monitoring
+- **Trivy:** ⚠️ REAL CVEs found in api-gateway:test image — NOT just config. Investigate actual vulnerabilities first (what CVEs? base image or dependency?), THEN decide patch vs threshold. Genuine security item requiring investigation.
+- **Hadolint:** misconfig — linting compose file instead of Dockerfile → fix path or remove job
+- **TruffleHog:** misconfig — BASE==HEAD on single-commit push → fix diff logic
+- **check-dependency-updates:** ✅ KEPT — working now (jq installed, permissions fixed, auto-creates weekly issues)
 
 ---
 
