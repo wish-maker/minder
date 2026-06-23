@@ -776,46 +776,16 @@ $ docker ps --filter name=minder-alertmanager
 
 **Status (2026-06-23):** Dependency chase complete (Unit Tests passing). Lint job blocks Integration/E2E tests via `needs: [lint, ...]` dependency. Precise breakdown from CI run 28032245906:
 
-| Check | Status | Count/Details |
-|-------|--------|---------------|
-| **Black** | ❌ FAILED | **120 files need reformatting** (spacing, line length, etc.) |
-| **Flake8** | ⏸️ Never ran | Job stopped at Black, but will flag: |
-| &nbsp;&nbsp;• Auth dupes (F811) | Still present | `api-gateway/main.py:352-369` (`create_jwt_token`, `verify_jwt_token`) |
-| &nbsp;&nbsp;• F401 unused imports | ~40 estimated | From previous scan |
-| &nbsp;&nbsp;• Empty dir (E902) | Still present | `src/plugins/` (no Python files) |
-| **isort/MyPy** | ⏸️ Never ran | Blocked by Black failure |
+**CI Phase 2 — lint cleanup (remaining after dependency fix landed; Unit Tests now PASS):**
 
-**Step-by-Step Plan (FRESH SESSION — no tired hands):**
+- **Black:** 120 files need reformatting (formatting only — run `black src/ src/services/ tests/`, then git diff to CONFIRM only formatting changed, no logic)
+- **autoflake:** ~40 F401 unused imports (`autoflake --in-place --remove-all-unused-imports --recursive src/services/ src/core/`) — CAVEAT: can remove genuinely-used imports (conditional/re-export); after running, verify EVERY service still imports/starts, not just 'lint passes'
+- **auth dupes:** delete `create_jwt_token`/`verify_jwt_token` in api-gateway/main.py lines 352-369 (verified identical to modules.auth imports yesterday) — restart api-gateway, verify JWT still works after
+- **src/plugins/** is an EMPTY dir → remove from lint targets in ci.yml (E902)
+- **Order:** autoflake → delete auth dupes → black → isort → verify all services start → re-run CI
+- **After lint passes,** Integration/E2E unblock (workflow `needs:[lint]`) — they may surface NEW findings (separate)
 
-1. **Fix lint paths first** (removes empty-dir blocker)
-   - Remove `src/plugins/` from ci.yml lint targets (bandit line 24, flake8 line 56, black line 59, isort line 62)
-   - Run lint to confirm E902 gone
-
-2. **Delete auth dupes** (removes known F811s)
-   - Delete `api-gateway/main.py:352-369` (`create_jwt_token`, `verify_jwt_token`)
-   - Use imports from `modules/auth.py` (line 27) instead
-   - Restart api-gateway, verify JWT auth still works (curl test)
-
-3. **Run autoflake** (removes F401 unused imports)
-   - `autoflake --remove-all-unused-imports --in-place src/services/ src/core/ src/shared/`
-   - **CRITICAL:** Autoflake CAN remove genuinely-used imports (conditional, re-exports, `__all__`)
-   - **AFTER:** Verify each service still imports/starts: `docker compose restart <service>` → curl health
-
-4. **Run black** (fixes 120 formatting issues)
-   - `black src/ src/services/ tests/` (apply formatting)
-   - No import changes, just spacing
-
-5. **Run isort** (fixes import ordering)
-   - `isort src/ src/services/ tests/`
-   - Verify services still start
-
-6. **Re-run CI** — expect lint pass, then Integration/E2E tests unblock
-
-7. **Phase 3 (deferred):**
-   - Hadolint linting docker-compose.yml (wrong file type, probably remove)
-   - TruffleHog script logic issues
-   - Trivy docker-scan fixes
-   - Some CI workflow issues better removed than fixed
+**Phase 3 (later):** Trivy (no build step), Hadolint (linting compose file - wrong), TruffleHog (single-commit logic), check-updates jq.
 
 **Lesson Learned:**
 - Reading lint output (not auto-fixing) found real bugs: F811 → duplicate route decorators → broken `/plugins/{plugin_id}` endpoint
