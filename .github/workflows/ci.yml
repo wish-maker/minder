@@ -21,7 +21,7 @@ jobs:
       - name: Run Bandit security linter
         run: |
           pip install bandit[toml]
-          bandit -r api/ plugins/ core/ -f json -o bandit-report.json || true
+          bandit -r src/services/ src/core/ src/plugins/ -f json -o bandit-report.json || true
 
       - name: Run Safety check
         run: |
@@ -53,16 +53,16 @@ jobs:
           pip install flake8 black isort mypy pylint
 
       - name: Run Flake8
-        run: flake8 api/ core/ plugins/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+        run: flake8 src/services/ src/core/ src/plugins/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run Black
-        run: black --check api/ core/ plugins/
+        run: black --check src/services/ src/core/ src/plugins/
 
       - name: Run isort
-        run: isort --check-only api/ core/ plugins/
+        run: isort --check-only src/services/ src/core/ src/plugins/
 
       - name: Run MyPy
-        run: mypy api/ --ignore-missing-imports || true
+        run: mypy src/services/ --ignore-missing-imports || true
 
   # Unit Tests
   test:
@@ -104,7 +104,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install -r src/config/requirements/requirements.txt
           pip install pytest pytest-asyncio pytest-cov pytest-mock
 
       - name: Run tests with coverage
@@ -117,9 +117,9 @@ jobs:
           REDIS_PORT: 6379
         run: |
           pytest tests/ --ignore=tests/manual \
-            --cov=api \
-            --cov=core \
-            --cov=plugins \
+            --cov=src/services \
+            --cov=src/core \
+            --cov=src/plugins \
             --cov-report=xml \
             --cov-report=html \
             --verbose \

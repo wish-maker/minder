@@ -54,7 +54,7 @@ jobs:
 
       - name: Run Bandit
         run: |
-          bandit -r src/ services/ tests/ \
+          bandit -r src/ src/services/ src/plugins/ tests/ \
             -f json \
             -o bandit-report.json \
             -ll || true
@@ -108,7 +108,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker compose -f infrastructure/docker/docker-compose.yml build api-gateway
+          docker compose -f docker/compose/docker-compose.yml build api-gateway
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -153,7 +153,7 @@ jobs:
       - name: Run Hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: infrastructure/docker/docker-compose.yml
+          dockerfile: docker/compose/docker-compose.yml
           ignore: DL3008,DL3013
 
   license-compliance:
