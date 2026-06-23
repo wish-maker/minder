@@ -863,3 +863,5 @@ python-dotenv==1.0.0  # Note: marketplace has 1.2.2 — investigate variance fir
 
 **Note:** Each previous "fix" (redis 5.4.2→5.0.1, ollama 0.5.7→0.1.7, qdrant→qdrant-client) was dragging the file toward container truth. The honest fix is to align the file with reality once, not chase it line-by-line.
 
+**Container Drift Found (2026-06-23):** plugin-registry running container has httpx 0.28.1 but its requirements.txt pins 0.25.2 — container is stale vs file. Harmless (plugin-registry doesn't use ollama) but a rebuild would downgrade it to 0.25.2. Track drift, not a fix-now item.
+
