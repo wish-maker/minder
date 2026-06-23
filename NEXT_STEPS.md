@@ -774,7 +774,7 @@ $ docker ps --filter name=minder-alertmanager
 
 **Remaining Phase 2 Work (NEXT SESSION — Fresh Lint Cleanup Plan):**
 
-**Status (2026-06-23 END):** Dependency chase complete — root cause found (requirements.txt had fabricated versions), container-pinned fix landed (commit 7fb0afc4), dry-run verified zero conflicts. **Unit Tests NOW PASSING.** This milestone also made requirements.txt genuinely installable — critical for ARM Pi deploy.
+**Status (2026-06-23 END):** Dependency chase complete — root cause found (requirements.txt had fabricated versions), container-pinned fix landed (commit 13b334cf), dry-run verified zero conflicts. **Unit Tests NOW PASSING.** This milestone also made requirements.txt genuinely installable — critical for ARM Pi deploy.
 
 The lint cleanup (120-file Black reformat + autoflake + auth dupes) is a careful multi-step job that deserves a focused fresh session. Doing a 120-file reformat on tired hands is exactly where a silent break slips in.
 
