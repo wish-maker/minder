@@ -11,7 +11,7 @@ import sys
 # Add the parent directory to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from test_database_schema import test_database_schema_created
+from test_database_schema import test_database_schema_created  # noqa: E402
 
 
 async def main():

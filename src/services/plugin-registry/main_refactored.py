@@ -21,14 +21,14 @@ sys.path.insert(0, "/app/src")
 sys.path.insert(0, "/app/plugins")
 
 # Import core modules
-from core.database import initialize_connection_pool
-from core.plugin_loader import load_plugins_from_disk
+from core.database import initialize_connection_pool  # noqa: E402
+from core.plugin_loader import load_plugins_from_disk  # noqa: E402
 
 # Import config
-from config import settings
+from config import settings  # noqa: E402
 
 # Import shared utilities
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import get_current_user  # noqa: E402
 
 # Import existing routes
 
@@ -209,14 +209,13 @@ async def metrics():
 @app.middleware("http")
 async def track_requests(request: Request, call_next):
     """Track requests for metrics"""
-    import time
-
-    start_time = time.time()
+    # import time
+    # start_time = time.time()
 
     response = await call_next(request)
 
     # Update metrics
-    duration = time.time() - start_time
+    # duration = time.time() - start_time  # Not currently used
     http_requests_total.labels(
         method=request.method, endpoint=request.url.path, status=response.status_code
     ).inc()

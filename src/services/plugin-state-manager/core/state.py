@@ -280,7 +280,6 @@ async def resolve_dependencies(conn: asyncpg.Connection, plugin_name: str) -> Li
     """
     # Build dependency graph
     plugins = {}
-    dependencies = {}
 
     # Get all plugins and their dependencies
     rows = await conn.fetch("""

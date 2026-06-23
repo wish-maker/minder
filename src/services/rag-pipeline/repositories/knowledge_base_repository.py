@@ -96,7 +96,10 @@ class KnowledgeBaseRepository:
             async with self.db_pool.acquire() as conn:
                 await conn.execute(
                     """
-                    INSERT INTO knowledge_bases (id, name, description, embedding_model, llm_model, chunk_size, chunk_overlap, parent_child_enabled, document_count, vector_count, created_at)
+                    INSERT INTO knowledge_bases
+                    (id, name, description, embedding_model, llm_model,
+                     chunk_size, chunk_overlap, parent_child_enabled,
+                     document_count, vector_count, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     """,
                     kb_id,
@@ -265,7 +268,7 @@ class KnowledgeBaseRepository:
 
         try:
             async with self.db_pool.acquire() as conn:
-                result = await conn.execute(
+                _ = await conn.execute(
                     "DELETE FROM knowledge_bases WHERE id = $1", kb_id
                 )
 

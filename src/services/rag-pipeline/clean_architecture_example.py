@@ -16,17 +16,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import all layers
-from domain import (
+from domain import (  # noqa: E402
     ContextualCompressor,
     CrossEncoderReranker,
     HybridSearchRetriever,
     HyDEQueryExpander,
 )
-from infrastructure import EmbeddingCache, Pi4ResourceManager
-from repositories import ConversationRepository, KnowledgeBaseRepository
-from utils import chunk_text, chunk_text_fallback, cosine_similarity
+from infrastructure import EmbeddingCache, Pi4ResourceManager  # noqa: E402
+from repositories import KnowledgeBaseRepository  # noqa: E402
+from utils import chunk_text, chunk_text_fallback, cosine_similarity  # noqa: E402
 
-from services import KnowledgeBaseService, RetrievalService
+from services import RetrievalService  # noqa: E402
 
 
 class MockQdrantClient:
@@ -142,7 +142,7 @@ async def demonstrate_clean_architecture():
     kb_repository = KnowledgeBaseRepository(postgres_pool)
     print("  ✅ KnowledgeBaseRepository initialized")
 
-    conv_repository = ConversationRepository(postgres_pool)
+    # conv_repository = ConversationRepository(postgres_pool)  # Not currently used
     print("  ✅ ConversationRepository initialized")
 
     # ============================================================================
@@ -179,11 +179,11 @@ async def demonstrate_clean_architecture():
     )
     print("  ✅ RetrievalService initialized with all enhancements")
 
-    kb_service = KnowledgeBaseService(
-        ollama_manager=ollama_manager,
-        qdrant_client=qdrant_client,
-        parent_child_chunker=None,  # Optional
-    )
+    # kb_service = KnowledgeBaseService(  # Not currently used
+    #     ollama_manager=ollama_manager,
+    #     qdrant_client=qdrant_client,
+    #     parent_child_chunker=None,  # Optional
+    # )
     print("  ✅ KnowledgeBaseService initialized")
 
     # ============================================================================

@@ -409,7 +409,7 @@ class RAPTORChunker:
         for cluster_idx, cluster in enumerate(clusters):
             try:
                 cluster_chunks = [chunks[i] for i in cluster]
-                cluster_embeddings = [embeddings[i] for i in cluster]
+                # cluster_embeddings = [embeddings[i] for i in cluster]  # Not currently used
 
                 # Generate summary
                 summary = self._generate_cluster_summary(cluster_chunks, llm_manager)
@@ -670,7 +670,8 @@ class RAPTORChunker:
             # Combine chunks (limit total length for efficiency)
             combined_text = "\n\n".join(chunks[:3])
 
-            prompt = f"""Summarize the following text in {self.summary_length} characters or less, capturing the main points:
+            prompt = f"""Summarize the following text in {self.summary_length} chars
+or less, capturing the main points:
 
 {combined_text}
 

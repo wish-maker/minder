@@ -185,7 +185,7 @@ async def test_service_layer():
         mock_resource = Pi4ResourceManager()
 
         # Test RetrievalService initialization
-        retrieval_service = RetrievalService(
+        _ = RetrievalService(
             ollama_manager=mock_ollama,
             qdrant_client=mock_qdrant,
             resource_manager=mock_resource,
@@ -194,7 +194,7 @@ async def test_service_layer():
         print("  ✅ RetrievalService initialization works")
 
         # Test KnowledgeBaseService initialization
-        kb_service = KnowledgeBaseService(
+        _ = KnowledgeBaseService(
             ollama_manager=mock_ollama, qdrant_client=mock_qdrant
         )
         print("  ✅ KnowledgeBaseService initialization works")
@@ -215,11 +215,11 @@ async def test_repository_layer():
         mock_pool = MockPostgresPool()
 
         # Test KnowledgeBaseRepository
-        kb_repo = KnowledgeBaseRepository(mock_pool)
+        _ = KnowledgeBaseRepository(mock_pool)
         print("  ✅ KnowledgeBaseRepository initialization works")
 
         # Test ConversationRepository
-        conv_repo = ConversationRepository(mock_pool)
+        _ = ConversationRepository(mock_pool)
         print("  ✅ ConversationRepository initialization works")
 
         print("✅ Repository layer test PASSED")

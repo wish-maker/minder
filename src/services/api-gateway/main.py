@@ -8,15 +8,13 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
-from typing import Dict
+from datetime import datetime
 
 import httpx
 import redis
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from jose import jwt
 
 # Import auth functions
 from modules.auth import create_jwt_token, verify_jwt_token
@@ -389,7 +387,7 @@ async def get_current_user(request: Request):
 # ============================================================================
 
 
-from modules.auth import (
+from modules.auth import (  # noqa: E402
     close_pg_pool,
     create_user,
     init_users_table,

@@ -29,7 +29,7 @@ PG_AVAILABLE = ASYNCPG_AVAILABLE
 pg_pool: Optional[asyncpg.Pool] = None
 
 # Database configuration
-import os
+import os  # noqa: E402
 
 PG_HOST = os.getenv("POSTGRES_HOST", "postgres")
 PG_PORT = os.getenv("POSTGRES_PORT", "5432")
@@ -114,7 +114,8 @@ async def initialize_schema():
             metadata JSONB DEFAULT '{}'::jsonb
         );
 
-        CREATE INDEX IF NOT EXISTS idx_conversation_turns_lookup ON conversation_turns(user_id, conversation_id, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_conversation_turns_lookup
+        ON conversation_turns(user_id, conversation_id, timestamp DESC);
         """
 
         async with conn.acquire() as connection:
@@ -142,7 +143,9 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
             await connection.execute(
                 """
                 INSERT INTO knowledge_bases
-                (id, name, description, embedding_model, llm_model, chunk_size, chunk_overlap, chunking_strategy, parent_size, document_count, vector_count)
+                (id, name, description, embedding_model, llm_model,
+                 chunk_size, chunk_overlap, chunking_strategy, parent_size,
+                 document_count, vector_count)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
@@ -187,7 +190,9 @@ async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
 
         async with conn.acquire() as connection:
             rows = await connection.fetch("""
-                SELECT id, name, description, embedding_model, llm_model, chunk_size, chunk_overlap, chunking_strategy, parent_size, document_count, vector_count, created_at
+                SELECT id, name, description, embedding_model, llm_model,
+                       chunk_size, chunk_overlap, chunking_strategy,
+                       parent_size, document_count, vector_count, created_at
                 FROM knowledge_bases
                 ORDER BY created_at DESC
             """)

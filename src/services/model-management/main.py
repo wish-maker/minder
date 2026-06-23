@@ -83,6 +83,15 @@ class ModelConstraints(BaseModel):
     max_tokens: int
 
 
+class FineTuneRequest(BaseModel):
+    """Fine-tuning request"""
+
+    base_model: str
+    training_data: Optional[str] = None
+    epochs: Optional[int] = 3
+    learning_rate: Optional[float] = 0.0001
+
+
 # ============================================================================
 # Ollama Client Management
 # ============================================================================
@@ -259,7 +268,6 @@ async def list_models():
             # Extract model info from Ollama response
             model_name = model.get("name", "")
             model_size = model.get("size", 0)
-            model_digest = model.get("digest", "")
 
             # Convert size to human-readable format
             size_str = f"{model_size / (1024**3):.2f} GB" if model_size else "Unknown"
@@ -276,7 +284,7 @@ async def list_models():
             )
 
         # Update cache
-        global models
+        global models  # noqa: F824
         models.clear()
         for model_info in result:
             models[model_info.id] = {
@@ -462,7 +470,8 @@ async def fine_tune_model(request: FineTuneRequest):
         fine_tuned_model_id = f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
         logger.info(
-            f"Fine-tuning request: {request.base_model} -> {fine_tuned_model_id} (delegated to model-fine-tuning service)"
+            f"Fine-tuning: {request.base_model} -> {fine_tuned_model_id} "
+            "(delegated to model-fine-tuning service)"
         )
 
         return {

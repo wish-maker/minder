@@ -29,8 +29,6 @@ async def get_postgres_connection():
         >>> async with get_postgres_connection() as conn:
         ...     result = await conn.fetch("SELECT NOW()")
     """
-    global connection_pool
-
     if connection_pool is None:
         raise RuntimeError("Connection pool not initialized")
 

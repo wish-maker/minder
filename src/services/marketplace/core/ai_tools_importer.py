@@ -52,7 +52,7 @@ async def import_ai_tools_from_manifest(
             # Validate required fields
             tool_name = tool_def.get("name")
             if not tool_name:
-                errors.append(f"Tool missing 'name' field")
+                errors.append("Tool missing 'name' field")
                 continue
 
             # Check if tool already exists

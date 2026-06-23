@@ -14,7 +14,7 @@ os.environ.setdefault("MARKETPLACE_DATABASE_USER", "minder")
 os.environ.setdefault("MARKETPLACE_DATABASE_PASSWORD", "dev_password_change_me")
 os.environ.setdefault("MARKETPLACE_DATABASE_NAME", "minder_marketplace")
 
-from services.marketplace.models.manifest_schema_v3 import (
+from services.marketplace.models.manifest_schema_v3 import (  # noqa: E402
     EXAMPLE_MANIFEST,
     AIToolCategory,
     AIToolDefinition,
@@ -41,7 +41,7 @@ def test_basic_manifest_creation():
     assert manifest.name == "test-plugin"
     assert manifest.display_name == "Test Plugin"
     assert manifest.tier == PluginTier.COMMUNITY
-    assert manifest.is_default_enabled == True
+    assert manifest.is_default_enabled is True
 
 
 def test_ai_tools_definition():
@@ -62,7 +62,7 @@ def test_ai_tools_definition():
     assert tool.name == "analysis_tool"
     assert tool.tool_type == AIToolType.ANALYSIS
     assert tool.endpoint_path == "/api/v1/analyze"
-    assert tool.is_default_enabled == True
+    assert tool.is_default_enabled is True
 
 
 def test_plugin_with_ai_tools():
@@ -103,7 +103,7 @@ def test_plugin_with_ai_tools():
     manifest = PluginManifestV3(**manifest_data)
 
     assert manifest.get_ai_tools_count() == 2
-    assert manifest.ai_tools.default_enabled == True
+    assert manifest.ai_tools.default_enabled is True
 
     # Test tool retrieval
     text_tool = manifest.get_tool_by_name("text_analysis")
@@ -112,7 +112,7 @@ def test_plugin_with_ai_tools():
 
     ml_tool = manifest.get_tool_by_name("advanced_ml")
     assert ml_tool is not None
-    assert ml_tool.requires_configuration == True
+    assert ml_tool.requires_configuration is True
     assert ml_tool.default_configuration["model"] == "gpt-4"
 
 
@@ -209,7 +209,7 @@ def test_manifest_validation():
     compatibility = PluginManifestValidator.check_tier_compatibility(
         manifest, PluginTier.COMMUNITY
     )
-    assert compatibility["is_compatible"] == True
+    assert compatibility["is_compatible"] is True
     assert compatibility["total_tools"] == 1
     assert len(compatibility["available_tools"]) == 1
 
@@ -229,7 +229,7 @@ def test_example_manifest():
 
     predictive_tool = manifest.get_tool_by_name("predictive_modeling")
     assert predictive_tool is not None
-    assert predictive_tool.requires_configuration == True
+    assert predictive_tool.requires_configuration is True
     assert predictive_tool.default_configuration["model_type"] == "random_forest"
 
 
@@ -273,7 +273,7 @@ def test_configuration_requirements():
         default_configuration={"api_key": "change_me"},
     )
 
-    assert manifest_with_config.requires_configuration() == True
+    assert manifest_with_config.requires_configuration() is True
 
     # Plugin with AI tools requiring configuration
     manifest_with_tools = PluginManifestV3(
@@ -298,7 +298,7 @@ def test_configuration_requirements():
         },
     )
 
-    assert manifest_with_tools.requires_configuration() == True
+    assert manifest_with_tools.requires_configuration() is True
 
     # Plugin without configuration requirements
     manifest_simple = PluginManifestV3(
@@ -310,7 +310,7 @@ def test_configuration_requirements():
         category="test",
     )
 
-    assert manifest_simple.requires_configuration() == False
+    assert manifest_simple.requires_configuration() is False
 
 
 def test_tag_normalization():

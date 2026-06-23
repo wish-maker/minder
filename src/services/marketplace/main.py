@@ -6,12 +6,12 @@ from contextlib import asynccontextmanager
 # Add src to path for shared module imports (MUST be before other imports)
 sys.path.insert(0, "/app/src")
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
 
-from services.marketplace.config import settings
-from services.marketplace.core.database import close_pool, get_pool
+from services.marketplace.config import settings  # noqa: E402
+from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
 
 logger = logging.getLogger("minder.marketplace")
 
@@ -108,15 +108,15 @@ async def global_exception_handler(request, exc):
     )
 
 
-from services.marketplace.routes.ai_tools import router as ai_tools_router
-from services.marketplace.routes.graph_dependencies import (
+from services.marketplace.routes.ai_tools import router as ai_tools_router  # noqa: E402
+from services.marketplace.routes.graph_dependencies import (  # noqa: E402
     router as graph_dependencies_router,
 )
-from services.marketplace.routes.licensing import router as licensing_router
-from services.marketplace.routes.management import router as management_router
+from services.marketplace.routes.licensing import router as licensing_router  # noqa: E402
+from services.marketplace.routes.management import router as management_router  # noqa: E402
 
 # Include routers
-from services.marketplace.routes.marketplace import router as marketplace_router
+from services.marketplace.routes.marketplace import router as marketplace_router  # noqa: E402
 
 app.include_router(marketplace_router)
 app.include_router(management_router)

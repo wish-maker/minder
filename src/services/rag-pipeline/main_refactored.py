@@ -25,6 +25,7 @@ from domain.rerankers.cross_encoder import CrossEncoderReranker
 from domain.retrievers.hybrid import HybridSearchRetriever
 from domain.retrievers.parent_child import ParentChildRetriever
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from pydantic import BaseModel
 from infrastructure.cache import EmbeddingCache
 
 # Infrastructure Layer
@@ -179,8 +180,6 @@ app = FastAPI(
 # ============================================================================
 # Pydantic Models
 # ============================================================================
-
-from pydantic import BaseModel
 
 
 class KnowledgeBaseCreate(BaseModel):

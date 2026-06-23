@@ -9,6 +9,7 @@ import time
 from typing import Any, Dict
 
 import httpx
+from fastapi import HTTPException
 from models.tool_execution import (
     ToolDiscoveryResponse,
     ToolExecutionResponse,
@@ -58,7 +59,7 @@ async def execute_tool(
 
         # Get plugin name
         plugin_name = tool_data.get("plugin_name")
-        plugin_id = tool_data.get("plugin_id")
+        # plugin_id = tool_data.get("plugin_id")  # Not currently used
 
         # Validate license
         from core.database import get_db_pool

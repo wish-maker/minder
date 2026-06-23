@@ -31,11 +31,11 @@ from config import settings
 sys.path.insert(0, "/app/src")
 sys.path.insert(0, "/app/plugins")  # Add plugins directory to path for direct imports
 # Import proxy router for microservices
-from routes.plugins import ProxyRouter
+from routes.plugins import ProxyRouter  # noqa: E402
 
 # Import AI tool validator
-from shared.ai.tool_validator import validate_ai_tools
-from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
+from shared.ai.tool_validator import validate_ai_tools  # noqa: E402
+from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -126,7 +126,7 @@ redis_client = redis.Redis(
 )
 
 # PostgreSQL client for plugin persistence
-import asyncpg
+import asyncpg  # noqa: E402
 
 postgres_pool = None
 
@@ -532,8 +532,6 @@ async def register_all_webhooks_on_startup():
     MVP: Loads from in-memory plugin_manifests populated by install endpoint.
     TODO: Load from PostgreSQL and restore all manifests.
     """
-    global webhook_routes, plugin_manifests
-
     # Clear existing routes
     webhook_routes.clear()
 
@@ -1334,8 +1332,6 @@ async def get_plugin_analysis(
 
     Called by OpenWebUI when LLM requests a plugin's AI tool.
     """
-    global plugin_instances
-
     # Check if plugin exists and is enabled
     if plugin_name not in plugins_db:
         raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
@@ -1538,14 +1534,13 @@ async def startup_event():
     asyncio.create_task(data_collection_scheduler())
 
     logger.info(
-        f"✅ Startup complete: {len(plugins_db)} plugins, {len(services_db)} services loaded, {len(webhook_routes)} webhooks"
+        f"✅ Startup: {len(plugins_db)} plugins, "
+        f"{len(services_db)} services, {len(webhook_routes)} webhooks"
     )
 
 
 async def auto_enable_plugins():
     """Automatically enable all plugins on startup"""
-    global plugins_db
-
     logger.info("Auto-enabling all plugins...")
 
     for plugin_name, plugin_info in plugins_db.items():
@@ -1600,7 +1595,6 @@ async def shutdown_event():
     logger.info("Plugin Registry shutting down...")
 
     # Close PostgreSQL connection
-    global postgres_pool
     if postgres_pool:
         await postgres_pool.close()
 
@@ -1683,7 +1677,7 @@ async def create_plugins_table_if_not_exists():
 
 async def load_services_from_redis():
     """Load registered services from Redis into memory cache"""
-    global services_db
+    global services_db  # noqa: F824
 
     try:
         # Get all service keys from Redis
@@ -1732,7 +1726,7 @@ async def load_services_from_redis():
 
 async def load_plugins_from_database():
     """Load plugins from PostgreSQL database into memory cache"""
-    global plugins_db
+    global plugins_db  # noqa: F824
 
     try:
         conn = await get_postgres_connection()

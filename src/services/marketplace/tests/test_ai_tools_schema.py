@@ -69,7 +69,7 @@ async def test_ai_tools_enhanced_schema():
         index_names = [row["indexname"] for row in indexes]
         assert len(index_names) > 0
 
-        print(f"✅ AI tools schema validated successfully")
+        print("✅ AI tools schema validated successfully")
         print(f"   - Tables found: {len(table_names)}")
         print(f"   - Enhanced columns: {len(column_names)}")
         print(f"   - Indexes created: {len(index_names)}")

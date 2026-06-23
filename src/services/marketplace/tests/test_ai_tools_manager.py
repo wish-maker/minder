@@ -15,8 +15,8 @@ os.environ.setdefault("MARKETPLACE_DATABASE_USER", "minder")
 os.environ.setdefault("MARKETPLACE_DATABASE_PASSWORD", "dev_password_change_me")
 os.environ.setdefault("MARKETPLACE_DATABASE_NAME", "minder_marketplace")
 
-from services.marketplace.core.ai_tools_manager import AIToolsManager
-from services.marketplace.core.database import close_pool, get_pool
+from services.marketplace.core.ai_tools_manager import AIToolsManager  # noqa: E402
+from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
 
 
 @pytest.fixture(scope="function")
@@ -138,7 +138,7 @@ async def test_tool_configuration_validation(cleanup_pool):
             configuration=valid_config,
         )
 
-        assert result["is_valid"] == True
+        assert result["is_valid"]
         assert len(result["errors"]) == 0
 
         # Test invalid configuration (missing required field)
@@ -150,7 +150,7 @@ async def test_tool_configuration_validation(cleanup_pool):
             configuration=invalid_config,
         )
 
-        assert result["is_valid"] == False
+        assert not result["is_valid"]
         assert len(result["errors"]) > 0
 
     finally:
@@ -224,7 +224,7 @@ async def test_enable_disable_tool(cleanup_pool):
 
         assert str(enable_result["plugin_id"]) == plugin_id
         assert enable_result["tool_name"] == "enable_test_tool"
-        assert enable_result["is_enabled"] == True
+        assert enable_result["is_enabled"]
         assert enable_result["activation_status"] == "active"
 
         # Disable tool
@@ -234,7 +234,7 @@ async def test_enable_disable_tool(cleanup_pool):
             installation_id=installation_id,
         )
 
-        assert disable_result["is_enabled"] == False
+        assert not disable_result["is_enabled"]
         assert disable_result["activation_status"] == "inactive"
 
     finally:
