@@ -194,9 +194,7 @@ async def test_service_layer():
         print("  ✅ RetrievalService initialization works")
 
         # Test KnowledgeBaseService initialization
-        _ = KnowledgeBaseService(
-            ollama_manager=mock_ollama, qdrant_client=mock_qdrant
-        )
+        _ = KnowledgeBaseService(ollama_manager=mock_ollama, qdrant_client=mock_qdrant)
         print("  ✅ KnowledgeBaseService initialization works")
 
         print("✅ Service layer test PASSED")

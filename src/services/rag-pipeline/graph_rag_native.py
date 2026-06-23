@@ -30,9 +30,7 @@ class NativeGraphRAG:
             # Test HTTP endpoint
             async with httpx.AsyncClient() as client:
                 # Simple connectivity test
-                _ = await client.get(
-                    f"{self.neo4j_http}/db/data/neo4j/tx/commit"
-                )
+                _ = await client.get(f"{self.neo4j_http}/db/data/neo4j/tx/commit")
                 logger.info("✅ Native Graph RAG: Neo4j HTTP accessible")
                 return True
         except Exception as e:
