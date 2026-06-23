@@ -774,18 +774,69 @@ $ docker ps --filter name=minder-alertmanager
 
 **Remaining Phase 2 Work (NEXT SESSION — Fresh Lint Cleanup Plan):**
 
-**Status (2026-06-23):** Dependency chase complete (Unit Tests passing). Lint job blocks Integration/E2E tests via `needs: [lint, ...]` dependency. Precise breakdown from CI run 28032245906:
+**Status (2026-06-23 END):** Dependency chase complete — root cause found (requirements.txt had fabricated versions), container-pinned fix landed (commit 7fb0afc4), dry-run verified zero conflicts. **Unit Tests NOW PASSING.** This milestone also made requirements.txt genuinely installable — critical for ARM Pi deploy.
 
-**CI Phase 2 — lint cleanup (remaining after dependency fix landed; Unit Tests now PASS):**
+The lint cleanup (120-file Black reformat + autoflake + auth dupes) is a careful multi-step job that deserves a focused fresh session. Doing a 120-file reformat on tired hands is exactly where a silent break slips in.
 
-- **Black:** 120 files need reformatting (formatting only — run `black src/ src/services/ tests/`, then git diff to CONFIRM only formatting changed, no logic)
-- **autoflake:** ~40 F401 unused imports (`autoflake --in-place --remove-all-unused-imports --recursive src/services/ src/core/`) — CAVEAT: can remove genuinely-used imports (conditional/re-export); after running, verify EVERY service still imports/starts, not just 'lint passes'
-- **auth dupes:** delete `create_jwt_token`/`verify_jwt_token` in api-gateway/main.py lines 352-369 (verified identical to modules.auth imports yesterday) — restart api-gateway, verify JWT still works after
-- **src/plugins/** is an EMPTY dir → remove from lint targets in ci.yml (E902)
-- **Order:** autoflake → delete auth dupes → black → isort → verify all services start → re-run CI
-- **After lint passes,** Integration/E2E unblock (workflow `needs:[lint]`) — they may surface NEW findings (separate)
+---
 
-**Phase 3 (later):** Trivy (no build step), Hadolint (linting compose file - wrong), TruffleHog (single-commit logic), check-updates jq.
+**NEXT SESSION: CI Phase 2 — Lint Cleanup (Unit Tests UNBLOCKED)**
+
+**Preconditions (PROVEN 2026-06-23):**
+- ✅ Unit Tests passing
+- ✅ requirements.txt pinned to container-proven versions
+- ✅ `pip install -r requirements.txt` verified zero conflicts (dry-run)
+- ✅ Lint job currently blocks Integration/E2E via `needs: [lint, ...]`
+
+**Step-by-Step Execution Order:**
+
+1. **autoflake** — Remove ~40 F401 unused imports
+   - Command: `autoflake --in-place --remove-all-unused-imports --recursive src/services/ src/core/`
+   - **CRITICAL CAVEAT:** autoflake can remove genuinely-used imports (conditional, re-export, type hints)
+   - **Verification required:** After running, verify EVERY service still imports and starts — don't rely on "lint passes"
+   - Test each service: `docker restart minder-<service>` and check logs for `ImportError`
+
+2. **Delete auth dupes** — api-gateway/main.py lines 352-369
+   - Functions: `create_jwt_token` and `verify_jwt_token`
+   - Verified yesterday: byte-identical to `src/shared/auth/jwt_handler.py` imports
+   - After deletion: restart api-gateway, verify JWT still works (`curl` with/without token)
+
+3. **Black** — Reformat 120 files
+   - Command: `black src/ src/services/ tests/`
+   - **Verification:** `git diff` to CONFIRM only formatting changed, no logic edits
+   - If logic changed: revert and investigate (Black shouldn't touch logic)
+
+4. **isort** — Sort imports
+   - Command: `isort src/ src/services/ tests/`
+   - Should be safe after Black + autoflake
+
+5. **Remove empty dir from lint targets** — ci.yml
+   - `src/plugins/` is empty → causes E902 errors
+   - Remove from lint job paths in `.github/workflows/ci.yml`
+
+6. **Final verification**
+   - Restart all services: `docker compose restart`
+   - Verify health: `docker ps --filter health=unhealthy` (should be empty)
+   - Re-run CI: check GitHub Actions tab
+
+7. **After lint passes** — Integration/E2E workflows unblocked
+   - They use `needs: [lint, ...]` dependency
+   - May surface NEW findings (separate issue, not lint scope)
+
+---
+
+**Phase 3 (deferred — separate task):**
+- Trivy: no build step, just scan
+- Hadolint: linting Dockerfiles (not compose file)
+- TruffleHog: single-commit logic check
+- check-updates: jq for dependency monitoring
+
+---
+
+**Session Win (2026-06-23):**
+- Dependency chase OVER — root cause found, pinned to container truth, verified, Unit Tests PASSING
+- requirements.txt now genuinely installable (matters for ARM Pi deploy)
+- Lint cleanup plan documented for fresh-session handoff
 
 **Lesson Learned:**
 - Reading lint output (not auto-fixing) found real bugs: F811 → duplicate route decorators → broken `/plugins/{plugin_id}` endpoint
