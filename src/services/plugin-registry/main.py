@@ -35,10 +35,10 @@ from routes.plugins import ProxyRouter  # noqa: E402
 
 # Import AI tool validator
 from shared.ai.tool_validator import validate_ai_tools  # noqa: E402
-from shared.auth.jwt_middleware import (
+from shared.auth.jwt_middleware import (  # noqa: E402
     enforce_rate_limit,
     get_current_user,
-)  # noqa: E402
+)
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))

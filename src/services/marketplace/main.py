@@ -112,17 +112,17 @@ from services.marketplace.routes.ai_tools import router as ai_tools_router  # no
 from services.marketplace.routes.graph_dependencies import (  # noqa: E402
     router as graph_dependencies_router,
 )
-from services.marketplace.routes.licensing import (
+from services.marketplace.routes.licensing import (  # noqa: E402
     router as licensing_router,
-)  # noqa: E402
-from services.marketplace.routes.management import (
+)
+from services.marketplace.routes.management import (  # noqa: E402
     router as management_router,
-)  # noqa: E402
+)
 
 # Include routers
-from services.marketplace.routes.marketplace import (
+from services.marketplace.routes.marketplace import (  # noqa: E402
     router as marketplace_router,
-)  # noqa: E402
+)
 
 app.include_router(marketplace_router)
 app.include_router(management_router)
