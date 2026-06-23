@@ -808,3 +808,58 @@ $ docker ps --filter name=minder-alertmanager
 - 16280365: "ci: fix workflow paths after src/ restructure"
 - 306540ab: "fix: marketplace route collisions (duplicate get_plugin/search_plugins + featured ordering)"
 
+---
+
+## CI Dependency Ground Truth Rewrite (2026-06-23)
+
+**Problem:** Shared requirements.txt has fabricated/wrong version numbers that don't exist on PyPI or conflict with actual container versions.
+
+**Root Cause:** File was never derived from running containers — it's aspirational fiction, not ground truth.
+
+**Evidence (pip freeze from containers):**
+
+| Package | requirements.txt claims | Container actually has | Match? |
+|---------|------------------------|----------------------|--------|
+| fastapi | `>=0.115.0,<0.120.0` | `==0.115.0` | ✅ (in range) |
+| pydantic | `>=2.10.0,<2.20.0` | `==2.9.0` | ❌ **BELOW range** |
+| httpx | `>=0.28.0,<0.29.0` | `==0.25.2` | ❌ **BELOW range** |
+| asyncpg | `>=0.30.0,<0.31.0` | `==0.29.0` | ❌ **BELOW range** |
+| redis | `==5.0.1` | `==5.0.1` | ✅ exact |
+| ollama | `==0.1.7` | `==0.1.7` | ✅ exact |
+| qdrant-client | `==1.17.1` | `==1.17.1` | ✅ exact |
+| neo4j | `>=5.26.0,<5.27.0` | `==5.15.0` | ❌ **BELOW range** |
+| python-multipart | `>=0.0.9,<0.1.0` | `==0.0.6` | ❌ **BELOW range** |
+| python-jose | `>=3.3.0,<3.4.0` | `==3.3.0` | ✅ (in range) |
+| python-dotenv | `>=1.0.0,<1.1.0` | `==1.0.0` / `==1.2.2` | ⚠️ Mixed (api-gateway ok, marketplace **ABOVE**) |
+
+**Summary:** 5 of 11 packages mismatched (all demand newer minimums than reality), 1 has container variance.
+
+**Fix: Rewrite requirements.txt from container ground truth**
+
+```txt
+# Core Application Requirements
+fastapi==0.115.0
+pydantic==2.9.0
+httpx==0.25.2
+asyncpg==0.29.0
+redis==5.0.1
+
+# AI/ML Libraries
+ollama==0.1.7
+qdrant-client==1.17.1
+neo4j==5.15.0
+
+# Utilities
+python-multipart==0.0.6
+python-jose==3.3.0
+python-dotenv==1.0.0  # Note: marketplace has 1.2.2 — investigate variance first
+```
+
+**Action Items:**
+1. **Investigate python-dotenv variance** — marketplace has 1.2.2, api-gateway has 1.0.0, file caps at `<1.1.0`. Decide: raise cap to 1.2.2 or pin both services to 1.0.0.
+2. **Rewrite requirements.txt** with exact container versions (above).
+3. **Verify CI installs cleanly** — `pip install -r requirements.txt` should resolve without conflicts.
+4. **Run full CI** — after dependency fix, see actual test results (not just install failures).
+
+**Note:** Each previous "fix" (redis 5.4.2→5.0.1, ollama 0.5.7→0.1.7, qdrant→qdrant-client) was dragging the file toward container truth. The honest fix is to align the file with reality once, not chase it line-by-line.
+
