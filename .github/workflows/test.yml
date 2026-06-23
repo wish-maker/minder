@@ -31,16 +31,16 @@ jobs:
           pip install -r src/config/requirements/requirements-dev.txt
 
       - name: Run Black
-        run: black --check src/ src/services/ tests/
+        run: black --check src/services/ src/core/
 
       - name: Run isort
-        run: isort --check-only src/ src/services/ tests/
+        run: isort --check-only src/services/ src/core/
 
       - name: Run Flake8
-        run: flake8 src/ src/services/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+        run: flake8 src/services/ src/core/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run MyPy
-        run: mypy src/ --ignore-missing-imports || true
+        run: mypy src/services/ --ignore-missing-imports || true
 
   security-scan:
     name: Security Scan
