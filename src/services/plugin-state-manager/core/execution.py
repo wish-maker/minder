@@ -11,7 +11,6 @@ from typing import Any, Dict
 import httpx
 from models.tool_execution import (
     ToolDiscoveryResponse,
-    ToolExecutionRequest,
     ToolExecutionResponse,
     ToolSchema,
 )

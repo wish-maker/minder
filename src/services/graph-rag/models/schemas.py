@@ -3,7 +3,7 @@ Pydantic Models for Graph RAG Service
 
 Request and response schemas for API endpoints.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
 

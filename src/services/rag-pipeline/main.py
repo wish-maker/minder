@@ -3,7 +3,6 @@ Minder RAG Pipeline Service - Production Ready
 Real Ollama integration with proper embedding generation and LLM inference
 """
 
-import asyncio
 import logging
 import os
 from datetime import datetime
@@ -24,7 +23,7 @@ except ImportError:
 
 # Qdrant client
 from qdrant_client import QdrantClient
-from qdrant_client.models import Batch, Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 logger = logging.getLogger(__name__)
 

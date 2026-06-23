@@ -4,7 +4,6 @@ Tests the comprehensive plugin manifest with AI tools support
 """
 
 import os
-from datetime import datetime
 
 import pytest
 
@@ -20,7 +19,6 @@ from services.marketplace.models.manifest_schema_v3 import (
     AIToolCategory,
     AIToolDefinition,
     AIToolType,
-    PluginAIConfig,
     PluginManifestV3,
     PluginManifestValidator,
     PluginTier,

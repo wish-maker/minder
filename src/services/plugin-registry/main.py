@@ -1362,7 +1362,7 @@ async def startup_event():
     # Initialize execution engine
     import sys
     sys.path.insert(0, '/app/services/plugin-registry')
-    from core.execution_engine import get_execution_engine, set_execution_engine, ExecutionEngine
+    from core.execution_engine import set_execution_engine, ExecutionEngine
     engine = ExecutionEngine()
     set_execution_engine(engine)
     logger.info("Execution engine initialized")

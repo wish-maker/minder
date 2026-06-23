@@ -4,7 +4,6 @@ PostgreSQL Client for RAG Pipeline Persistence
 Handles knowledge bases, pipelines, and conversation storage.
 """
 
-import asyncio
 import json
 import logging
 from datetime import datetime

@@ -8,7 +8,6 @@ Provides production-ready quality metrics:
 - Answer coherence and completeness
 """
 
-import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 

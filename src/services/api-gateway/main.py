@@ -224,7 +224,6 @@ if settings.RATE_LIMIT_ENABLED:
         except Exception as e:
             # Redis unavailable, bypass rate limiting (fail open)
             logger.warning(f"Rate limiting unavailable: {e}")
-            pass
 
         return await call_next(request)
 
@@ -389,7 +388,6 @@ async def get_current_user(request: Request):
 from modules.auth import (
     create_user,
     verify_user_credentials,
-    get_pg_pool,
     close_pg_pool,
     init_users_table,
 )

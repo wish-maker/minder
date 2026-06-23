@@ -6,19 +6,14 @@ This refactored version uses core modules for database and plugin loading.
 """
 
 import asyncio
-import json
 import logging
-import os
 import sys
 from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-import redis
-import yaml
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_latest
 from pydantic import BaseModel
 
 # Add paths for module imports
@@ -26,15 +21,13 @@ sys.path.insert(0, "/app/src")
 sys.path.insert(0, "/app/plugins")
 
 # Import core modules
-from core.database import get_postgres_connection, initialize_connection_pool
-from core.plugin_loader import load_plugins_from_disk, load_plugin_from_manifest
+from core.database import initialize_connection_pool
+from core.plugin_loader import load_plugins_from_disk
 
 # Import existing routes
-from routes.plugins import ProxyRouter
 
 # Import shared utilities
-from shared.ai.tool_validator import validate_ai_tools
-from shared.auth.jwt_middleware import JWT_EXPIRATION_MINUTES, enforce_rate_limit, get_current_user
+from shared.auth.jwt_middleware import get_current_user
 
 # Import config
 from config import settings

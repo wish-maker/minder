@@ -9,8 +9,7 @@ import logging
 import os
 import re
 import uuid
-from typing import Dict, Any, Optional, List
-from pathlib import Path
+from typing import Dict, Any, Optional
 from datetime import datetime
 
 import httpx

@@ -9,11 +9,10 @@ Neo4j graph database integration for managing:
 """
 
 import logging
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from services.marketplace.config import settings
 from services.marketplace.core.neo4j_client import Neo4jClient, get_neo4j_client
 from shared.auth.jwt_middleware import get_current_user
 

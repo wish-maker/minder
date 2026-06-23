@@ -14,7 +14,6 @@ from models.plugin_state import (
     PluginStateResponse,
     UpdatePluginConfigRequest,
 )
-from pydantic import BaseModel
 
 from core.database import get_db_pool
 from core.state import (

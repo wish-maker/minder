@@ -4,7 +4,7 @@ Eliminates external service dependency by directly querying Neo4j
 """
 import logging
 import os
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 import httpx
 
 logger = logging.getLogger(__name__)

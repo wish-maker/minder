@@ -6,10 +6,8 @@ All business logic is in services/, all data access in repositories/.
 """
 
 import logging
-from typing import Dict, Any
 
 from fastapi import APIRouter, HTTPException, UploadFile
-from pydantic import BaseModel
 
 # Service layer imports
 from services.knowledge_base_service import KnowledgeBaseService

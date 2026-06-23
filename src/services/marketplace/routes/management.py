@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from services.marketplace.core.database import get_pool
-from services.marketplace.models.installation import InstallationCreate, InstallationResponse
+from services.marketplace.models.installation import InstallationResponse
 from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])

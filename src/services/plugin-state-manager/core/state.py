@@ -38,13 +38,11 @@ def _record_to_dict(record) -> Dict:
 class StateTransitionError(Exception):
     """State transition error"""
 
-    pass
 
 
 class RequiredPluginError(Exception):
     """Required plugin error"""
 
-    pass
 
 
 async def get_plugin_state(conn: asyncpg.Connection, plugin_name: str) -> Optional[Dict]:

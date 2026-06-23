@@ -7,7 +7,6 @@ Prevents cascading failures by tracking service health and breaking circuits whe
 
 import logging
 import time
-from typing import Dict, Any
 
 import httpx
 

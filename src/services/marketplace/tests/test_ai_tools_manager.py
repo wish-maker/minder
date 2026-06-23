@@ -3,7 +3,6 @@ Test AI Tools Manager Service
 Tests the AI tools management functionality
 """
 
-import asyncio
 import os
 import uuid
 

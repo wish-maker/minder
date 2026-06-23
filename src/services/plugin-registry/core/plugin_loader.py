@@ -8,11 +8,10 @@ Supports both manifest-based and module-based plugin discovery.
 import importlib
 import json
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 import yaml
 

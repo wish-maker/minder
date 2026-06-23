@@ -8,7 +8,6 @@ algorithms in domain/, all external dependencies in infrastructure/.
 This file is now a thin API layer that delegates to service layer.
 """
 
-import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -38,11 +37,9 @@ from domain.pipelines.self_rag import SelfRAGPipeline
 from infrastructure.ollama import OllamaManager, OLLAMA_AVAILABLE
 from infrastructure.cache import EmbeddingCache
 from infrastructure.resource_manager import Pi4ResourceManager
-from infrastructure.postgres import PostgreSQLClient
 
 # Legacy imports (will be removed after full migration)
 from corrective_rag import CorrectiveRetriever
-from raptor_rag import raptor_chunker, raptor_retriever
 
 logger = logging.getLogger(__name__)
 

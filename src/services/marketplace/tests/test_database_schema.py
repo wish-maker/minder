@@ -1,5 +1,4 @@
 # services/marketplace/tests/test_database_schema.py
-import os
 
 import asyncpg
 

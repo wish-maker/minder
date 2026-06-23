@@ -18,15 +18,12 @@ logger = logging.getLogger(__name__)
 # Import all layers
 from domain import (
     HybridSearchRetriever,
-    ParentChildRetriever,
     CrossEncoderReranker,
     ContextualCompressor,
-    SelfRAGPipeline,
     HyDEQueryExpander
 )
 
 from infrastructure import (
-    OllamaManager,
     EmbeddingCache,
     Pi4ResourceManager
 )
@@ -41,11 +38,6 @@ from repositories import (
     ConversationRepository
 )
 
-from api import (
-    KnowledgeBaseCreate,
-    QueryRequest,
-    QueryResponse
-)
 
 from utils import (
     chunk_text,
@@ -91,7 +83,6 @@ class MockConnection:
     """Mock database connection"""
     async def execute(self, sql, *args):
         """Mock execute"""
-        pass
 
     async def fetchrow(self, sql, *args):
         """Mock fetchrow"""

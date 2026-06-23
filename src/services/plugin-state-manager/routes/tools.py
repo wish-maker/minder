@@ -4,7 +4,6 @@ Tool discovery and execution endpoints
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 from models.tool_execution import (
@@ -14,7 +13,6 @@ from models.tool_execution import (
     ToolExecutionRequest,
     ToolExecutionResponse,
 )
-from pydantic import BaseModel
 
 from core.execution import discover_plugin_tools, discover_tools, execute_tool
 

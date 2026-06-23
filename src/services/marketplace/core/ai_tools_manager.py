@@ -5,19 +5,12 @@ Manages AI tools lifecycle, configuration, and validation
 
 import json
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from jsonschema import ValidationError as JSONSchemaValidationError
 from jsonschema import validate
 
 from services.marketplace.core.database import get_pool
-from services.marketplace.models.ai_tools import (
-    ActivationStatus,
-    AIToolConfigurationCreate,
-    AIToolRegistrationCreate,
-    AIToolResponse,
-)
 
 logger = logging.getLogger("minder.marketplace.ai_tools")
 

@@ -4,7 +4,6 @@ Tests the enhanced database schema for AI tools management
 """
 
 import json
-from typing import List
 
 import asyncpg
 import pytest

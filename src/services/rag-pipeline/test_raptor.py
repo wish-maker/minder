@@ -8,11 +8,9 @@ Tests cover:
 4. Edge cases and error handling
 """
 
-import asyncio
 import logging
 import sys
-import os
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 # Setup logging
 logging.basicConfig(

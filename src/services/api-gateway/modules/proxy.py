@@ -5,7 +5,6 @@ Handles proxying requests to downstream services with circuit breaker integratio
 """
 
 import logging
-from typing import Dict, Any
 
 import httpx
 from fastapi import HTTPException, Request

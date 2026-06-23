@@ -41,8 +41,7 @@ References:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
-from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
 
 # Optional imports for enhanced functionality
 try:
@@ -52,7 +51,6 @@ except ImportError:
     NUMPY_AVAILABLE = False
     logging.warning("NumPy not available. Some optimizations will be disabled.")
 
-from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
@@ -63,22 +61,18 @@ logger = logging.getLogger(__name__)
 
 class RAPTORError(Exception):
     """Base exception for RAPTOR-related errors"""
-    pass
 
 
 class RAPTORChunkingError(RAPTORError):
     """Raised when text chunking fails"""
-    pass
 
 
 class RAPTORClusteringError(RAPTORError):
     """Raised when clustering operation fails"""
-    pass
 
 
 class RAPTORRetrievalError(RAPTORError):
     """Raised when retrieval operation fails"""
-    pass
 
 
 # ============================================================================

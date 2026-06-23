@@ -4,7 +4,6 @@ API Routes for Graph RAG Service
 All FastAPI endpoints for entity extraction, graph construction, and retrieval.
 """
 import logging
-from typing import Dict
 
 from fastapi import HTTPException
 

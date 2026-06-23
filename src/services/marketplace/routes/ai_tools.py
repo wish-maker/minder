@@ -1,6 +1,6 @@
 # services/marketplace/routes/ai_tools.py
 import logging
-from typing import Dict, Optional
+from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel

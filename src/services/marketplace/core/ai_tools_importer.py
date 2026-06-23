@@ -6,7 +6,7 @@ Automatically imports AI tools from plugin manifests into the marketplace databa
 import json
 import logging
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import asyncpg
 

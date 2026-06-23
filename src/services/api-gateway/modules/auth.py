@@ -5,7 +5,6 @@ Handles JWT token creation, verification, and user authentication.
 Real PostgreSQL + bcrypt implementation.
 """
 
-import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional

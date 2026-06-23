@@ -4,13 +4,11 @@ License validation logic
 """
 
 import logging
-from datetime import datetime
 from typing import Optional
 
 import asyncpg
 import httpx
 from models.plugin_state import LicenseTier
-from models.tool_execution import ToolSchema
 
 logger = logging.getLogger(__name__)
 

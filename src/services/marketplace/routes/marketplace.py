@@ -3,7 +3,6 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
 
 from services.marketplace.core.database import get_pool
 from services.marketplace.models.plugin import PluginCreate, PluginListResponse, PluginResponse

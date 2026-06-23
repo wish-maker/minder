@@ -5,13 +5,10 @@ Entity extraction and knowledge graph construction for RAG enhancement.
 This refactored version uses clean separation of concerns.
 """
 
-import asyncio
 import logging
 import os
-from typing import Dict
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 # Import core modules
 from core.entity_extractor import EntityExtractor

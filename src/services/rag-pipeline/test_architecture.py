@@ -13,7 +13,6 @@ Run with: python3 test_architecture.py
 
 import asyncio
 import sys
-from typing import Dict, Any
 
 # Test imports for all layers
 print("🔍 Testing layer imports...")
@@ -22,17 +21,13 @@ try:
     # Domain layer
     from domain import (
         HybridSearchRetriever,
-        ParentChildRetriever,
         CrossEncoderReranker,
-        ContextualCompressor,
-        SelfRAGPipeline,
-        HyDEQueryExpander
+        ContextualCompressor
     )
     print("✅ Domain layer imports successful")
 
     # Infrastructure layer
     from infrastructure import (
-        OllamaManager,
         EmbeddingCache,
         Pi4ResourceManager
     )
@@ -89,7 +84,6 @@ class MockConnection:
     """Mock database connection"""
     async def execute(self, sql, *args):
         """Mock execute"""
-        pass
 
     async def fetchrow(self, sql, *args):
         """Mock fetchrow"""

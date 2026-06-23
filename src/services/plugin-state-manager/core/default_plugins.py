@@ -6,11 +6,11 @@ Default plugins bootstrap logic
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 import asyncpg
 import yaml
-from models.plugin_state import LicenseTier, PluginState
+from models.plugin_state import PluginState
 
 logger = logging.getLogger(__name__)
 
