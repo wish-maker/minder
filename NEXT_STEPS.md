@@ -745,3 +745,66 @@ $ docker ps --filter name=minder-alertmanager
 - ✅ **Pre-commit hook removed** — Broken hook (config never committed) removed 2026-06-21. Future: proper pre-commit setup for secret scanning, linting.
 - **Cleanup (leftover untracked dirs):** `docker/compose/authelia/`, `src/services/plugin-state-manager/core/config/` — from previous sessions, not part of current work. Can be removed sometime.
 - Pi RAM bütçesi — tüm servisler aynı anda açılırsa OOM riski var (~3.1GB / 4GB).
+
+---
+
+## CI Lint Cleanup - Phase 2 (2026-06-23)
+
+**Session Summary:** Fixed CI workflow paths after `src/` restructure, discovered and fixed 2 real user-facing bugs via F811 lint warnings.
+
+**What Was Done (2026-06-23):**
+- ✅ **Phase 1: Path errors fixed** (commit 16280365)
+  - ci.yml: bandit/flake8/black/isort/mypy paths updated (`api/plugins/core` → `src/services/src/core/src/plugins`)
+  - ci.yml: requirements.txt path fixed (`requirements.txt` → `src/config/requirements/requirements.txt`)
+  - ci.yml: pytest --cov paths fixed (`--cov=api/core/plugins` → `src/services/src/core/src/plugins`)
+  - test.yml: requirements paths fixed (`requirements-dev.txt` → `src/config/requirements/requirements-dev.txt`)
+  - test.yml: docker-compose paths fixed (`infrastructure/docker/docker-compose.yml` → `docker/compose/docker-compose.yml`)
+  - security.yml: bandit/compose paths fixed
+  - Result: 5 path errors cleared, CI now actually runs (no more "file not found" errors)
+
+- ✅ **Phase 2a: Marketplace route bugs fixed** (commit 306540ab) — **Found via CI lint F811 + endpoint testing**
+  - Deleted duplicate `get_plugin@333` (had wrong `/plugins/search` decorator, shadowing `/plugins/{plugin_id}`)
+  - Deleted duplicate `search_plugins@381` (byte-identical to @124, completely shadowed first implementation)
+  - Moved `/plugins/featured` before `/plugins/{plugin_id}` (FastAPI route ordering fix)
+  - **Raw proof via curl:**
+    - `GET /plugins/featured` → returns `PluginListResponse` (was UUID parse error)
+    - `GET /plugins/{id}` → returns `PluginResponse`/404 (still works)
+    - `GET /plugins/search` → returns `PluginListResponse` (still works)
+  - **Key insight:** F811 duplicate function warnings led to real user-facing bugs, not just lint noise.
+
+**Remaining Phase 2 Work (NEXT SESSION):**
+
+1. **Auth dup removal (api-gateway/main.py lines 352-369)**
+   - **Status:** VERIFIED functionally identical to `modules/auth.py` imports (line 27)
+   - **Plan:** Delete local `create_jwt_token`/`verify_jwt_token` definitions, use imports from line 27
+   - **Risk:** Low but should restart api-gateway + verify JWT still works after
+   - **Why:** Local definitions shadow imports (duplicates), imports have better docs/type hints
+
+2. **Lint path fix (src/plugins/ empty directory)**
+   - **Issue:** `src/plugins/` exists but is empty (no Python files)
+   - **Plan:** Remove `src/plugins/` from lint targets in ci.yml (Flake8 throws `E902 FileNotFoundError` on empty dir)
+   - **Files:** `.github/workflows/ci.yml` line 24 (bandit), line 56 (flake8), line 59 (black), line 62 (isort)
+
+3. **Auto lint cleanup (~40 F401 + formatting issues)**
+   - **Issues:** F401 unused imports (~40), W292 missing newlines, E302 blank lines, E501 line too long, E712 bool comparisons, F541 f-string no placeholders
+   - **Plan:** Run autoflake → black → isort on `src/services/` + `src/core/`
+   - **CRITICAL CAVEAT:** `autoflake --remove-all-unused-imports` can remove genuinely-used imports (conditional imports, re-exports, `__all__` declarations)
+   - **AFTER running:** MUST verify every service still imports/starts (not just "lint passes")
+   - **Test method:** `docker compose restart <service>` → check health endpoint
+   - **Note:** This needs a fresh, careful session — tired hands should not run aggressive auto-fixes
+
+4. **Phase 3 (deferred — later work):**
+   - Hadolint linting docker-compose.yml (wrong file type, probably remove)
+   - TruffleHog script logic issues
+   - check-updates jq syntax
+   - Some CI workflow issues better removed than fixed
+
+**Lesson Learned:**
+- Reading lint output (not auto-fixing) found real bugs: F811 → duplicate route decorators → broken `/plugins/{plugin_id}` endpoint
+- Always verify with real endpoint tests (curl), not just "lint passes"
+- Route ordering matters: specific routes before parameterized in FastAPI
+
+**Commits:**
+- 16280365: "ci: fix workflow paths after src/ restructure"
+- 306540ab: "fix: marketplace route collisions (duplicate get_plugin/search_plugins + featured ordering)"
+
