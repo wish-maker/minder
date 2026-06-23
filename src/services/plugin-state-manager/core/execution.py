@@ -52,7 +52,9 @@ async def execute_tool(
 
         # Check if tool is active
         if not tool_data.get("active"):
-            raise HTTPException(status_code=400, detail=f"Tool {tool_name} is not active")
+            raise HTTPException(
+                status_code=400, detail=f"Tool {tool_name} is not active"
+            )
 
         # Get plugin name
         plugin_name = tool_data.get("plugin_name")
@@ -85,7 +87,8 @@ async def execute_tool(
 
             if not plugin_state:
                 raise HTTPException(
-                    status_code=404, detail=f"Plugin {plugin_name} not found in state database"
+                    status_code=404,
+                    detail=f"Plugin {plugin_name} not found in state database",
                 )
 
             if plugin_state["state"] != "enabled":
@@ -129,7 +132,9 @@ async def execute_tool(
                 detail=f"Tool execution failed: {e.response.text}",
             )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Tool execution error: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Tool execution error: {str(e)}"
+            )
 
 
 async def discover_tools(

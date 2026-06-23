@@ -2,10 +2,10 @@
 Common Pydantic models for standard API responses
 Provides consistent response structures across all Minder services
 """
+
 from datetime import datetime
 from typing import Any, Dict, List, Optional, TypeVar, Generic
 from pydantic import BaseModel, Field
-
 
 # ============================================================================
 # Generic Type Variables
@@ -17,6 +17,7 @@ T = TypeVar("T")
 # ============================================================================
 # Standard Response Models
 # ============================================================================
+
 
 class SuccessResponse(BaseModel, Generic[T]):
     """
@@ -103,6 +104,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
 # Health Check Models
 # ============================================================================
 
+
 class HealthCheckResponse(BaseModel):
     """
     Standard health check response
@@ -155,6 +157,7 @@ class DetailedHealthCheck(BaseModel):
 # Common CRUD Models
 # ============================================================================
 
+
 class CreateResponse(BaseModel):
     """Response after creating a resource"""
 
@@ -187,6 +190,7 @@ class DeleteResponse(BaseModel):
 # Batch Operations
 # ============================================================================
 
+
 class BatchOperationResponse(BaseModel):
     """
     Response for batch operations
@@ -212,6 +216,7 @@ class BatchOperationResponse(BaseModel):
 # Validation Models
 # ============================================================================
 
+
 class ValidationErrorDetail(BaseModel):
     """Detail about a validation error"""
 
@@ -232,6 +237,7 @@ class ValidationErrorResponse(BaseModel):
 # ============================================================================
 # Configuration
 # ============================================================================
+
 
 class ConfigurationResponse(BaseModel):
     """Response exposing service configuration (safe fields only)"""

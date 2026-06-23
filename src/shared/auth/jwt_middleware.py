@@ -30,6 +30,7 @@ JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "60"))
 # JWT Token Operations
 # ============================================================================
 
+
 def create_jwt_token(data: Dict) -> str:
     """
     Create JWT access token with expiration
@@ -93,6 +94,7 @@ def verify_jwt_token(token: str) -> Dict:
 # FastAPI Dependencies
 # ============================================================================
 
+
 async def get_current_user(request: Request) -> Dict:
     """
     Get current user from JWT token in Authorization header
@@ -113,7 +115,7 @@ async def get_current_user(request: Request) -> Dict:
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=401,
-            detail="Missing or invalid Authorization header. Expected: 'Bearer <token>'"
+            detail="Missing or invalid Authorization header. Expected: 'Bearer <token>'",
         )
 
     token = auth_header.split(" ")[1]
@@ -160,6 +162,7 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
         max_requests: Maximum requests allowed in window
         window_minutes: Time window in minutes
     """
+
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -175,12 +178,12 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
                 return await func(*args, **kwargs)
 
             # Get user identifier
-            current_user = getattr(request.state, 'user', None)
+            current_user = getattr(request.state, "user", None)
             if current_user:
-                user_id = current_user.get('username', 'anonymous')
+                user_id = current_user.get("username", "anonymous")
             else:
                 # Fallback to IP address
-                user_id = request.client.host if request.client else 'anonymous'
+                user_id = request.client.host if request.client else "anonymous"
 
             # Check rate limit
             key = f"{user_id}:{request.url.path}"
@@ -190,15 +193,14 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
             if key in _rate_limit_store:
                 window_start = now - (window_minutes * 60)
                 _rate_limit_store[key] = [
-                    ts for ts in _rate_limit_store[key]
-                    if ts > window_start
+                    ts for ts in _rate_limit_store[key] if ts > window_start
                 ]
 
             # Check limit
             if len(_rate_limit_store.get(key, [])) >= max_requests:
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Rate limit exceeded: {max_requests} requests per {window_minutes} minute(s)"
+                    detail=f"Rate limit exceeded: {max_requests} requests per {window_minutes} minute(s)",
                 )
 
             # Record this request
@@ -207,5 +209,7 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
             _rate_limit_store[key].append(now)
 
             return await func(*args, **kwargs)
+
         return wrapper
+
     return decorator

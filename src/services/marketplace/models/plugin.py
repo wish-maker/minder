@@ -46,10 +46,12 @@ class PluginCreate(BaseModel):
     pricing_model: PricingModel = PricingModel.FREE
     base_tier: str = "community"
     category_id: Optional[str] = Field(
-        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        None,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
     developer_id: Optional[str] = Field(
-        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        None,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
 
     @field_validator("display_name", "description", mode="after")
@@ -84,7 +86,8 @@ class PluginResponse(BaseModel):
     """Model for plugin response"""
 
     id: str = Field(
-        ..., pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        ...,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
     name: str
     display_name: str
@@ -106,10 +109,12 @@ class PluginResponse(BaseModel):
     updated_at: datetime
     published_at: Optional[datetime]
     developer_id: Optional[str] = Field(
-        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        None,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
     category_id: Optional[str] = Field(
-        None, pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        None,
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
 
     class Config:

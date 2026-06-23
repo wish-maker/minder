@@ -29,7 +29,7 @@ class TestPluginConfiguration:
         # Without auth, expect 401 Unauthorized
         response = requests.put(
             "http://localhost:8000/v1/plugins/tefas/config",
-            json={"refresh_interval": 300}
+            json={"refresh_interval": 300},
         )
         # 401 (auth required) or 404 (not implemented)
         assert response.status_code in [200, 401, 404]
@@ -85,7 +85,7 @@ class TestTEFASPluginConfiguration:
         """Test TEFAS config update endpoint"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/tefas/config",
-            json={"refresh_interval": 300, "cache_enabled": True}
+            json={"refresh_interval": 300, "cache_enabled": True},
         )
         assert response.status_code in [200, 401, 404]
 
@@ -112,7 +112,7 @@ class TestWeatherPluginConfiguration:
         """Test Weather config update endpoint"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/weather/config",
-            json={"location": "Istanbul", "units": "metric"}
+            json={"location": "Istanbul", "units": "metric"},
         )
         assert response.status_code in [200, 401, 404]
 
@@ -139,7 +139,7 @@ class TestNewsPluginConfiguration:
         """Test News config update endpoint"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/news/config",
-            json={"sources": ["feed1", "feed2"], "refresh_interval": 300}
+            json={"sources": ["feed1", "feed2"], "refresh_interval": 300},
         )
         assert response.status_code in [200, 401, 404]
 
@@ -166,7 +166,7 @@ class TestCryptoPluginConfiguration:
         """Test Crypto config update endpoint"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/crypto/config",
-            json={"symbols": ["BTC", "ETH"], "refresh_interval": 60}
+            json={"symbols": ["BTC", "ETH"], "refresh_interval": 60},
         )
         assert response.status_code in [200, 401, 404]
 
@@ -193,7 +193,7 @@ class TestNetworkPluginConfiguration:
         """Test Network config update endpoint"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/network/config",
-            json={"scan_interval": 300, "alert_threshold": 5}
+            json={"scan_interval": 300, "alert_threshold": 5},
         )
         assert response.status_code in [200, 401, 404]
 
@@ -220,7 +220,7 @@ class TestFundPluginConfiguration:
         """Test Fund config update endpoint"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/fund/config",
-            json={"funds": ["TFKAS", "BIST100", "ALTIN"], "refresh_interval": 3600}
+            json={"funds": ["TFKAS", "BIST100", "ALTIN"], "refresh_interval": 3600},
         )
         assert response.status_code in [200, 401, 404]
 
@@ -242,7 +242,7 @@ class TestPluginConfigurationErrorHandling:
         """Test invalid config field returns 400 or 401"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/tefas/config",
-            json={"invalid_field": "value"}
+            json={"invalid_field": "value"},
         )
         # 400 (bad request), 401 (auth required), or 404 (not implemented)
         assert response.status_code in [400, 401, 404]
@@ -251,13 +251,15 @@ class TestPluginConfigurationErrorHandling:
         """Test invalid config value type returns 400 or 401"""
         response = requests.put(
             "http://localhost:8000/v1/plugins/weather/config",
-            json={"refresh_interval": "invalid_string"}
+            json={"refresh_interval": "invalid_string"},
         )
         assert response.status_code in [400, 401, 404]
 
     def test_invalid_plugin_name(self):
         """Test invalid plugin name returns 404"""
-        response = requests.get("http://localhost:8000/v1/plugins/invalid_plugin/config")
+        response = requests.get(
+            "http://localhost:8000/v1/plugins/invalid_plugin/config"
+        )
         assert response.status_code == 404
 
     def test_plugin_config_not_found(self):

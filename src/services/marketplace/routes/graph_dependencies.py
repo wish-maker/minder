@@ -22,7 +22,9 @@ router = APIRouter(prefix="/v1/graph", tags=["graph-dependencies"])
 
 
 @router.get("/dependencies/{plugin_id}")
-async def get_plugin_dependencies(plugin_id: str, neo4j: Neo4jClient = Depends(get_neo4j_client)):
+async def get_plugin_dependencies(
+    plugin_id: str, neo4j: Neo4jClient = Depends(get_neo4j_client)
+):
     """
     Get all dependencies for a plugin (direct and transitive)
 
@@ -80,7 +82,9 @@ async def add_plugin_dependency(
 
 
 @router.get("/conflicts/{plugin_id}")
-async def get_plugin_conflicts(plugin_id: str, neo4j: Neo4jClient = Depends(get_neo4j_client)):
+async def get_plugin_conflicts(
+    plugin_id: str, neo4j: Neo4jClient = Depends(get_neo4j_client)
+):
     """
     Find plugins that conflict with the given plugin
 
@@ -92,7 +96,11 @@ async def get_plugin_conflicts(plugin_id: str, neo4j: Neo4jClient = Depends(get_
     """
     try:
         conflicts = await neo4j.find_conflicting_plugins(plugin_id)
-        return {"plugin_id": plugin_id, "conflicts": conflicts, "conflict_count": len(conflicts)}
+        return {
+            "plugin_id": plugin_id,
+            "conflicts": conflicts,
+            "conflict_count": len(conflicts),
+        }
     except Exception as e:
         logger.error(f"Failed to get conflicts for {plugin_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -100,7 +108,10 @@ async def get_plugin_conflicts(plugin_id: str, neo4j: Neo4jClient = Depends(get_
 
 @router.post("/recommendations")
 async def get_plugin_recommendations(
-    installed_plugins: List[str], limit: int = 5, neo4j: Neo4jClient = Depends(get_neo4j_client), current_user: dict = Depends(get_current_user)
+    installed_plugins: List[str],
+    limit: int = 5,
+    neo4j: Neo4jClient = Depends(get_neo4j_client),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Get plugin recommendations based on installed plugins

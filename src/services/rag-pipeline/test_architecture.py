@@ -19,32 +19,23 @@ print("🔍 Testing layer imports...")
 
 try:
     # Domain layer
-    from domain import (
-        HybridSearchRetriever,
-        CrossEncoderReranker,
-        ContextualCompressor
-    )
+    from domain import HybridSearchRetriever, CrossEncoderReranker, ContextualCompressor
+
     print("✅ Domain layer imports successful")
 
     # Infrastructure layer
-    from infrastructure import (
-        EmbeddingCache,
-        Pi4ResourceManager
-    )
+    from infrastructure import EmbeddingCache, Pi4ResourceManager
+
     print("✅ Infrastructure layer imports successful")
 
     # Service layer
-    from services import (
-        RetrievalService,
-        KnowledgeBaseService
-    )
+    from services import RetrievalService, KnowledgeBaseService
+
     print("✅ Service layer imports successful")
 
     # Repository layer
-    from repositories import (
-        KnowledgeBaseRepository,
-        ConversationRepository
-    )
+    from repositories import KnowledgeBaseRepository, ConversationRepository
+
     print("✅ Repository layer imports successful")
 
 except ImportError as e:
@@ -60,18 +51,23 @@ class MockQdrantClient:
 
     def query_points(self, collection_name, query, limit=5):
         """Mock query - returns dummy results"""
+
         class MockPoint:
             def __init__(self, id, score, text):
                 self.id = id
                 self.score = score
                 self.payload = {"text": text, "source": "test"}
 
-        return type('Result', (), {
-            'points': [
-                MockPoint(f"doc_{i}", 0.9 - (i * 0.1), f"Test document {i}")
-                for i in range(limit)
-            ]
-        })()
+        return type(
+            "Result",
+            (),
+            {
+                "points": [
+                    MockPoint(f"doc_{i}", 0.9 - (i * 0.1), f"Test document {i}")
+                    for i in range(limit)
+                ]
+            },
+        )()
 
     def upsert(self, collection_name, points):
         """Mock upsert"""
@@ -82,6 +78,7 @@ class MockQdrantClient:
 
 class MockConnection:
     """Mock database connection"""
+
     async def execute(self, sql, *args):
         """Mock execute"""
 
@@ -92,6 +89,7 @@ class MockConnection:
     async def fetch(self, sql, *args):
         """Mock fetch"""
         return []
+
 
 class MockPostgresPool:
     """Mock PostgreSQL pool for testing"""
@@ -123,8 +121,7 @@ async def test_domain_components():
         # Test ContextualCompressor
         compressor = ContextualCompressor(max_tokens=2000, compression_ratio=0.3)
         result = compressor.compress(
-            query="test query",
-            contexts=[{"text": "Test context" * 10}]
+            query="test query", contexts=[{"text": "Test context" * 10}]
         )
         assert "compressed_context" in result, "ContextualCompressor failed"
         print("  ✅ ContextualCompressor works")
@@ -192,14 +189,13 @@ async def test_service_layer():
             ollama_manager=mock_ollama,
             qdrant_client=mock_qdrant,
             resource_manager=mock_resource,
-            context_compressor=ContextualCompressor()
+            context_compressor=ContextualCompressor(),
         )
         print("  ✅ RetrievalService initialization works")
 
         # Test KnowledgeBaseService initialization
         kb_service = KnowledgeBaseService(
-            ollama_manager=mock_ollama,
-            qdrant_client=mock_qdrant
+            ollama_manager=mock_ollama, qdrant_client=mock_qdrant
         )
         print("  ✅ KnowledgeBaseService initialization works")
 
@@ -263,36 +259,35 @@ async def test_layer_integration():
             qdrant_client=mock_qdrant,
             resource_manager=mock_resource,
             context_compressor=compressor,
-            reranker=reranker
+            reranker=reranker,
         )
 
         # Test KB creation flow
         kb_metadata = await kb_repo.create(
-            name="Test KB",
-            embedding_model="nomic-embed-text"
+            name="Test KB", embedding_model="nomic-embed-text"
         )
         assert kb_metadata["id"] is not None, "KB creation failed"
         assert kb_metadata["name"] == "Test KB", "KB name mismatch"
         print("  ✅ KB creation flow works")
 
         # Test retrieval service
-        pipeline = {
-            "knowledge_base_ids": ["test_kb_id"]
-        }
+        pipeline = {"knowledge_base_ids": ["test_kb_id"]}
 
         try:
             results = await retrieval_service.retrieve(
                 pipeline=pipeline,
                 question="What is RAG?",
                 top_k=5,
-                knowledge_bases={"test_kb_id": kb_metadata}
+                knowledge_bases={"test_kb_id": kb_metadata},
             )
             assert "context" in results, "Retrieval failed"
             assert "sources" in results, "Retrieval failed"
             print("  ✅ Retrieval flow works")
         except Exception as e:
             # Expected to fail with mocks, but structure should work
-            print(f"  ⚠️  Retrieval flow structure OK (expected mock failure: {type(e).__name__})")
+            print(
+                f"  ⚠️  Retrieval flow structure OK (expected mock failure: {type(e).__name__})"
+            )
 
         print("✅ Layer integration test PASSED")
         return True
@@ -300,6 +295,7 @@ async def test_layer_integration():
     except Exception as e:
         print(f"❌ Layer integration test FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 

@@ -73,7 +73,11 @@ def db_session():
 
             # Filter by from_version if specified
             if params.get("from_version"):
-                filtered_events = [e for e in filtered_events if e.get("version", 0) >= params.get("from_version")]
+                filtered_events = [
+                    e
+                    for e in filtered_events
+                    if e.get("version", 0) >= params.get("from_version")
+                ]
 
             # Sort by version
             filtered_events.sort(key=lambda x: x.get("version", 0))
@@ -122,9 +126,13 @@ def db_session():
             filtered_outbox = [o for o in outbox_storage]
 
             if "where status = 'pending'" in query_str:
-                filtered_outbox = [o for o in outbox_storage if o.get("status") == "pending"]
+                filtered_outbox = [
+                    o for o in outbox_storage if o.get("status") == "pending"
+                ]
             elif "where status = 'failed'" in query_str:
-                filtered_outbox = [o for o in outbox_storage if o.get("status") == "failed"]
+                filtered_outbox = [
+                    o for o in outbox_storage if o.get("status") == "failed"
+                ]
 
             # Sort by created_at
             filtered_outbox.sort(key=lambda x: x.get("created_at"))

@@ -21,7 +21,9 @@ class EntityExtractor:
             self.nlp = spacy.load(spacy_model)
             logger.info(f"✅ Loaded spaCy model: {spacy_model}")
         except OSError:
-            logger.warning(f"⚠️  spaCy model {spacy_model} not found, using blank model")
+            logger.warning(
+                f"⚠️  spaCy model {spacy_model} not found, using blank model"
+            )
             self.nlp = spacy.blank("en")
 
         # TODO: Add GLiNER support in Phase 2
@@ -33,9 +35,7 @@ class EntityExtractor:
         #     self.gliner_model = None
 
     def extract_entities(
-        self,
-        text: str,
-        extract_relationships: bool = True
+        self, text: str, extract_relationships: bool = True
     ) -> Dict[str, Any]:
         """
         Extract entities and relationships from text
@@ -57,7 +57,7 @@ class EntityExtractor:
                     "label": ent.label_,
                     "start": ent.start_char,
                     "end": ent.end_char,
-                    "description": spacy.explain(ent.label_)
+                    "description": spacy.explain(ent.label_),
                 }
                 entities.append(entity)
 
@@ -70,7 +70,7 @@ class EntityExtractor:
                         "label": "NOUN_PHRASE",
                         "start": np.start_char,
                         "end": np.end_char,
-                        "description": "Noun phrase"
+                        "description": "Noun phrase",
                     }
                     entities.append(entity)
 
@@ -83,20 +83,25 @@ class EntityExtractor:
                 "entities": entities,
                 "relationships": relationships,
                 "entity_count": len(entities),
-                "relationship_count": len(relationships)
+                "relationship_count": len(relationships),
             }
 
-            logger.info(f"📊 Extracted {len(entities)} entities, {len(relationships)} relationships")
+            logger.info(
+                f"📊 Extracted {len(entities)} entities, {len(relationships)} relationships"
+            )
             return result
 
         except Exception as e:
             logger.error(f"❌ Entity extraction failed: {e}")
-            return {"entities": [], "relationships": [], "entity_count": 0, "relationship_count": 0}
+            return {
+                "entities": [],
+                "relationships": [],
+                "entity_count": 0,
+                "relationship_count": 0,
+            }
 
     def _extract_relationships(
-        self,
-        doc: spacy.tokens.Doc,
-        entities: List[Dict]
+        self, doc: spacy.tokens.Doc, entities: List[Dict]
     ) -> List[Dict[str, Any]]:
         """Extract relationships between entities"""
         relationships = []
@@ -120,20 +125,20 @@ class EntityExtractor:
                             "subject": subject,
                             "predicate": verb,
                             "object": obj,
-                            "type": "SVO"
+                            "type": "SVO",
                         }
                         relationships.append(relationship)
 
             # Find co-occurrence relationships
             entity_texts = [e["text"] for e in entities]
             for i, e1 in enumerate(entity_texts):
-                for e2 in entity_texts[i+1:]:
+                for e2 in entity_texts[i + 1 :]:
                     if e1.lower() != e2.lower():
                         relationship = {
                             "subject": e1,
                             "predicate": "CO_OCCURS_WITH",
                             "object": e2,
-                            "type": "CO_OCCURRENCE"
+                            "type": "CO_OCCURRENCE",
                         }
                         relationships.append(relationship)
 

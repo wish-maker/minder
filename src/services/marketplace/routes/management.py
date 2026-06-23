@@ -16,7 +16,11 @@ class InstallRequest(BaseModel):
 
 
 @router.post("/{plugin_id}/install", response_model=InstallationResponse)
-async def install_plugin(plugin_id: str, request: InstallRequest, current_user: dict = Depends(get_current_user)):
+async def install_plugin(
+    plugin_id: str,
+    request: InstallRequest,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Install a plugin for a user
 
@@ -28,7 +32,9 @@ async def install_plugin(plugin_id: str, request: InstallRequest, current_user: 
 
     # Check if plugin exists
     async with pool.acquire() as conn:
-        plugin = await conn.fetchrow("SELECT * FROM marketplace_plugins WHERE id = $1", plugin_id)
+        plugin = await conn.fetchrow(
+            "SELECT * FROM marketplace_plugins WHERE id = $1", plugin_id
+        )
 
         if not plugin:
             raise HTTPException(status_code=404, detail="Plugin not found")
@@ -97,7 +103,11 @@ async def install_plugin(plugin_id: str, request: InstallRequest, current_user: 
 
 
 @router.delete("/{plugin_id}/uninstall")
-async def uninstall_plugin(plugin_id: str, user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
+async def uninstall_plugin(
+    plugin_id: str,
+    user_id: str = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
     """Uninstall a plugin for a user"""
     pool = await get_pool()
 
@@ -129,7 +139,11 @@ async def uninstall_plugin(plugin_id: str, user_id: str = Query(...), current_us
 
 
 @router.post("/{plugin_id}/enable")
-async def enable_plugin(plugin_id: str, user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
+async def enable_plugin(
+    plugin_id: str,
+    user_id: str = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
     """Enable a plugin for a user"""
     pool = await get_pool()
 
@@ -161,7 +175,11 @@ async def enable_plugin(plugin_id: str, user_id: str = Query(...), current_user:
 
 
 @router.post("/{plugin_id}/disable")
-async def disable_plugin(plugin_id: str, user_id: str = Query(...), current_user: dict = Depends(get_current_user)):
+async def disable_plugin(
+    plugin_id: str,
+    user_id: str = Query(...),
+    current_user: dict = Depends(get_current_user),
+):
     """Disable a plugin for a user"""
     pool = await get_pool()
 

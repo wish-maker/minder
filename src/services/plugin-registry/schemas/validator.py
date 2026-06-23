@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class ManifestValidationError(Exception):
     """Raised when manifest validation fails"""
+
     def __init__(self, errors: list):
         self.errors = errors
         super().__init__(f"Manifest validation failed: {len(errors)} error(s)")
@@ -42,15 +43,19 @@ def validate_manifest(manifest_data: Dict) -> Tuple[bool, Optional[list]]:
     try:
         validate(instance=manifest_data, schema=MVP_MANIFEST_SCHEMA)
     except ValidationError as e:
-        errors.append({
-            "path": " -> ".join(str(p) for p in e.path) if e.path else "root",
-            "message": e.message,
-            "failed_value": e.instance
-        })
+        errors.append(
+            {
+                "path": " -> ".join(str(p) for p in e.path) if e.path else "root",
+                "message": e.message,
+                "failed_value": e.instance,
+            }
+        )
 
     # Additional security checks
     if manifest_data.get("apiVersion") != "minder.dev/v1alpha1":
-        errors.append({"path": "apiVersion", "message": "Only v1alpha1 supported in MVP"})
+        errors.append(
+            {"path": "apiVersion", "message": "Only v1alpha1 supported in MVP"}
+        )
 
     if manifest_data.get("kind") != "Plugin":
         errors.append({"path": "kind", "message": "Only Plugin kind supported"})
@@ -58,36 +63,60 @@ def validate_manifest(manifest_data: Dict) -> Tuple[bool, Optional[list]]:
     # Ensure trigger type is webhook (MVP only)
     trigger = manifest_data.get("spec", {}).get("trigger", {})
     if trigger.get("type") != "webhook":
-        errors.append({"path": "spec.trigger.type", "message": "Only webhook trigger supported in MVP"})
+        errors.append(
+            {
+                "path": "spec.trigger.type",
+                "message": "Only webhook trigger supported in MVP",
+            }
+        )
 
     # Ensure action type is store-vector (MVP only)
     action = manifest_data.get("spec", {}).get("action", {})
     if action.get("type") != "store-vector":
-        errors.append({"path": "spec.action.type", "message": "Only store-vector action supported in MVP"})
+        errors.append(
+            {
+                "path": "spec.action.type",
+                "message": "Only store-vector action supported in MVP",
+            }
+        )
 
     # Check webhook path is valid
     webhook_config = trigger.get("webhook", {})
     webhook_path = webhook_config.get("path", "")
     if not webhook_path.startswith("/"):
-        errors.append({"path": "spec.trigger.webhook.path", "message": "Path must start with /"})
+        errors.append(
+            {"path": "spec.trigger.webhook.path", "message": "Path must start with /"}
+        )
 
     # Check collection name is valid
     store_config = action.get("store", {})
     collection = store_config.get("collection", "")
     if not collection:
-        errors.append({"path": "spec.action.store.collection", "message": "Collection name required"})
+        errors.append(
+            {
+                "path": "spec.action.store.collection",
+                "message": "Collection name required",
+            }
+        )
 
     # Check input.text template exists
     input_config = store_config.get("input", {})
     text_template = input_config.get("text", "")
     if not text_template:
-        errors.append({"path": "spec.action.store.input.text", "message": "Text template required"})
+        errors.append(
+            {
+                "path": "spec.action.store.input.text",
+                "message": "Text template required",
+            }
+        )
 
     is_valid = len(errors) == 0
     return (is_valid, None if is_valid else errors)
 
 
-def load_and_validate_manifest(manifest_path: Path) -> Tuple[Optional[Dict], Optional[list]]:
+def load_and_validate_manifest(
+    manifest_path: Path,
+) -> Tuple[Optional[Dict], Optional[list]]:
     """
     Load manifest from file and validate it.
 
@@ -101,13 +130,18 @@ def load_and_validate_manifest(manifest_path: Path) -> Tuple[Optional[Dict], Opt
         return None, [{"path": "file", "message": f"File not found: {manifest_path}"}]
 
     try:
-        with open(manifest_path, 'r') as f:
-            if manifest_path.suffix in ['.yaml', '.yml']:
+        with open(manifest_path, "r") as f:
+            if manifest_path.suffix in [".yaml", ".yml"]:
                 manifest_data = yaml.safe_load(f)
-            elif manifest_path.suffix == '.json':
+            elif manifest_path.suffix == ".json":
                 manifest_data = json.load(f)
             else:
-                return None, [{"path": "file", "message": f"Unsupported file type: {manifest_path.suffix}"}]
+                return None, [
+                    {
+                        "path": "file",
+                        "message": f"Unsupported file type: {manifest_path.suffix}",
+                    }
+                ]
 
         is_valid, errors = validate_manifest(manifest_data)
 
@@ -124,7 +158,9 @@ def load_and_validate_manifest(manifest_path: Path) -> Tuple[Optional[Dict], Opt
         return None, [{"path": "file", "message": f"Error reading file: {e}"}]
 
 
-def validate_manifest_string(manifest_yaml: str) -> Tuple[Optional[Dict], Optional[list]]:
+def validate_manifest_string(
+    manifest_yaml: str,
+) -> Tuple[Optional[Dict], Optional[list]]:
     """
     Validate manifest from string (for API upload).
 

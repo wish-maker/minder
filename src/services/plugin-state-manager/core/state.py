@@ -39,15 +39,17 @@ class StateTransitionError(Exception):
     """State transition error"""
 
 
-
 class RequiredPluginError(Exception):
     """Required plugin error"""
 
 
-
-async def get_plugin_state(conn: asyncpg.Connection, plugin_name: str) -> Optional[Dict]:
+async def get_plugin_state(
+    conn: asyncpg.Connection, plugin_name: str
+) -> Optional[Dict]:
     """Get plugin state from database"""
-    row = await conn.fetchrow("SELECT * FROM plugin_states WHERE plugin_name = $1", plugin_name)
+    row = await conn.fetchrow(
+        "SELECT * FROM plugin_states WHERE plugin_name = $1", plugin_name
+    )
     return _record_to_dict(row)
 
 
@@ -72,7 +74,10 @@ async def create_plugin_state(
 
 
 async def update_plugin_state(
-    conn: asyncpg.Connection, plugin_name: str, state: PluginState, metadata: Optional[Dict] = None
+    conn: asyncpg.Connection,
+    plugin_name: str,
+    state: PluginState,
+    metadata: Optional[Dict] = None,
 ) -> Dict:
     """Update plugin state"""
     now = datetime.now()
@@ -103,7 +108,9 @@ async def update_plugin_state(
 
     if metadata:
         await conn.execute(
-            "UPDATE plugin_states SET metadata = $1 WHERE plugin_name = $2", metadata, plugin_name
+            "UPDATE plugin_states SET metadata = $1 WHERE plugin_name = $2",
+            metadata,
+            plugin_name,
         )
 
     return dict(row)
@@ -135,7 +142,9 @@ async def enable_plugin(
     if default_plugin and default_plugin["required"]:
         # Check if there's a specific reason to force enable
         if reason != "system_bootstrap":
-            logger.warning(f"Plugin {plugin_name} is required and should always be enabled")
+            logger.warning(
+                f"Plugin {plugin_name} is required and should always be enabled"
+            )
 
     # Get current state
     current = await get_plugin_state(conn, plugin_name)
@@ -158,7 +167,10 @@ async def enable_plugin(
 
 
 async def disable_plugin(
-    conn: asyncpg.Connection, plugin_name: str, force: bool = False, reason: Optional[str] = None
+    conn: asyncpg.Connection,
+    plugin_name: str,
+    force: bool = False,
+    reason: Optional[str] = None,
 ) -> Dict:
     """
     Disable a plugin
@@ -233,7 +245,8 @@ async def list_plugin_states(
     """List all plugin states, optionally filtered by state"""
     if state_filter:
         rows = await conn.fetch(
-            "SELECT * FROM plugin_states WHERE state = $1 ORDER BY plugin_name", state_filter.value
+            "SELECT * FROM plugin_states WHERE state = $1 ORDER BY plugin_name",
+            state_filter.value,
         )
     else:
         rows = await conn.fetch("SELECT * FROM plugin_states ORDER BY plugin_name")
@@ -241,7 +254,9 @@ async def list_plugin_states(
     return [_record_to_dict(row) for row in rows]
 
 
-async def get_dependent_plugins(conn: asyncpg.Connection, plugin_name: str) -> List[Dict]:
+async def get_dependent_plugins(
+    conn: asyncpg.Connection, plugin_name: str
+) -> List[Dict]:
     """Get plugins that depend on this plugin"""
     rows = await conn.fetch(
         """
@@ -287,7 +302,9 @@ async def resolve_dependencies(conn: asyncpg.Connection, plugin_name: str) -> Li
 
     def visit(name: str, stack: set):
         if name in stack:
-            raise ValueError(f"Circular dependency detected: {' -> '.join(stack)} -> {name}")
+            raise ValueError(
+                f"Circular dependency detected: {' -> '.join(stack)} -> {name}"
+            )
 
         if name in visited:
             return

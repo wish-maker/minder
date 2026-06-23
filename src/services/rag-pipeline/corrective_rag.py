@@ -28,7 +28,9 @@ class CorrectiveRetriever:
         # Check if web search is available
         self.web_search_available = bool(self.tavily_api_key or self.serper_api_key)
 
-    def evaluate_retrieval_quality(self, results: List[Dict], query: str) -> Dict[str, Any]:
+    def evaluate_retrieval_quality(
+        self, results: List[Dict], query: str
+    ) -> Dict[str, Any]:
         """
         Evaluate quality of retrieval results
 
@@ -45,7 +47,7 @@ class CorrectiveRetriever:
                 "average_score": 0.0,
                 "result_count": 0,
                 "should_fallback": True,
-                "reason": "No results retrieved"
+                "reason": "No results retrieved",
             }
 
         # Calculate average score
@@ -61,9 +63,9 @@ class CorrectiveRetriever:
 
         # Should fallback if quality is poor
         should_fallback = (
-            quality == "poor" or
-            avg_score < self.quality_threshold or
-            low_quality_count > len(results) / 2
+            quality == "poor"
+            or avg_score < self.quality_threshold
+            or low_quality_count > len(results) / 2
         )
 
         return {
@@ -73,7 +75,7 @@ class CorrectiveRetriever:
             "high_quality_count": high_quality_count,
             "low_quality_count": low_quality_count,
             "should_fallback": should_fallback,
-            "reason": f"Average score {avg_score:.3f} below threshold {self.quality_threshold}"
+            "reason": f"Average score {avg_score:.3f} below threshold {self.quality_threshold}",
         }
 
     async def search_web_tavily(self, query: str, max_results: int = 5) -> List[Dict]:
@@ -112,22 +114,28 @@ class CorrectiveRetriever:
                 # Parse results
                 results = []
                 if data.get("answer"):
-                    results.append({
-                        "title": "Generated Answer",
-                        "text": data["answer"],
-                        "url": "",
-                        "score": 0.9,  # High score for generated answer
-                        "source": "tavily_answer"
-                    })
+                    results.append(
+                        {
+                            "title": "Generated Answer",
+                            "text": data["answer"],
+                            "url": "",
+                            "score": 0.9,  # High score for generated answer
+                            "source": "tavily_answer",
+                        }
+                    )
 
                 for result in data.get("results", []):
-                    results.append({
-                        "title": result.get("title", ""),
-                        "text": result.get("content", "")[:500],  # Limit content length
-                        "url": result.get("url", ""),
-                        "score": 0.7,  # Moderate score for web results
-                        "source": "tavily_search"
-                    })
+                    results.append(
+                        {
+                            "title": result.get("title", ""),
+                            "text": result.get("content", "")[
+                                :500
+                            ],  # Limit content length
+                            "url": result.get("url", ""),
+                            "score": 0.7,  # Moderate score for web results
+                            "source": "tavily_search",
+                        }
+                    )
 
                 logger.info(f"🌐 Tavily search returned {len(results)} results")
                 return results[:max_results]
@@ -168,13 +176,17 @@ class CorrectiveRetriever:
                 # Parse results
                 results = []
                 for result in data.get("organic", []):
-                    results.append({
-                        "title": result.get("title", ""),
-                        "text": result.get("snippet", "")[:500],  # Limit snippet length
-                        "url": result.get("link", ""),
-                        "score": 0.7,  # Moderate score for web results
-                        "source": "serper_search"
-                    })
+                    results.append(
+                        {
+                            "title": result.get("title", ""),
+                            "text": result.get("snippet", "")[
+                                :500
+                            ],  # Limit snippet length
+                            "url": result.get("link", ""),
+                            "score": 0.7,  # Moderate score for web results
+                            "source": "serper_search",
+                        }
+                    )
 
                 logger.info(f"🌐 SerperAPI search returned {len(results)} results")
                 return results[:max_results]
@@ -184,11 +196,7 @@ class CorrectiveRetriever:
             return []
 
     async def retrieve_with_fallback(
-        self,
-        query: str,
-        internal_results: List[Dict],
-        kb_id: str,
-        max_results: int = 5
+        self, query: str, internal_results: List[Dict], kb_id: str, max_results: int = 5
     ) -> Dict[str, Any]:
         """
         Retrieve with web search fallback if quality is poor
@@ -205,8 +213,10 @@ class CorrectiveRetriever:
         # Evaluate internal retrieval quality
         quality_assessment = self.evaluate_retrieval_quality(internal_results, query)
 
-        logger.info(f"📊 Retrieval quality assessment: {quality_assessment['quality']} "
-                   f"(score: {quality_assessment['average_score']:.3f})")
+        logger.info(
+            f"📊 Retrieval quality assessment: {quality_assessment['quality']} "
+            f"(score: {quality_assessment['average_score']:.3f})"
+        )
 
         # If quality is good, return internal results
         if not quality_assessment["should_fallback"]:
@@ -216,11 +226,13 @@ class CorrectiveRetriever:
                 "fallback_used": False,
                 "quality": quality_assessment["quality"],
                 "internal_count": len(internal_results),
-                "web_count": 0
+                "web_count": 0,
             }
 
         # Quality is poor, try web search fallback
-        logger.warning("⚠️ Internal retrieval quality poor, attempting web search fallback")
+        logger.warning(
+            "⚠️ Internal retrieval quality poor, attempting web search fallback"
+        )
 
         if not self.web_search_available:
             logger.warning("❌ Web search not available, returning internal results")
@@ -230,7 +242,7 @@ class CorrectiveRetriever:
                 "quality": quality_assessment["quality"],
                 "internal_count": len(internal_results),
                 "web_count": 0,
-                "reason": "Web search API not configured"
+                "reason": "Web search API not configured",
             }
 
         # Try web search
@@ -249,7 +261,7 @@ class CorrectiveRetriever:
                     "quality": quality_assessment["quality"],
                     "internal_count": len(internal_results),
                     "web_count": 0,
-                    "reason": "No web search API configured"
+                    "reason": "No web search API configured",
                 }
         except Exception as e:
             logger.warning(f"⚠️ Web search failed: {e}")
@@ -259,7 +271,7 @@ class CorrectiveRetriever:
                 "quality": quality_assessment["quality"],
                 "internal_count": len(internal_results),
                 "web_count": 0,
-                "reason": f"Web search error: {e}"
+                "reason": f"Web search error: {e}",
             }
 
         if not web_results:
@@ -270,7 +282,7 @@ class CorrectiveRetriever:
                 "quality": quality_assessment["quality"],
                 "internal_count": len(internal_results),
                 "web_count": 0,
-                "reason": "Web search returned no results"
+                "reason": "Web search returned no results",
             }
 
         # Combine internal and web results
@@ -279,7 +291,9 @@ class CorrectiveRetriever:
 
         # Add web results first (with boost)
         for web_result in web_results:
-            web_result["score"] = web_result.get("score", 0.7) * 1.2  # 20% boost for web results
+            web_result["score"] = (
+                web_result.get("score", 0.7) * 1.2
+            )  # 20% boost for web results
             combined_results.append(web_result)
 
         # Add internal results
@@ -287,11 +301,15 @@ class CorrectiveRetriever:
             combined_results.append(internal_result)
 
         # Sort by score and limit
-        combined_results = sorted(combined_results, key=lambda x: x["score"], reverse=True)
+        combined_results = sorted(
+            combined_results, key=lambda x: x["score"], reverse=True
+        )
         final_results = combined_results[:max_results]
 
-        logger.info(f"✅ CRAG fallback successful: {len(web_results)} web results + "
-                   f"{len(internal_results)} internal results = {len(final_results)} final results")
+        logger.info(
+            f"✅ CRAG fallback successful: {len(web_results)} web results + "
+            f"{len(internal_results)} internal results = {len(final_results)} final results"
+        )
 
         return {
             "results": final_results,
@@ -300,7 +318,7 @@ class CorrectiveRetriever:
             "internal_count": len(internal_results),
             "web_count": len(web_results),
             "final_count": len(final_results),
-            "reason": "Web search fallback applied successfully"
+            "reason": "Web search fallback applied successfully",
         }
 
 

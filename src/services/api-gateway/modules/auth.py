@@ -56,6 +56,7 @@ async def close_pg_pool():
 # User Management
 # ============================================================================
 
+
 async def init_users_table():
     """Create users table if not exists"""
     pool = await get_pg_pool()
@@ -75,7 +76,9 @@ async def init_users_table():
         logger.info("Users table ready")
 
 
-async def create_user(username: str, email: str, password: str, role: str = "user") -> Dict[str, Any]:
+async def create_user(
+    username: str, email: str, password: str, role: str = "user"
+) -> Dict[str, Any]:
     """
     Create a new user with hashed password
 
@@ -92,8 +95,8 @@ async def create_user(username: str, email: str, password: str, role: str = "use
         HTTPException: If username or email already exists
     """
     # Hash password with bcrypt
-    password_bytes = password.encode('utf-8')
-    password_hash = hashpw(password_bytes, gensalt()).decode('utf-8')
+    password_bytes = password.encode("utf-8")
+    password_hash = hashpw(password_bytes, gensalt()).decode("utf-8")
 
     pool = await get_pg_pool()
     try:
@@ -105,21 +108,26 @@ async def create_user(username: str, email: str, password: str, role: str = "use
                 VALUES ($1, $2, $3, $4)
                 RETURNING id, username, email, role, is_active, created_at
                 """,
-                username, email, password_hash, role
+                username,
+                email,
+                password_hash,
+                role,
             )
 
             logger.info(f"Created user: {username}")
             return dict(user)
 
     except asyncpg.UniqueViolationError as e:
-        if 'username' in str(e):
+        if "username" in str(e):
             raise HTTPException(status_code=400, detail="Username already exists")
-        elif 'email' in str(e):
+        elif "email" in str(e):
             raise HTTPException(status_code=400, detail="Email already exists")
         raise HTTPException(status_code=400, detail="User creation failed")
 
 
-async def verify_user_credentials(username: str, password: str) -> Optional[Dict[str, Any]]:
+async def verify_user_credentials(
+    username: str, password: str
+) -> Optional[Dict[str, Any]]:
     """
     Verify user credentials against database
 
@@ -138,7 +146,7 @@ async def verify_user_credentials(username: str, password: str) -> Optional[Dict
             SELECT id, username, email, password_hash, role, is_active
             FROM users WHERE username = $1
             """,
-            username
+            username,
         )
 
         if row is None:
@@ -147,16 +155,16 @@ async def verify_user_credentials(username: str, password: str) -> Optional[Dict
         user = dict(row)
 
         # Check if user is active
-        if not user['is_active']:
+        if not user["is_active"]:
             raise HTTPException(status_code=403, detail="User account is disabled")
 
         # Verify password with bcrypt
-        password_bytes = password.encode('utf-8')
-        hash_bytes = user['password_hash'].encode('utf-8')
+        password_bytes = password.encode("utf-8")
+        hash_bytes = user["password_hash"].encode("utf-8")
 
         if checkpw(password_bytes, hash_bytes):
             # Remove password hash before returning
-            del user['password_hash']
+            del user["password_hash"]
             logger.info(f"User authenticated: {username}")
             return user
 
@@ -181,7 +189,9 @@ def create_jwt_token(data: Dict[str, Any]) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    encoded_jwt = jwt.encode(
+        to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
+    )
     return encoded_jwt
 
 
@@ -199,7 +209,9 @@ def verify_jwt_token(token: str) -> Dict:
         HTTPException: If token is expired or invalid
     """
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        )
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")

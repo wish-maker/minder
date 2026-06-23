@@ -50,13 +50,19 @@ class HttpMethod(str, Enum):
 class ParameterSchema(BaseModel):
     """Parameter schema definition"""
 
-    type: str = Field(..., description="Parameter type (string, integer, boolean, etc.)")
+    type: str = Field(
+        ..., description="Parameter type (string, integer, boolean, etc.)"
+    )
     description: str = Field(..., description="Parameter description")
     required: bool = Field(False, description="Whether parameter is required")
     default: Optional[Any] = Field(None, description="Default value")
     enum: Optional[List[str]] = Field(None, description="Allowed values")
-    minimum: Optional[float] = Field(None, description="Minimum value for numeric types")
-    maximum: Optional[float] = Field(None, description="Maximum value for numeric types")
+    minimum: Optional[float] = Field(
+        None, description="Minimum value for numeric types"
+    )
+    maximum: Optional[float] = Field(
+        None, description="Maximum value for numeric types"
+    )
     pattern: Optional[str] = Field(None, description="Regex pattern for string types")
 
 
@@ -67,7 +73,9 @@ class ToolConfigurationSchema(BaseModel):
     properties: Dict[str, Dict[str, Any]] = Field(
         default_factory=dict, description="Configuration properties"
     )
-    required: List[str] = Field(default_factory=list, description="Required configuration keys")
+    required: List[str] = Field(
+        default_factory=list, description="Required configuration keys"
+    )
 
 
 class AIToolDefinition(BaseModel):
@@ -77,21 +85,29 @@ class AIToolDefinition(BaseModel):
     display_name: str = Field(
         ..., min_length=1, max_length=200, description="Human-readable tool name"
     )
-    description: str = Field(..., min_length=1, max_length=1000, description="Tool description")
+    description: str = Field(
+        ..., min_length=1, max_length=1000, description="Tool description"
+    )
 
     # Tool classification
     tool_type: AIToolType = Field(..., description="Type of AI tool")
-    category: AIToolCategory = Field(default=AIToolCategory.CUSTOM, description="Tool category")
+    category: AIToolCategory = Field(
+        default=AIToolCategory.CUSTOM, description="Tool category"
+    )
 
     # Endpoint configuration
-    endpoint_path: str = Field(..., min_length=1, max_length=500, description="API endpoint path")
+    endpoint_path: str = Field(
+        ..., min_length=1, max_length=500, description="API endpoint path"
+    )
     http_method: HttpMethod = Field(default=HttpMethod.POST, description="HTTP method")
 
     # Schemas
     parameters_schema: Dict[str, ParameterSchema] = Field(
         default_factory=dict, description="Input parameters"
     )
-    response_schema: Dict[str, Any] = Field(default_factory=dict, description="Response schema")
+    response_schema: Dict[str, Any] = Field(
+        default_factory=dict, description="Response schema"
+    )
 
     # Configuration
     configuration_schema: ToolConfigurationSchema = Field(
@@ -108,7 +124,9 @@ class AIToolDefinition(BaseModel):
     requires_configuration: bool = Field(
         default=False, description="Whether tool requires configuration"
     )
-    allow_user_configuration: bool = Field(default=True, description="Allow users to configure")
+    allow_user_configuration: bool = Field(
+        default=True, description="Allow users to configure"
+    )
 
     # State
     is_default_enabled: bool = Field(default=True, description="Enable by default")
@@ -120,8 +138,12 @@ class AIToolDefinition(BaseModel):
     author: Optional[str] = Field(None, description="Tool author")
 
     # Implementation
-    implementation_code: Optional[str] = Field(None, description="Inline tool implementation code")
-    implementation_file: Optional[str] = Field(None, description="Path to implementation file")
+    implementation_code: Optional[str] = Field(
+        None, description="Inline tool implementation code"
+    )
+    implementation_file: Optional[str] = Field(
+        None, description="Path to implementation file"
+    )
 
     @field_validator("endpoint_path")
     @classmethod
@@ -141,14 +163,17 @@ class AIToolDefinition(BaseModel):
 class PluginAIConfig(BaseModel):
     """Plugin-level AI tools configuration"""
 
-    default_enabled: bool = Field(default=True, description="Enable AI tools by default")
+    default_enabled: bool = Field(
+        default=True, description="Enable AI tools by default"
+    )
     tools: List[AIToolDefinition] = Field(
         default_factory=list, description="AI tools provided by plugin"
     )
 
     # Global configuration
     shared_configuration: ToolConfigurationSchema = Field(
-        default_factory=ToolConfigurationSchema, description="Shared configuration for all tools"
+        default_factory=ToolConfigurationSchema,
+        description="Shared configuration for all tools",
     )
     shared_defaults: Dict[str, Any] = Field(
         default_factory=dict, description="Default values for shared configuration"
@@ -170,27 +195,45 @@ class PluginManifestV3(BaseModel):
     """
 
     # Basic metadata
-    name: str = Field(..., min_length=1, max_length=100, description="Unique plugin identifier")
-    display_name: str = Field(..., min_length=1, max_length=200, description="Human-readable name")
-    description: str = Field(..., min_length=1, max_length=1000, description="Plugin description")
-    version: str = Field(..., min_length=1, max_length=50, description="Plugin version (semver)")
+    name: str = Field(
+        ..., min_length=1, max_length=100, description="Unique plugin identifier"
+    )
+    display_name: str = Field(
+        ..., min_length=1, max_length=200, description="Human-readable name"
+    )
+    description: str = Field(
+        ..., min_length=1, max_length=1000, description="Plugin description"
+    )
+    version: str = Field(
+        ..., min_length=1, max_length=50, description="Plugin version (semver)"
+    )
 
     # Author information
     author: str = Field(..., min_length=1, max_length=200, description="Author name")
-    author_email: Optional[str] = Field(None, max_length=200, description="Author email")
-    organization: Optional[str] = Field(None, max_length=200, description="Organization name")
+    author_email: Optional[str] = Field(
+        None, max_length=200, description="Author email"
+    )
+    organization: Optional[str] = Field(
+        None, max_length=200, description="Organization name"
+    )
 
     # Classification
     category: str = Field(..., max_length=100, description="Plugin category")
-    tags: List[str] = Field(default_factory=list, description="Plugin tags for discovery")
+    tags: List[str] = Field(
+        default_factory=list, description="Plugin tags for discovery"
+    )
     license: str = Field(default="MIT", max_length=50, description="License type")
 
     # Access control
-    tier: PluginTier = Field(default=PluginTier.COMMUNITY, description="Required access tier")
+    tier: PluginTier = Field(
+        default=PluginTier.COMMUNITY, description="Required access tier"
+    )
     pricing: Optional[Dict[str, Any]] = Field(None, description="Pricing information")
 
     # AI Tools Configuration
-    ai_tools: Optional[PluginAIConfig] = Field(None, description="AI tools provided by plugin")
+    ai_tools: Optional[PluginAIConfig] = Field(
+        None, description="AI tools provided by plugin"
+    )
 
     # Dependencies
     dependencies: List[DependencySpec] = Field(
@@ -199,9 +242,12 @@ class PluginManifestV3(BaseModel):
     python_version: str = Field(default=">=3.11", description="Required Python version")
 
     # Installation
-    install_command: Optional[str] = Field(None, description="Custom installation command")
+    install_command: Optional[str] = Field(
+        None, description="Custom installation command"
+    )
     configuration_schema: ToolConfigurationSchema = Field(
-        default_factory=ToolConfigurationSchema, description="Plugin configuration schema"
+        default_factory=ToolConfigurationSchema,
+        description="Plugin configuration schema",
     )
     default_configuration: Dict[str, Any] = Field(
         default_factory=dict, description="Default plugin configuration"
@@ -215,21 +261,33 @@ class PluginManifestV3(BaseModel):
     can_be_disabled: bool = Field(default=True, description="Allow users to disable")
 
     # Metadata
-    homepage: Optional[str] = Field(None, max_length=500, description="Plugin homepage URL")
-    repository: Optional[str] = Field(None, max_length=500, description="Source repository URL")
-    documentation: Optional[str] = Field(None, max_length=500, description="Documentation URL")
+    homepage: Optional[str] = Field(
+        None, max_length=500, description="Plugin homepage URL"
+    )
+    repository: Optional[str] = Field(
+        None, max_length=500, description="Source repository URL"
+    )
+    documentation: Optional[str] = Field(
+        None, max_length=500, description="Documentation URL"
+    )
     logo_url: Optional[str] = Field(None, max_length=500, description="Logo/image URL")
     screenshots: List[str] = Field(default_factory=list, description="Screenshot URLs")
 
     # Compatibility
-    minder_version: str = Field(default=">=1.0.0", description="Compatible Minder version")
+    minder_version: str = Field(
+        default=">=1.0.0", description="Compatible Minder version"
+    )
     breaking_changes: List[str] = Field(
         default_factory=list, description="List of breaking changes in this version"
     )
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.now, description="Creation timestamp")
-    updated_at: datetime = Field(default_factory=datetime.now, description="Last update timestamp")
+    created_at: datetime = Field(
+        default_factory=datetime.now, description="Creation timestamp"
+    )
+    updated_at: datetime = Field(
+        default_factory=datetime.now, description="Last update timestamp"
+    )
 
     @field_validator("name")
     @classmethod
@@ -328,7 +386,9 @@ class PluginManifestValidator:
 
                 # Validate endpoint paths
                 if not tool.endpoint_path.startswith("/"):
-                    warnings.append(f"Tool '{tool.name}' endpoint path should start with '/'")
+                    warnings.append(
+                        f"Tool '{tool.name}' endpoint path should start with '/'"
+                    )
 
         return warnings
 
@@ -337,7 +397,11 @@ class PluginManifestValidator:
         manifest: PluginManifestV3, user_tier: PluginTier
     ) -> Dict[str, Any]:
         """Check if plugin is compatible with user tier"""
-        tier_order = {PluginTier.COMMUNITY: 0, PluginTier.PROFESSIONAL: 1, PluginTier.ENTERPRISE: 2}
+        tier_order = {
+            PluginTier.COMMUNITY: 0,
+            PluginTier.PROFESSIONAL: 1,
+            PluginTier.ENTERPRISE: 2,
+        }
 
         plugin_tier_level = tier_order[manifest.tier]
         user_tier_level = tier_order[user_tier]
@@ -377,7 +441,10 @@ EXAMPLE_MANIFEST = {
         "default_enabled": True,
         "shared_configuration": {
             "properties": {
-                "api_key": {"type": "string", "description": "API key for external services"}
+                "api_key": {
+                    "type": "string",
+                    "description": "API key for external services",
+                }
             }
         },
         "tools": [
@@ -391,11 +458,18 @@ EXAMPLE_MANIFEST = {
                 "http_method": "POST",
                 "required_tier": "community",
                 "parameters_schema": {
-                    "data": {"type": "array", "description": "Time series data", "required": True}
+                    "data": {
+                        "type": "array",
+                        "description": "Time series data",
+                        "required": True,
+                    }
                 },
                 "response_schema": {
                     "type": "object",
-                    "properties": {"trends": {"type": "array"}, "confidence": {"type": "number"}},
+                    "properties": {
+                        "trends": {"type": "array"},
+                        "confidence": {"type": "number"},
+                    },
                 },
             },
             {
@@ -410,7 +484,10 @@ EXAMPLE_MANIFEST = {
                 "requires_configuration": True,
                 "configuration_schema": {
                     "properties": {
-                        "model_type": {"type": "string", "description": "Type of ML model"},
+                        "model_type": {
+                            "type": "string",
+                            "description": "Type of ML model",
+                        },
                         "accuracy_threshold": {
                             "type": "number",
                             "description": "Minimum accuracy threshold",
@@ -418,7 +495,10 @@ EXAMPLE_MANIFEST = {
                     },
                     "required": ["model_type"],
                 },
-                "default_configuration": {"model_type": "random_forest", "accuracy_threshold": 0.8},
+                "default_configuration": {
+                    "model_type": "random_forest",
+                    "accuracy_threshold": 0.8,
+                },
             },
         ],
     },

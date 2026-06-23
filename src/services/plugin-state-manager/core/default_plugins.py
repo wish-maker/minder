@@ -15,7 +15,9 @@ from models.plugin_state import PluginState
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_PLUGINS_CONFIG = os.getenv("DEFAULT_PLUGINS_CONFIG", "/app/src/core/config/default_plugins.yml")
+DEFAULT_PLUGINS_CONFIG = os.getenv(
+    "DEFAULT_PLUGINS_CONFIG", "/app/src/core/config/default_plugins.yml"
+)
 
 
 async def load_default_plugins_config() -> Dict:
@@ -104,7 +106,9 @@ async def bootstrap_default_plugins():
                         dep,
                         dep_config.get("required", False),
                     )
-                    logger.info(f"✅ Registered dependency: {dep_config['plugin']} → {dep}")
+                    logger.info(
+                        f"✅ Registered dependency: {dep_config['plugin']} → {dep}"
+                    )
             except Exception as e:
                 logger.error(f"❌ Failed to register dependency: {e}")
 
@@ -119,7 +123,11 @@ async def bootstrap_default_plugins():
 
                 if not existing:
                     plugin_config = next(
-                        (p for p in config.get("default_plugins", []) if p["name"] == plugin_name),
+                        (
+                            p
+                            for p in config.get("default_plugins", [])
+                            if p["name"] == plugin_name
+                        ),
                         {},
                     )
 
@@ -176,7 +184,9 @@ async def enable_plugins_in_dependency_order(conn: asyncpg.Connection, config: D
 
     def visit(name: str, stack: set):
         if name in stack:
-            logger.warning(f"Circular dependency detected: {' -> '.join(stack)} → {name}")
+            logger.warning(
+                f"Circular dependency detected: {' -> '.join(stack)} → {name}"
+            )
             return
 
         if name in visited or name not in plugins:

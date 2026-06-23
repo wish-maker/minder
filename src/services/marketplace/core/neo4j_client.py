@@ -82,12 +82,17 @@ class Neo4jClient:
         """
 
         async with self.driver.session() as session:
-            result = await session.run(query, id=plugin_data["id"], properties=plugin_data)
+            result = await session.run(
+                query, id=plugin_data["id"], properties=plugin_data
+            )
             record = await result.single()
             return record["plugin_id"] if record else None
 
     async def add_dependency(
-        self, plugin_id: str, depends_on_plugin_id: str, dependency_type: str = "requires"
+        self,
+        plugin_id: str,
+        depends_on_plugin_id: str,
+        dependency_type: str = "requires",
     ) -> bool:
         """
         Add a dependency relationship between two plugins
@@ -178,7 +183,9 @@ class Neo4jClient:
         """
 
         async with self.driver.session() as session:
-            result = await session.run(query, installed_ids=installed_plugin_ids, limit=limit)
+            result = await session.run(
+                query, installed_ids=installed_plugin_ids, limit=limit
+            )
             return [record.data() for record in await result.list()]
 
     async def get_dependency_chain(self, plugin_id: str) -> List[Dict[str, Any]]:

@@ -64,7 +64,9 @@ async def initialize_connection_pool():
             min_size=5,
             max_size=20,
         )
-        logger.info(f"✅ PostgreSQL connection pool initialized: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}")
+        logger.info(
+            f"✅ PostgreSQL connection pool initialized: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}"
+        )
     except Exception as e:
         logger.error(f"❌ Failed to initialize connection pool: {e}")
         raise

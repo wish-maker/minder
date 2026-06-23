@@ -45,7 +45,9 @@ NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
 # NEO4J_AUTH is required — fail-fast if not set
 NEO4J_AUTH = os.getenv("NEO4J_AUTH")
 if not NEO4J_AUTH:
-    raise ValueError("NEO4J_AUTH must be set via environment variable (format: neo4j/password)")
+    raise ValueError(
+        "NEO4J_AUTH must be set via environment variable (format: neo4j/password)"
+    )
 
 # Parse NEO4J_AUTH to extract password (format: "user/password")
 if "/" in NEO4J_AUTH:
@@ -79,6 +81,7 @@ app = FastAPI(
 # Startup/Shutdown Events
 # ============================================================================
 
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
@@ -91,16 +94,12 @@ async def startup_event():
 
     # Initialize graph constructor
     graph_constructor = KnowledgeGraphConstructor(
-        uri=NEO4J_URI,
-        user=NEO4J_USER,
-        password=NEO4J_PASSWORD
+        uri=NEO4J_URI, user=NEO4J_USER, password=NEO4J_PASSWORD
     )
 
     # Initialize graph retriever
     graph_retriever = GraphRetriever(
-        uri=NEO4J_URI,
-        user=NEO4J_USER,
-        password=NEO4J_PASSWORD
+        uri=NEO4J_URI, user=NEO4J_USER, password=NEO4J_PASSWORD
     )
 
     logger.info("✅ Graph RAG Service initialized")
@@ -115,9 +114,11 @@ async def shutdown_event():
         await graph_retriever.close()
     logger.info("🛑 Graph RAG Service shut down")
 
+
 # ============================================================================
 # Health Check Endpoints
 # ============================================================================
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():
@@ -145,9 +146,11 @@ async def health_check():
         "checks": checks,
     }
 
+
 # ============================================================================
 # API Endpoints
 # ============================================================================
+
 
 @app.get("/", tags=["Root"])
 async def root():
@@ -160,7 +163,7 @@ async def root():
             "Entity extraction (spaCy)",
             "Knowledge graph construction",
             "Graph-based retrieval",
-            "Entity context enhancement"
+            "Entity context enhancement",
         ],
         "docs": "/docs",
         "health": "/health",
@@ -176,7 +179,9 @@ async def extract_entities(request: EntityExtractionRequest):
 @app.post("/construct-graph", tags=["Knowledge Graph"])
 async def construct_knowledge_graph(request: KnowledgeGraphRequest):
     """Build knowledge graph from document"""
-    return await construct_knowledge_graph_handler(request, entity_extractor, graph_constructor)
+    return await construct_knowledge_graph_handler(
+        request, entity_extractor, graph_constructor
+    )
 
 
 @app.post("/retrieve", tags=["Graph Retrieval"])
@@ -197,4 +202,5 @@ async def get_entity_context(request: EntityContextRequest):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8008)

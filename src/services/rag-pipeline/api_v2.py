@@ -23,7 +23,7 @@ from api.models import (
     KnowledgeBaseResponse,
     QueryRequest,
     QueryResponse,
-    DocumentUploadResponse
+    DocumentUploadResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,8 +64,7 @@ def get_knowledge_base_service() -> KnowledgeBaseService:
     global _knowledge_base_service
     if _knowledge_base_service is None:
         _knowledge_base_service = KnowledgeBaseService(
-            ollama_manager=get_ollama_manager(),
-            resource_manager=get_resource_manager()
+            ollama_manager=get_ollama_manager(), resource_manager=get_resource_manager()
         )
     return _knowledge_base_service
 
@@ -83,7 +82,7 @@ def get_retrieval_service() -> RetrievalService:
             reranker=None,
             crag_retriever=None,
             parent_child_retriever=None,
-            context_compressor=None
+            context_compressor=None,
         )
     return _retrieval_service
 
@@ -91,6 +90,7 @@ def get_retrieval_service() -> RetrievalService:
 # ============================================================================
 # Knowledge Base Endpoints (Thin - delegate to service)
 # ============================================================================
+
 
 @router.post("/knowledge-base", response_model=KnowledgeBaseResponse)
 async def create_knowledge_base(request: KnowledgeBaseCreate) -> KnowledgeBaseResponse:
@@ -111,7 +111,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate) -> KnowledgeBaseRe
             llm_model=request.llm_model,
             chunk_size=request.chunk_size,
             chunk_overlap=request.chunk_overlap,
-            parent_child_enabled=request.parent_child_enabled
+            parent_child_enabled=request.parent_child_enabled,
         )
 
         logger.info(f"Knowledge base created: {result.id}")
@@ -152,9 +152,7 @@ async def upload_document(kb_id: str, file: UploadFile):
 
         service = get_knowledge_base_service()
         result = await service.upload_document(
-            kb_id=kb_id,
-            filename=file.filename,
-            content=content
+            kb_id=kb_id, filename=file.filename, content=content
         )
 
         logger.info(f"Document uploaded: {result.chunks_processed} chunks")
@@ -170,6 +168,7 @@ async def upload_document(kb_id: str, file: UploadFile):
 # ============================================================================
 # Query Endpoints (Thin - delegate to service)
 # ============================================================================
+
 
 @router.post("/pipeline/{pipeline_id}/query", response_model=QueryResponse)
 async def query_rag_pipeline(pipeline_id: str, request: QueryRequest) -> QueryResponse:
@@ -193,7 +192,7 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest) -> QueryRe
             pipeline_id=pipeline_id,
             question=request.question,
             top_k=request.top_k,
-            knowledge_bases={}  # Would fetch from repository
+            knowledge_bases={},  # Would fetch from repository
         )
 
         logger.info(f"Query completed: {len(result.sources)} sources")
@@ -210,6 +209,7 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest) -> QueryRe
 # Health & Metrics (Thin - system status)
 # ============================================================================
 
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -220,8 +220,8 @@ async def health_check():
         "components": {
             "api": "operational",
             "services": "operational",
-            "infrastructure": "operational"
-        }
+            "infrastructure": "operational",
+        },
     }
 
 

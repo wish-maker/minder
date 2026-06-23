@@ -57,10 +57,14 @@ async def get_pool() -> asyncpg.Pool:
                     max_size=10,
                     command_timeout=60,
                 )
-                logger.info("Database connection pool created successfully (min_size=2, max_size=10)")
+                logger.info(
+                    "Database connection pool created successfully (min_size=2, max_size=10)"
+                )
             except asyncpg.InvalidCatalogNameError:
                 # Database doesn't exist, create it first
-                logger.warning(f"Database {settings.MARKETPLACE_DATABASE_NAME} does not exist, creating...")
+                logger.warning(
+                    f"Database {settings.MARKETPLACE_DATABASE_NAME} does not exist, creating..."
+                )
 
                 # Connect to 'postgres' database to create new database
                 admin_conn = await asyncpg.connect(
@@ -68,14 +72,16 @@ async def get_pool() -> asyncpg.Pool:
                     port=settings.MARKETPLACE_DATABASE_PORT,
                     user=settings.MARKETPLACE_DATABASE_USER,
                     password=settings.POSTGRES_PASSWORD,
-                    database='postgres'
+                    database="postgres",
                 )
 
                 try:
                     await admin_conn.execute(
-                        f'CREATE DATABASE {settings.MARKETPLACE_DATABASE_NAME}'
+                        f"CREATE DATABASE {settings.MARKETPLACE_DATABASE_NAME}"
                     )
-                    logger.info(f"✅ Database {settings.MARKETPLACE_DATABASE_NAME} created")
+                    logger.info(
+                        f"✅ Database {settings.MARKETPLACE_DATABASE_NAME} created"
+                    )
                 finally:
                     await admin_conn.close()
 
@@ -90,7 +96,9 @@ async def get_pool() -> asyncpg.Pool:
                     max_size=10,
                     command_timeout=60,
                 )
-                logger.info("Database connection pool created successfully after database creation")
+                logger.info(
+                    "Database connection pool created successfully after database creation"
+                )
 
         except Exception as e:
             logger.error(f"Failed to create database connection pool: {e}")

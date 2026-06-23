@@ -17,7 +17,13 @@ import yaml
 from config import settings
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel
 
 # Import authentication middleware
@@ -47,15 +53,21 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-plugins_total = Gauge("plugins_total", "Total number of plugins", ["status"])  # registered, enabled, disabled, error
+plugins_total = Gauge(
+    "plugins_total", "Total number of plugins", ["status"]
+)  # registered, enabled, disabled, error
 
-health_check_failures_total = Counter("health_check_failures_total", "Total health check failures", ["plugin"])
+health_check_failures_total = Counter(
+    "health_check_failures_total", "Total health check failures", ["plugin"]
+)
 
 # ============================================================================
 # Data Models
@@ -123,13 +135,25 @@ async def get_postgres_connection():
     global postgres_pool
     if postgres_pool is None:
         postgres_pool = await asyncpg.create_pool(
-            host=(settings.POSTGRES_HOST if hasattr(settings, "POSTGRES_HOST") else "minder-postgres"),
-            port=settings.POSTGRES_PORT if hasattr(settings, "POSTGRES_PORT") else 5432,
-            user=settings.POSTGRES_USER if hasattr(settings, "POSTGRES_USER") else "minder",
-            password=(
-                settings.POSTGRES_PASSWORD if hasattr(settings, "POSTGRES_PASSWORD") else "dev_password_change_me"
+            host=(
+                settings.POSTGRES_HOST
+                if hasattr(settings, "POSTGRES_HOST")
+                else "minder-postgres"
             ),
-            database=settings.POSTGRES_DB if hasattr(settings, "POSTGRES_DB") else "minder",
+            port=settings.POSTGRES_PORT if hasattr(settings, "POSTGRES_PORT") else 5432,
+            user=(
+                settings.POSTGRES_USER
+                if hasattr(settings, "POSTGRES_USER")
+                else "minder"
+            ),
+            password=(
+                settings.POSTGRES_PASSWORD
+                if hasattr(settings, "POSTGRES_PASSWORD")
+                else "dev_password_change_me"
+            ),
+            database=(
+                settings.POSTGRES_DB if hasattr(settings, "POSTGRES_DB") else "minder"
+            ),
             min_size=2,
             max_size=10,
         )
@@ -204,7 +228,9 @@ async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "j
         if isinstance(dependencies_data, dict):
             dependencies_list = dependencies_data.get("python", [])
         else:
-            dependencies_list = dependencies_data if isinstance(dependencies_data, list) else []
+            dependencies_list = (
+                dependencies_data if isinstance(dependencies_data, list) else []
+            )
 
         # TODO: Load plugin module and call register()
         # For now, just store metadata
@@ -230,10 +256,24 @@ async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "j
             version=plugin_info.version,
             description=plugin_info.description,
             author=plugin_info.author,
-            dependencies=json.dumps(plugin_info.dependencies) if plugin_info.dependencies else None,
-            capabilities=json.dumps(plugin_info.capabilities) if plugin_info.capabilities else None,
-            data_sources=json.dumps(plugin_info.data_sources) if plugin_info.data_sources else None,
-            databases=json.dumps(plugin_info.databases) if plugin_info.databases else None,
+            dependencies=(
+                json.dumps(plugin_info.dependencies)
+                if plugin_info.dependencies
+                else None
+            ),
+            capabilities=(
+                json.dumps(plugin_info.capabilities)
+                if plugin_info.capabilities
+                else None
+            ),
+            data_sources=(
+                json.dumps(plugin_info.data_sources)
+                if plugin_info.data_sources
+                else None
+            ),
+            databases=(
+                json.dumps(plugin_info.databases) if plugin_info.databases else None
+            ),
         )
 
         # Auto-sync AI tools with marketplace
@@ -272,7 +312,11 @@ async def load_plugin_from_module(plugin_dir: Path):
 
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
-                if isinstance(attr, type) and issubclass(attr, BaseModule) and attr != BaseModule:
+                if (
+                    isinstance(attr, type)
+                    and issubclass(attr, BaseModule)
+                    and attr != BaseModule
+                ):
                     plugin_class = attr
                     break
 
@@ -283,20 +327,27 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "host": "minder-postgres",
                     "port": 5432,
                     "user": "minder",
-                    "password": os.environ.get("POSTGRES_PASSWORD", "dev_password_change_me"),
+                    "password": os.environ.get(
+                        "POSTGRES_PASSWORD", "dev_password_change_me"
+                    ),
                     "database": "minder",
                 },
                 "redis": {
                     "host": "minder-redis",
                     "port": 6379,
-                    "password": os.environ.get("REDIS_PASSWORD", "dev_password_change_me"),
+                    "password": os.environ.get(
+                        "REDIS_PASSWORD", "dev_password_change_me"
+                    ),
                     "db": 0,
                 },
                 "influxdb": {
                     "enabled": True,
                     "host": "minder-influxdb",
                     "port": 8086,
-                    "token": os.environ.get("INFLUXDB_TOKEN", "minder-super-secret-token-change-me-in-production"),
+                    "token": os.environ.get(
+                        "INFLUXDB_TOKEN",
+                        "minder-super-secret-token-change-me-in-production",
+                    ),
                     "org": "minder",
                     "bucket": "minder-metrics",
                 },
@@ -325,7 +376,9 @@ async def load_plugin_from_module(plugin_dir: Path):
             plugins_db[plugin_name] = plugin_info
             plugin_instances[plugin_name] = plugin_instance
 
-            logger.info(f"Loaded and registered plugin: {plugin_name} (version {plugin_info.version})")
+            logger.info(
+                f"Loaded and registered plugin: {plugin_name} (version {plugin_info.version})"
+            )
 
             # Persist to database
             await update_plugin_in_database(
@@ -333,10 +386,24 @@ async def load_plugin_from_module(plugin_dir: Path):
                 version=plugin_info.version,
                 description=plugin_info.description,
                 author=plugin_info.author,
-                dependencies=json.dumps(plugin_info.dependencies) if plugin_info.dependencies else None,
-                capabilities=json.dumps(plugin_info.capabilities) if plugin_info.capabilities else None,
-                data_sources=json.dumps(plugin_info.data_sources) if plugin_info.data_sources else None,
-                databases=json.dumps(plugin_info.databases) if plugin_info.databases else None,
+                dependencies=(
+                    json.dumps(plugin_info.dependencies)
+                    if plugin_info.dependencies
+                    else None
+                ),
+                capabilities=(
+                    json.dumps(plugin_info.capabilities)
+                    if plugin_info.capabilities
+                    else None
+                ),
+                data_sources=(
+                    json.dumps(plugin_info.data_sources)
+                    if plugin_info.data_sources
+                    else None
+                ),
+                databases=(
+                    json.dumps(plugin_info.databases) if plugin_info.databases else None
+                ),
             )
 
             # Auto-sync AI tools with marketplace
@@ -401,13 +468,17 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
     plugin_name = webhook_routes.get(webhook_path)
 
     if not plugin_name:
-        raise HTTPException(status_code=404, detail=f"No webhook registered at {webhook_path}")
+        raise HTTPException(
+            status_code=404, detail=f"No webhook registered at {webhook_path}"
+        )
 
     # Get manifest
     manifest = plugin_manifests.get(plugin_name)
 
     if not manifest:
-        raise HTTPException(status_code=500, detail=f"Plugin {plugin_name} manifest not loaded")
+        raise HTTPException(
+            status_code=500, detail=f"Plugin {plugin_name} manifest not loaded"
+        )
 
     # Get webhook data
     try:
@@ -418,7 +489,9 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
             form_data = await request.form()
             webhook_data = dict(form_data)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse webhook data: {e}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to parse webhook data: {e}"
+        )
 
     # Validate secret if configured
     webhook_config = manifest.get("spec", {}).get("trigger", {}).get("webhook", {})
@@ -430,8 +503,10 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
 
     # Execute using execution engine
     import sys
-    sys.path.insert(0, '/app/services/plugin-registry')
+
+    sys.path.insert(0, "/app/services/plugin-registry")
     from core.execution_engine import get_execution_engine
+
     engine = get_execution_engine()
 
     result = await engine.execute_webhook_trigger(manifest, webhook_data)
@@ -442,7 +517,7 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
     return {
         "message": "Webhook processed successfully",
         "plugin": plugin_name,
-        "result": result.get("result", {})
+        "result": result.get("result", {}),
     }
 
 
@@ -469,17 +544,22 @@ async def register_all_webhooks_on_startup():
     # TEMP: Load manifests from /tmp for testing (MVP restart-safety workaround)
     import glob
     import yaml
+
     manifest_files = glob.glob("/tmp/*-manifest.yml")
     logger.info(f"DEBUG: Found {len(manifest_files)} manifest files in /tmp")
-    logger.info(f"DEBUG: plugins_db has {len(plugins_db)} plugins: {list(plugins_db.keys())}")
+    logger.info(
+        f"DEBUG: plugins_db has {len(plugins_db)} plugins: {list(plugins_db.keys())}"
+    )
 
     for manifest_file in manifest_files:
         try:
             logger.info(f"DEBUG: Loading manifest from {manifest_file}")
-            with open(manifest_file, 'r') as f:
+            with open(manifest_file, "r") as f:
                 manifest = yaml.safe_load(f)
             plugin_name = manifest.get("metadata", {}).get("name")
-            logger.info(f"DEBUG: Plugin name: {plugin_name}, in plugins_db: {plugin_name in plugins_db}")
+            logger.info(
+                f"DEBUG: Plugin name: {plugin_name}, in plugins_db: {plugin_name in plugins_db}"
+            )
             if plugin_name and plugin_name in plugins_db:
                 plugin_manifests[plugin_name] = manifest
                 await register_plugin_webhook(plugin_name, manifest)
@@ -504,7 +584,9 @@ async def health_check_loop():
                 plugin_info = plugins_db.get(plugin_name)
 
                 if plugin_info:
-                    plugin_info.health_status = "healthy" if health.get("healthy") else "unhealthy"
+                    plugin_info.health_status = (
+                        "healthy" if health.get("healthy") else "unhealthy"
+                    )
                     last_check_dt = datetime.now()
                     plugin_info.last_health_check = last_check_dt.isoformat()
 
@@ -563,7 +645,7 @@ async def force_webhooks():
     count = 0
     for manifest_file in glob.glob("/tmp/*-manifest.yml"):
         try:
-            with open(manifest_file, 'r') as f:
+            with open(manifest_file, "r") as f:
                 manifest = yaml.safe_load(f)
             plugin_name = manifest.get("metadata", {}).get("name")
             if plugin_name and plugin_name in plugins_db:
@@ -576,7 +658,7 @@ async def force_webhooks():
 
     return {
         "message": f"Registered {count} webhook(s)",
-        "webhooks": list(webhook_routes.keys())
+        "webhooks": list(webhook_routes.keys()),
     }
 
 
@@ -604,8 +686,12 @@ async def track_requests(request, call_next):
 
     # Update metrics
     duration = time.time() - start_time
-    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
-    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+    http_requests_total.labels(
+        method=method, endpoint=endpoint, status=response.status_code
+    ).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
+        duration
+    )
 
     return response
 
@@ -651,7 +737,11 @@ async def install_plugin(request: Request, background_tasks: BackgroundTasks):
 
     # Detect format (YAML or JSON)
     content_type = request.headers.get("content-type", "")
-    is_yaml = "yaml" in content_type or "yml" in content_type or body.strip().startswith(b"apiVersion")
+    is_yaml = (
+        "yaml" in content_type
+        or "yml" in content_type
+        or body.strip().startswith(b"apiVersion")
+    )
 
     # Parse manifest
     try:
@@ -664,8 +754,10 @@ async def install_plugin(request: Request, background_tasks: BackgroundTasks):
 
     # Validate manifest
     import sys
-    sys.path.insert(0, '/app/services/plugin-registry')
+
+    sys.path.insert(0, "/app/services/plugin-registry")
     from schemas.validator import validate_manifest
+
     is_valid, errors = validate_manifest(manifest)
 
     if not is_valid:
@@ -679,7 +771,9 @@ async def install_plugin(request: Request, background_tasks: BackgroundTasks):
 
     # Check if plugin already exists
     if plugin_name in plugins_db:
-        raise HTTPException(status_code=409, detail=f"Plugin {plugin_name} already installed")
+        raise HTTPException(
+            status_code=409, detail=f"Plugin {plugin_name} already installed"
+        )
 
     # Store manifest in PostgreSQL (restart-safe)
     try:
@@ -738,12 +832,17 @@ async def install_plugin(request: Request, background_tasks: BackgroundTasks):
     return {
         "message": f"Plugin {plugin_name} installed successfully",
         "plugin": plugin_name,
-        "webhook_path": manifest.get("spec", {}).get("trigger", {}).get("webhook", {}).get("path")
+        "webhook_path": manifest.get("spec", {})
+        .get("trigger", {})
+        .get("webhook", {})
+        .get("path"),
     }
 
 
 @app.delete("/v1/plugins/{plugin_name}")
-async def uninstall_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
+async def uninstall_plugin(
+    plugin_name: str, current_user: Dict = Depends(get_current_user)
+):
     """Uninstall a plugin"""
     if plugin_name not in plugins_db:
         raise HTTPException(status_code=404, detail="Plugin not found")
@@ -772,7 +871,9 @@ async def handle_webhook(path: str, request: Request):
 
 
 @app.post("/v1/plugins/{plugin_name}/enable")
-async def enable_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
+async def enable_plugin(
+    plugin_name: str, current_user: Dict = Depends(get_current_user)
+):
     """Enable a plugin"""
     plugin = plugins_db.get(plugin_name)
     if not plugin:
@@ -793,7 +894,9 @@ async def enable_plugin(plugin_name: str, current_user: Dict = Depends(get_curre
 
 
 @app.post("/v1/plugins/{plugin_name}/disable")
-async def disable_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
+async def disable_plugin(
+    plugin_name: str, current_user: Dict = Depends(get_current_user)
+):
     """Disable a plugin"""
     plugin = plugins_db.get(plugin_name)
     if not plugin:
@@ -825,7 +928,11 @@ async def reload_plugin_webhook(request: Request):
 
     # Detect format (YAML or JSON)
     content_type = request.headers.get("content-type", "")
-    is_yaml = "yaml" in content_type or "yml" in content_type or body.strip().startswith(b"apiVersion")
+    is_yaml = (
+        "yaml" in content_type
+        or "yml" in content_type
+        or body.strip().startswith(b"apiVersion")
+    )
 
     # Parse manifest
     try:
@@ -838,8 +945,10 @@ async def reload_plugin_webhook(request: Request):
 
     # Validate manifest
     import sys
-    sys.path.insert(0, '/app/services/plugin-registry')
+
+    sys.path.insert(0, "/app/services/plugin-registry")
     from schemas.validator import validate_manifest
+
     is_valid, errors = validate_manifest(manifest)
 
     if not is_valid:
@@ -853,7 +962,9 @@ async def reload_plugin_webhook(request: Request):
 
     # Check if plugin exists (allow reload for existing plugins)
     if plugin_name not in plugins_db:
-        raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found. Install it first.")
+        raise HTTPException(
+            status_code=404, detail=f"Plugin {plugin_name} not found. Install it first."
+        )
 
     # Store manifest in memory
     plugin_manifests[plugin_name] = manifest
@@ -870,7 +981,7 @@ async def reload_plugin_webhook(request: Request):
     return {
         "message": f"Webhook re-registered for {plugin_name}",
         "webhook_path": f"/webhook{manifest['spec']['trigger']['webhook']['path']}",
-        "registered_routes": list(webhook_routes.keys())
+        "registered_routes": list(webhook_routes.keys()),
     }
 
 
@@ -984,7 +1095,10 @@ async def register_service(service: ServiceRegistration):
 
     logger.info(f"Service registered: {service.service_name}")
 
-    return {"message": f"Service {service.service_name} registered", "service": service.dict()}
+    return {
+        "message": f"Service {service.service_name} registered",
+        "service": service.dict(),
+    }
 
 
 @app.get("/v1/services")
@@ -1058,7 +1172,10 @@ async def check_service_health(service_name: str):
 # ============================================================================
 
 
-@app.api_route("/v1/proxy/{service_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/v1/proxy/{service_name}/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+)
 async def proxy_to_service(service_name: str, path: str, request: Request):
     """
     Dynamic proxy endpoint for plugin microservices
@@ -1095,7 +1212,9 @@ async def list_proxyable_services():
 
     for service_name, service in services_db.items():
         # Check if service is healthy
-        health_status = redis_client.hget(f"service:{service_name}", "health_status") or "unknown"
+        health_status = (
+            redis_client.hget(f"service:{service_name}", "health_status") or "unknown"
+        )
 
         proxyable_services.append(
             {
@@ -1219,11 +1338,15 @@ async def get_plugin_analysis(
         raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
 
     if not plugins_db[plugin_name].enabled:
-        raise HTTPException(status_code=403, detail=f"Plugin '{plugin_name}' is not enabled")
+        raise HTTPException(
+            status_code=403, detail=f"Plugin '{plugin_name}' is not enabled"
+        )
 
     # Check if plugin instance is available
     if plugin_name not in plugin_instances:
-        raise HTTPException(status_code=503, detail=f"Plugin '{plugin_name}' is not running")
+        raise HTTPException(
+            status_code=503, detail=f"Plugin '{plugin_name}' is not running"
+        )
 
     try:
         plugin_instance = plugin_instances[plugin_name]
@@ -1243,14 +1366,25 @@ async def get_plugin_analysis(
                     "timestamp": datetime.now().isoformat(),
                 }
             else:
-                raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol}")
+                raise HTTPException(
+                    status_code=404, detail=f"No data found for symbol {symbol}"
+                )
 
         elif plugin_name == "news":
             # News-specific: limit articles
             if "insights" in analysis_result:
                 return {
-                    "articles": analysis_result.get("metrics", {}).get("latest_articles", [])[:limit],
-                    "total": min(limit, len(analysis_result.get("metrics", {}).get("latest_articles", []))),
+                    "articles": analysis_result.get("metrics", {}).get(
+                        "latest_articles", []
+                    )[:limit],
+                    "total": min(
+                        limit,
+                        len(
+                            analysis_result.get("metrics", {}).get(
+                                "latest_articles", []
+                            )
+                        ),
+                    ),
                     "limit": limit,
                 }
 
@@ -1261,7 +1395,9 @@ async def get_plugin_analysis(
                     location,
                     {
                         "temperature": analysis_result["metrics"].get("avg_temp_c", 0),
-                        "humidity": analysis_result["metrics"].get("avg_humidity_pct", 0),
+                        "humidity": analysis_result["metrics"].get(
+                            "avg_humidity_pct", 0
+                        ),
                         "conditions": "unknown",
                     },
                 )
@@ -1280,20 +1416,36 @@ async def get_plugin_analysis(
                     "metrics": [
                         {
                             "timestamp": datetime.now().isoformat(),
-                            "cpu_usage": analysis_result["metrics"].get("avg_cpu_usage_pct", 0),
-                            "memory_usage": analysis_result["metrics"].get("avg_memory_usage_pct", 0),
-                            "load_avg": analysis_result["metrics"].get("avg_load_avg", 0),
+                            "cpu_usage": analysis_result["metrics"].get(
+                                "avg_cpu_usage_pct", 0
+                            ),
+                            "memory_usage": analysis_result["metrics"].get(
+                                "avg_memory_usage_pct", 0
+                            ),
+                            "load_avg": analysis_result["metrics"].get(
+                                "avg_load_avg", 0
+                            ),
                         }
                     ],
-                    "average_latency": analysis_result["metrics"].get("avg_load_avg", 0),
+                    "average_latency": analysis_result["metrics"].get(
+                        "avg_load_avg", 0
+                    ),
                     "limit": limit,
                 }
 
         elif plugin_name == "tefas":
             # TEFAS-specific: return fund data
-            if "metrics" in analysis_result and "top_funds" in analysis_result["metrics"]:
+            if (
+                "metrics" in analysis_result
+                and "top_funds" in analysis_result["metrics"]
+            ):
                 funds = analysis_result["metrics"]["top_funds"][:limit]
-                return {"funds": funds, "total": len(funds), "fund_type": fund_type, "limit": limit}
+                return {
+                    "funds": funds,
+                    "total": len(funds),
+                    "fund_type": fund_type,
+                    "limit": limit,
+                }
 
         # Default: return full analysis
         return analysis_result
@@ -1361,8 +1513,10 @@ async def startup_event():
 
     # Initialize execution engine
     import sys
-    sys.path.insert(0, '/app/services/plugin-registry')
+
+    sys.path.insert(0, "/app/services/plugin-registry")
     from core.execution_engine import set_execution_engine, ExecutionEngine
+
     engine = ExecutionEngine()
     set_execution_engine(engine)
     logger.info("Execution engine initialized")
@@ -1380,7 +1534,9 @@ async def startup_event():
     # Start automatic data collection scheduler
     asyncio.create_task(data_collection_scheduler())
 
-    logger.info(f"✅ Startup complete: {len(plugins_db)} plugins, {len(services_db)} services loaded, {len(webhook_routes)} webhooks")
+    logger.info(
+        f"✅ Startup complete: {len(plugins_db)} plugins, {len(services_db)} services loaded, {len(webhook_routes)} webhooks"
+    )
 
 
 async def auto_enable_plugins():
@@ -1421,7 +1577,9 @@ async def data_collection_scheduler():
                         # Trigger data collection
                         result = await plugin_instance.collect_data()
 
-                        logger.info(f"✅ {plugin_name}: {result.get('records_collected', 0)} records collected")
+                        logger.info(
+                            f"✅ {plugin_name}: {result.get('records_collected', 0)} records collected"
+                        )
                     except Exception as e:
                         logger.error(f"❌ {plugin_name}: Collection failed - {e}")
 
@@ -1460,8 +1618,10 @@ async def shutdown_event():
     # Close execution engine
     try:
         import sys
-        sys.path.insert(0, '/app/services/plugin-registry')
+
+        sys.path.insert(0, "/app/services/plugin-registry")
         from core.execution_engine import get_execution_engine
+
         engine = get_execution_engine()
         await engine.close()
         logger.info("✅ Execution engine closed")
@@ -1595,9 +1755,15 @@ async def load_plugins_from_database():
                 capabilities=row["capabilities"] or [],
                 data_sources=row["data_sources"] or [],
                 databases=row["databases"] or [],
-                registered_at=row["registered_at"].isoformat() if row["registered_at"] else None,
+                registered_at=(
+                    row["registered_at"].isoformat() if row["registered_at"] else None
+                ),
                 health_status=row["health_status"] or "unknown",
-                last_health_check=(row["last_health_check"].isoformat() if row["last_health_check"] else None),
+                last_health_check=(
+                    row["last_health_check"].isoformat()
+                    if row["last_health_check"]
+                    else None
+                ),
             )
             plugins_db[row["name"]] = plugin_info
 
@@ -1653,7 +1819,9 @@ async def update_plugin_in_database(plugin_name: str, **updates):
 
         async with pool.acquire() as conn:
             await conn.execute(query, *values)
-        logger.debug(f"Upserted plugin {plugin_name} in database: {list(valid_updates.keys())}")
+        logger.debug(
+            f"Upserted plugin {plugin_name} in database: {list(valid_updates.keys())}"
+        )
 
     except Exception as e:
         logger.error(f"Failed to update plugin {plugin_name} in database: {e}")
@@ -1705,7 +1873,9 @@ async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
         plugin_id = await get_or_create_marketplace_plugin(plugin_name, manifest)
 
         if not plugin_id:
-            logger.warning(f"Could not get/create marketplace plugin ID for {plugin_name}")
+            logger.warning(
+                f"Could not get/create marketplace plugin ID for {plugin_name}"
+            )
             return
 
         # Call marketplace sync API
@@ -1714,14 +1884,22 @@ async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 f"{marketplace_url}/v1/marketplace/ai/sync",
-                json={"plugin_name": plugin_name, "plugin_id": plugin_id, "manifest": manifest},
+                json={
+                    "plugin_name": plugin_name,
+                    "plugin_id": plugin_id,
+                    "manifest": manifest,
+                },
             )
 
             if response.status_code == 200:
                 result = response.json()
-                logger.info(f"✅ Synced {result.get('tools_imported', 0)} AI tools for {plugin_name}")
+                logger.info(
+                    f"✅ Synced {result.get('tools_imported', 0)} AI tools for {plugin_name}"
+                )
             else:
-                logger.warning(f"Failed to sync AI tools for {plugin_name}: {response.status_code}")
+                logger.warning(
+                    f"Failed to sync AI tools for {plugin_name}: {response.status_code}"
+                )
 
     except Exception as e:
         logger.error(f"Error syncing AI tools for {plugin_name}: {e}")
@@ -1741,13 +1919,16 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
     try:
         import httpx
 
-        marketplace_url = os.environ.get("MARKETPLACE_URL", "http://minder-marketplace:8002")
+        marketplace_url = os.environ.get(
+            "MARKETPLACE_URL", "http://minder-marketplace:8002"
+        )
 
         # Try to find existing plugin by name
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Search for existing plugin
             search_response = await client.get(
-                f"{marketplace_url}/v1/marketplace/plugins/search", params={"q": plugin_name}
+                f"{marketplace_url}/v1/marketplace/plugins/search",
+                params={"q": plugin_name},
             )
 
             if search_response.status_code == 200:
@@ -1757,7 +1938,9 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
                 # Check if plugin with matching name exists
                 for plugin in plugins:
                     if plugin.get("name") == plugin_name:
-                        logger.debug(f"Found existing marketplace plugin: {plugin_name}")
+                        logger.debug(
+                            f"Found existing marketplace plugin: {plugin_name}"
+                        )
                         return plugin.get("id")
 
             # Plugin doesn't exist, create it
@@ -1765,7 +1948,9 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
 
             # Create display_name from description (first sentence, max 200 chars)
             description = manifest.get("description", plugin_name)
-            display_name = description.split(".")[0][:200] if description else plugin_name
+            display_name = (
+                description.split(".")[0][:200] if description else plugin_name
+            )
 
             # Build plugin data - only include repository_url if it's a valid URL
             plugin_data = {
@@ -1783,14 +1968,20 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
             if repository and repository.strip():
                 plugin_data["repository_url"] = repository
 
-            create_response = await client.post(f"{marketplace_url}/v1/marketplace/plugins", json=plugin_data)
+            create_response = await client.post(
+                f"{marketplace_url}/v1/marketplace/plugins", json=plugin_data
+            )
 
             if create_response.status_code in [200, 201]:
                 plugin_data = create_response.json()
-                logger.info(f"Created marketplace plugin entry: {plugin_name} -> {plugin_data.get('id')}")
+                logger.info(
+                    f"Created marketplace plugin entry: {plugin_name} -> {plugin_data.get('id')}"
+                )
                 return plugin_data.get("id")
             else:
-                logger.warning(f"Failed to create marketplace plugin: {create_response.status_code}")
+                logger.warning(
+                    f"Failed to create marketplace plugin: {create_response.status_code}"
+                )
                 logger.warning(f"Response: {create_response.text}")
                 return None
 

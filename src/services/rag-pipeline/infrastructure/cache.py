@@ -149,7 +149,7 @@ class EmbeddingCache:
             "size": len(self.cache),
             "hits": self.hits,
             "misses": self.misses,
-            "hit_rate": hit_rate
+            "hit_rate": hit_rate,
         }
 
         logger.debug(

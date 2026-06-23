@@ -32,7 +32,7 @@ class TemplateEngine:
 
     # Pattern to match {{ .field.name }} or {{ .field }}
     # The dot is REQUIRED (prevents code injection)
-    TEMPLATE_PATTERN = re.compile(r'\{\{\s*\.([a-zA-Z0-9_.]+)\s*\}\}')
+    TEMPLATE_PATTERN = re.compile(r"\{\{\s*\.([a-zA-Z0-9_.]+)\s*\}\}")
 
     @staticmethod
     def render(template: str, context: Dict[str, Any]) -> str:
@@ -49,6 +49,7 @@ class TemplateEngine:
         Raises:
             ValueError: If template references missing field
         """
+
         def replace_match(match):
             field_path = match.group(1)
             value = TemplateEngine._get_nested_value(context, field_path)
@@ -73,7 +74,7 @@ class TemplateEngine:
         Returns:
             Value at path, or None if not found
         """
-        keys = path.split('.')
+        keys = path.split(".")
         value = data
 
         for key in keys:
@@ -87,7 +88,9 @@ class TemplateEngine:
         return value
 
     @staticmethod
-    def render_dict(template_dict: Dict[str, str], context: Dict[str, Any]) -> Dict[str, str]:
+    def render_dict(
+        template_dict: Dict[str, str], context: Dict[str, Any]
+    ) -> Dict[str, str]:
         """
         Render all string values in a dictionary.
 
@@ -116,8 +119,9 @@ class ExecutionEngine:
     For MVP: webhook trigger → store-vector action
     """
 
-    def __init__(self, qdrant_url: str = "http://minder-qdrant:6333",
-                 ollama_url: str = None):
+    def __init__(
+        self, qdrant_url: str = "http://minder-qdrant:6333", ollama_url: str = None
+    ):
         """
         Initialize execution engine.
 
@@ -131,9 +135,7 @@ class ExecutionEngine:
         self.http_client = None  # Created on first use
 
         # Action handlers registry (fixed functions, NO dynamic imports)
-        self._action_handlers = {
-            "store-vector": self._handle_store_vector
-        }
+        self._action_handlers = {"store-vector": self._handle_store_vector}
 
     async def _get_http_client(self):
         """Get or create HTTP client"""
@@ -147,7 +149,9 @@ class ExecutionEngine:
             await self.http_client.aclose()
             self.http_client = None
 
-    async def execute_webhook_trigger(self, manifest: Dict, webhook_data: Dict) -> Dict[str, Any]:
+    async def execute_webhook_trigger(
+        self, manifest: Dict, webhook_data: Dict
+    ) -> Dict[str, Any]:
         """
         Execute webhook trigger pipeline.
 
@@ -189,18 +193,16 @@ class ExecutionEngine:
                 "status": "success",
                 "plugin": plugin_name,
                 "action": action_type,
-                "result": result
+                "result": result,
             }
 
         except Exception as e:
             logger.error(f"Execution failed for {plugin_name}: {e}")
-            return {
-                "status": "error",
-                "plugin": plugin_name,
-                "error": str(e)
-            }
+            return {"status": "error", "plugin": plugin_name, "error": str(e)}
 
-    async def _handle_store_vector(self, manifest: Dict, input_data: Dict) -> Dict[str, Any]:
+    async def _handle_store_vector(
+        self, manifest: Dict, input_data: Dict
+    ) -> Dict[str, Any]:
         """
         Store text in Qdrant with embedding.
 
@@ -229,7 +231,9 @@ class ExecutionEngine:
         metadata_template = input_config.get("metadata", {})
         metadata = self.template_engine.render_dict(metadata_template, input_data)
 
-        logger.info(f"Storing vector for {plugin_name}: collection={collection}, text_length={len(text)}")
+        logger.info(
+            f"Storing vector for {plugin_name}: collection={collection}, text_length={len(text)}"
+        )
 
         # Validate text is not empty
         if not text or not text.strip():
@@ -244,7 +248,7 @@ class ExecutionEngine:
             model_map = {
                 "all-minilm": "nomic-embed-text",
                 "nomic-embed-text": "nomic-embed-text",
-                "mxbai-embed-large": "nomic-embed-text"
+                "mxbai-embed-large": "nomic-embed-text",
             }
             ollama_model = model_map.get(embed_model, "nomic-embed-text")
 
@@ -252,11 +256,13 @@ class ExecutionEngine:
 
             response = await client.post(
                 f"{self.ollama_url}/api/embed",
-                json={"model": ollama_model, "input": text}
+                json={"model": ollama_model, "input": text},
             )
 
             if response.status_code != 200:
-                raise ValueError(f"Ollama embedding failed: {response.status_code} - {response.text}")
+                raise ValueError(
+                    f"Ollama embedding failed: {response.status_code} - {response.text}"
+                )
 
             embed_data = response.json()
             embedding = embed_data.get("embeddings", [])[0]
@@ -272,7 +278,9 @@ class ExecutionEngine:
             client = await self._get_http_client()
 
             # Check if collection exists
-            collections_response = await client.get(f"{self.qdrant_url}/collections/{collection}")
+            collections_response = await client.get(
+                f"{self.qdrant_url}/collections/{collection}"
+            )
 
             if collections_response.status_code == 404:
                 # Create collection
@@ -280,16 +288,13 @@ class ExecutionEngine:
 
                 create_response = await client.put(
                     f"{self.qdrant_url}/collections/{collection}",
-                    json={
-                        "vectors": {
-                            "size": len(embedding),
-                            "distance": "Cosine"
-                        }
-                    }
+                    json={"vectors": {"size": len(embedding), "distance": "Cosine"}},
                 )
 
                 if create_response.status_code not in [200, 201]:
-                    raise ValueError(f"Failed to create collection: {create_response.text}")
+                    raise ValueError(
+                        f"Failed to create collection: {create_response.text}"
+                    )
 
                 logger.info(f"Created collection: {collection}")
 
@@ -306,7 +311,7 @@ class ExecutionEngine:
             payload = {
                 "text": text,
                 "plugin": plugin_name,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
             payload.update(metadata)
 
@@ -314,17 +319,15 @@ class ExecutionEngine:
                 f"{self.qdrant_url}/collections/{collection}/points",
                 json={
                     "points": [
-                        {
-                            "id": point_id,
-                            "vector": embedding,
-                            "payload": payload
-                        }
+                        {"id": point_id, "vector": embedding, "payload": payload}
                     ]
-                }
+                },
             )
 
             if upsert_response.status_code != 200:
-                raise ValueError(f"Qdrant upsert failed: {upsert_response.status_code} - {upsert_response.text}")
+                raise ValueError(
+                    f"Qdrant upsert failed: {upsert_response.status_code} - {upsert_response.text}"
+                )
 
             logger.info(f"Stored vector: point_id={point_id}, collection={collection}")
 
@@ -337,7 +340,7 @@ class ExecutionEngine:
             "collection": collection,
             "text_length": len(text),
             "metadata": metadata,
-            "embedding_dim": len(embedding)
+            "embedding_dim": len(embedding),
         }
 
 

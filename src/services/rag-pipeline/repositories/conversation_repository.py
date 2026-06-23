@@ -53,12 +53,16 @@ class ConversationRepository:
             raise ValueError("db_pool cannot be None")
 
         if default_ttl_days <= 0:
-            raise ValueError(f"default_ttl_days must be positive, got {default_ttl_days}")
+            raise ValueError(
+                f"default_ttl_days must be positive, got {default_ttl_days}"
+            )
 
         self.db_pool = db_pool
         self.default_ttl_days = default_ttl_days
 
-        logger.info(f"✅ ConversationRepository initialized: ttl={default_ttl_days} days")
+        logger.info(
+            f"✅ ConversationRepository initialized: ttl={default_ttl_days} days"
+        )
 
     async def store_turn(
         self,
@@ -66,7 +70,7 @@ class ConversationRepository:
         conversation_id: str,
         question: str,
         answer: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Store conversation turn
@@ -107,12 +111,15 @@ class ConversationRepository:
                     INSERT INTO conversation_turns (user_id, conversation_id, question, answer, timestamp, metadata)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     """,
-                    user_id, conversation_id, question, answer, timestamp, metadata_json
+                    user_id,
+                    conversation_id,
+                    question,
+                    answer,
+                    timestamp,
+                    metadata_json,
                 )
 
-            logger.debug(
-                f"💾 Stored conversation turn: {user_id}:{conversation_id}"
-            )
+            logger.debug(f"💾 Stored conversation turn: {user_id}:{conversation_id}")
             return True
 
         except Exception as e:
@@ -120,10 +127,7 @@ class ConversationRepository:
             raise RuntimeError(f"Database operation failed: {str(e)}")
 
     async def get_history(
-        self,
-        user_id: str,
-        conversation_id: str,
-        max_turns: int = 5
+        self, user_id: str, conversation_id: str, max_turns: int = 5
     ) -> List[Dict[str, Any]]:
         """
         Get conversation history
@@ -159,7 +163,9 @@ class ConversationRepository:
                     ORDER BY timestamp ASC
                     LIMIT $3
                     """,
-                    user_id, conversation_id, max_turns
+                    user_id,
+                    conversation_id,
+                    max_turns,
                 )
 
             turns = []
@@ -168,7 +174,7 @@ class ConversationRepository:
                     "question": row["question"],
                     "answer": row["answer"],
                     "timestamp": row["timestamp"],
-                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {}
+                    "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
                 }
                 turns.append(turn)
 
@@ -182,10 +188,7 @@ class ConversationRepository:
             raise RuntimeError(f"Database operation failed: {str(e)}")
 
     async def build_context(
-        self,
-        user_id: str,
-        conversation_id: str,
-        max_turns: int = 3
+        self, user_id: str, conversation_id: str, max_turns: int = 3
     ) -> str:
         """
         Build conversational context string
@@ -222,11 +225,7 @@ class ConversationRepository:
 
         return context_str
 
-    async def clear_conversation(
-        self,
-        user_id: str,
-        conversation_id: str
-    ) -> bool:
+    async def clear_conversation(self, user_id: str, conversation_id: str) -> bool:
         """
         Clear conversation history
 
@@ -254,7 +253,8 @@ class ConversationRepository:
                     DELETE FROM conversation_turns
                     WHERE user_id = $1 AND conversation_id = $2
                     """,
-                    user_id, conversation_id
+                    user_id,
+                    conversation_id,
                 )
 
             logger.info(f"🗑️ Cleared conversation: {user_id}:{conversation_id}")
@@ -281,7 +281,7 @@ class ConversationRepository:
                     DELETE FROM conversation_turns
                     WHERE timestamp < NOW() - INTERVAL '1 day' * $1
                     """,
-                    self.default_ttl_days
+                    self.default_ttl_days,
                 )
 
             # Parse result to get deleted count

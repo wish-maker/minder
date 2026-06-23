@@ -13,10 +13,13 @@ logger = logging.getLogger(__name__)
 
 try:
     import asyncpg
+
     ASYNCPG_AVAILABLE = True
 except ImportError as e:
     ASYNCPG_AVAILABLE = False
-    logger.warning(f"⚠️  asyncpg not installed. PostgreSQL persistence will be disabled. Error: {e}")
+    logger.warning(
+        f"⚠️  asyncpg not installed. PostgreSQL persistence will be disabled. Error: {e}"
+    )
 
 
 # PostgreSQL availability flag
@@ -27,6 +30,7 @@ pg_pool: Optional[asyncpg.Pool] = None
 
 # Database configuration
 import os
+
 PG_HOST = os.getenv("POSTGRES_HOST", "postgres")
 PG_PORT = os.getenv("POSTGRES_PORT", "5432")
 PG_USER = os.getenv("POSTGRES_USER", "minder")
@@ -40,7 +44,7 @@ async def get_pg_connection():
         return None
 
     # Use globals() to explicitly access and update the module-level variable
-    if globals()['pg_pool'] is None:
+    if globals()["pg_pool"] is None:
         try:
             # Create connection pool
             pool = await asyncpg.create_pool(
@@ -50,16 +54,18 @@ async def get_pg_connection():
                 password=PG_PASSWORD,
                 database=PG_DATABASE,
                 min_size=2,
-                max_size=10
+                max_size=10,
             )
             # Explicitly update the module-level variable using globals()
-            globals()['pg_pool'] = pool
-            logger.info(f"✅ PostgreSQL connection pool created: {PG_HOST}:{PG_PORT}/{PG_DATABASE}")
+            globals()["pg_pool"] = pool
+            logger.info(
+                f"✅ PostgreSQL connection pool created: {PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+            )
         except Exception as e:
             logger.error(f"❌ Failed to create PostgreSQL connection pool: {e}")
             raise
 
-    return globals()['pg_pool']
+    return globals()["pg_pool"]
 
 
 async def initialize_schema():
@@ -113,7 +119,7 @@ async def initialize_schema():
 
         async with conn.acquire() as connection:
             # Split and execute statements
-            statements = [s.strip() for s in schema_sql.split(';') if s.strip()]
+            statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
             for statement in statements:
                 await connection.execute(statement)
 
@@ -133,7 +139,8 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
             return False
 
         async with conn.acquire() as connection:
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO knowledge_bases
                 (id, name, description, embedding_model, llm_model, chunk_size, chunk_overlap, chunking_strategy, parent_size, document_count, vector_count)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -149,10 +156,19 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
                     document_count = EXCLUDED.document_count,
                     vector_count = EXCLUDED.vector_count,
                     updated_at = CURRENT_TIMESTAMP
-            """, kb_id, kb_data["name"], kb_data.get("description", ""), kb_data["embedding_model"],
-                kb_data["llm_model"], kb_data["chunk_size"], kb_data["chunk_overlap"],
-                kb_data.get("chunking_strategy", "basic"), kb_data.get("parent_size", 2000),
-                kb_data["document_count"], kb_data["vector_count"])
+            """,
+                kb_id,
+                kb_data["name"],
+                kb_data.get("description", ""),
+                kb_data["embedding_model"],
+                kb_data["llm_model"],
+                kb_data["chunk_size"],
+                kb_data["chunk_overlap"],
+                kb_data.get("chunking_strategy", "basic"),
+                kb_data.get("parent_size", 2000),
+                kb_data["document_count"],
+                kb_data["vector_count"],
+            )
 
         logger.info(f"✅ KB saved to PostgreSQL: {kb_id}")
         return True
@@ -191,8 +207,10 @@ async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
                 "parent_size": row["parent_size"],
                 "document_count": row["document_count"],
                 "vector_count": row["vector_count"],
-                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "persisted": True  # Mark as loaded from PostgreSQL
+                "created_at": (
+                    row["created_at"].isoformat() if row["created_at"] else None
+                ),
+                "persisted": True,  # Mark as loaded from PostgreSQL
             }
 
         logger.info(f"✅ Loaded {len(kbs)} KBs from PostgreSQL")
@@ -203,7 +221,9 @@ async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
-async def save_pipeline_to_postgres(pipeline_id: str, pipeline_data: Dict[str, Any]) -> bool:
+async def save_pipeline_to_postgres(
+    pipeline_id: str, pipeline_data: Dict[str, Any]
+) -> bool:
     """Save RAG pipeline to PostgreSQL"""
     try:
         conn = await get_pg_connection()
@@ -219,7 +239,8 @@ async def save_pipeline_to_postgres(pipeline_id: str, pipeline_data: Dict[str, A
             kb_ids_str = str(kb_ids)
 
         async with conn.acquire() as connection:
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO rag_pipelines
                 (id, name, knowledge_base_ids, retrieval_config, generation_config)
                 VALUES ($1, $2, $3, $4, $5)
@@ -229,9 +250,13 @@ async def save_pipeline_to_postgres(pipeline_id: str, pipeline_data: Dict[str, A
                     retrieval_config = EXCLUDED.retrieval_config,
                     generation_config = EXCLUDED.generation_config,
                     updated_at = CURRENT_TIMESTAMP
-            """, pipeline_id, pipeline_data["name"], kb_ids_str,
+            """,
+                pipeline_id,
+                pipeline_data["name"],
+                kb_ids_str,
                 json.dumps(pipeline_data.get("retrieval_config", {})),
-                json.dumps(pipeline_data.get("generation_config", {})))
+                json.dumps(pipeline_data.get("generation_config", {})),
+            )
 
         logger.info(f"✅ Pipeline saved to PostgreSQL: {pipeline_id}")
         return True
@@ -280,10 +305,20 @@ async def load_pipelines_from_postgres() -> Dict[str, Dict[str, Any]]:
                 "id": pipeline_id,
                 "name": row["name"],
                 "knowledge_base_ids": kb_ids_list,
-                "retrieval_config": json.loads(row["retrieval_config"]) if row["retrieval_config"] else {},
-                "generation_config": json.loads(row["generation_config"]) if row["generation_config"] else {},
-                "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-                "persisted": True  # Mark as loaded from PostgreSQL
+                "retrieval_config": (
+                    json.loads(row["retrieval_config"])
+                    if row["retrieval_config"]
+                    else {}
+                ),
+                "generation_config": (
+                    json.loads(row["generation_config"])
+                    if row["generation_config"]
+                    else {}
+                ),
+                "created_at": (
+                    row["created_at"].isoformat() if row["created_at"] else None
+                ),
+                "persisted": True,  # Mark as loaded from PostgreSQL
             }
             logger.debug(f"Loaded pipeline {pipeline_id} with KBs: {kb_ids_list}")
 
@@ -295,7 +330,9 @@ async def load_pipelines_from_postgres() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
-async def save_session_to_postgres(session_id: str, session_data: Dict[str, Any]) -> bool:
+async def save_session_to_postgres(
+    session_id: str, session_data: Dict[str, Any]
+) -> bool:
     """Save conversation session to PostgreSQL"""
     try:
         conn = await get_pg_connection()
@@ -303,7 +340,8 @@ async def save_session_to_postgres(session_id: str, session_data: Dict[str, Any]
             return False
 
         async with conn.acquire() as connection:
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO conversation_sessions
                 (session_id, user_id, pipeline_id, message_count, metadata, expires_at)
                 VALUES ($1, $2, $3, $4, $5, $6)
@@ -311,9 +349,14 @@ async def save_session_to_postgres(session_id: str, session_data: Dict[str, Any]
                     message_count = EXCLUDED.message_count,
                     metadata = EXCLUDED.metadata,
                     updated_at = CURRENT_TIMESTAMP
-            """, session_id, session_data.get("user_id"), session_data.get("pipeline_id"),
-                session_data.get("message_count", 0), json.dumps(session_data.get("metadata", {})),
-                session_data.get("expires_at"))
+            """,
+                session_id,
+                session_data.get("user_id"),
+                session_data.get("pipeline_id"),
+                session_data.get("message_count", 0),
+                json.dumps(session_data.get("metadata", {})),
+                session_data.get("expires_at"),
+            )
 
         logger.info(f"✅ Session saved to PostgreSQL: {session_id}")
         return True
@@ -330,7 +373,7 @@ async def save_conversation_turn_to_postgres(
     answer: str,
     sources: List[Dict] = None,
     confidence: float = None,
-    embedding: List[float] = None
+    embedding: List[float] = None,
 ) -> bool:
     """Save conversation turn to PostgreSQL"""
     try:
@@ -342,15 +385,21 @@ async def save_conversation_turn_to_postgres(
             # Store embedding as array if available
             embedding_array = embedding if embedding else None
 
-            await connection.execute("""
+            await connection.execute(
+                """
                 INSERT INTO conversation_turns
                 (session_id, turn_id, question, answer, sources, confidence, embedding, timestamp)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            """, session_id, turn_id, question, answer,
+            """,
+                session_id,
+                turn_id,
+                question,
+                answer,
                 json.dumps(sources) if sources else None,
                 confidence,
                 embedding_array,
-                datetime.utcnow())
+                datetime.utcnow(),
+            )
 
         logger.debug(f"✅ Conversation turn saved to PostgreSQL: {turn_id}")
         return True

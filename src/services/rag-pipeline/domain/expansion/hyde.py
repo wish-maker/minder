@@ -52,10 +52,7 @@ class HyDEQueryExpander:
         logger.info("✅ HyDEQueryExpander initialized")
 
     async def generate_hypothetical_answer(
-        self,
-        query: str,
-        llm_manager: Any,
-        model: str = "llama3"
+        self, query: str, llm_manager: Any, model: str = "llama3"
     ) -> str:
         """
         Generate hypothetical answer to query
@@ -78,20 +75,18 @@ class HyDEQueryExpander:
             raise ValueError("query cannot be empty")
 
         try:
-            prompt = (
-                f"Please write a comprehensive answer to the following question: {query}"
-            )
+            prompt = f"Please write a comprehensive answer to the following question: {query}"
 
             # Generate hypothetical answer with higher temperature for creativity
             result = await llm_manager.generate_response(
-                prompt=prompt,
-                model=model,
-                temperature=0.7
+                prompt=prompt, model=model, temperature=0.7
             )
 
             hypothetical_answer = result.get("text", "")
 
-            logger.info(f"✅ Generated hypothetical answer ({len(hypothetical_answer)} chars)")
+            logger.info(
+                f"✅ Generated hypothetical answer ({len(hypothetical_answer)} chars)"
+            )
 
             return hypothetical_answer
 
@@ -104,7 +99,7 @@ class HyDEQueryExpander:
         query: str,
         llm_manager: Any,
         model: str = "llama3",
-        query_embedding: List[float] = None
+        query_embedding: List[float] = None,
     ) -> Dict[str, Any]:
         """
         Expand query using HyDE technique
@@ -135,32 +130,26 @@ class HyDEQueryExpander:
 
         if not self._enabled:
             logger.debug("HyDE expansion disabled")
-            return {
-                "expanded": False,
-                "reason": "HyDE disabled"
-            }
+            return {"expanded": False, "reason": "HyDE disabled"}
 
         logger.info(f"🔄 Expanding query with HyDE: {query[:50]}...")
 
         # Generate hypothetical answer
         hypothetical_answer = await self.generate_hypothetical_answer(
-            query,
-            llm_manager,
-            model
+            query, llm_manager, model
         )
 
         if not hypothetical_answer:
             logger.warning("Failed to generate hypothetical answer")
             return {
                 "expanded": False,
-                "reason": "Failed to generate hypothetical answer"
+                "reason": "Failed to generate hypothetical answer",
             }
 
         # Generate embedding for hypothetical answer
         try:
             hypothetical_embeddings = await llm_manager.generate_embeddings(
-                [hypothetical_answer],
-                model=model
+                [hypothetical_answer], model=model
             )
             hypothetical_embedding = hypothetical_embeddings[0]
 
@@ -178,5 +167,5 @@ class HyDEQueryExpander:
             logger.warning(f"⚠️ Failed to generate hypothetical embedding: {e}")
             return {
                 "expanded": False,
-                "reason": "Failed to generate hypothetical embedding"
+                "reason": "Failed to generate hypothetical embedding",
             }

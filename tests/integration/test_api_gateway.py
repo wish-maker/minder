@@ -177,7 +177,10 @@ class TestAPIGatewayPerformance:
     async def test_load_capacity(self, gateway_test_client, load_tester):
         """Test load capacity"""
         stats = await load_tester(
-            endpoint="/v1/plugins", concurrent_users=50, requests_per_user=10, delay_between_requests=0.01
+            endpoint="/v1/plugins",
+            concurrent_users=50,
+            requests_per_user=10,
+            delay_between_requests=0.01,
         )
 
         assert stats["total_requests"] == 500
@@ -218,7 +221,11 @@ class TestAPIGatewaySecurity:
 
     def test_sql_injection_prevention(self, gateway_test_client, security_tester):
         """Test SQL injection prevention"""
-        payloads = ["1' OR '1'='1", "1; DROP TABLE plugins--", "1 UNION SELECT * FROM users"]
+        payloads = [
+            "1' OR '1'='1",
+            "1; DROP TABLE plugins--",
+            "1 UNION SELECT * FROM users",
+        ]
 
         for payload in payloads:
             response = gateway_test_client.get(f"/v1/plugins/{payload}")
@@ -227,7 +234,11 @@ class TestAPIGatewaySecurity:
 
     def test_xss_prevention(self, gateway_test_client, security_tester):
         """Test XSS prevention"""
-        payloads = ["<script>alert('xss')</script>", "<img src=x onerror=alert('xss')>", "javascript:alert('xss')"]
+        payloads = [
+            "<script>alert('xss')</script>",
+            "<img src=x onerror=alert('xss')>",
+            "javascript:alert('xss')",
+        ]
 
         for payload in payloads:
             response = gateway_test_client.get(f"/v1/plugins?query={payload}")
@@ -258,7 +269,9 @@ class TestAPIGatewayE2E:
             if plugins and len(plugins) > 0:
                 plugin_name = plugins[0].get("name") or plugins[0].get("id")
                 if plugin_name:
-                    detail_response = gateway_test_client.get(f"/v1/plugins/{plugin_name}")
+                    detail_response = gateway_test_client.get(
+                        f"/v1/plugins/{plugin_name}"
+                    )
                     assert detail_response.status_code in [200, 404]
 
     def test_proxy_routing(self, gateway_test_client):

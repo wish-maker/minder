@@ -50,7 +50,9 @@ async def load_plugins_from_disk():
                     plugins[plugin_name] = plugin_data
                     logger.info(f"✅ Loaded plugin from manifest: {plugin_name}")
             except Exception as e:
-                logger.error(f"❌ Failed to load plugin {plugin_name} from manifest: {e}")
+                logger.error(
+                    f"❌ Failed to load plugin {plugin_name} from manifest: {e}"
+                )
         else:
             # Try loading as Python module
             try:
@@ -65,7 +67,9 @@ async def load_plugins_from_disk():
     return plugins
 
 
-async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "json") -> Dict:
+async def load_plugin_from_manifest(
+    manifest_path: Path, manifest_type: str = "json"
+) -> Dict:
     """
     Load plugin from manifest file
 
@@ -83,19 +87,19 @@ async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "j
         raise ValueError(f"Manifest file not found: {manifest_path}")
 
     try:
-        with open(manifest_path, 'r') as f:
+        with open(manifest_path, "r") as f:
             if manifest_type == "yaml":
                 manifest_data = yaml.safe_load(f)
             else:
                 manifest_data = json.load(f)
 
         # Validate manifest structure
-        if not manifest_data.get('name'):
+        if not manifest_data.get("name"):
             raise ValueError("Manifest must have 'name' field")
 
         # Add metadata
-        manifest_data['loaded_from'] = str(manifest_path)
-        manifest_data['loaded_at'] = datetime.now().isoformat()
+        manifest_data["loaded_from"] = str(manifest_path)
+        manifest_data["loaded_at"] = datetime.now().isoformat()
 
         return manifest_data
 

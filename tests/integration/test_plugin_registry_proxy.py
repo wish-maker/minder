@@ -17,7 +17,9 @@ pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 # Skip this test if plugin registry dependencies are not available
 try:
     # Add plugin registry to path
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry"))
+    sys.path.insert(
+        0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry")
+    )
     from routes.plugins import ProxyRouter
 
     PROXY_ROUTER_AVAILABLE = True
@@ -140,7 +142,9 @@ async def test_forward_request_success(proxy_router, sample_service):
 
         from fastapi import Response
 
-        result = await proxy_router.forward_request("crypto-plugin", "/analysis", mock_request)
+        result = await proxy_router.forward_request(
+            "crypto-plugin", "/analysis", mock_request
+        )
 
         assert isinstance(result, Response)
         assert result.status_code == 200

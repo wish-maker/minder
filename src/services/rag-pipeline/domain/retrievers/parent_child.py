@@ -63,8 +63,7 @@ class ParentChildRetriever:
 
             # Index child chunks for search
             self.child_index[kb_id] = [
-                item for item in hierarchy
-                if item.get("type") == "child"
+                item for item in hierarchy if item.get("type") == "child"
             ]
 
             logger.info(
@@ -78,9 +77,7 @@ class ParentChildRetriever:
             raise
 
     def retrieve_with_parent_context(
-        self,
-        kb_id: str,
-        child_results: List[Dict[str, Any]]
+        self, kb_id: str, child_results: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Retrieve child results enhanced with parent context
@@ -103,7 +100,9 @@ class ParentChildRetriever:
             return []
 
         if kb_id not in self.hierarchies:
-            logger.warning(f"⚠️ No hierarchy found for KB {kb_id}, returning child results as-is")
+            logger.warning(
+                f"⚠️ No hierarchy found for KB {kb_id}, returning child results as-is"
+            )
             return child_results
 
         enhanced_results = []
@@ -122,14 +121,16 @@ class ParentChildRetriever:
 
             if parent_entry and parent_entry["id"] not in parent_ids_seen:
                 # Return parent context for first child from each parent
-                enhanced_results.append({
-                    "text": parent_entry.get("text", ""),
-                    "source": child_result.get("source", ""),
-                    "score": child_result.get("score", 0.0),
-                    "context_type": "parent",
-                    "parent_id": parent_entry["id"],
-                    "child_id": child_id
-                })
+                enhanced_results.append(
+                    {
+                        "text": parent_entry.get("text", ""),
+                        "source": child_result.get("source", ""),
+                        "score": child_result.get("score", 0.0),
+                        "context_type": "parent",
+                        "parent_id": parent_entry["id"],
+                        "child_id": child_id,
+                    }
+                )
                 parent_ids_seen.add(parent_entry["id"])
             else:
                 # No parent found or already seen, return child as-is
@@ -165,16 +166,24 @@ class ParentChildRetriever:
             # Recursive search in nested structures
             if "children" in item:
                 for child in item["children"]:
-                    if child.get("type") == "parent" and child_id in child.get("children", []):
+                    if child.get("type") == "parent" and child_id in child.get(
+                        "children", []
+                    ):
                         return child
                     if "children" in child:
                         for grandchild in child["children"]:
-                            if grandchild.get("type") == "parent" and child_id in grandchild.get("children", []):
+                            if grandchild.get(
+                                "type"
+                            ) == "parent" and child_id in grandchild.get(
+                                "children", []
+                            ):
                                 return grandchild
             elif "clusters" in item:
                 for cluster in item["clusters"]:
                     for node in cluster:
-                        if node.get("type") == "parent" and child_id in node.get("children", []):
+                        if node.get("type") == "parent" and child_id in node.get(
+                            "children", []
+                        ):
                             return node
 
         return None

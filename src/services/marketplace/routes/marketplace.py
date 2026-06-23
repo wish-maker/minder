@@ -5,7 +5,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from services.marketplace.core.database import get_pool
-from services.marketplace.models.plugin import PluginCreate, PluginListResponse, PluginResponse
+from services.marketplace.models.plugin import (
+    PluginCreate,
+    PluginListResponse,
+    PluginResponse,
+)
 from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
@@ -98,7 +102,9 @@ async def list_plugins(
                 status=row["status"],
                 featured=row["featured"],
                 download_count=row["download_count"],
-                rating_average=float(row["rating_average"]) if row["rating_average"] else None,
+                rating_average=(
+                    float(row["rating_average"]) if row["rating_average"] else None
+                ),
                 rating_count=row["rating_count"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
@@ -182,7 +188,9 @@ async def search_plugins(
                 status=row["status"],
                 featured=row["featured"],
                 download_count=row["download_count"],
-                rating_average=float(row["rating_average"]) if row["rating_average"] else None,
+                rating_average=(
+                    float(row["rating_average"]) if row["rating_average"] else None
+                ),
                 rating_count=row["rating_count"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
@@ -205,7 +213,9 @@ async def search_plugins(
 
 
 @router.post("/plugins", response_model=PluginResponse, status_code=201)
-async def create_plugin(plugin_data: PluginCreate, current_user: dict = Depends(get_current_user)):
+async def create_plugin(
+    plugin_data: PluginCreate, current_user: dict = Depends(get_current_user)
+):
     """
     Create a new plugin in marketplace
 
@@ -268,7 +278,9 @@ async def create_plugin(plugin_data: PluginCreate, current_user: dict = Depends(
                 status=row["status"],
                 featured=row["featured"],
                 download_count=row["download_count"],
-                rating_average=float(row["rating_average"]) if row["rating_average"] else None,
+                rating_average=(
+                    float(row["rating_average"]) if row["rating_average"] else None
+                ),
                 rating_count=row["rating_count"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
@@ -278,7 +290,9 @@ async def create_plugin(plugin_data: PluginCreate, current_user: dict = Depends(
             )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create plugin: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create plugin: {str(e)}"
+        )
 
 
 @router.get("/plugins/featured", response_model=PluginListResponse)
@@ -319,7 +333,9 @@ async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
                 status=row["status"],
                 featured=row["featured"],
                 download_count=row["download_count"],
-                rating_average=float(row["rating_average"]) if row["rating_average"] else None,
+                rating_average=(
+                    float(row["rating_average"]) if row["rating_average"] else None
+                ),
                 rating_count=row["rating_count"],
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
@@ -373,7 +389,9 @@ async def get_plugin(plugin_id: str):
             status=row["status"],
             featured=row["featured"],
             download_count=row["download_count"],
-            rating_average=float(row["rating_average"]) if row["rating_average"] else None,
+            rating_average=(
+                float(row["rating_average"]) if row["rating_average"] else None
+            ),
             rating_count=row["rating_count"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -381,6 +399,3 @@ async def get_plugin(plugin_id: str):
             developer_id=str(row["developer_id"]) if row["developer_id"] else None,
             category_id=str(row["category_id"]) if row["category_id"] else None,
         )
-
-
-

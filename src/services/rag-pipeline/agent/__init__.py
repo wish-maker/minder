@@ -10,7 +10,7 @@ from .decision_engine import (
     QueryAnalysis,
     PipelineDecision,
     QueryComplexity,
-    RetrievalStrategy
+    RetrievalStrategy,
 )
 
 __all__ = [
@@ -18,5 +18,5 @@ __all__ = [
     "QueryAnalysis",
     "PipelineDecision",
     "QueryComplexity",
-    "RetrievalStrategy"
+    "RetrievalStrategy",
 ]

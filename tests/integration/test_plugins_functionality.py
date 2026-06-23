@@ -224,17 +224,13 @@ class TestPluginLifecycle:
     def test_plugin_enable_endpoint_exists(self):
         """Test plugin enable endpoint is accessible"""
         # This would require authentication, so expect 401
-        response = requests.post(
-            "http://localhost:8000/v1/plugins/tefas/enable"
-        )
+        response = requests.post("http://localhost:8000/v1/plugins/tefas/enable")
         assert response.status_code in [200, 401, 404]
 
     def test_plugin_disable_endpoint_exists(self):
         """Test plugin disable endpoint is accessible"""
         # This would require authentication, so expect 401
-        response = requests.post(
-            "http://localhost:8000/v1/plugins/tefas/disable"
-        )
+        response = requests.post("http://localhost:8000/v1/plugins/tefas/disable")
         assert response.status_code in [200, 401, 404]
 
     def test_plugin_status_endpoint_exists(self):

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Optional dependency handling
 try:
     import asyncpg
+
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
@@ -62,7 +63,7 @@ class PostgreSQLClient:
         user: str = "minder",
         password: str = "minder",
         min_size: int = 5,
-        max_size: int = 20
+        max_size: int = 20,
     ):
         """
         Initialize PostgreSQL client
@@ -167,7 +168,7 @@ class PostgreSQLClient:
         try:
             if schema_file:
                 # Load schema from file
-                with open(schema_file, 'r') as f:
+                with open(schema_file, "r") as f:
                     schema_sql = f.read()
             else:
                 # Use default schema
@@ -199,7 +200,7 @@ class PostgreSQLClient:
 
             async with self.pool.acquire() as conn:
                 # Split and execute statements
-                statements = [s.strip() for s in schema_sql.split(';') if s.strip()]
+                statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
                 for statement in statements:
                     await conn.execute(statement)
 

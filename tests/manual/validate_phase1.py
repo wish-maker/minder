@@ -109,7 +109,10 @@ try:
             sys.exit(1)
 
     # Check for views
-    if "CREATE OR REPLACE VIEW" in sql_content or "create or replace view" in sql_content:
+    if (
+        "CREATE OR REPLACE VIEW" in sql_content
+        or "create or replace view" in sql_content
+    ):
         print("  ✅ Views defined")
 
     print("✅ SQL migration script valid")
@@ -121,7 +124,11 @@ except Exception as e:
 # Test 5: Import and test UnifiedDataAPI
 print("\n[5/6] Testing UnifiedDataAPI import...")
 try:
-    from plugins.tefas.unified_data_api import BORSAPY_AVAILABLE, TEFAS_CRAWLER_AVAILABLE, UnifiedDataAPI
+    from plugins.tefas.unified_data_api import (
+        BORSAPY_AVAILABLE,
+        TEFAS_CRAWLER_AVAILABLE,
+        UnifiedDataAPI,
+    )
 
     print("  ✅ UnifiedDataAPI imported successfully")
     print(f"  ℹ️  borsapy available: {BORSAPY_AVAILABLE}")
@@ -146,14 +153,24 @@ except Exception as e:
 # Test 6: Run unit tests
 print("\n[6/6] Running unit tests...")
 
-result = subprocess.run(["python3", "test_unified_api.py"], capture_output=True, text=True, cwd="/root/minder")
+result = subprocess.run(
+    ["python3", "test_unified_api.py"],
+    capture_output=True,
+    text=True,
+    cwd="/root/minder",
+)
 
 if result.returncode == 0:
     print("  ✅ All unit tests passed")
     # Show test summary
     lines = result.stdout.split("\n")
     for line in lines:
-        if "TEST SUMMARY" in line or "Tests run:" in line or "Successes:" in line or "✅" in line:
+        if (
+            "TEST SUMMARY" in line
+            or "Tests run:" in line
+            or "Successes:" in line
+            or "✅" in line
+        ):
             print(f"     {line}")
 else:
     print("  ❌ Unit tests failed")

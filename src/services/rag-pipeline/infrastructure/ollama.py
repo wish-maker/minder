@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Optional dependency handling
 try:
     from ollama import AsyncClient
+
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
@@ -112,8 +113,10 @@ class OllamaManager:
         """
         try:
             models = await self.client.list()
-            model_names = [m['name'] for m in models.get('models', [])]
-            logger.info(f"✅ Ollama connection verified. Available models: {model_names}")
+            model_names = [m["name"] for m in models.get("models", [])]
+            logger.info(
+                f"✅ Ollama connection verified. Available models: {model_names}"
+            )
         except Exception as e:
             logger.warning(f"⚠️ Ollama connection test failed: {e}")
 
@@ -136,7 +139,8 @@ class OllamaManager:
 
             # Check if model exists with any version tag
             model_exists = any(
-                model_name in available_model or available_model.startswith(model_name + ":")
+                model_name in available_model
+                or available_model.startswith(model_name + ":")
                 for available_model in available
             )
 
@@ -155,7 +159,7 @@ class OllamaManager:
         texts: List[str],
         model: str,
         cache: Optional[Any] = None,
-        embedding_dimensions: int = 768
+        embedding_dimensions: int = 768,
     ) -> List[List[float]]:
         """
         Generate embeddings using Ollama with optional cache
@@ -216,7 +220,7 @@ class OllamaManager:
         model: str,
         context: str = "",
         temperature: float = 0.7,
-        stream: bool = False
+        stream: bool = False,
     ) -> Dict[str, Any]:
         """
         Generate response using Ollama LLM
@@ -270,7 +274,8 @@ class OllamaManager:
                 "text": response.get("response", ""),
                 "model": model,
                 "context": context,
-                "tokens_used": response.get("prompt_eval_count", 0) + response.get("eval_count", 0),
+                "tokens_used": response.get("prompt_eval_count", 0)
+                + response.get("eval_count", 0),
             }
 
         except Exception as e:

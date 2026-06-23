@@ -99,13 +99,19 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={
             "error": "Internal server error",
-            "detail": str(exc) if settings.ENVIRONMENT == "development" else "An error occurred",
+            "detail": (
+                str(exc)
+                if settings.ENVIRONMENT == "development"
+                else "An error occurred"
+            ),
         },
     )
 
 
 from services.marketplace.routes.ai_tools import router as ai_tools_router
-from services.marketplace.routes.graph_dependencies import router as graph_dependencies_router
+from services.marketplace.routes.graph_dependencies import (
+    router as graph_dependencies_router,
+)
 from services.marketplace.routes.licensing import router as licensing_router
 from services.marketplace.routes.management import router as management_router
 

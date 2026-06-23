@@ -82,6 +82,7 @@ async def api_client(clean_database):
     """
     # Clear prometheus metrics before importing main
     from prometheus_client import REGISTRY
+
     for collector in list(REGISTRY._collector_to_names.keys()):
         try:
             REGISTRY.unregister(collector)
@@ -92,6 +93,7 @@ async def api_client(clean_database):
 
     # Import main module (prometheus metrics will be created fresh)
     import main
+
     app = main.app
 
     transport = ASGITransport(app=app)
@@ -118,11 +120,14 @@ class TestAuthFlowE2E:
         import asyncpg
         from modules.auth import get_pg_pool
 
-        response = await api_client.post("/v1/auth/register", json={
-            "username": "e2euser",
-            "email": "e2e@example.com",
-            "password": "E2EPass123!"
-        })
+        response = await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "e2euser",
+                "email": "e2e@example.com",
+                "password": "E2EPass123!",
+            },
+        )
 
         assert response.status_code == 200, f"Register failed: {response.text}"
         data = response.json()
@@ -135,7 +140,7 @@ class TestAuthFlowE2E:
         async with pool.acquire() as conn:
             row = await conn.fetchrow(
                 "SELECT username, email, password_hash FROM users WHERE username = $1",
-                "e2euser"
+                "e2euser",
             )
             assert row is not None, "User not found in database"
             assert row["username"] == "e2euser"
@@ -146,16 +151,19 @@ class TestAuthFlowE2E:
     async def test_2_login_correct_password_returns_jwt(self, api_client):
         """Step 2: Login with correct password returns valid JWT"""
         # First create a user for this test
-        await api_client.post("/v1/auth/register", json={
-            "username": "loginuser",
-            "email": "login@example.com",
-            "password": "LoginPass123!"
-        })
+        await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "loginuser",
+                "email": "login@example.com",
+                "password": "LoginPass123!",
+            },
+        )
 
-        response = await api_client.post("/v1/auth/login", json={
-            "username": "loginuser",
-            "password": "LoginPass123!"
-        })
+        response = await api_client.post(
+            "/v1/auth/login",
+            json={"username": "loginuser", "password": "LoginPass123!"},
+        )
 
         assert response.status_code == 200, f"Login failed: {response.text}"
         data = response.json()
@@ -168,6 +176,7 @@ class TestAuthFlowE2E:
 
         # Verify token can be decoded
         from modules.auth import verify_jwt_token
+
         payload = verify_jwt_token(data["access_token"])
         assert payload["username"] == "loginuser"
         assert "exp" in payload
@@ -176,31 +185,39 @@ class TestAuthFlowE2E:
 
     async def test_3_login_wrong_password_returns_401(self, api_client):
         """Step 3: Login with wrong password returns 401 Unauthorized"""
-        response = await api_client.post("/v1/auth/login", json={
-            "username": "e2euser",
-            "password": "WrongPassword123!"
-        })
+        response = await api_client.post(
+            "/v1/auth/login",
+            json={"username": "e2euser", "password": "WrongPassword123!"},
+        )
 
         assert response.status_code == 401, f"Expected 401, got {response.status_code}"
         data = response.json()
         assert "detail" in data
-        assert "invalid" in data["detail"].lower() or "incorrect" in data["detail"].lower()
+        assert (
+            "invalid" in data["detail"].lower() or "incorrect" in data["detail"].lower()
+        )
 
     async def test_4_duplicate_username_returns_400(self, api_client):
         """Step 4: Duplicate username is rejected"""
         # First create a user
-        await api_client.post("/v1/auth/register", json={
-            "username": "dupuser",
-            "email": "dup1@example.com",
-            "password": "DupPass123!"
-        })
+        await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "dupuser",
+                "email": "dup1@example.com",
+                "password": "DupPass123!",
+            },
+        )
 
         # Try to create with same username
-        response = await api_client.post("/v1/auth/register", json={
-            "username": "dupuser",  # Already exists
-            "email": "different@example.com",
-            "password": "AnotherPass123!"
-        })
+        response = await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "dupuser",  # Already exists
+                "email": "different@example.com",
+                "password": "AnotherPass123!",
+            },
+        )
 
         assert response.status_code == 400, f"Expected 400, got {response.status_code}"
         data = response.json()
@@ -209,18 +226,24 @@ class TestAuthFlowE2E:
     async def test_5_duplicate_email_returns_400(self, api_client):
         """Step 5: Duplicate email is rejected"""
         # First create a user
-        await api_client.post("/v1/auth/register", json={
-            "username": "emaildup1",
-            "email": "emaildup@example.com",
-            "password": "DupPass123!"
-        })
+        await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "emaildup1",
+                "email": "emaildup@example.com",
+                "password": "DupPass123!",
+            },
+        )
 
         # Try to create with same email
-        response = await api_client.post("/v1/auth/register", json={
-            "username": "differentuser",
-            "email": "emaildup@example.com",  # Already exists
-            "password": "AnotherPass123!"
-        })
+        response = await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "differentuser",
+                "email": "emaildup@example.com",  # Already exists
+                "password": "AnotherPass123!",
+            },
+        )
 
         assert response.status_code == 400, f"Expected 400, got {response.status_code}"
         data = response.json()
@@ -228,15 +251,21 @@ class TestAuthFlowE2E:
 
     async def test_6_weak_password_returns_400(self, api_client):
         """Step 6: Weak password (< 8 chars) is rejected"""
-        response = await api_client.post("/v1/auth/register", json={
-            "username": "weakuser",
-            "email": "weak@example.com",
-            "password": "short"  # Too short
-        })
+        response = await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "weakuser",
+                "email": "weak@example.com",
+                "password": "short",  # Too short
+            },
+        )
 
         assert response.status_code == 400, f"Expected 400, got {response.status_code}"
         data = response.json()
-        assert "at least 8 characters" in data["detail"] or "password" in data["detail"].lower()
+        assert (
+            "at least 8 characters" in data["detail"]
+            or "password" in data["detail"].lower()
+        )
 
 
 @pytest.mark.e2e
@@ -247,20 +276,24 @@ class TestAuthProtectedEndpoints:
     async def test_valid_jwt_allows_access(self, api_client):
         """Valid JWT allows access to protected endpoints"""
         # Create user and login
-        await api_client.post("/v1/auth/register", json={
-            "username": "protecteduser",
-            "email": "protected@example.com",
-            "password": "ProtectedPass123!"
-        })
+        await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "protecteduser",
+                "email": "protected@example.com",
+                "password": "ProtectedPass123!",
+            },
+        )
 
-        login = await api_client.post("/v1/auth/login", json={
-            "username": "protecteduser",
-            "password": "ProtectedPass123!"
-        })
+        login = await api_client.post(
+            "/v1/auth/login",
+            json={"username": "protecteduser", "password": "ProtectedPass123!"},
+        )
         token = login.json()["access_token"]
 
         # Test token verification directly
         from modules.auth import verify_jwt_token
+
         payload = verify_jwt_token(token)
         assert payload["username"] == "protecteduser"
         assert "exp" in payload
@@ -276,12 +309,10 @@ class TestAuthProtectedEndpoints:
         expired_payload = {
             "sub": "user123",
             "username": "testuser",
-            "exp": datetime.utcnow() - timedelta(hours=1)  # Expired
+            "exp": datetime.utcnow() - timedelta(hours=1),  # Expired
         }
         expired_token = jwt.encode(
-            expired_payload,
-            settings.JWT_SECRET,
-            algorithm="HS256"
+            expired_payload, settings.JWT_SECRET, algorithm="HS256"
         )
 
         with pytest.raises(HTTPException) as exc:

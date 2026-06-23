@@ -2,15 +2,16 @@
 Common Pydantic models for standard API requests
 Provides consistent request validation across all Minder services
 """
+
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 import re
 
-
 # ============================================================================
 # Pagination
 # ============================================================================
+
 
 class PaginationParams(BaseModel):
     """
@@ -40,6 +41,7 @@ class PaginationParams(BaseModel):
 # Search and Filter
 # ============================================================================
 
+
 class SearchParams(BaseModel):
     """
     Standard search parameters
@@ -48,9 +50,13 @@ class SearchParams(BaseModel):
         >>> params = SearchParams(query="ai", filters={"tag": "ml"})
     """
 
-    query: Optional[str] = Field(None, min_length=1, max_length=200, description="Search query")
+    query: Optional[str] = Field(
+        None, min_length=1, max_length=200, description="Search query"
+    )
     filters: Dict[str, Any] = Field(default_factory=dict, description="Filter criteria")
-    exact_match: bool = Field(False, description="Use exact match instead of fuzzy search")
+    exact_match: bool = Field(
+        False, description="Use exact match instead of fuzzy search"
+    )
 
     @field_validator("query")
     @classmethod
@@ -99,6 +105,7 @@ class FilterParams(BaseModel):
 # Common CRUD Operations
 # ============================================================================
 
+
 class IdRequest(BaseModel):
     """Request with single ID"""
 
@@ -108,7 +115,9 @@ class IdRequest(BaseModel):
 class BulkIdsRequest(BaseModel):
     """Request with multiple IDs"""
 
-    ids: List[str] = Field(..., min_length=1, description="List of resource identifiers")
+    ids: List[str] = Field(
+        ..., min_length=1, description="List of resource identifiers"
+    )
 
     @field_validator("ids")
     @classmethod
@@ -131,6 +140,7 @@ class BulkOperationRequest(BaseModel):
 # Service Communication
 # ============================================================================
 
+
 class ServiceRequest(BaseModel):
     """
     Request for service-to-service communication
@@ -148,12 +158,15 @@ class ServiceRequest(BaseModel):
     target_service: str = Field(..., description="Name of the target service")
     action: str = Field(..., description="Action to perform")
     payload: Dict[str, Any] = Field(default_factory=dict, description="Request payload")
-    request_id: Optional[str] = Field(None, description="Unique request identifier for tracing")
+    request_id: Optional[str] = Field(
+        None, description="Unique request identifier for tracing"
+    )
 
 
 # ============================================================================
 # Batch Processing
 # ============================================================================
+
 
 class BatchProcessRequest(BaseModel):
     """
@@ -169,15 +182,20 @@ class BatchProcessRequest(BaseModel):
     """
 
     operation: str = Field(..., description="Operation to perform")
-    items: List[Dict[str, Any]] = Field(..., min_length=1, max_length=1000, description="Items to process")
+    items: List[Dict[str, Any]] = Field(
+        ..., min_length=1, max_length=1000, description="Items to process"
+    )
     parallel: bool = Field(False, description="Process items in parallel")
     batch_size: int = Field(10, ge=1, le=100, description="Number of items per batch")
-    options: Dict[str, Any] = Field(default_factory=dict, description="Additional options")
+    options: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional options"
+    )
 
 
 # ============================================================================
 # Export/Import
 # ============================================================================
+
 
 class ExportRequest(BaseModel):
     """
@@ -191,8 +209,12 @@ class ExportRequest(BaseModel):
         ... )
     """
 
-    format: str = Field("json", pattern="^(json|csv|yaml)$", description="Export format")
-    filters: Dict[str, Any] = Field(default_factory=dict, description="Filters to apply")
+    format: str = Field(
+        "json", pattern="^(json|csv|yaml)$", description="Export format"
+    )
+    filters: Dict[str, Any] = Field(
+        default_factory=dict, description="Filters to apply"
+    )
     include_metadata: bool = Field(False, description="Include metadata in export")
     compress: bool = Field(False, description="Compress output")
 
@@ -210,7 +232,9 @@ class ImportRequest(BaseModel):
         ... )
     """
 
-    format: str = Field("json", pattern="^(json|csv|yaml)$", description="Import format")
+    format: str = Field(
+        "json", pattern="^(json|csv|yaml)$", description="Import format"
+    )
     data: Dict[str, Any] = Field(..., description="Data to import")
     overwrite: bool = Field(False, description="Overwrite existing data")
     skip_errors: bool = Field(True, description="Continue on errors")
@@ -221,11 +245,16 @@ class ImportRequest(BaseModel):
 # Admin Operations
 # ============================================================================
 
+
 class CacheInvalidationRequest(BaseModel):
     """Request to invalidate cache"""
 
-    cache_keys: Optional[List[str]] = Field(None, description="Specific cache keys to invalidate")
-    pattern: Optional[str] = Field(None, description="Pattern for cache keys to invalidate")
+    cache_keys: Optional[List[str]] = Field(
+        None, description="Specific cache keys to invalidate"
+    )
+    pattern: Optional[str] = Field(
+        None, description="Pattern for cache keys to invalidate"
+    )
     invalidate_all: bool = Field(False, description="Invalidate all cache")
 
 
@@ -233,13 +262,16 @@ class MaintenanceRequest(BaseModel):
     """Request for maintenance operations"""
 
     operation: str = Field(..., pattern="^(vacuum|analyze|reindex|cleanup)$")
-    tables: Optional[List[str]] = Field(None, description="Specific tables to operate on")
+    tables: Optional[List[str]] = Field(
+        None, description="Specific tables to operate on"
+    )
     dry_run: bool = Field(False, description="Simulate without executing")
 
 
 # ============================================================================
 # Validation Helpers
 # ============================================================================
+
 
 def validate_identifier(value: str) -> str:
     """
@@ -285,6 +317,7 @@ def validate_json_field(value: Any) -> Dict[str, Any]:
     if isinstance(value, str):
         try:
             import json
+
             return json.loads(value)
         except json.JSONDecodeError:
             raise ValueError("Invalid JSON string")

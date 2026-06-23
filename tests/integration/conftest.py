@@ -25,7 +25,9 @@ os.environ["MINDER_PHASE"] = "1"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 # Add api-gateway to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../src/services/api-gateway"))
+sys.path.insert(
+    0, os.path.join(os.path.dirname(__file__), "../../src/services/api-gateway")
+)
 
 # Import config - it should now read from os.environ
 import config

@@ -47,8 +47,10 @@ plugins: Dict[str, Dict] = {}
 # Pydantic Models
 # ============================================================================
 
+
 class PluginInfo(BaseModel):
     """Basic plugin information"""
+
     name: str
     version: str
     description: str
@@ -58,6 +60,7 @@ class PluginInfo(BaseModel):
 
 class ServiceRegistration(BaseModel):
     """Service registration request"""
+
     name: str
     url: str
     health_check_url: Optional[str] = None
@@ -65,6 +68,7 @@ class ServiceRegistration(BaseModel):
 
 class PluginInstallationRequest(BaseModel):
     """Plugin installation request"""
+
     source: str  # "git" or "file"
     url: Optional[str] = None
     manifest: Optional[Dict] = None
@@ -72,6 +76,7 @@ class PluginInstallationRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     """Login request"""
+
     username: str
     password: str
 
@@ -92,13 +97,16 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 active_plugins_total = Gauge("active_plugins_total", "Number of active plugins")
 plugin_health_status = Gauge("plugin_health_status", "Plugin health status", ["plugin"])
 
 # ============================================================================
 # Startup/Shutdown Events
 # ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -130,12 +138,14 @@ async def shutdown_event():
     """Cleanup on shutdown"""
     logger.info("Shutting down Plugin Registry service...")
     from core.database import close_postgres_connection
+
     await close_postgres_connection()
 
 
 # ============================================================================
 # Health Check Loop
 # ============================================================================
+
 
 async def health_check_loop():
     """Background health check loop for all plugins"""
@@ -171,6 +181,7 @@ async def check_plugin_health(plugin_name: str) -> str:
 # Health & Metrics Endpoints
 # ============================================================================
 
+
 @app.get("/health")
 async def health_check():
     """Service health check endpoint"""
@@ -193,6 +204,7 @@ async def metrics():
 # Request Tracking Middleware
 # ============================================================================
 
+
 @app.middleware("http")
 async def track_requests(request: Request, call_next):
     """Track requests for metrics"""
@@ -205,9 +217,7 @@ async def track_requests(request: Request, call_next):
     # Update metrics
     duration = time.time() - start_time
     http_requests_total.labels(
-        method=request.method,
-        endpoint=request.url.path,
-        status=response.status_code
+        method=request.method, endpoint=request.url.path, status=response.status_code
     ).inc()
 
     return response
@@ -216,6 +226,7 @@ async def track_requests(request: Request, call_next):
 # ============================================================================
 # Authentication Endpoints
 # ============================================================================
+
 
 @app.post("/login")
 async def login(request: LoginRequest):
@@ -228,7 +239,7 @@ async def login(request: LoginRequest):
         return {
             "access_token": "demo_token",
             "token_type": "bearer",
-            "expires_in": 3600
+            "expires_in": 3600,
         }
 
     raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -246,6 +257,7 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
 # ============================================================================
 # Plugin List Endpoints
 # ============================================================================
+
 
 @app.get("/plugins", redirect_slash=False)
 async def list_plugins_redirect():
@@ -272,10 +284,10 @@ async def get_plugin(plugin_name: str):
 # Plugin Lifecycle Endpoints
 # ============================================================================
 
+
 @app.post("/v1/plugins/install")
 async def install_plugin(
-    request: PluginInstallationRequest,
-    background_tasks: BackgroundTasks
+    request: PluginInstallationRequest, background_tasks: BackgroundTasks
 ):
     """Install a new plugin"""
     plugin_name = f"plugin_{datetime.now().timestamp()}"
@@ -294,7 +306,9 @@ async def install_plugin(
 
 
 @app.delete("/v1/plugins/{plugin_name}")
-async def uninstall_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
+async def uninstall_plugin(
+    plugin_name: str, current_user: Dict = Depends(get_current_user)
+):
     """Uninstall a plugin"""
     if plugin_name not in plugins:
         raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found")
@@ -306,7 +320,9 @@ async def uninstall_plugin(plugin_name: str, current_user: Dict = Depends(get_cu
 
 
 @app.post("/v1/plugins/{plugin_name}/enable")
-async def enable_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
+async def enable_plugin(
+    plugin_name: str, current_user: Dict = Depends(get_current_user)
+):
     """Enable a plugin"""
     if plugin_name not in plugins:
         raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found")
@@ -318,7 +334,9 @@ async def enable_plugin(plugin_name: str, current_user: Dict = Depends(get_curre
 
 
 @app.post("/v1/plugins/{plugin_name}/disable")
-async def disable_plugin(plugin_name: str, current_user: Dict = Depends(get_current_user)):
+async def disable_plugin(
+    plugin_name: str, current_user: Dict = Depends(get_current_user)
+):
     """Disable a plugin"""
     if plugin_name not in plugins:
         raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found")
@@ -332,6 +350,7 @@ async def disable_plugin(plugin_name: str, current_user: Dict = Depends(get_curr
 # ============================================================================
 # Plugin Health Endpoints
 # ============================================================================
+
 
 @app.get("/v1/plugins/{plugin_name}/health")
 async def get_plugin_health(plugin_name: str):
@@ -368,6 +387,7 @@ async def trigger_plugin_collection(plugin_name: str):
 # Root Endpoint
 # ============================================================================
 
+
 @app.get("/")
 async def root():
     """Root endpoint"""
@@ -385,4 +405,5 @@ async def root():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8001)

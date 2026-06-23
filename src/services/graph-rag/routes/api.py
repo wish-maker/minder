@@ -3,6 +3,7 @@ API Routes for Graph RAG Service
 
 All FastAPI endpoints for entity extraction, graph construction, and retrieval.
 """
+
 import logging
 
 from fastapi import HTTPException
@@ -26,14 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 async def extract_entities_handler(
-    request: EntityExtractionRequest,
-    entity_extractor: EntityExtractor
+    request: EntityExtractionRequest, entity_extractor: EntityExtractor
 ) -> EntityExtractionResponse:
     """Handle entity extraction requests"""
     try:
         result = entity_extractor.extract_entities(
-            text=request.text,
-            extract_relationships=request.extract_relationships
+            text=request.text, extract_relationships=request.extract_relationships
         )
 
         return EntityExtractionResponse(
@@ -41,7 +40,7 @@ async def extract_entities_handler(
             entities=result["entities"],
             relationships=result["relationships"],
             entity_count=result["entity_count"],
-            relationship_count=result["relationship_count"]
+            relationship_count=result["relationship_count"],
         )
 
     except Exception as e:
@@ -52,14 +51,13 @@ async def extract_entities_handler(
 async def construct_knowledge_graph_handler(
     request: KnowledgeGraphRequest,
     entity_extractor: EntityExtractor,
-    graph_constructor: KnowledgeGraphConstructor
+    graph_constructor: KnowledgeGraphConstructor,
 ) -> KnowledgeGraphResponse:
     """Handle knowledge graph construction requests"""
     try:
         # Extract entities first
         extraction_result = entity_extractor.extract_entities(
-            text=request.text,
-            extract_relationships=True
+            text=request.text, extract_relationships=True
         )
 
         # Create document node
@@ -67,25 +65,23 @@ async def construct_knowledge_graph_handler(
             document_id=request.document_id,
             title=request.title,
             source=request.source,
-            metadata=request.metadata
+            metadata=request.metadata,
         )
 
         # Create entity nodes
         entity_ids = await graph_constructor.create_entity_nodes(
-            document_id=request.document_id,
-            entities=extraction_result["entities"]
+            document_id=request.document_id, entities=extraction_result["entities"]
         )
 
         # Create relationship nodes
         relationship_count = await graph_constructor.create_relationship_nodes(
             document_id=request.document_id,
-            relationships=extraction_result["relationships"]
+            relationships=extraction_result["relationships"],
         )
 
         # Link document to entities
         await graph_constructor.link_document_to_entities(
-            document_id=request.document_id,
-            entity_ids=entity_ids
+            document_id=request.document_id, entity_ids=entity_ids
         )
 
         return KnowledgeGraphResponse(
@@ -93,7 +89,7 @@ async def construct_knowledge_graph_handler(
             document_id=request.document_id,
             entity_count=len(extraction_result["entities"]),
             relationship_count=relationship_count,
-            message=f"Knowledge graph constructed with {len(extraction_result['entities'])} entities"
+            message=f"Knowledge graph constructed with {len(extraction_result['entities'])} entities",
         )
 
     except Exception as e:
@@ -104,11 +100,12 @@ async def construct_knowledge_graph_handler(
 async def retrieve_with_graph_handler(
     request: GraphRetrievalRequest,
     entity_extractor: EntityExtractor,
-    graph_retriever: GraphRetriever
+    graph_retriever: GraphRetriever,
 ) -> GraphRetrievalResponse:
     """Handle graph-based retrieval requests"""
     try:
         import time
+
         start_time = time.time()
 
         # Extract entities from query
@@ -120,7 +117,7 @@ async def retrieve_with_graph_handler(
                 query=request.query,
                 related_entities=[],
                 entity_count=0,
-                retrieval_time_ms=(time.time() - start_time) * 1000
+                retrieval_time_ms=(time.time() - start_time) * 1000,
             )
 
         # DEBUG: Log extracted entities
@@ -130,7 +127,10 @@ async def retrieve_with_graph_handler(
         # Split query into tokens and search for each significant token
         # This handles cases like "Bill Gates Microsoft" where spaCy extracts multi-word entities
         import re
-        tokens = re.findall(r'\b[A-Z][a-z]+\b', request.query)  # Extract capitalized words
+
+        tokens = re.findall(
+            r"\b[A-Z][a-z]+\b", request.query
+        )  # Extract capitalized words
         tokens = list(set(tokens))  # Remove duplicates
 
         if len(tokens) == 0:
@@ -140,7 +140,7 @@ async def retrieve_with_graph_handler(
                 query=request.query,
                 related_entities=[],
                 entity_count=0,
-                retrieval_time_ms=(time.time() - start_time) * 1000
+                retrieval_time_ms=(time.time() - start_time) * 1000,
             )
 
         logger.info(f"🔍 Split query into tokens: {tokens}")
@@ -154,7 +154,7 @@ async def retrieve_with_graph_handler(
             entities = await graph_retriever.find_related_entities(
                 entity_name=token,
                 max_depth=request.traversal_depth,
-                limit=request.limit
+                limit=request.limit,
             )
             logger.info(f"🔍 Found {len(entities)} related entities for '{token}'")
             for e in entities:
@@ -171,7 +171,7 @@ async def retrieve_with_graph_handler(
             query=request.query,
             related_entities=related_entities,
             entity_count=len(related_entities),
-            retrieval_time_ms=retrieval_time_ms
+            retrieval_time_ms=retrieval_time_ms,
         )
 
     except Exception as e:
@@ -180,14 +180,12 @@ async def retrieve_with_graph_handler(
 
 
 async def get_entity_context_handler(
-    request: EntityContextRequest,
-    graph_retriever: GraphRetriever
+    request: EntityContextRequest, graph_retriever: GraphRetriever
 ) -> EntityContextResponse:
     """Handle entity context retrieval requests"""
     try:
         context_result = await graph_retriever.get_entity_context(
-            entity_text=request.entity_text,
-            include_neighbors=request.include_neighbors
+            entity_text=request.entity_text, include_neighbors=request.include_neighbors
         )
 
         if "error" in context_result:
@@ -198,7 +196,7 @@ async def get_entity_context_handler(
             entity=context_result.get("entity", {}),
             related_entities=context_result.get("related_entities", []),
             documents=context_result.get("documents", []),
-            context_window=context_result.get("context_window", 3)
+            context_window=context_result.get("context_window", 3),
         )
 
     except HTTPException:

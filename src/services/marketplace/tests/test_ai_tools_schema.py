@@ -119,7 +119,9 @@ async def test_ai_tools_configuration_table():
         """,
             plugin_id,
             "test_tool",
-            json.dumps({"type": "object", "properties": {"api_key": {"type": "string"}}}),
+            json.dumps(
+                {"type": "object", "properties": {"api_key": {"type": "string"}}}
+            ),
             json.dumps({"api_key": "default_key"}),
         )
 
@@ -133,7 +135,9 @@ async def test_ai_tools_configuration_table():
         await conn.execute(
             "DELETE FROM marketplace_ai_tools_configurations WHERE tool_name = 'test_tool'"
         )
-        await conn.execute("DELETE FROM marketplace_plugins WHERE name LIKE 'test_plugin_%'")
+        await conn.execute(
+            "DELETE FROM marketplace_plugins WHERE name LIKE 'test_plugin_%'"
+        )
 
     finally:
         await conn.close()

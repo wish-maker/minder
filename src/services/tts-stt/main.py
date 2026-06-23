@@ -69,9 +69,13 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-tts_requests_total = Counter("tts_requests_total", "Total TTS requests", ["language", "status"])
+tts_requests_total = Counter(
+    "tts_requests_total", "Total TTS requests", ["language", "status"]
+)
 
-stt_requests_total = Counter("stt_requests_total", "Total STT requests", ["language", "status"])
+stt_requests_total = Counter(
+    "stt_requests_total", "Total STT requests", ["language", "status"]
+)
 
 # ============================================================================
 # Pydantic Models
@@ -107,7 +111,9 @@ async def text_to_speech(request: TTSRequest):
 
     # Validate language
     if request.language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(status_code=400, detail=f"Unsupported language: {request.language}")
+        raise HTTPException(
+            status_code=400, detail=f"Unsupported language: {request.language}"
+        )
 
     try:
         tts_requests_total.labels(language=request.language, status="success").inc()
@@ -162,7 +168,9 @@ async def get_tts_languages():
 
 
 @app.post("/stt", response_model=STTResponse, tags=["STT"])
-async def speech_to_text(file: UploadFile = File(...), language: str = DEFAULT_STT_LANG):
+async def speech_to_text(
+    file: UploadFile = File(...), language: str = DEFAULT_STT_LANG
+):
     """Convert speech to text"""
     if not STT_AVAILABLE:
         raise HTTPException(status_code=503, detail="STT not available")

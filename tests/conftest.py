@@ -39,7 +39,9 @@ try:
         # Add service directory to sys.path for relative imports
         sys.path.insert(0, str(service_path))
 
-        spec = importlib.util.spec_from_file_location(module_name, service_path / "main.py")
+        spec = importlib.util.spec_from_file_location(
+            module_name, service_path / "main.py"
+        )
         module = importlib.util.module_from_spec(spec)
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
@@ -56,37 +58,49 @@ try:
     tts_app = None
 
     try:
-        gateway_app = load_service_module(services_base / "api-gateway", "api_gateway.main")
+        gateway_app = load_service_module(
+            services_base / "api-gateway", "api_gateway.main"
+        )
         print("✅ Loaded API Gateway")
     except Exception as e:
         print(f"❌ Failed to load API Gateway: {e}")
 
     try:
-        registry_app = load_service_module(services_base / "plugin-registry", "plugin_registry.main")
+        registry_app = load_service_module(
+            services_base / "plugin-registry", "plugin_registry.main"
+        )
         print("✅ Loaded Plugin Registry")
     except Exception as e:
         print(f"❌ Failed to load Plugin Registry: {e}")
 
     try:
-        marketplace_app = load_service_module(services_base / "marketplace", "marketplace.main")
+        marketplace_app = load_service_module(
+            services_base / "marketplace", "marketplace.main"
+        )
         print("✅ Loaded Marketplace")
     except Exception as e:
         print(f"❌ Failed to load Marketplace: {e}")
 
     try:
-        rag_app = load_service_module(services_base / "rag-pipeline", "rag_pipeline.main")
+        rag_app = load_service_module(
+            services_base / "rag-pipeline", "rag_pipeline.main"
+        )
         print("✅ Loaded RAG Pipeline")
     except Exception as e:
         print(f"❌ Failed to load RAG Pipeline: {e}")
 
     try:
-        model_app = load_service_module(services_base / "model-management", "model_management.main")
+        model_app = load_service_module(
+            services_base / "model-management", "model_management.main"
+        )
         print("✅ Loaded Model Management")
     except Exception as e:
         print(f"❌ Failed to load Model Management: {e}")
 
     try:
-        tts_app = load_service_module(services_base / "tts-stt-service", "tts_stt_service.main")
+        tts_app = load_service_module(
+            services_base / "tts-stt-service", "tts_stt_service.main"
+        )
         print("✅ Loaded TTS-STT Service")
     except Exception as e:
         print(f"❌ Failed to load TTS-STT Service: {e}")
@@ -106,14 +120,17 @@ def test_database_url():
     """Get test database URL"""
     # Default to Docker container database URL for tests
     return os.getenv(
-        "TEST_DATABASE_URL", "postgresql://minder:PG8sjzqq5jqIf8gSkUIsexKioz1RQVSO@minder-postgres:5432/minder_test"
+        "TEST_DATABASE_URL",
+        "postgresql://minder:PG8sjzqq5jqIf8gSkUIsexKioz1RQVSO@minder-postgres:5432/minder_test",
     )
 
 
 @pytest_asyncio.fixture(scope="function")
 async def test_db_pool(test_database_url):
     """Create test database connection pool"""
-    pool = await asyncpg.create_pool(test_database_url, min_size=1, max_size=5, command_timeout=60)
+    pool = await asyncpg.create_pool(
+        test_database_url, min_size=1, max_size=5, command_timeout=60
+    )
 
     yield pool
 
@@ -156,7 +173,9 @@ def redis_client(redis_url):
     try:
         import redis
 
-        return redis.from_url(redis_url, decode_responses=True, socket_timeout=5, socket_connect_timeout=5)
+        return redis.from_url(
+            redis_url, decode_responses=True, socket_timeout=5, socket_connect_timeout=5
+        )
     except Exception as e:
         print(f"Warning: Redis client not available: {e}")
         return None
@@ -327,7 +346,11 @@ def sample_plugin_data():
 @pytest.fixture(scope="function")
 def sample_user_data():
     """Sample user data"""
-    return {"username": "testuser", "email": "test@example.com", "password": "TestPassword123!"}
+    return {
+        "username": "testuser",
+        "email": "test@example.com",
+        "password": "TestPassword123!",
+    }
 
 
 @pytest.fixture(scope="function")
@@ -342,14 +365,21 @@ def sample_plugin_manifest():
         "repository": "https://github.com/test/test-plugin",
         "dependencies": [],
         "capabilities": ["data_collection", "ai_tools"],
-        "configuration": {"database": {"schema": "test_plugin"}, "api": {"base_url": "http://localhost:8001"}},
+        "configuration": {
+            "database": {"schema": "test_plugin"},
+            "api": {"base_url": "http://localhost:8001"},
+        },
     }
 
 
 @pytest.fixture(scope="function")
 def sample_rag_query():
     """Sample RAG query"""
-    return {"query": "What is the purpose of this plugin?", "context": ["plugin context"], "max_results": 5}
+    return {
+        "query": "What is the purpose of this plugin?",
+        "context": ["plugin context"],
+        "max_results": 5,
+    }
 
 
 @pytest.fixture(scope="function")
@@ -363,18 +393,28 @@ def sample_tts_request():
 def assert_response():
     """Utility for asserting HTTP responses"""
 
-    def _assert(response, status_code: int = None, has_error: bool = False, error_code: str = None):
+    def _assert(
+        response,
+        status_code: int = None,
+        has_error: bool = False,
+        error_code: str = None,
+    ):
         if status_code is not None:
-            assert response.status_code == status_code, f"Expected status {status_code}, got {response.status_code}"
+            assert (
+                response.status_code == status_code
+            ), f"Expected status {status_code}, got {response.status_code}"
 
         if has_error:
-            assert "error" in response.json() or "detail" in response.json(), "Expected error in response"
+            assert (
+                "error" in response.json() or "detail" in response.json()
+            ), "Expected error in response"
 
             if error_code:
                 json_response = response.json()
                 error_obj = json_response.get("error", json_response)
                 assert (
-                    error_obj.get("code") == error_code or json_response.get("detail") == error_code
+                    error_obj.get("code") == error_code
+                    or json_response.get("detail") == error_code
                 ), f"Expected error code {error_code}"
 
     return _assert
@@ -386,7 +426,9 @@ def gateway_test_client_no_redis():
     """Create test client without Redis dependency (for testing without rate limiting)"""
     # Access to FastAPI app from the module
     if gateway_app:
-        with unittest.mock.patch("services.api-gateway.main.redis_client", return_value=None):
+        with unittest.mock.patch(
+            "services.api-gateway.main.redis_client", return_value=None
+        ):
             return TestClient(gateway_app.app)
     else:
         return TestClient(None)
@@ -456,7 +498,11 @@ def sample_plugin_list():
                 "technical_analysis",
                 "fund_screening",
             ],
-            "data_sources": ["TEFAS (via tefas-crawler)", "TEFAS (via borsapy 0.8.7)", "KAP"],
+            "data_sources": [
+                "TEFAS (via tefas-crawler)",
+                "TEFAS (via borsapy 0.8.7)",
+                "KAP",
+            ],
             "databases": ["postgresql", "influxdb"],
             "registered_at": "2026-05-01T06:41:40.555350",
             "health_status": "healthy",
@@ -470,7 +516,11 @@ def sample_plugin_list():
             "status": "enabled",
             "enabled": True,
             "dependencies": [],
-            "capabilities": ["weather_data_collection", "forecast_analysis", "seasonal_pattern_detection"],
+            "capabilities": [
+                "weather_data_collection",
+                "forecast_analysis",
+                "seasonal_pattern_detection",
+            ],
             "data_sources": ["Open-Meteo API"],
             "databases": ["postgresql", "influxdb"],
             "registered_at": "2026-05-01T06:41:37.654885",

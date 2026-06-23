@@ -2,6 +2,7 @@
 Service URL configuration utilities
 Central management of internal service URLs and endpoints
 """
+
 import os
 from typing import Optional
 from urllib.parse import urljoin

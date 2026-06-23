@@ -113,7 +113,9 @@ class TestDataFlow:
         3. Plugin State Manager tracks
         4. Notification sent
         """
-        install_response = gateway_client.post("/v1/plugins/install", json={"name": "test-plugin", "version": "1.0.0"})
+        install_response = gateway_client.post(
+            "/v1/plugins/install", json={"name": "test-plugin", "version": "1.0.0"}
+        )
 
         # Accept various status codes depending on implementation
         assert install_response.status_code in [200, 201, 404, 501, 503]
@@ -175,7 +177,10 @@ class TestErrorPropagation:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
             futures = [executor.submit(make_request) for _ in range(50)]
-            results = [future.result(timeout=10) for future in concurrent.futures.as_completed(futures)]
+            results = [
+                future.result(timeout=10)
+                for future in concurrent.futures.as_completed(futures)
+            ]
 
         # Most should succeed (200)
         success_count = sum(1 for code in results if code == 200)
@@ -240,7 +245,8 @@ class TestLoadBalancing:
         # If load balancing is implemented, we should see multiple server IDs
         # For now, just verify the requests succeeded
         assert all(
-            response.status_code in [200, 503] for response in [gateway_client.get("/health") for _ in range(20)]
+            response.status_code in [200, 503]
+            for response in [gateway_client.get("/health") for _ in range(20)]
         )
 
 
@@ -287,7 +293,10 @@ class TestDatabaseConnections:
         # Make 50 concurrent requests
         with concurrent.futures.ThreadPoolExecutor(max_workers=50) as executor:
             futures = [executor.submit(make_request) for _ in range(50)]
-            results = [future.result(timeout=10) for future in concurrent.futures.as_completed(futures)]
+            results = [
+                future.result(timeout=10)
+                for future in concurrent.futures.as_completed(futures)
+            ]
 
         # Most should succeed
         success_count = sum(1 for code in results if code in [200, 404])
@@ -307,7 +316,9 @@ class TestMessageQueues:
         3. Status updates are provided
         """
         # Submit a long-running task
-        task_response = gateway_client.post("/v1/rag/tasks", json={"type": "bulk_index", "documents": []})
+        task_response = gateway_client.post(
+            "/v1/rag/tasks", json={"type": "bulk_index", "documents": []}
+        )
 
         # Accept various status codes
         assert task_response.status_code in [201, 202, 501, 503]
@@ -382,7 +393,10 @@ class TestScalability:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
             futures = [executor.submit(make_request) for _ in range(100)]
-            results = [future.result(timeout=15) for future in concurrent.futures.as_completed(futures)]
+            results = [
+                future.result(timeout=15)
+                for future in concurrent.futures.as_completed(futures)
+            ]
 
         # Calculate success rate
         success_count = sum(1 for code in results if code == 200)

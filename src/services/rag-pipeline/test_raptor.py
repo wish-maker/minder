@@ -14,8 +14,7 @@ from typing import Dict, Any
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -33,8 +32,10 @@ TEST_CONFIG = {
 # Test Utilities
 # ============================================================================
 
+
 class TestResult:
     """Test result tracker"""
+
     def __init__(self):
         self.total = 0
         self.passed = 0
@@ -59,7 +60,7 @@ class TestResult:
             "passed": self.passed,
             "failed": self.failed,
             "success_rate": success_rate,
-            "errors": self.errors
+            "errors": self.errors,
         }
 
 
@@ -110,6 +111,7 @@ def assert_contains(collection, item, test_name: str):
 # Unit Tests: RAPTORChunker
 # ============================================================================
 
+
 def test_raptor_chunker_initialization():
     """Test RAPTORChunker initialization"""
     try:
@@ -119,12 +121,18 @@ def test_raptor_chunker_initialization():
             chunk_size=TEST_CONFIG["chunk_size"],
             chunk_overlap=TEST_CONFIG["chunk_overlap"],
             max_tree_depth=TEST_CONFIG["max_tree_depth"],
-            cluster_size=TEST_CONFIG["cluster_size"]
+            cluster_size=TEST_CONFIG["cluster_size"],
         )
 
         assert_not_none(chunker, "Chunker initialization")
-        assert_equal(chunker.chunk_size, TEST_CONFIG["chunk_size"], "Chunk size setting")
-        assert_equal(chunker.max_tree_depth, TEST_CONFIG["max_tree_depth"], "Max tree depth setting")
+        assert_equal(
+            chunker.chunk_size, TEST_CONFIG["chunk_size"], "Chunk size setting"
+        )
+        assert_equal(
+            chunker.max_tree_depth,
+            TEST_CONFIG["max_tree_depth"],
+            "Max tree depth setting",
+        )
 
     except Exception as e:
         results.add_fail("Chunker initialization", str(e))
@@ -152,9 +160,7 @@ def test_raptor_tree_creation_basic():
         from raptor_rag import RAPTORChunker
 
         chunker = RAPTORChunker(
-            chunk_size=TEST_CONFIG["chunk_size"],
-            max_tree_depth=2,
-            cluster_size=4
+            chunk_size=TEST_CONFIG["chunk_size"], max_tree_depth=2, cluster_size=4
         )
 
         # Create test text
@@ -193,7 +199,9 @@ def test_cosine_similarity_calculation():
 
         # Identical vectors
         sim_identical = chunker._cosine_similarity(vec1, vec3)
-        assert_true(abs(sim_identical - 1.0) < 0.01, "Identical vectors have ~1 similarity")
+        assert_true(
+            abs(sim_identical - 1.0) < 0.01, "Identical vectors have ~1 similarity"
+        )
 
     except Exception as e:
         results.add_fail("Cosine similarity calculation", str(e))
@@ -203,6 +211,7 @@ def test_cosine_similarity_calculation():
 # Unit Tests: RAPTORRetriever
 # ============================================================================
 
+
 def test_raptor_retriever_initialization():
     """Test RAPTORRetriever initialization"""
     try:
@@ -211,7 +220,10 @@ def test_raptor_retriever_initialization():
         retriever = RAPTORRetriever()
         assert_not_none(retriever, "Retriever initialization")
         assert_true(isinstance(retriever.trees, dict), "Trees is a dictionary")
-        assert_true(isinstance(retriever.tree_embeddings, dict), "Tree embeddings is a dictionary")
+        assert_true(
+            isinstance(retriever.tree_embeddings, dict),
+            "Tree embeddings is a dictionary",
+        )
 
     except Exception as e:
         results.add_fail("Retriever initialization", str(e))
@@ -229,8 +241,8 @@ def test_raptor_tree_indexing():
             "type": "leaves",
             "leaves": [
                 {"id": "leaf_1", "type": "leaf", "text": "Text 1"},
-                {"id": "leaf_2", "type": "leaf", "text": "Text 2"}
-            ]
+                {"id": "leaf_2", "type": "leaf", "text": "Text 2"},
+            ],
         }
 
         retriever.index_tree("test_kb", mock_tree)
@@ -248,12 +260,21 @@ def test_query_specificity_analysis():
         retriever = RAPTORRetriever()
 
         # General query
-        specificity_general = retriever._analyze_query_specificity("What is machine learning?")
-        assert_true(0.0 <= specificity_general <= 1.0, "General query specificity in range")
+        specificity_general = retriever._analyze_query_specificity(
+            "What is machine learning?"
+        )
+        assert_true(
+            0.0 <= specificity_general <= 1.0, "General query specificity in range"
+        )
 
         # Specific query (with quotes and numbers)
-        specificity_specific = retriever._analyze_query_specificity('Find "machine learning" algorithms from 2020')
-        assert_true(specificity_specific > specificity_general, "Specific query has higher specificity")
+        specificity_specific = retriever._analyze_query_specificity(
+            'Find "machine learning" algorithms from 2020'
+        )
+        assert_true(
+            specificity_specific > specificity_general,
+            "Specific query has higher specificity",
+        )
 
     except Exception as e:
         results.add_fail("Query specificity analysis", str(e))
@@ -263,16 +284,13 @@ def test_query_specificity_analysis():
 # Integration Tests (Mock)
 # ============================================================================
 
+
 def test_raptor_end_to_end_mock():
     """Test end-to-end RAPTOR pipeline with mocked LLM"""
     try:
         from raptor_rag import RAPTORChunker
 
-        chunker = RAPTORChunker(
-            chunk_size=256,
-            max_tree_depth=2,
-            cluster_size=4
-        )
+        chunker = RAPTORChunker(chunk_size=256, max_tree_depth=2, cluster_size=4)
 
         # Create test document
         test_text = """
@@ -297,7 +315,10 @@ def test_raptor_end_to_end_mock():
         assert_greater_than(len(chunks), 3, "Document chunked properly")
 
         # Verify chunk content
-        assert_true(any("neural" in chunk.lower() for chunk in chunks), "Chunks contain expected keywords")
+        assert_true(
+            any("neural" in chunk.lower() for chunk in chunks),
+            "Chunks contain expected keywords",
+        )
 
     except Exception as e:
         results.add_fail("End-to-end mock test", str(e))
@@ -306,6 +327,7 @@ def test_raptor_end_to_end_mock():
 # ============================================================================
 # Edge Cases and Error Handling
 # ============================================================================
+
 
 def test_empty_text_handling():
     """Test handling of empty text"""
@@ -316,7 +338,10 @@ def test_empty_text_handling():
         chunks = chunker._chunk_text("")
 
         # Should return empty list or single empty chunk
-        assert_true(len(chunks) == 0 or (len(chunks) == 1 and chunks[0] == ""), "Empty text handled gracefully")
+        assert_true(
+            len(chunks) == 0 or (len(chunks) == 1 and chunks[0] == ""),
+            "Empty text handled gracefully",
+        )
 
     except Exception as e:
         results.add_fail("Empty text handling", str(e))
@@ -359,6 +384,7 @@ def test_non_ascii_text():
 # Run All Tests
 # ============================================================================
 
+
 def run_all_tests():
     """Run all test suites"""
     logger.info("🧪 Starting RAPTOR Test Suite")
@@ -398,14 +424,14 @@ def run_all_tests():
     logger.info(f"Failed: {summary['failed']}")
     logger.info(f"Success Rate: {summary['success_rate']:.1f}%")
 
-    if summary['errors']:
+    if summary["errors"]:
         logger.error("\n❌ Failed Tests:")
-        for test_name, error in summary['errors']:
+        for test_name, error in summary["errors"]:
             logger.error(f"  - {test_name}: {error}")
 
     logger.info("=" * 60)
 
-    return summary['failed'] == 0
+    return summary["failed"] == 0
 
 
 if __name__ == "__main__":

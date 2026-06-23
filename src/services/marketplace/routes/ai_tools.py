@@ -105,7 +105,9 @@ async def get_plugin_ai_tools(plugin_id: str):
 
     async with pool.acquire() as conn:
         # Check if plugin exists
-        plugin = await conn.fetchrow("SELECT * FROM marketplace_plugins WHERE id = $1", plugin_id)
+        plugin = await conn.fetchrow(
+            "SELECT * FROM marketplace_plugins WHERE id = $1", plugin_id
+        )
 
         if not plugin:
             raise HTTPException(status_code=404, detail="Plugin not found")
@@ -201,7 +203,9 @@ async def get_ai_tool_details(tool_name: str):
 
 
 @router.post("/sync")
-async def sync_ai_tools(request: AIToolsSyncRequest, current_user: dict = Depends(get_current_user)):
+async def sync_ai_tools(
+    request: AIToolsSyncRequest, current_user: dict = Depends(get_current_user)
+):
     """
     Sync AI tools from plugin manifest
 
@@ -216,18 +220,24 @@ async def sync_ai_tools(request: AIToolsSyncRequest, current_user: dict = Depend
     """
     try:
         result = await sync_plugin_tools(
-            plugin_name=request.plugin_name, plugin_id=request.plugin_id, manifest=request.manifest
+            plugin_name=request.plugin_name,
+            plugin_id=request.plugin_id,
+            manifest=request.manifest,
         )
 
         return result
 
     except Exception as e:
         logger.error(f"AI tools sync failed for {request.plugin_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to sync AI tools: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to sync AI tools: {str(e)}"
+        )
 
 
 @router.delete("/plugins/{plugin_id}/tools")
-async def deactivate_plugin_tools(plugin_id: str, current_user: dict = Depends(get_current_user)):
+async def deactivate_plugin_tools(
+    plugin_id: str, current_user: dict = Depends(get_current_user)
+):
     """
     Deactivate all AI tools for a plugin
 
@@ -244,4 +254,6 @@ async def deactivate_plugin_tools(plugin_id: str, current_user: dict = Depends(g
 
     except Exception as e:
         logger.error(f"Failed to deactivate tools for plugin {plugin_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to deactivate tools: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to deactivate tools: {str(e)}"
+        )

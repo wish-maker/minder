@@ -231,7 +231,9 @@ class AIToolsManager:
                 )
 
             if not row:
-                raise ValueError(f"Tool registration not found: {plugin_id}/{tool_name}")
+                raise ValueError(
+                    f"Tool registration not found: {plugin_id}/{tool_name}"
+                )
 
             return {
                 "id": str(row["id"]),
@@ -272,7 +274,9 @@ class AIToolsManager:
 
             schema = json.loads(row["configuration_schema"])
             required_params = (
-                json.loads(row["required_parameters"]) if row["required_parameters"] else {}
+                json.loads(row["required_parameters"])
+                if row["required_parameters"]
+                else {}
             )
 
             # Validate against schema
@@ -288,7 +292,9 @@ class AIToolsManager:
                 if missing_params:
                     return {
                         "is_valid": False,
-                        "errors": [f"Missing required parameters: {', '.join(missing_params)}"],
+                        "errors": [
+                            f"Missing required parameters: {', '.join(missing_params)}"
+                        ],
                     }
 
                 # Update validation status in database
@@ -392,7 +398,10 @@ class AIToolsManager:
             return tools
 
     async def get_all_ai_tools(
-        self, active_only: bool = True, category: Optional[str] = None, tier: Optional[str] = None
+        self,
+        active_only: bool = True,
+        category: Optional[str] = None,
+        tier: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Get all AI tools across all plugins

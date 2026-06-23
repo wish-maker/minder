@@ -29,7 +29,7 @@ class GraphRetriever:
         entity_name: str,
         relationship_type: Optional[str] = None,
         max_depth: int = 2,
-        limit: int = 10
+        limit: int = 10,
     ) -> List[Dict[str, Any]]:
         """
         Find entities related to a given entity
@@ -54,7 +54,11 @@ class GraphRetriever:
                            r.predicate as predicate, r.type as type
                     LIMIT $limit
                     """
-                    params = {"entity_name": entity_name, "rel_type": relationship_type, "limit": limit}
+                    params = {
+                        "entity_name": entity_name,
+                        "rel_type": relationship_type,
+                        "limit": limit,
+                    }
                 else:
                     # Neo4j 5.x doesn't support parameterized path lengths
                     # Use string formatting for depth value
@@ -74,23 +78,25 @@ class GraphRetriever:
                 result = await session.run(query, **params)
 
                 async for record in result:
-                    related_entities.append({
-                        "text": record["entity"],
-                        "label": record["label"],
-                        "predicate": record.get("predicate", "RELATED"),
-                        "type": record.get("type", "RELATION")
-                    })
+                    related_entities.append(
+                        {
+                            "text": record["entity"],
+                            "label": record["label"],
+                            "predicate": record.get("predicate", "RELATED"),
+                            "type": record.get("type", "RELATION"),
+                        }
+                    )
 
         except Exception as e:
             logger.error(f"❌ Graph retrieval failed: {e}")
 
-        logger.info(f"🔍 Found {len(related_entities)} related entities for '{entity_name}'")
+        logger.info(
+            f"🔍 Found {len(related_entities)} related entities for '{entity_name}'"
+        )
         return related_entities
 
     async def get_entity_context(
-        self,
-        entity_name: str,
-        context_window: int = 3
+        self, entity_name: str, context_window: int = 3
     ) -> Dict[str, Any]:
         """
         Get contextual information about an entity
@@ -121,15 +127,21 @@ class GraphRetriever:
                 RETURN related.text as text, related.label as label, r.predicate as predicate
                 LIMIT $context_window
                 """
-                related_result = await session.run(related_query, entity_name=entity_name, context_window=context_window)
+                related_result = await session.run(
+                    related_query,
+                    entity_name=entity_name,
+                    context_window=context_window,
+                )
 
                 related_entities = []
                 async for record in related_result:
-                    related_entities.append({
-                        "text": record["text"],
-                        "label": record["label"],
-                        "predicate": record["predicate"]
-                    })
+                    related_entities.append(
+                        {
+                            "text": record["text"],
+                            "label": record["label"],
+                            "predicate": record["predicate"],
+                        }
+                    )
 
                 # Get documents that mention this entity
                 docs_query = """
@@ -141,31 +153,24 @@ class GraphRetriever:
 
                 documents = []
                 async for record in docs_result:
-                    documents.append({
-                        "id": record["doc_id"],
-                        "title": record["title"]
-                    })
+                    documents.append({"id": record["doc_id"], "title": record["title"]})
 
                 return {
                     "entity": {
                         "text": entity_record["text"],
                         "label": entity_record["label"],
-                        "description": entity_record["description"]
+                        "description": entity_record["description"],
                     },
                     "related_entities": related_entities,
                     "documents": documents,
-                    "context_window": context_window
+                    "context_window": context_window,
                 }
 
         except Exception as e:
             logger.error(f"❌ Entity context retrieval failed: {e}")
             return {"error": f"Failed to get context: {e}"}
 
-    async def graph_search(
-        self,
-        query: str,
-        limit: int = 5
-    ) -> List[Dict[str, Any]]:
+    async def graph_search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
         Search graph for entities matching query
 
@@ -189,13 +194,17 @@ class GraphRetriever:
 
                 entities = []
                 async for record in result:
-                    entities.append({
-                        "text": record["text"],
-                        "label": record["label"],
-                        "description": record["description"]
-                    })
+                    entities.append(
+                        {
+                            "text": record["text"],
+                            "label": record["label"],
+                            "description": record["description"],
+                        }
+                    )
 
-                logger.info(f"🔍 Graph search found {len(entities)} entities for '{query}'")
+                logger.info(
+                    f"🔍 Graph search found {len(entities)} entities for '{query}'"
+                )
                 return entities
 
         except Exception as e:

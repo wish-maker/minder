@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 # Optional dependency handling
 try:
     import numpy as np
+
     NUMPY_AVAILABLE = True
 except ImportError:
     NUMPY_AVAILABLE = False

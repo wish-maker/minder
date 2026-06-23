@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class AgentQueryRequest(BaseModel):
     """Agent-powered query request"""
+
     query: str
     knowledge_base_id: Optional[str] = None
     enable_optimization: bool = True
@@ -25,6 +26,7 @@ class AgentQueryRequest(BaseModel):
 
 class AgentQueryResponse(BaseModel):
     """Agent-powered query response"""
+
     query: str
     answer: str
     sources: list
@@ -49,7 +51,9 @@ class AgentQueryService:
         self.decision_engine = AgentDecisionEngine()
         # Integration with existing RAG services will be added here
 
-    async def process_agent_query(self, request: AgentQueryRequest) -> AgentQueryResponse:
+    async def process_agent_query(
+        self, request: AgentQueryRequest
+    ) -> AgentQueryResponse:
         """
         Process query with intelligent pipeline selection
 
@@ -65,20 +69,19 @@ class AgentQueryService:
             query_analysis = await self.decision_engine.analyze_query(request.query)
 
             # Phase 2: Pipeline Decision
-            pipeline_decision = await self.decision_engine.decide_pipeline(query_analysis)
+            pipeline_decision = await self.decision_engine.decide_pipeline(
+                query_analysis
+            )
 
             # Phase 3: Execute with Optimized Pipeline
             answer, sources, metrics = await self._execute_optimized_pipeline(
-                request.query,
-                pipeline_decision,
-                request.knowledge_base_id
+                request.query, pipeline_decision, request.knowledge_base_id
             )
 
             # Phase 4: Performance Feedback (if optimization enabled)
             if request.enable_optimization:
                 optimized_decision = await self.decision_engine.optimize_pipeline(
-                    pipeline_decision,
-                    metrics
+                    pipeline_decision, metrics
                 )
                 pipeline_decision = optimized_decision
 
@@ -88,15 +91,16 @@ class AgentQueryService:
                 sources=sources,
                 pipeline_config=self._serialize_decision(pipeline_decision),
                 query_analysis=self._serialize_analysis(query_analysis),
-                performance_metrics=metrics
+                performance_metrics=metrics,
             )
 
         except Exception as e:
             logger.error(f"Agent query processing failed: {e}")
             raise HTTPException(status_code=500, detail=f"Agent query failed: {str(e)}")
 
-    async def _execute_optimized_pipeline(self, query: str, decision: PipelineDecision,
-                                        knowledge_base_id: Optional[str]) -> tuple:
+    async def _execute_optimized_pipeline(
+        self, query: str, decision: PipelineDecision, knowledge_base_id: Optional[str]
+    ) -> tuple:
         """
         Execute RAG pipeline with agent-selected configuration
 
@@ -114,7 +118,7 @@ class AgentQueryService:
         metrics = {
             "retrieval_latency": 0.5,
             "answer_relevance": 0.85,
-            "total_time": 0.8
+            "total_time": 0.8,
         }
 
         return answer, sources, metrics
@@ -130,7 +134,7 @@ class AgentQueryService:
             "use_hyde": decision.use_hyde,
             "use_self_rag": decision.use_self_rag,
             "chunking_strategy": decision.chunking_strategy,
-            "reasoning_required": decision.reasoning_required
+            "reasoning_required": decision.reasoning_required,
         }
 
     def _serialize_analysis(self, analysis: QueryAnalysis) -> Dict[str, Any]:
@@ -141,7 +145,7 @@ class AgentQueryService:
             "entities": analysis.entities,
             "intent": analysis.intent,
             "requires_external": analysis.requires_external,
-            "confidence": analysis.confidence
+            "confidence": analysis.confidence,
         }
 
 

@@ -147,7 +147,9 @@ async def health_check():
 # ============================================================================
 
 app.include_router(state.router, prefix="/v1/plugins", tags=["State Management"])
-app.include_router(tools.router, prefix="/v1/tools", tags=["Tool Discovery & Execution"])
+app.include_router(
+    tools.router, prefix="/v1/tools", tags=["Tool Discovery & Execution"]
+)
 app.include_router(licensing.router, prefix="/v1/licensing", tags=["Licensing"])
 
 

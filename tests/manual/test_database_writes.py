@@ -49,7 +49,9 @@ async def test_database_writes():
                 "port": 5432,
                 "database": "fundmind",
                 "user": "postgres",
-                "password": os.getenv("POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")),
+                "password": os.getenv(
+                    "POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")
+                ),
             }
         },
         "plugins": {"network": {}, "weather": {}, "crypto": {}, "news": {}},
@@ -75,20 +77,20 @@ async def test_database_writes():
             port=5432,
             database="fundmind",
             user="postgres",
-            password=os.getenv("POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")),
+            password=os.getenv(
+                "POSTGRES_PASSWORD", os.getenv("PGPASSWORD", "postgrespassword")
+            ),
         )
 
         # Create test table
-        await conn.execute(
-            """
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS test_news_write (
                 id SERIAL PRIMARY KEY,
                 title VARCHAR(255),
                 content TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )
-        """
-        )
+        """)
 
         # Insert test data
         test_title = f"Test News {datetime.now().isoformat()}"
@@ -99,7 +101,9 @@ async def test_database_writes():
         )
 
         # Verify write
-        row = await conn.fetchrow("SELECT * FROM test_news_write WHERE title = $1", test_title)
+        row = await conn.fetchrow(
+            "SELECT * FROM test_news_write WHERE title = $1", test_title
+        )
 
         if row:
             print("✓ PostgreSQL write SUCCESS")
@@ -167,7 +171,10 @@ async def test_database_writes():
             if len(records) > 0:
                 print("✓ InfluxDB write SUCCESS")
                 print(f"  - Records written: {len(records)}")
-                results["influxdb"] = {"status": "success", "details": [f"{len(records)} records"]}
+                results["influxdb"] = {
+                    "status": "success",
+                    "details": [f"{len(records)} records"],
+                }
             else:
                 print("✗ InfluxDB write FAILED - No records found")
                 results["influxdb"] = {"status": "failed", "details": ["No records"]}
@@ -217,7 +224,10 @@ async def test_database_writes():
                 PointStruct(
                     id=1,
                     vector=test_vector,
-                    payload={"test": "database_write", "timestamp": datetime.now().isoformat()},
+                    payload={
+                        "test": "database_write",
+                        "timestamp": datetime.now().isoformat(),
+                    },
                 )
             ],
         )
@@ -225,7 +235,9 @@ async def test_database_writes():
         # Verify write - using the correct Qdrant API
         from qdrant_client.models import Filter, SearchRequest  # noqa: F401
 
-        search_result = qdrant_client.query_points(collection_name=collection_name, query=test_vector, limit=1)
+        search_result = qdrant_client.query_points(
+            collection_name=collection_name, query=test_vector, limit=1
+        )
 
         # Check if we got any results from the QueryResponse object
         if search_result and len(search_result.points) > 0:
@@ -250,11 +262,15 @@ async def test_database_writes():
     print("=" * 60)
 
     try:
-        redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)  # FIXED
+        redis_client = redis.Redis(
+            host="localhost", port=6379, decode_responses=True
+        )  # FIXED
 
         # Write test data
         test_key = f"test_write_{datetime.now().timestamp()}"
-        test_value = json.dumps({"test": "database_write", "timestamp": datetime.now().isoformat()})
+        test_value = json.dumps(
+            {"test": "database_write", "timestamp": datetime.now().isoformat()}
+        )
 
         redis_client.set(test_key, test_value, ex=60)
 

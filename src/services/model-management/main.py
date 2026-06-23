@@ -10,12 +10,19 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel
 
 # Ollama client for real model management
 try:
     from ollama import AsyncClient
+
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
@@ -41,13 +48,17 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-models_registered_total = Gauge("models_registered_total", "Total number of registered models")
+models_registered_total = Gauge(
+    "models_registered_total", "Total number of registered models"
+)
 
 
 # Pydantic models
@@ -109,7 +120,9 @@ class OllamaManager:
             return models
         except Exception as e:
             logger.error(f"❌ Failed to list models: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to list models: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to list models: {str(e)}"
+            )
 
     async def pull_model(self, model_id: str, stream: bool = False) -> Dict[str, Any]:
         """Pull/download a model from Ollama library"""
@@ -122,7 +135,9 @@ class OllamaManager:
             return {"model": model_id, "status": "pulled", "details": response}
         except Exception as e:
             logger.error(f"❌ Failed to pull model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to pull model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to pull model: {str(e)}"
+            )
 
     async def show_model(self, model_id: str) -> Dict[str, Any]:
         """Show detailed information about a model"""
@@ -147,9 +162,13 @@ class OllamaManager:
             return {"model": model_id, "status": "deleted", "details": response}
         except Exception as e:
             logger.error(f"❌ Failed to delete model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to delete model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to delete model: {str(e)}"
+            )
 
-    async def test_model(self, model_id: str, prompt: str = "Hello, test.") -> Dict[str, Any]:
+    async def test_model(
+        self, model_id: str, prompt: str = "Hello, test."
+    ) -> Dict[str, Any]:
         """Test a model with a simple generation"""
         if not self._initialized:
             await self.initialize()
@@ -160,11 +179,13 @@ class OllamaManager:
                 "model": model_id,
                 "prompt": prompt,
                 "response": response.get("response", ""),
-                "status": "success"
+                "status": "success",
             }
         except Exception as e:
             logger.error(f"❌ Failed to test model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to test model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to test model: {str(e)}"
+            )
 
 
 # Global Ollama manager
@@ -210,8 +231,12 @@ async def track_requests(request, call_next):
 
     # Update metrics
     duration = time.time() - start_time
-    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
-    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+    http_requests_total.labels(
+        method=method, endpoint=endpoint, status=response.status_code
+    ).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
+        duration
+    )
 
     # Update models count
     if endpoint == "/health":
@@ -289,7 +314,7 @@ async def register_model(model_id: str, model_info: ModelInfo):
                 return {
                     "message": f"Model '{model_id}' already exists",
                     "model": model_id,
-                    "status": "already_exists"
+                    "status": "already_exists",
                 }
 
         # Pull the model (real download from Ollama library)
@@ -301,14 +326,16 @@ async def register_model(model_id: str, model_info: ModelInfo):
             "message": f"Model '{model_id}' pulled successfully",
             "model": model_id,
             "status": "pulled",
-            "details": result
+            "details": result,
         }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Failed to register model {model_id}: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to register model: {str(e)}")
+        raise HTTPException(
+            status_code=503, detail=f"Failed to register model: {str(e)}"
+        )
 
 
 # Get model details
@@ -319,11 +346,7 @@ async def get_model(model_id: str):
         model_details = await ollama_manager.show_model(model_id)
 
         # Extract relevant information
-        return {
-            "id": model_id,
-            "details": model_details,
-            "status": "ready"
-        }
+        return {"id": model_id, "details": model_details, "status": "ready"}
 
     except HTTPException:
         raise
@@ -360,7 +383,7 @@ async def delete_model(model_id: str):
             "message": f"Model '{model_id}' deleted successfully",
             "model": model_id,
             "status": "deleted",
-            "details": result
+            "details": result,
         }
 
     except HTTPException:
@@ -411,7 +434,7 @@ async def get_model_metrics(model_id: str):
         "average_latency_ms": 0,
         "error_rate": 0.0,
         "cost_usd": 0.0,
-        "note": "Metrics tracking not yet implemented"
+        "note": "Metrics tracking not yet implemented",
     }
 
 
@@ -438,21 +461,25 @@ async def fine_tune_model(request: FineTuneRequest):
         # Placeholder response
         fine_tuned_model_id = f"{request.base_model}_fine_tuned_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        logger.info(f"Fine-tuning request: {request.base_model} -> {fine_tuned_model_id} (delegated to model-fine-tuning service)")
+        logger.info(
+            f"Fine-tuning request: {request.base_model} -> {fine_tuned_model_id} (delegated to model-fine-tuning service)"
+        )
 
         return {
             "message": "Fine-tuning request forwarded to model-fine-tuning service",
             "fine_tuned_model_id": fine_tuned_model_id,
             "base_model": request.base_model,
             "status": "forwarded",
-            "note": "Use model-fine-tuning service for actual training"
+            "note": "Use model-fine-tuning service for actual training",
         }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"❌ Failed to process fine-tune request: {e}")
-        raise HTTPException(status_code=503, detail=f"Failed to process fine-tune request: {str(e)}")
+        raise HTTPException(
+            status_code=503, detail=f"Failed to process fine-tune request: {str(e)}"
+        )
 
 
 # Root endpoint
@@ -464,7 +491,7 @@ async def root():
         "version": app.version,
         "status": "operational",
         "ollama_available": OLLAMA_AVAILABLE,
-        "ollama_host": OLLAMA_HOST if OLLAMA_AVAILABLE else None
+        "ollama_host": OLLAMA_HOST if OLLAMA_AVAILABLE else None,
     }
 
 

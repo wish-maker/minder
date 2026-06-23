@@ -63,9 +63,7 @@ async def get_db_pool() -> asyncpg.Pool:
             )
 
             try:
-                await admin_conn.execute(
-                    f'CREATE DATABASE {config["database"]}'
-                )
+                await admin_conn.execute(f'CREATE DATABASE {config["database"]}')
                 logger.info(f"✅ Database {config['database']} created")
             finally:
                 await admin_conn.close()
@@ -81,7 +79,9 @@ async def get_db_pool() -> asyncpg.Pool:
                 max_size=10,
                 command_timeout=60,
             )
-            logger.info("Database connection pool created successfully after database creation")
+            logger.info(
+                "Database connection pool created successfully after database creation"
+            )
 
     return _pool
 

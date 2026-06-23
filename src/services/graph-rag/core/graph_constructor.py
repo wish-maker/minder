@@ -31,7 +31,7 @@ class KnowledgeGraphConstructor:
         document_id: str,
         title: str = None,
         source: str = None,
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
     ) -> bool:
         """
         Create a document node in Neo4j
@@ -61,7 +61,7 @@ class KnowledgeGraphConstructor:
                     document_id=document_id,
                     title=title,
                     source=source,
-                    metadata=metadata
+                    metadata=metadata,
                 )
 
                 return await result.single() is not None
@@ -71,9 +71,7 @@ class KnowledgeGraphConstructor:
                 return False
 
     async def create_entity_nodes(
-        self,
-        document_id: str,
-        entities: List[Dict[str, Any]]
+        self, document_id: str, entities: List[Dict[str, Any]]
     ) -> List[str]:
         """
         Create entity nodes in Neo4j
@@ -100,7 +98,7 @@ class KnowledgeGraphConstructor:
                         text=entity["text"],
                         label=entity["label"],
                         description=entity.get("description", ""),
-                        document_id=document_id
+                        document_id=document_id,
                     )
 
                     record = await result.single()
@@ -108,15 +106,15 @@ class KnowledgeGraphConstructor:
                         entity_ids.append(record["entity_id"])
 
                 except Exception as e:
-                    logger.warning(f"⚠️  Failed to create entity {entity.get('text')}: {e}")
+                    logger.warning(
+                        f"⚠️  Failed to create entity {entity.get('text')}: {e}"
+                    )
 
         logger.info(f"✅ Created {len(entity_ids)} entity nodes")
         return entity_ids
 
     async def create_relationship_nodes(
-        self,
-        document_id: str,
-        relationships: List[Dict[str, Any]]
+        self, document_id: str, relationships: List[Dict[str, Any]]
     ) -> int:
         """
         Create relationship nodes in Neo4j
@@ -144,7 +142,7 @@ class KnowledgeGraphConstructor:
                         object=rel["object"],
                         predicate=rel["predicate"],
                         type=rel.get("type", "UNKNOWN"),
-                        document_id=document_id
+                        document_id=document_id,
                     )
 
                     if await result.single():
@@ -157,9 +155,7 @@ class KnowledgeGraphConstructor:
         return count
 
     async def link_document_to_entities(
-        self,
-        document_id: str,
-        entity_ids: List[str]
+        self, document_id: str, entity_ids: List[str]
     ) -> int:
         """
         Link document to entities
@@ -185,9 +181,7 @@ class KnowledgeGraphConstructor:
                     """
 
                     result = await session.run(
-                        query,
-                        document_id=document_id,
-                        entity_id=entity_id
+                        query, document_id=document_id, entity_id=entity_id
                     )
 
                     if await result.single():
@@ -218,12 +212,10 @@ class KnowledgeGraphConstructor:
             rel_count = rel_record["count"] if rel_record else 0
 
             # Count documents
-            doc_result = await session.run("MATCH (d:Document) RETURN count(d) as count")
+            doc_result = await session.run(
+                "MATCH (d:Document) RETURN count(d) as count"
+            )
             doc_record = await doc_result.single()
             doc_count = doc_record["count"] if doc_record else 0
 
-        return {
-            "nodes": node_count,
-            "relationships": rel_count,
-            "documents": doc_count
-        }
+        return {"nodes": node_count, "relationships": rel_count, "documents": doc_count}

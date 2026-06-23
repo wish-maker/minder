@@ -11,10 +11,14 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Service discovery infrastructure not yet implemented")
+pytestmark = pytest.mark.skip(
+    reason="Service discovery infrastructure not yet implemented"
+)
 
 # Add plugin registry to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry"))
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry")
+)
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -37,7 +41,11 @@ class MockCryptoPlugin:
 
         @self.app.get("/analysis")
         async def analysis(symbol: str = "BTC"):
-            return {"symbol": symbol, "price": 50000 + hash(symbol) % 1000, "timestamp": "2026-04-24T10:00:00Z"}
+            return {
+                "symbol": symbol,
+                "price": 50000 + hash(symbol) % 1000,
+                "timestamp": "2026-04-24T10:00:00Z",
+            }
 
         @self.app.get("/metrics")
         async def metrics():

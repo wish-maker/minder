@@ -17,7 +17,7 @@ async def generate_streaming_response(
     context: str,
     model: str,
     temperature: float,
-    sources_count: int
+    sources_count: int,
 ) -> AsyncGenerator[str, None]:
     """
     Generate streaming response token by token.
@@ -59,7 +59,9 @@ async def generate_streaming_response(
         # Send completion signal
         yield f"data: {json.dumps({'type': 'done', 'total_chunks': chunk_count, 'total_length': len(full_text)})}\n\n"
 
-        logger.info(f"✅ Streaming complete: {chunk_count} chunks, {len(full_text)} chars")
+        logger.info(
+            f"✅ Streaming complete: {chunk_count} chunks, {len(full_text)} chars"
+        )
 
     except Exception as e:
         logger.error(f"Streaming error: {e}")

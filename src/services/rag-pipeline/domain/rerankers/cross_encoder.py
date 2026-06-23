@@ -74,7 +74,7 @@ class CrossEncoderReranker:
                 self._model = CrossEncoder(
                     self.model_name,
                     device="cpu",
-                    max_length=512  # Reduced for memory efficiency
+                    max_length=512,  # Reduced for memory efficiency
                 )
 
                 self._initialized = True
@@ -89,10 +89,7 @@ class CrossEncoderReranker:
         return self._model
 
     def rerank(
-        self,
-        query: str,
-        documents: List[Dict[str, Any]],
-        top_k: int = 5
+        self, query: str, documents: List[Dict[str, Any]], top_k: int = 5
     ) -> List[Tuple[Dict[str, Any], float]]:
         """
         Re-rank documents using cross-encoder

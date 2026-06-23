@@ -18,7 +18,13 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from jose import jwt
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 # Import AI integration router
 from routes.ai import router as ai_router
@@ -78,18 +84,24 @@ app.include_router(ai_router)
 # ============================================================================
 
 # HTTP request metrics
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
 http_requests_in_progress = Gauge(
-    "http_requests_in_progress", "HTTP requests currently in progress", ["method", "endpoint"]
+    "http_requests_in_progress",
+    "HTTP requests currently in progress",
+    ["method", "endpoint"],
 )
 
 # Service health metrics
-service_health_up = Gauge("service_health_up", "Service health status (1=up, 0=down)", ["service"])
+service_health_up = Gauge(
+    "service_health_up", "Service health status (1=up, 0=down)", ["service"]
+)
 
 active_plugins_gauge = Gauge("active_plugins_total", "Number of active plugins")
 
@@ -99,7 +111,9 @@ active_plugins_gauge = Gauge("active_plugins_total", "Number of active plugins")
 
 # CORS Middleware
 # Parse CORS_ALLOWED_ORIGINS from environment (comma-separated)
-cors_origins = settings.CORS_ALLOWED_ORIGINS.split(",") if settings.CORS_ALLOWED_ORIGINS else ["*"]
+cors_origins = (
+    settings.CORS_ALLOWED_ORIGINS.split(",") if settings.CORS_ALLOWED_ORIGINS else ["*"]
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
@@ -158,8 +172,12 @@ async def request_id_middleware(request: Request, call_next):
 
     # Update metrics
     http_requests_in_progress.labels(method=method, endpoint=endpoint).dec()
-    http_requests_total.labels(method=method, endpoint=endpoint, status=response.status_code).inc()
-    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(duration)
+    http_requests_total.labels(
+        method=method, endpoint=endpoint, status=response.status_code
+    ).inc()
+    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
+        duration
+    )
 
     # Add request ID to response headers
     response.headers["X-Request-ID"] = request_id
@@ -195,7 +213,9 @@ if settings.RATE_LIMIT_ENABLED:
             return await call_next(request)
 
         # Skip rate limiting for static files and frontend assets
-        if request.url.path.startswith("/static/") or request.url.path.startswith("/favicon"):
+        if request.url.path.startswith("/static/") or request.url.path.startswith(
+            "/favicon"
+        ):
             return await call_next(request)
 
         # Get identifier (JWT token subject or IP address)
@@ -257,7 +277,9 @@ async def health_check():
         "redis": ("redis", lambda: redis_client.ping()),
         "plugin_registry": (
             settings.PLUGIN_REGISTRY_URL,
-            lambda: http_client.get(f"{settings.PLUGIN_REGISTRY_URL}/health", timeout=5.0),
+            lambda: http_client.get(
+                f"{settings.PLUGIN_REGISTRY_URL}/health", timeout=5.0
+            ),
         ),
         "rag_pipeline": (
             settings.RAG_PIPELINE_URL,
@@ -265,7 +287,9 @@ async def health_check():
         ),
         "model_management": (
             settings.MODEL_MANAGEMENT_URL,
-            lambda: http_client.get(f"{settings.MODEL_MANAGEMENT_URL}/health", timeout=5.0),
+            lambda: http_client.get(
+                f"{settings.MODEL_MANAGEMENT_URL}/health", timeout=5.0
+            ),
         ),
     }
 
@@ -296,7 +320,9 @@ async def health_check():
                 if response.status_code == 200:
                     health_status["checks"][service_name] = "healthy"
                 else:
-                    health_status["checks"][service_name] = f"unhealthy: HTTP {response.status_code}"
+                    health_status["checks"][
+                        service_name
+                    ] = f"unhealthy: HTTP {response.status_code}"
                     if service_name in critical_services:
                         critical_unhealthy = True
                     else:
@@ -326,7 +352,9 @@ async def health_check():
     elif optional_unhealthy:
         # Only degraded if optional services are unhealthy
         health_status["status"] = "degraded"
-        health_status["message"] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        health_status["message"] = (
+            f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
+        )
         status_code = 200  # Degraded is still functional, return 200
     else:
         health_status["status"] = "healthy"
@@ -341,8 +369,6 @@ async def metrics():
     Prometheus metrics endpoint
     """
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
 
 
 # Optional: Authentication dependency for protected routes
@@ -413,10 +439,14 @@ async def register(request: Request):
 
         # Validate input
         if not username or not email or not password:
-            raise HTTPException(status_code=400, detail="Username, email and password required")
+            raise HTTPException(
+                status_code=400, detail="Username, email and password required"
+            )
 
         if len(password) < 8:
-            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+            raise HTTPException(
+                status_code=400, detail="Password must be at least 8 characters"
+            )
 
         # Create user
         user = await create_user(username, email, password, role)
@@ -428,8 +458,10 @@ async def register(request: Request):
                 "username": user["username"],
                 "email": user["email"],
                 "role": user["role"],
-                "created_at": user["created_at"].isoformat() if user["created_at"] else None,
-            }
+                "created_at": (
+                    user["created_at"].isoformat() if user["created_at"] else None
+                ),
+            },
         }
 
     except HTTPException:
@@ -452,7 +484,9 @@ async def login(request: Request):
 
         # Validate input
         if not username or not password:
-            raise HTTPException(status_code=400, detail="Username and password required")
+            raise HTTPException(
+                status_code=400, detail="Username and password required"
+            )
 
         # Verify credentials
         user = await verify_user_credentials(username, password)
@@ -466,7 +500,7 @@ async def login(request: Request):
             "username": user["username"],
             "email": user["email"],
             "role": user["role"],
-            "iat": datetime.utcnow()
+            "iat": datetime.utcnow(),
         }
         access_token = create_jwt_token(token_data)
 
@@ -481,7 +515,7 @@ async def login(request: Request):
                 "username": user["username"],
                 "email": user["email"],
                 "role": user["role"],
-            }
+            },
         }
 
     except HTTPException:
@@ -580,7 +614,9 @@ async def list_plugins(request: Request):
     return await proxy_request(service_url, "v1/plugins", request)
 
 
-@app.api_route("/v1/plugins/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/v1/plugins/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
 async def proxy_to_plugin_registry(path: str, request: Request):
     """
     Proxy all /v1/plugins/* requests to Plugin Registry service
@@ -623,7 +659,9 @@ async def proxy_to_rag_pipeline(path: str, request: Request):
 # ============================================================================
 
 
-@app.api_route("/v1/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+@app.api_route(
+    "/v1/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
 async def proxy_to_model_management(path: str, request: Request):
     """
     Proxy all /v1/models/* requests to Model Management service

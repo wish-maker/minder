@@ -4,6 +4,7 @@ Redis-based Rate Limiting Middleware for FastAPI
 Provides production-grade rate limiting with sliding window algorithm,
 Redis backend, and Prometheus metrics integration.
 """
+
 import json
 import logging
 import time
@@ -22,19 +23,17 @@ logger = logging.getLogger(__name__)
 rate_limit_requests_total = Counter(
     "rate_limit_requests_total",
     "Total rate limit checks",
-    ["endpoint", "status"]  # status: allowed, blocked, error
+    ["endpoint", "status"],  # status: allowed, blocked, error
 )
 
 rate_limit_response_time_seconds = Histogram(
-    "rate_limit_response_time_seconds",
-    "Rate limiting check duration",
-    ["endpoint"]
+    "rate_limit_response_time_seconds", "Rate limiting check duration", ["endpoint"]
 )
 
 rate_limit_blocked_total = Counter(
     "rate_limit_blocked_total",
     "Total blocked requests by rate limit",
-    ["endpoint", "limit_type"]
+    ["endpoint", "limit_type"],
 )
 
 # ============================================================================
@@ -44,8 +43,8 @@ rate_limit_blocked_total = Counter(
 # Rate limit tiers (requests per minute)
 RATE_LIMITS = {
     "default": 60,  # 60 requests per minute
-    "strict": 30,   # 30 requests per minute
-    "lenient": 120, # 120 requests per minute
+    "strict": 30,  # 30 requests per minute
+    "lenient": 120,  # 120 requests per minute
     "bypass": None,  # No rate limiting
 }
 
@@ -65,6 +64,7 @@ WINDOW_SIZE = 60
 # Rate Limiter Implementation
 # ============================================================================
 
+
 class RedisRateLimiter:
     """
     Redis-based rate limiter using sliding window algorithm.
@@ -82,7 +82,7 @@ class RedisRateLimiter:
         redis_client: Redis,
         default_limit: int = 60,
         window_size: int = 60,
-        key_prefix: str = "rate_limit"
+        key_prefix: str = "rate_limit",
     ):
         """
         Initialize rate limiter.
@@ -115,10 +115,7 @@ class RedisRateLimiter:
         return f"{key}:window:{window_timestamp}"
 
     def check_rate_limit(
-        self,
-        identifier: str,
-        endpoint: str,
-        limit: Optional[int] = None
+        self, identifier: str, endpoint: str, limit: Optional[int] = None
     ) -> Tuple[bool, Dict]:
         """
         Check if request should be rate limited.
@@ -172,26 +169,24 @@ class RedisRateLimiter:
             # Update Prometheus metrics
             endpoint_safe = endpoint.replace("/", "_").strip("_") or "root"
             rate_limit_requests_total.labels(
-                endpoint=endpoint_safe,
-                status="allowed" if is_allowed else "blocked"
+                endpoint=endpoint_safe, status="allowed" if is_allowed else "blocked"
             ).inc()
 
             if not is_allowed:
                 rate_limit_blocked_total.labels(
-                    endpoint=endpoint_safe,
-                    limit_type="default"
+                    endpoint=endpoint_safe, limit_type="default"
                 ).inc()
 
             # Record response time
-            rate_limit_response_time_seconds.labels(
-                endpoint=endpoint_safe
-            ).observe(time.time() - start_time)
+            rate_limit_response_time_seconds.labels(endpoint=endpoint_safe).observe(
+                time.time() - start_time
+            )
 
             info = {
                 "limit": current_limit,
                 "remaining": remaining,
                 "reset": reset_time,
-                "current": current_count
+                "current": current_count,
             }
 
             return is_allowed, info
@@ -200,8 +195,7 @@ class RedisRateLimiter:
             logger.error(f"❌ Rate limit check error: {e}")
             # On error, allow request (fail open)
             rate_limit_requests_total.labels(
-                endpoint=endpoint.replace("/", "_").strip("_") or "root",
-                status="error"
+                endpoint=endpoint.replace("/", "_").strip("_") or "root", status="error"
             ).inc()
             return True, {"error": str(e)}
 
@@ -218,7 +212,7 @@ class RateLimitMiddleware:
         self,
         redis_client: Redis,
         rate_limiter: Optional[RedisRateLimiter] = None,
-        identifier_func: Optional[Callable] = None
+        identifier_func: Optional[Callable] = None,
     ):
         """
         Initialize rate limit middleware.
@@ -296,29 +290,29 @@ class RateLimitMiddleware:
 
         # Check rate limit
         is_allowed, info = self.rate_limiter.check_rate_limit(
-            identifier=identifier,
-            endpoint=endpoint,
-            limit=limit
+            identifier=identifier, endpoint=endpoint, limit=limit
         )
 
         # Handle rate limit exceeded
         if not is_allowed:
             logger.warning(f"⚠️ Rate limit exceeded for {identifier} on {endpoint}")
             return Response(
-                content=json.dumps({
-                    "error": "Rate limit exceeded",
-                    "limit": info.get("limit"),
-                    "reset": info.get("reset")
-                }),
+                content=json.dumps(
+                    {
+                        "error": "Rate limit exceeded",
+                        "limit": info.get("limit"),
+                        "reset": info.get("reset"),
+                    }
+                ),
                 status_code=429,
                 media_type="application/json",
                 headers={
                     "X-RateLimit-Limit": str(info.get("limit")),
                     "X-RateLimit-Remaining": str(info.get("remaining")),
                     "X-RateLimit-Reset": str(info.get("reset")),
-                    "Retry-After": str(info.get("reset") - int(time.time()))
-                }
-                )
+                    "Retry-After": str(info.get("reset") - int(time.time())),
+                },
+            )
 
         # Add rate limit headers to allowed requests
         response = await call_next(request)
@@ -333,10 +327,9 @@ class RateLimitMiddleware:
 # FastAPI Integration
 # ============================================================================
 
+
 def add_rate_limiting(
-    app: FastAPI,
-    redis_client: Redis,
-    identifier_func: Optional[Callable] = None
+    app: FastAPI, redis_client: Redis, identifier_func: Optional[Callable] = None
 ):
     """
     Add rate limiting middleware to FastAPI application.
@@ -383,4 +376,6 @@ if __name__ == "__main__":
 
     for i in range(65):  # Test default limit of 60
         is_allowed, info = rate_limiter.check_rate_limit(identifier, endpoint)
-        print(f"Request {i+1}: Allowed={is_allowed}, Count={info.get('current')}, Remaining={info.get('remaining')}")
+        print(
+            f"Request {i+1}: Allowed={is_allowed}, Count={info.get('current')}, Remaining={info.get('remaining')}"
+        )

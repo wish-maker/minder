@@ -58,7 +58,9 @@ class ServiceRegistry:
             raise ValueError(f"Unknown service: {service_name}")
 
         # Check circuit breaker
-        circuit_state = self.circuit_breakers.get(service_name, {"failures": 0, "last_failure": 0, "state": "closed"})
+        circuit_state = self.circuit_breakers.get(
+            service_name, {"failures": 0, "last_failure": 0, "state": "closed"}
+        )
 
         # If circuit is open, check if it should be reset
         if circuit_state["state"] == "open":
@@ -70,9 +72,10 @@ class ServiceRegistry:
                 logger.info(f"🔄 Circuit breaker half-open for {service_name}")
             else:
                 from fastapi import HTTPException
+
                 raise HTTPException(
                     status_code=503,
-                    detail=f"Service {service_name} is temporarily unavailable (circuit breaker open)"
+                    detail=f"Service {service_name} is temporarily unavailable (circuit breaker open)",
                 )
 
         return self.services[service_name]
@@ -80,7 +83,11 @@ class ServiceRegistry:
     def record_service_call(self, service_name: str, success: bool):
         """Record service call result for circuit breaker"""
         if service_name not in self.circuit_breakers:
-            self.circuit_breakers[service_name] = {"failures": 0, "last_failure": 0, "state": "closed"}
+            self.circuit_breakers[service_name] = {
+                "failures": 0,
+                "last_failure": 0,
+                "state": "closed",
+            }
 
         circuit_state = self.circuit_breakers[service_name]
 
@@ -100,11 +107,15 @@ class ServiceRegistry:
             # Open circuit after 3 consecutive failures
             if circuit_state["failures"] >= 3:
                 circuit_state["state"] = "open"
-                logger.error(f"⚠️ Circuit breaker opened for {service_name} after {circuit_state['failures']} failures")
+                logger.error(
+                    f"⚠️ Circuit breaker opened for {service_name} after {circuit_state['failures']} failures"
+                )
 
         self.circuit_breakers[service_name] = circuit_state
 
-    async def check_service_health(self, service_name: str, http_client: httpx.AsyncClient) -> bool:
+    async def check_service_health(
+        self, service_name: str, http_client: httpx.AsyncClient
+    ) -> bool:
         """Check health of a specific service"""
         try:
             service_url = self.services.get(service_name)

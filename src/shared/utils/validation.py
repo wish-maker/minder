@@ -2,6 +2,7 @@
 Input validation and sanitization utilities
 Provides comprehensive validation for common input types
 """
+
 import re
 import html
 from typing import Any, Dict, List, Optional, Union
@@ -168,7 +169,7 @@ def validate_json(data: Union[str, Dict], max_size: int = 10240) -> Dict:
 
     if isinstance(data, str):
         # Check size before parsing
-        if len(data.encode('utf-8')) > max_size:
+        if len(data.encode("utf-8")) > max_size:
             raise ValueError(f"JSON data exceeds maximum size of {max_size} bytes")
 
         try:
@@ -256,22 +257,24 @@ def validate_sql_identifier(identifier: str) -> str:
     """
     # Check for SQL injection patterns
     dangerous_patterns = [
-        r";",      # Statement separator
-        r"--",     # Comment
-        r"/\*",     # Multi-line comment start
-        r"\*/",     # Multi-line comment end
-        r"xp_",     # Extended procedure prefix
-        r"exec",    # Execute command
-        r"drop",    # Drop command
+        r";",  # Statement separator
+        r"--",  # Comment
+        r"/\*",  # Multi-line comment start
+        r"\*/",  # Multi-line comment end
+        r"xp_",  # Extended procedure prefix
+        r"exec",  # Execute command
+        r"drop",  # Drop command
         r"delete",  # Delete command
-        r"truncate",# Truncate command
+        r"truncate",  # Truncate command
     ]
 
     identifier_lower = identifier.lower()
 
     for pattern in dangerous_patterns:
         if re.search(pattern, identifier_lower):
-            raise ValueError(f"Identifier contains potentially harmful pattern: {pattern}")
+            raise ValueError(
+                f"Identifier contains potentially harmful pattern: {pattern}"
+            )
 
     # Validate format
     if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", identifier):

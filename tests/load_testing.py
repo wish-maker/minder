@@ -19,11 +19,14 @@ import tracemalloc
 
 logger = logging.getLogger("minder.load_testing")
 
-pytestmark = pytest.mark.skip(reason="Load testing framework not yet integrated with CI/CD")
+pytestmark = pytest.mark.skip(
+    reason="Load testing framework not yet integrated with CI/CD"
+)
 
 
 class TestPhase(Enum):
     """Load testing phases"""
+
     WARMUP = "warmup"
     RAMP_UP = "ramp_up"
     SUSTAINED_LOAD = "sustained_load"
@@ -34,6 +37,7 @@ class TestPhase(Enum):
 @dataclass
 class RequestResult:
     """Represents a single request result"""
+
     success: bool
     status_code: Optional[int] = None
     response_time_ms: float = 0.0
@@ -44,12 +48,13 @@ class RequestResult:
 @dataclass
 class LoadTestStats:
     """Statistics from load test"""
+
     total_requests: int = 0
     successful_requests: int = 0
     failed_requests: int = 0
     success_rate: float = 0.0
     avg_response_time_ms: float = 0.0
-    min_response_time_ms: float = float('inf')
+    min_response_time_ms: float = float("inf")
     max_response_time_ms: float = 0.0
     p50_response_time_ms: float = 0.0
     p95_response_time_ms: float = 0.0
@@ -64,6 +69,7 @@ class LoadTestStats:
 @dataclass
 class PhaseConfig:
     """Configuration for a load test phase"""
+
     phase: TestPhase
     duration_seconds: int
     concurrent_users: int
@@ -77,10 +83,7 @@ class LoadTester:
     """
 
     def __init__(
-        self,
-        base_url: str,
-        max_concurrent_users: int = 100,
-        timeout: float = 30.0
+        self, base_url: str, max_concurrent_users: int = 100, timeout: float = 30.0
     ):
         """
         Initialize load tester.
@@ -106,7 +109,7 @@ class LoadTester:
         endpoint: str = "/",
         headers: Dict[str, str] = None,
         data: Any = None,
-        json: Dict[str, Any] = None
+        json: Dict[str, Any] = None,
     ) -> RequestResult:
         """
         Make a single HTTP request.
@@ -130,7 +133,7 @@ class LoadTester:
                 async with session.get(
                     url,
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
                 ) as response:
                     response_time = (time.time() - start_time) * 1000
                     response_size = len(await response.read())
@@ -139,7 +142,7 @@ class LoadTester:
                         success=response.status < 400,
                         status_code=response.status,
                         response_time_ms=response_time,
-                        response_size_bytes=response_size
+                        response_size_bytes=response_size,
                     )
 
             elif method == "POST":
@@ -148,7 +151,7 @@ class LoadTester:
                     headers=headers,
                     data=data,
                     json=json,
-                    timeout=aiohttp.ClientTimeout(total=self.timeout)
+                    timeout=aiohttp.ClientTimeout(total=self.timeout),
                 ) as response:
                     response_time = (time.time() - start_time) * 1000
                     response_size = len(await response.read())
@@ -157,15 +160,13 @@ class LoadTester:
                         success=response.status < 400,
                         status_code=response.status,
                         response_time_ms=response_time,
-                        response_size_bytes=response_size
+                        response_size_bytes=response_size,
                     )
 
         except Exception as e:
             response_time = (time.time() - start_time) * 1000
             return RequestResult(
-                success=False,
-                response_time_ms=response_time,
-                error=str(e)
+                success=False, response_time_ms=response_time, error=str(e)
             )
 
     async def run_user_scenario(
@@ -173,7 +174,7 @@ class LoadTester:
         session: aiohttp.ClientSession,
         scenario: Callable[[aiohttp.ClientSession], Any],
         requests_count: int = 10,
-        delay_between_requests: float = 0.1
+        delay_between_requests: float = 0.1,
     ) -> List[RequestResult]:
         """
         Run a user scenario with multiple requests.
@@ -204,7 +205,7 @@ class LoadTester:
         duration_seconds: int,
         concurrent_users: int,
         requests_per_user: int = 10,
-        scenario: Callable[[aiohttp.ClientSession], Any] = None
+        scenario: Callable[[aiohttp.ClientSession], Any] = None,
     ) -> LoadTestStats:
         """
         Run a load test phase.
@@ -219,7 +220,9 @@ class LoadTester:
         Returns:
             LoadTestStats with phase statistics
         """
-        logger.info(f"Starting phase: {phase.value} ({duration_seconds}s, {concurrent_users} users)")
+        logger.info(
+            f"Starting phase: {phase.value} ({duration_seconds}s, {concurrent_users} users)"
+        )
 
         # Start resource monitoring
         memory_samples = []
@@ -240,7 +243,7 @@ class LoadTester:
                             session,
                             scenario,
                             requests_count=requests_per_user,
-                            delay_between_requests=0.0
+                            delay_between_requests=0.0,
                         )
                     )
                 else:
@@ -250,7 +253,7 @@ class LoadTester:
                             session,
                             lambda s: self.make_request(s, method="GET", endpoint="/"),
                             requests_count=requests_per_user,
-                            delay_between_requests=0.0
+                            delay_between_requests=0.0,
                         )
                     )
                 tasks.append(task)
@@ -259,7 +262,9 @@ class LoadTester:
             phase_results = await asyncio.gather(*tasks)
 
             # Flatten results
-            self.results.extend([result for user_results in phase_results for result in user_results])
+            self.results.extend(
+                [result for user_results in phase_results for result in user_results]
+            )
 
         # Stop resource monitoring
         monitoring_task.cancel()
@@ -269,10 +274,14 @@ class LoadTester:
             pass
 
         # Calculate statistics
-        stats = self._calculate_stats(self.results, memory_samples, cpu_samples, duration_seconds)
+        stats = self._calculate_stats(
+            self.results, memory_samples, cpu_samples, duration_seconds
+        )
 
-        logger.info(f"Phase {phase.value} completed: {stats.success_rate:.2f}% success, "
-                   f"{stats.avg_response_time_ms:.2f}ms avg")
+        logger.info(
+            f"Phase {phase.value} completed: {stats.success_rate:.2f}% success, "
+            f"{stats.avg_response_time_ms:.2f}ms avg"
+        )
 
         return stats
 
@@ -280,7 +289,7 @@ class LoadTester:
         self,
         duration_seconds: int,
         memory_samples: List[float],
-        cpu_samples: List[float]
+        cpu_samples: List[float],
     ):
         """
         Monitor system resources during test.
@@ -311,7 +320,7 @@ class LoadTester:
         results: List[RequestResult],
         memory_samples: List[float],
         cpu_samples: List[float],
-        duration_seconds: int
+        duration_seconds: int,
     ) -> LoadTestStats:
         """
         Calculate statistics from results.
@@ -337,7 +346,7 @@ class LoadTester:
             total_requests=len(results),
             successful_requests=len(successful),
             failed_requests=len(failed),
-            success_rate=len(successful) / len(results) * 100 if results else 0
+            success_rate=len(successful) / len(results) * 100 if results else 0,
         )
 
         if response_times:
@@ -351,7 +360,9 @@ class LoadTester:
             stats.p95_response_time_ms = sorted_times[int(len(sorted_times) * 0.95)]
             stats.p99_response_time_ms = sorted_times[int(len(sorted_times) * 0.99)]
 
-        stats.requests_per_second = len(results) / duration_seconds if duration_seconds > 0 else 0
+        stats.requests_per_second = (
+            len(results) / duration_seconds if duration_seconds > 0 else 0
+        )
 
         if memory_samples:
             stats.avg_memory_mb = statistics.mean(memory_samples)
@@ -366,7 +377,7 @@ class LoadTester:
     async def run_load_test(
         self,
         phases: List[PhaseConfig],
-        scenario: Callable[[aiohttp.ClientSession], Any] = None
+        scenario: Callable[[aiohttp.ClientSession], Any] = None,
     ) -> Dict[TestPhase, LoadTestStats]:
         """
         Run complete load test with multiple phases.
@@ -388,7 +399,7 @@ class LoadTester:
                 duration_seconds=phase_config.duration_seconds,
                 concurrent_users=phase_config.concurrent_users,
                 requests_per_user=10,
-                scenario=scenario
+                scenario=scenario,
             )
 
             results[phase_config.phase] = stats
@@ -410,15 +421,17 @@ class LoadTester:
         Args:
             results: Dictionary of phase statistics
         """
-        logger.info("\n" + "="*80)
+        logger.info("\n" + "=" * 80)
         logger.info("LOAD TEST REPORT")
-        logger.info("="*80)
+        logger.info("=" * 80)
 
         for phase, stats in results.items():
             logger.info(f"\nPhase: {phase.value}")
             logger.info("-" * 40)
             logger.info(f"Total Requests: {stats.total_requests}")
-            logger.info(f"Successful: {stats.successful_requests} ({stats.success_rate:.2f}%)")
+            logger.info(
+                f"Successful: {stats.successful_requests} ({stats.success_rate:.2f}%)"
+            )
             logger.info(f"Failed: {stats.failed_requests}")
             logger.info(f"Requests/sec: {stats.requests_per_second:.2f}")
             logger.info(f"\nResponse Times:")
@@ -429,10 +442,14 @@ class LoadTester:
             logger.info(f"  P95: {stats.p95_response_time_ms:.2f} ms")
             logger.info(f"  P99: {stats.p99_response_time_ms:.2f} ms")
             logger.info(f"\nResource Usage:")
-            logger.info(f"  Memory: {stats.avg_memory_mb:.2f} MB (max: {stats.max_memory_mb:.2f} MB)")
-            logger.info(f"  CPU: {stats.avg_cpu_percent:.2f}% (max: {stats.max_cpu_percent:.2f}%)")
+            logger.info(
+                f"  Memory: {stats.avg_memory_mb:.2f} MB (max: {stats.max_memory_mb:.2f} MB)"
+            )
+            logger.info(
+                f"  CPU: {stats.avg_cpu_percent:.2f}% (max: {stats.max_cpu_percent:.2f}%)"
+            )
 
-        logger.info("\n" + "="*80)
+        logger.info("\n" + "=" * 80)
 
 
 class PerformanceProfiler:
@@ -458,7 +475,7 @@ class PerformanceProfiler:
             "timestamp": time.time(),
             "memory_mb": psutil.Process().memory_info().rss / (1024 * 1024),
             "cpu_percent": psutil.Process().cpu_percent(),
-            "threads": psutil.Process().num_threads()
+            "threads": psutil.Process().num_threads(),
         }
 
         # Memory profiling
@@ -489,7 +506,7 @@ class PerformanceProfiler:
         diff = {
             "time_delta_ms": (snap2["timestamp"] - snap1["timestamp"]) * 1000,
             "memory_delta_mb": snap2["memory_mb"] - snap1["memory_mb"],
-            "cpu_delta_percent": snap2["cpu_percent"] - snap1["cpu_percent"]
+            "cpu_delta_percent": snap2["cpu_percent"] - snap1["cpu_percent"],
         }
 
         return diff
@@ -511,104 +528,69 @@ class PerformanceProfiler:
 
             # Consider significant increase
             if memory_increase > 10:  # 10 MB increase
-                candidates.append({
-                    "from_snapshot": snap1["name"],
-                    "to_snapshot": snap2["name"],
-                    "memory_increase_mb": memory_increase,
-                    "memory_percent_increase": (memory_increase / snap1["memory_mb"]) * 100
-                })
+                candidates.append(
+                    {
+                        "from_snapshot": snap1["name"],
+                        "to_snapshot": snap2["name"],
+                        "memory_increase_mb": memory_increase,
+                        "memory_percent_increase": (
+                            memory_increase / snap1["memory_mb"]
+                        )
+                        * 100,
+                    }
+                )
 
         return candidates
 
 
 # Performance test presets
 
+
 class PerformanceTestPresets:
     """Common performance test configurations"""
 
     # Quick smoke test
     SMOKE_TEST = [
-        PhaseConfig(
-            phase=TestPhase.WARMUP,
-            duration_seconds=30,
-            concurrent_users=5
-        )
+        PhaseConfig(phase=TestPhase.WARMUP, duration_seconds=30, concurrent_users=5)
     ]
 
     # Basic load test
     BASIC_LOAD = [
+        PhaseConfig(phase=TestPhase.WARMUP, duration_seconds=30, concurrent_users=10),
+        PhaseConfig(phase=TestPhase.RAMP_UP, duration_seconds=60, concurrent_users=50),
         PhaseConfig(
-            phase=TestPhase.WARMUP,
-            duration_seconds=30,
-            concurrent_users=10
+            phase=TestPhase.SUSTAINED_LOAD, duration_seconds=300, concurrent_users=100
         ),
         PhaseConfig(
-            phase=TestPhase.RAMP_UP,
-            duration_seconds=60,
-            concurrent_users=50
+            phase=TestPhase.RAMP_DOWN, duration_seconds=60, concurrent_users=10
         ),
-        PhaseConfig(
-            phase=TestPhase.SUSTAINED_LOAD,
-            duration_seconds=300,
-            concurrent_users=100
-        ),
-        PhaseConfig(
-            phase=TestPhase.RAMP_DOWN,
-            duration_seconds=60,
-            concurrent_users=10
-        ),
-        PhaseConfig(
-            phase=TestPhase.COOLDOWN,
-            duration_seconds=30,
-            concurrent_users=5
-        )
+        PhaseConfig(phase=TestPhase.COOLDOWN, duration_seconds=30, concurrent_users=5),
     ]
 
     # Stress test
     STRESS_TEST = [
+        PhaseConfig(phase=TestPhase.WARMUP, duration_seconds=30, concurrent_users=10),
+        PhaseConfig(phase=TestPhase.RAMP_UP, duration_seconds=60, concurrent_users=200),
         PhaseConfig(
-            phase=TestPhase.WARMUP,
-            duration_seconds=30,
-            concurrent_users=10
+            phase=TestPhase.SUSTAINED_LOAD, duration_seconds=300, concurrent_users=500
         ),
-        PhaseConfig(
-            phase=TestPhase.RAMP_UP,
-            duration_seconds=60,
-            concurrent_users=200
-        ),
-        PhaseConfig(
-            phase=TestPhase.SUSTAINED_LOAD,
-            duration_seconds=300,
-            concurrent_users=500
-        ),
-        PhaseConfig(
-            phase=TestPhase.COOLDOWN,
-            duration_seconds=60,
-            concurrent_users=5
-        )
+        PhaseConfig(phase=TestPhase.COOLDOWN, duration_seconds=60, concurrent_users=5),
     ]
 
     # Soak test (long duration)
     SOAK_TEST = [
-        PhaseConfig(
-            phase=TestPhase.WARMUP,
-            duration_seconds=60,
-            concurrent_users=10
-        ),
+        PhaseConfig(phase=TestPhase.WARMUP, duration_seconds=60, concurrent_users=10),
         PhaseConfig(
             phase=TestPhase.SUSTAINED_LOAD,
             duration_seconds=3600,  # 1 hour
-            concurrent_users=50
+            concurrent_users=50,
         ),
-        PhaseConfig(
-            phase=TestPhase.COOLDOWN,
-            duration_seconds=60,
-            concurrent_users=5
-        )
+        PhaseConfig(phase=TestPhase.COOLDOWN, duration_seconds=60, concurrent_users=5),
     ]
 
 
 # Performance metrics
+
 
 class PerformanceMetrics:
     """Standard performance metrics for Minder"""
@@ -660,9 +642,15 @@ class PerformanceMetrics:
 
         if response_grade == "EXCELLENT" and success_grade == "EXCELLENT":
             return "A+"
-        elif response_grade in ["EXCELLENT", "GOOD"] and success_grade in ["EXCELLENT", "GOOD"]:
+        elif response_grade in ["EXCELLENT", "GOOD"] and success_grade in [
+            "EXCELLENT",
+            "GOOD",
+        ]:
             return "A"
-        elif response_grade in ["GOOD", "ACCEPTABLE"] and success_grade in ["GOOD", "ACCEPTABLE"]:
+        elif response_grade in ["GOOD", "ACCEPTABLE"] and success_grade in [
+            "GOOD",
+            "ACCEPTABLE",
+        ]:
             return "B"
         elif response_grade == "ACCEPTABLE" and success_grade == "ACCEPTABLE":
             return "C"

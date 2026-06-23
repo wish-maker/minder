@@ -37,11 +37,7 @@ class ContextualCompressor:
         >>> print(f"Compressed {result['original_length']} → {result['compressed_length']} chars")
     """
 
-    def __init__(
-        self,
-        max_tokens: int = 2000,
-        compression_ratio: float = 0.3
-    ):
+    def __init__(self, max_tokens: int = 2000, compression_ratio: float = 0.3):
         """
         Initialize contextual compressor
 
@@ -56,19 +52,19 @@ class ContextualCompressor:
             raise ValueError(f"max_tokens must be positive, got {max_tokens}")
 
         if not 0 < compression_ratio <= 1:
-            raise ValueError(f"compression_ratio must be in (0, 1], got {compression_ratio}")
+            raise ValueError(
+                f"compression_ratio must be in (0, 1], got {compression_ratio}"
+            )
 
         self.max_tokens = max_tokens
         self.compression_ratio = compression_ratio
         self.avg_chars_per_token = 4  # Approximate for English
 
-        logger.info(f"✅ ContextualCompressor initialized: max_tokens={max_tokens}, ratio={compression_ratio}")
+        logger.info(
+            f"✅ ContextualCompressor initialized: max_tokens={max_tokens}, ratio={compression_ratio}"
+        )
 
-    def compress(
-        self,
-        query: str,
-        contexts: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def compress(self, query: str, contexts: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Compress context while preserving relevance
 
@@ -96,7 +92,7 @@ class ContextualCompressor:
             return {
                 "compressed_context": "",
                 "original_length": 0,
-                "compressed_length": 0
+                "compressed_length": 0,
             }
 
         # Combine all contexts
@@ -128,12 +124,7 @@ class ContextualCompressor:
             "compressed_length": compressed_length,
         }
 
-    def _extract_key_sentences(
-        self,
-        query: str,
-        text: str,
-        target_length: int
-    ) -> str:
+    def _extract_key_sentences(self, query: str, text: str, target_length: int) -> str:
         """
         Extract key sentences based on query relevance
 

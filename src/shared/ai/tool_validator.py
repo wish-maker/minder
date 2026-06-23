@@ -2,6 +2,7 @@
 AI Tool Validator - Placeholder implementation
 """
 
+
 def validate_ai_tools(manifest):
     """
     Validate AI tools in plugin manifest

@@ -30,7 +30,11 @@ async def import_ai_tools_from_manifest(
     ai_tools_section = manifest.get("ai_tools")
 
     if not ai_tools_section:
-        return {"success": True, "tools_imported": 0, "message": "No AI tools section in manifest"}
+        return {
+            "success": True,
+            "tools_imported": 0,
+            "message": "No AI tools section in manifest",
+        }
 
     # Handle both list and dict formats
     if isinstance(ai_tools_section, list):
@@ -148,7 +152,9 @@ async def import_ai_tools_from_manifest(
             imported_count += 1
 
         except Exception as e:
-            error_msg = f"Failed to import tool {tool_def.get('name', 'unknown')}: {str(e)}"
+            error_msg = (
+                f"Failed to import tool {tool_def.get('name', 'unknown')}: {str(e)}"
+            )
             logger.error(error_msg)
             errors.append(error_msg)
 
@@ -160,7 +166,9 @@ async def import_ai_tools_from_manifest(
     }
 
 
-async def deactivate_plugin_ai_tools(conn: asyncpg.Connection, plugin_id: str) -> Dict[str, Any]:
+async def deactivate_plugin_ai_tools(
+    conn: asyncpg.Connection, plugin_id: str
+) -> Dict[str, Any]:
     """
     Deactivate all AI tools for a plugin (when plugin is disabled/uninstalled)
 

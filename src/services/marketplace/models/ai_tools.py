@@ -55,8 +55,12 @@ class AIToolConfigurationCreate(BaseModel):
 
     plugin_id: str
     tool_name: str = Field(..., min_length=1, max_length=100)
-    configuration_schema: Dict[str, Any] = Field(..., description="JSON Schema for configuration")
-    default_configuration: Dict[str, Any] = Field(..., description="Default configuration values")
+    configuration_schema: Dict[str, Any] = Field(
+        ..., description="JSON Schema for configuration"
+    )
+    default_configuration: Dict[str, Any] = Field(
+        ..., description="Default configuration values"
+    )
     required_parameters: Optional[Dict[str, Any]] = None
     optional_parameters: Optional[Dict[str, Any]] = None
 

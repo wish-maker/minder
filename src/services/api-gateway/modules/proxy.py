@@ -20,7 +20,7 @@ async def proxy_request(
     path: str,
     request: Request,
     http_client: httpx.AsyncClient,
-    service_registry: ServiceRegistry
+    service_registry: ServiceRegistry,
 ) -> JSONResponse:
     """
     Proxy request to downstream service with circuit breaker and service discovery
@@ -89,7 +89,9 @@ async def proxy_request(
         # Record failed service call
         service_registry.record_service_call(service_name, False)
         logger.error(f"Service {service_name} connection error: {e}")
-        raise HTTPException(status_code=503, detail=f"Service {service_name} unreachable")
+        raise HTTPException(
+            status_code=503, detail=f"Service {service_name} unreachable"
+        )
     except Exception as e:
         # Record failed service call
         service_registry.record_service_call(service_name, False)

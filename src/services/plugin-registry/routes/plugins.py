@@ -34,7 +34,9 @@ class ProxyRouter:
             )
         return self.http_client
 
-    async def forward_request(self, service_name: str, path: str, request: Request) -> Response:
+    async def forward_request(
+        self, service_name: str, path: str, request: Request
+    ) -> Response:
         """
         Forward HTTP request to registered service
 
@@ -136,7 +138,9 @@ class ProxyRouter:
 
         try:
             client = await self.get_http_client()
-            health_url = f"http://{service.host}:{service.port}{service.health_check_url}"
+            health_url = (
+                f"http://{service.host}:{service.port}{service.health_check_url}"
+            )
 
             response = await client.get(health_url, timeout=5.0)
 

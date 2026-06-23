@@ -20,30 +20,17 @@ from domain import (
     HybridSearchRetriever,
     CrossEncoderReranker,
     ContextualCompressor,
-    HyDEQueryExpander
+    HyDEQueryExpander,
 )
 
-from infrastructure import (
-    EmbeddingCache,
-    Pi4ResourceManager
-)
+from infrastructure import EmbeddingCache, Pi4ResourceManager
 
-from services import (
-    RetrievalService,
-    KnowledgeBaseService
-)
+from services import RetrievalService, KnowledgeBaseService
 
-from repositories import (
-    KnowledgeBaseRepository,
-    ConversationRepository
-)
+from repositories import KnowledgeBaseRepository, ConversationRepository
 
 
-from utils import (
-    chunk_text,
-    chunk_text_fallback,
-    cosine_similarity
-)
+from utils import chunk_text, chunk_text_fallback, cosine_similarity
 
 
 class MockQdrantClient:
@@ -54,18 +41,23 @@ class MockQdrantClient:
 
     def query_points(self, collection_name, query, limit=5):
         """Mock query"""
+
         class MockPoint:
             def __init__(self, id, score, text):
                 self.id = id
                 self.score = score
                 self.payload = {"text": text, "source": "test"}
 
-        return type('Result', (), {
-            'points': [
-                MockPoint(f"doc_{i}", 0.9 - (i * 0.1), f"Sample document {i}")
-                for i in range(limit)
-            ]
-        })()
+        return type(
+            "Result",
+            (),
+            {
+                "points": [
+                    MockPoint(f"doc_{i}", 0.9 - (i * 0.1), f"Sample document {i}")
+                    for i in range(limit)
+                ]
+            },
+        )()
 
     def create_collection(self, collection_name, vectors_config):
         """Mock collection creation"""
@@ -81,6 +73,7 @@ class MockQdrantClient:
 
 class MockConnection:
     """Mock database connection"""
+
     async def execute(self, sql, *args):
         """Mock execute"""
 
@@ -91,6 +84,7 @@ class MockConnection:
     async def fetch(self, sql, *args):
         """Mock fetch"""
         return []
+
 
 class MockPostgresPool:
     """Mock PostgreSQL for demonstration"""
@@ -112,19 +106,16 @@ class MockPostgresPool:
 async def demonstrate_clean_architecture():
     """Demonstrate complete clean architecture flow"""
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("🏗️  Clean Architecture Demonstration")
-    print("="*70)
+    print("=" * 70)
 
     # ============================================================================
     # STEP 1: Initialize Infrastructure Layer
     # ============================================================================
     print("\n📦 Step 1: Initialize Infrastructure Layer")
 
-    resource_manager = Pi4ResourceManager(
-        max_concurrent_requests=2,
-        max_memory_mb=4000
-    )
+    resource_manager = Pi4ResourceManager(max_concurrent_requests=2, max_memory_mb=4000)
     print("  ✅ Pi4ResourceManager initialized")
 
     embedding_cache = EmbeddingCache(max_size=1000)
@@ -188,14 +179,14 @@ async def demonstrate_clean_architecture():
         hyde_expander=hyde_expander,
         hybrid_searcher=hybrid_searcher,
         reranker=reranker,
-        context_compressor=compressor
+        context_compressor=compressor,
     )
     print("  ✅ RetrievalService initialized with all enhancements")
 
     kb_service = KnowledgeBaseService(
         ollama_manager=ollama_manager,
         qdrant_client=qdrant_client,
-        parent_child_chunker=None  # Optional
+        parent_child_chunker=None,  # Optional
     )
     print("  ✅ KnowledgeBaseService initialized")
 
@@ -205,7 +196,9 @@ async def demonstrate_clean_architecture():
     print("\n🛠️  Step 5: Demonstrate Shared Utilities")
 
     # Text chunking
-    sample_text = "This is a long document that needs to be chunked for processing. " * 20
+    sample_text = (
+        "This is a long document that needs to be chunked for processing. " * 20
+    )
 
     # Try chunk_text, fallback to chunk_text_fallback if langchain unavailable
     try:
@@ -230,14 +223,14 @@ async def demonstrate_clean_architecture():
     kb_metadata = await kb_repository.create(
         name="Sample Knowledge Base",
         description="Demonstration KB",
-        embedding_model="nomic-embed-text"
+        embedding_model="nomic-embed-text",
     )
     print(f"  ✅ Created knowledge base: {kb_metadata['id']}")
 
     # Create Qdrant collection
     qdrant_client.create_collection(
-        collection_name=kb_metadata['id'],
-        vectors_config={"size": 768, "distance": "Cosine"}
+        collection_name=kb_metadata["id"],
+        vectors_config={"size": 768, "distance": "Cosine"},
     )
 
     # Mock document upload
@@ -245,8 +238,7 @@ async def demonstrate_clean_architecture():
 
     # Generate embeddings
     embeddings = await ollama_manager.generate_embeddings(
-        [sample_doc],
-        model=kb_metadata['embedding_model']
+        [sample_doc], model=kb_metadata["embedding_model"]
     )
     print(f"  ✅ Generated embeddings: {len(embeddings[0])} dimensions")
 
@@ -260,13 +252,13 @@ async def demonstrate_clean_architecture():
 
     # Check resources
     resources = await resource_manager.check_resources()
-    print(f"  ✅ Resource check: memory={resources.get('available_memory_mb', 'N/A')}MB, "
-          f"load={resources.get('cpu_load', 'N/A')}, temp={resources.get('temperature_c', 'N/A')}°C")
+    print(
+        f"  ✅ Resource check: memory={resources.get('available_memory_mb', 'N/A')}MB, "
+        f"load={resources.get('cpu_load', 'N/A')}, temp={resources.get('temperature_c', 'N/A')}°C"
+    )
 
     # Demonstrate retrieval
-    pipeline = {
-        "knowledge_base_ids": [kb_metadata['id']]
-    }
+    pipeline = {"knowledge_base_ids": [kb_metadata["id"]]}
 
     question = "What is this document about?"
     print(f"\n  🔍 Question: {question}")
@@ -275,7 +267,7 @@ async def demonstrate_clean_architecture():
         pipeline=pipeline,
         question=question,
         top_k=3,
-        knowledge_bases={kb_metadata['id']: kb_metadata}
+        knowledge_bases={kb_metadata["id"]: kb_metadata},
     )
 
     print(f"  ✅ Retrieved {len(results['sources'])} sources")
@@ -284,9 +276,9 @@ async def demonstrate_clean_architecture():
     # ============================================================================
     # Summary
     # ============================================================================
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("🎉 Clean Architecture Demonstration Complete!")
-    print("="*70)
+    print("=" * 70)
 
     print("\n📊 Layer Summary:")
     print("  ✅ Infrastructure Layer - External services (Ollama, Qdrant, PostgreSQL)")

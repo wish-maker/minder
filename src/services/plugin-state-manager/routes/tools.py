@@ -58,7 +58,9 @@ async def get_tool_details(tool_name: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get tool details for {tool_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tool details: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get tool details: {str(e)}"
+        )
 
 
 @router.post("/{tool_name}/execute", response_model=ToolExecutionResponse)
@@ -88,7 +90,9 @@ async def list_plugin_tools(plugin_id: str):
         return await discover_plugin_tools(plugin_id)
     except Exception as e:
         logger.error(f"Failed to discover tools for plugin {plugin_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to discover plugin tools: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to discover plugin tools: {str(e)}"
+        )
 
 
 @router.post("/validate", response_model=LicenseValidationResponse)
@@ -105,8 +109,12 @@ async def validate_tool_license(request: LicenseValidationRequest):
 
     try:
         async with db.acquire() as conn:
-            result = await validate_tool_access(conn, request.user_id, request.tool_name)
+            result = await validate_tool_access(
+                conn, request.user_id, request.tool_name
+            )
             return LicenseValidationResponse(**result)
     except Exception as e:
         logger.error(f"License validation failed: {e}")
-        raise HTTPException(status_code=500, detail=f"License validation failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"License validation failed: {str(e)}"
+        )

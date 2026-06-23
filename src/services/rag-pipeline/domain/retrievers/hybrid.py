@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Tuple
 # Optional dependency for BM25
 try:
     from rank_bm25 import BM25Okapi
+
     BM25_AVAILABLE = True
 except ImportError:
     BM25_AVAILABLE = False
@@ -22,6 +23,7 @@ except ImportError:
 # Optional dependency for numerical operations
 try:
     import numpy as np
+
     NUMPY_AVAILABLE = True
 except ImportError:
     NUMPY_AVAILABLE = False
@@ -100,14 +102,18 @@ class HybridSearchRetriever:
                 corpus.append(tokens)
 
             if not corpus:
-                logger.warning(f"No valid tokens extracted from {len(documents)} documents")
+                logger.warning(
+                    f"No valid tokens extracted from {len(documents)} documents"
+                )
                 return
 
             # Build BM25 index
             self.sparse_index[kb_id] = BM25Okapi(corpus)
             self.documents[kb_id] = documents
 
-            logger.info(f"✅ BM25 index built for KB {kb_id}: {len(documents)} docs, {len(corpus)} tokens")
+            logger.info(
+                f"✅ BM25 index built for KB {kb_id}: {len(documents)} docs, {len(corpus)} tokens"
+            )
 
         except Exception as e:
             logger.error(f"Failed to build BM25 index for KB {kb_id}: {e}")
@@ -119,7 +125,7 @@ class HybridSearchRetriever:
         query_embedding: List[float],
         query: str,
         dense_results: List[Any],
-        top_k: int = 5
+        top_k: int = 5,
     ) -> List[Tuple[Any, float]]:
         """
         Perform hybrid search combining dense and sparse scores
@@ -151,7 +157,7 @@ class HybridSearchRetriever:
             # Extract dense scores
             dense_scores = {
                 r.payload.get("_id", str(r.id)): r.score
-                for r in dense_results[:top_k * 2]  # Get more for better combination
+                for r in dense_results[: top_k * 2]  # Get more for better combination
             }
 
             # Perform sparse search
@@ -162,28 +168,41 @@ class HybridSearchRetriever:
 
             # Start with dense contribution
             for doc_id, score in dense_scores.items():
-                hybrid_scores[doc_id] = self.alpha * self._normalize_score(score, dense_scores)
+                hybrid_scores[doc_id] = self.alpha * self._normalize_score(
+                    score, dense_scores
+                )
 
             # Add sparse contribution
             for doc_id, score in sparse_results.items():
                 if doc_id in hybrid_scores:
                     # Already has dense score, add sparse
-                    hybrid_scores[doc_id] += (1 - self.alpha) * self._normalize_score(score, sparse_results)
+                    hybrid_scores[doc_id] += (1 - self.alpha) * self._normalize_score(
+                        score, sparse_results
+                    )
                 else:
                     # Only sparse score found
-                    hybrid_scores[doc_id] = (1 - self.alpha) * self._normalize_score(score, sparse_results)
+                    hybrid_scores[doc_id] = (1 - self.alpha) * self._normalize_score(
+                        score, sparse_results
+                    )
 
             # Sort and return top-k
-            sorted_results = sorted(hybrid_scores.items(), key=lambda x: x[1], reverse=True)
+            sorted_results = sorted(
+                hybrid_scores.items(), key=lambda x: x[1], reverse=True
+            )
             results = [(doc_id, score) for doc_id, score in sorted_results[:top_k]]
 
-            logger.debug(f"Hybrid search: {len(results)} results (dense: {len(dense_scores)}, sparse: {len(sparse_results)})")
+            logger.debug(
+                f"Hybrid search: {len(results)} results (dense: {len(dense_scores)}, sparse: {len(sparse_results)})"
+            )
             return results
 
         except Exception as e:
             logger.error(f"Hybrid search failed for KB {kb_id}: {e}")
             # Fallback to dense-only
-            return [(r.payload.get("_id", str(r.id)), r.score) for r in dense_results[:top_k]]
+            return [
+                (r.payload.get("_id", str(r.id)), r.score)
+                for r in dense_results[:top_k]
+            ]
 
     def _sparse_search(self, kb_id: str, query: str, k: int) -> Dict[str, float]:
         """
@@ -220,7 +239,9 @@ class HybridSearchRetriever:
                 top_indices = np.argsort(scores)[::-1][:k]
             else:
                 # Python fallback
-                top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
+                top_indices = sorted(
+                    range(len(scores)), key=lambda i: scores[i], reverse=True
+                )[:k]
 
             # Map to document IDs
             doc_scores = {}
@@ -230,7 +251,9 @@ class HybridSearchRetriever:
                 if idx < len(documents):
                     doc = documents[idx]
                     doc_id = doc.get("_id", f"doc_{idx}")
-                    doc_scores[doc_id] = float(scores[idx]) if idx < len(scores) else 0.0
+                    doc_scores[doc_id] = (
+                        float(scores[idx]) if idx < len(scores) else 0.0
+                    )
 
             logger.debug(f"BM25 search: {len(doc_scores)} results from {k} requested")
             return doc_scores

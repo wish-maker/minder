@@ -29,7 +29,9 @@ class LicenseGenerator:
 
         # 2. Generate HMAC signature
         secret = settings.LICENSE_SECRET
-        signature = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(
+            secret.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()
 
         # 3. Create license key from signature (take first 16 chars)
         key = signature[:16].upper()

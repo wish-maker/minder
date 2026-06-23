@@ -45,11 +45,7 @@ class SelfRAGPipeline:
         >>> print(f"Answer quality: {result['quality']['threshold_met']}")
     """
 
-    def __init__(
-        self,
-        max_iterations: int = 2,
-        quality_threshold: float = 0.7
-    ):
+    def __init__(self, max_iterations: int = 2, quality_threshold: float = 0.7):
         """
         Initialize Self-RAG pipeline
 
@@ -64,7 +60,9 @@ class SelfRAGPipeline:
             raise ValueError(f"max_iterations must be positive, got {max_iterations}")
 
         if not 0 <= quality_threshold <= 1:
-            raise ValueError(f"quality_threshold must be in [0, 1], got {quality_threshold}")
+            raise ValueError(
+                f"quality_threshold must be in [0, 1], got {quality_threshold}"
+            )
 
         self.max_iterations = max_iterations
         self.quality_threshold = quality_threshold
@@ -101,7 +99,7 @@ class SelfRAGPipeline:
         context: str,
         sources: List[Dict[str, Any]],
         llm_manager: Any,
-        model: str = "llama3"
+        model: str = "llama3",
     ) -> Dict[str, Any]:
         """
         Generate answer with self-refinement loop
@@ -147,9 +145,7 @@ class SelfRAGPipeline:
         for iteration in range(self.max_iterations):
             # Generate answer
             result = await llm_manager.generate_response(
-                prompt=question,
-                context=current_context,
-                model=model
+                prompt=question, context=current_context, model=model
             )
 
             current_answer = result["text"]
@@ -165,11 +161,13 @@ class SelfRAGPipeline:
                     question=question,
                     answer=current_answer,
                     context=current_context,
-                    context_sources=sources
+                    context_sources=sources,
                 )
 
                 overall_quality = quality_result.get("overall_quality", 0.0)
-                logger.info(f"🔄 Iteration {iteration + 1}: Quality = {overall_quality:.3f}")
+                logger.info(
+                    f"🔄 Iteration {iteration + 1}: Quality = {overall_quality:.3f}"
+                )
 
                 # Check if quality is sufficient
                 if overall_quality >= self.quality_threshold:
@@ -186,9 +184,9 @@ class SelfRAGPipeline:
                     if hallucination_result.get("is_hallucination"):
                         logger.warning("⚠️ Hallucination detected, reducing context")
                         # Reduce context to top sources only
-                        current_context = "\n".join([
-                            s.get("text", "") for s in sources[:2]
-                        ])
+                        current_context = "\n".join(
+                            [s.get("text", "") for s in sources[:2]]
+                        )
 
             except Exception as e:
                 logger.warning(f"⚠️ Quality evaluation failed: {e}")
@@ -200,6 +198,6 @@ class SelfRAGPipeline:
             "answer": current_answer,
             "quality": {
                 "iterations": iteration + 1,
-                "threshold_met": iteration < self.max_iterations
-            }
+                "threshold_met": iteration < self.max_iterations,
+            },
         }

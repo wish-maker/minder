@@ -16,23 +16,26 @@ logger = logging.getLogger(__name__)
 
 class QueryComplexity(Enum):
     """Query complexity levels"""
-    SIMPLE = "simple"           # Direct factual query
-    MODERATE = "moderate"       # Requires some reasoning
-    COMPLEX = "complex"         # Multi-hop reasoning needed
-    AMBIGUOUS = "ambiguous"     # Clarification needed
+
+    SIMPLE = "simple"  # Direct factual query
+    MODERATE = "moderate"  # Requires some reasoning
+    COMPLEX = "complex"  # Multi-hop reasoning needed
+    AMBIGUOUS = "ambiguous"  # Clarification needed
 
 
 class RetrievalStrategy(Enum):
     """Available retrieval strategies"""
-    BASIC = "basic"                    # Simple vector search
-    HYBRID = "hybrid"                  # Vector + keyword search
-    HIERARCHICAL = "hierarchical"      # Multi-level retrieval
-    DECOMPOSITION = "decomposition"    # Query decomposition
+
+    BASIC = "basic"  # Simple vector search
+    HYBRID = "hybrid"  # Vector + keyword search
+    HIERARCHICAL = "hierarchical"  # Multi-level retrieval
+    DECOMPOSITION = "decomposition"  # Query decomposition
 
 
 @dataclass
 class QueryAnalysis:
     """Query analysis results"""
+
     original_query: str
     complexity: QueryComplexity
     keywords: List[str]
@@ -45,6 +48,7 @@ class QueryAnalysis:
 @dataclass
 class PipelineDecision:
     """RAG pipeline configuration decision"""
+
     retrieval_strategy: RetrievalStrategy
     top_k: int
     similarity_threshold: float
@@ -94,6 +98,7 @@ Provide JSON response:
 
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"http://{self.ollama_host}/api/generate",
@@ -101,8 +106,8 @@ Provide JSON response:
                         "model": "llama3.2",
                         "prompt": analysis_prompt,
                         "stream": False,
-                        "format": "json"
-                    }
+                        "format": "json",
+                    },
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -112,12 +117,14 @@ Provide JSON response:
 
                 return QueryAnalysis(
                     original_query=query,
-                    complexity=QueryComplexity(analysis_data.get("complexity", "moderate")),
+                    complexity=QueryComplexity(
+                        analysis_data.get("complexity", "moderate")
+                    ),
                     keywords=analysis_data.get("keywords", []),
                     entities=analysis_data.get("entities", []),
                     intent=analysis_data.get("intent", "factual"),
                     requires_external=analysis_data.get("requires_external", False),
-                    confidence=analysis_data.get("confidence", 0.5)
+                    confidence=analysis_data.get("confidence", 0.5),
                 )
 
         except Exception as e:
@@ -144,7 +151,7 @@ Provide JSON response:
             entities=[],
             intent="factual",
             requires_external=False,
-            confidence=0.6
+            confidence=0.6,
         )
 
     async def decide_pipeline(self, analysis: QueryAnalysis) -> PipelineDecision:
@@ -189,6 +196,7 @@ Rules:
 
         try:
             import httpx
+
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
                     f"http://{self.ollama_host}/api/generate",
@@ -196,8 +204,8 @@ Rules:
                         "model": "llama3.2",
                         "prompt": decision_prompt,
                         "stream": False,
-                        "format": "json"
-                    }
+                        "format": "json",
+                    },
                 )
                 response.raise_for_status()
                 result = response.json()
@@ -206,25 +214,33 @@ Rules:
                 decision_data = json.loads(result.get("response", "{}"))
 
                 decision = PipelineDecision(
-                    retrieval_strategy=RetrievalStrategy(decision_data.get("retrieval_strategy", "hybrid")),
+                    retrieval_strategy=RetrievalStrategy(
+                        decision_data.get("retrieval_strategy", "hybrid")
+                    ),
                     top_k=decision_data.get("top_k", 10),
                     similarity_threshold=decision_data.get("similarity_threshold", 0.7),
                     use_reranking=decision_data.get("use_reranking", True),
                     use_query_expansion=decision_data.get("use_query_expansion", False),
                     use_hyde=decision_data.get("use_hyde", False),
                     use_self_rag=decision_data.get("use_self_rag", False),
-                    chunking_strategy=decision_data.get("chunking_strategy", "semantic"),
-                    reasoning_required=decision_data.get("reasoning_required", False)
+                    chunking_strategy=decision_data.get(
+                        "chunking_strategy", "semantic"
+                    ),
+                    reasoning_required=decision_data.get("reasoning_required", False),
                 )
 
                 # Record decision for learning
-                self.decision_history.append({
-                    "query": analysis.original_query,
-                    "analysis": analysis.__dict__,
-                    "decision": decision.__dict__
-                })
+                self.decision_history.append(
+                    {
+                        "query": analysis.original_query,
+                        "analysis": analysis.__dict__,
+                        "decision": decision.__dict__,
+                    }
+                )
 
-                logger.info(f"Agent decision: {decision.retrieval_strategy.value} strategy with top_k={decision.top_k}")
+                logger.info(
+                    f"Agent decision: {decision.retrieval_strategy.value} strategy with top_k={decision.top_k}"
+                )
                 return decision
 
         except Exception as e:
@@ -244,7 +260,7 @@ Rules:
             use_hyde=False,
             use_self_rag=False,
             chunking_strategy="semantic",
-            reasoning_required=False
+            reasoning_required=False,
         )
 
         # Adjust based on complexity
@@ -270,8 +286,9 @@ Rules:
 
         return decision
 
-    async def optimize_pipeline(self, current_decision: PipelineDecision,
-                               performance_metrics: Dict[str, float]) -> PipelineDecision:
+    async def optimize_pipeline(
+        self, current_decision: PipelineDecision, performance_metrics: Dict[str, float]
+    ) -> PipelineDecision:
         """
         Optimize pipeline based on performance feedback
 
@@ -290,7 +307,7 @@ Rules:
             use_hyde=current_decision.use_hyde,
             use_self_rag=current_decision.use_self_rag,
             chunking_strategy=current_decision.chunking_strategy,
-            reasoning_required=current_decision.reasoning_required
+            reasoning_required=current_decision.reasoning_required,
         )
 
         # Adjust based on performance
@@ -305,7 +322,9 @@ Rules:
             if not optimized.use_query_expansion:
                 optimized.use_query_expansion = True
 
-        logger.info(f"Pipeline optimized: top_k {current_decision.top_k} -> {optimized.top_k}")
+        logger.info(
+            f"Pipeline optimized: top_k {current_decision.top_k} -> {optimized.top_k}"
+        )
         return optimized
 
     def get_decision_stats(self) -> Dict[str, Any]:
@@ -327,5 +346,8 @@ Rules:
             "total_decisions": len(self.decision_history),
             "strategy_distribution": strategy_counts,
             "complexity_distribution": complexity_counts,
-            "avg_confidence": sum(r["analysis"]["confidence"] for r in self.decision_history) / len(self.decision_history)
+            "avg_confidence": sum(
+                r["analysis"]["confidence"] for r in self.decision_history
+            )
+            / len(self.decision_history),
         }

@@ -50,7 +50,7 @@ class Pi4ResourceManager:
         max_concurrent_requests: int = 2,
         max_memory_mb: int = 4000,
         cpu_threshold: int = 80,
-        embedding_batch_size: int = 5
+        embedding_batch_size: int = 5,
     ):
         """
         Initialize RPi 4 resource manager
@@ -65,7 +65,9 @@ class Pi4ResourceManager:
             ValueError: If parameters invalid
         """
         if max_concurrent_requests <= 0:
-            raise ValueError(f"max_concurrent_requests must be positive, got {max_concurrent_requests}")
+            raise ValueError(
+                f"max_concurrent_requests must be positive, got {max_concurrent_requests}"
+            )
 
         if max_memory_mb <= 0:
             raise ValueError(f"max_memory_mb must be positive, got {max_memory_mb}")
@@ -74,7 +76,9 @@ class Pi4ResourceManager:
             raise ValueError(f"cpu_threshold must be in (0, 100], got {cpu_threshold}")
 
         if embedding_batch_size <= 0:
-            raise ValueError(f"embedding_batch_size must be positive, got {embedding_batch_size}")
+            raise ValueError(
+                f"embedding_batch_size must be positive, got {embedding_batch_size}"
+            )
 
         self.max_concurrent_requests = max_concurrent_requests
         self.max_memory_mb = max_memory_mb
@@ -112,10 +116,16 @@ class Pi4ResourceManager:
             # Read memory info
             with open("/proc/meminfo", "r") as f:
                 meminfo = f.read()
-                available = int([
-                    line for line in meminfo.split("\n")
-                    if "MemAvailable" in line
-                ][0].split()[1]) // 1024  # Convert KB to MB
+                available = (
+                    int(
+                        [
+                            line
+                            for line in meminfo.split("\n")
+                            if "MemAvailable" in line
+                        ][0].split()[1]
+                    )
+                    // 1024
+                )  # Convert KB to MB
 
             # Read CPU load
             with open("/proc/loadavg", "r") as f:
@@ -124,23 +134,21 @@ class Pi4ResourceManager:
             # Read thermal
             try:
                 with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
-                    temp = int(f.read().strip()) / 1000  # Convert millidegrees to Celsius
+                    temp = (
+                        int(f.read().strip()) / 1000
+                    )  # Convert millidegrees to Celsius
             except (FileNotFoundError, ValueError, IndexError):
                 temp = 0  # Thermal read failed
                 logger.debug("Unable to read CPU temperature")
 
             # Determine if resources are sufficient
-            can_process = (
-                available > 1000 and
-                load < 10.0 and
-                temp < self.cpu_threshold
-            )
+            can_process = available > 1000 and load < 10.0 and temp < self.cpu_threshold
 
             return {
                 "available_memory_mb": available,
                 "cpu_load": load,
                 "temperature_c": temp,
-                "can_process": can_process
+                "can_process": can_process,
             }
 
         except Exception as e:

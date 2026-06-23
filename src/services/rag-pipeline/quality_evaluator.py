@@ -15,13 +15,17 @@ from typing import Any, Dict, List, Optional
 try:
     from sentence_transformers import SentenceTransformer
     from sentence_transformers.util import cos_sim
+
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
-    logging.warning("sentence-transformers not available. Install with: pip install sentence-transformers")
+    logging.warning(
+        "sentence-transformers not available. Install with: pip install sentence-transformers"
+    )
 
 try:
     from bert_score import BERTScorer
+
     BERTSCORE_AVAILABLE = True
 except ImportError:
     BERTSCORE_AVAILABLE = False
@@ -37,7 +41,7 @@ class AdvancedQualityEvaluator:
         self,
         semantic_model: str = "sentence-transformers/all-MiniLM-L-6-v2",
         bertscore_model: str = "microsoft/deberta-xlarge-mnli",
-        use_gpu: bool = False
+        use_gpu: bool = False,
     ):
         """
         Initialize advanced quality evaluator
@@ -55,7 +59,9 @@ class AdvancedQualityEvaluator:
         self._semantic_model = None
         self._bertscore_model = None
 
-        logger.info(f"✅ Advanced Quality Evaluator initialized (semantic: {semantic_model}, bertscore: {bertscore_model})")
+        logger.info(
+            f"✅ Advanced Quality Evaluator initialized (semantic: {semantic_model}, bertscore: {bertscore_model})"
+        )
 
     @property
     def semantic_model(self) -> Optional[SentenceTransformer]:
@@ -78,10 +84,14 @@ class AdvancedQualityEvaluator:
                 logger.info(f"🔄 Loading BERTScore model: {self.bertscore_model_name}")
                 self._bertscore_model = BERTScorer(
                     model_type=[self.bertscore_model_name],
-                    num_layers=len(self.bertscore_model_name) if isinstance(self.bertscore_model_name, list) else None,
+                    num_layers=(
+                        len(self.bertscore_model_name)
+                        if isinstance(self.bertscore_model_name, list)
+                        else None
+                    ),
                     idf=False,
                     device="cuda" if self.use_gpu else "cpu",
-                    lang="en"
+                    lang="en",
                 )
                 logger.info("✅ BERTScore model loaded")
             except Exception as e:
@@ -90,10 +100,7 @@ class AdvancedQualityEvaluator:
         return self._bertscore_model
 
     def evaluate_semantic_similarity(
-        self,
-        answer: str,
-        context: str,
-        context_sources: Optional[List[Dict]] = None
+        self, answer: str, context: str, context_sources: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
         Evaluate semantic similarity between answer and context
@@ -121,20 +128,31 @@ class AdvancedQualityEvaluator:
             # If context sources available, calculate max similarity with any source
             max_source_similarity = similarity
             if context_sources:
-                source_texts = [s.get("text", "") for s in context_sources if s.get("text")]
+                source_texts = [
+                    s.get("text", "") for s in context_sources if s.get("text")
+                ]
                 if source_texts:
                     source_embeddings = self.semantic_model.encode(source_texts)
-                    source_similarities = cos_sim(answer_embedding, source_embeddings)[0]
+                    source_similarities = cos_sim(answer_embedding, source_embeddings)[
+                        0
+                    ]
                     max_source_similarity = float(max(source_similarities))
 
             result = {
                 "similarity": similarity,
                 "max_source_similarity": max_source_similarity,
-                "normalized_similarity": (similarity + 1) / 2,  # Convert [-1, 1] to [0, 1]
-                "confidence": "high" if similarity > 0.7 else "medium" if similarity > 0.4 else "low"
+                "normalized_similarity": (similarity + 1)
+                / 2,  # Convert [-1, 1] to [0, 1]
+                "confidence": (
+                    "high"
+                    if similarity > 0.7
+                    else "medium" if similarity > 0.4 else "low"
+                ),
             }
 
-            logger.info(f"📊 Semantic similarity: {similarity:.3f} (max source: {max_source_similarity:.3f})")
+            logger.info(
+                f"📊 Semantic similarity: {similarity:.3f} (max source: {max_source_similarity:.3f})"
+            )
             return result
 
         except Exception as e:
@@ -147,7 +165,12 @@ class AdvancedQualityEvaluator:
         context_words = set(context.lower().split())
 
         if not context_words:
-            return {"similarity": 0.0, "max_source_similarity": 0.0, "normalized_similarity": 0.0, "confidence": "low"}
+            return {
+                "similarity": 0.0,
+                "max_source_similarity": 0.0,
+                "normalized_similarity": 0.0,
+                "confidence": "low",
+            }
 
         # Jaccard similarity
         intersection = answer_words & context_words
@@ -164,15 +187,14 @@ class AdvancedQualityEvaluator:
             "similarity": similarity,
             "max_source_similarity": similarity,
             "normalized_similarity": similarity,
-            "confidence": "high" if similarity > 0.5 else "medium" if similarity > 0.2 else "low",
-            "fallback": "basic_word_overlap"
+            "confidence": (
+                "high" if similarity > 0.5 else "medium" if similarity > 0.2 else "low"
+            ),
+            "fallback": "basic_word_overlap",
         }
 
     def evaluate_bertscore(
-        self,
-        answer: str,
-        reference: str,
-        language: str = "en"
+        self, answer: str, reference: str, language: str = "en"
     ) -> Dict[str, Any]:
         """
         Evaluate factual correctness using BERTScore
@@ -192,20 +214,19 @@ class AdvancedQualityEvaluator:
         try:
             # Calculate BERTScore
             P, R, F1 = self.bertscore_model.score(
-                [answer],
-                [reference],
-                batch_size=1,
-                verbose=False
+                [answer], [reference], batch_size=1, verbose=False
             )
 
             result = {
                 "precision": float(P[0]),
                 "recall": float(R[0]),
                 "f1": float(F1[0]),
-                "confidence": "high" if F1 > 0.85 else "medium" if F1 > 0.7 else "low"
+                "confidence": "high" if F1 > 0.85 else "medium" if F1 > 0.7 else "low",
             }
 
-            logger.info(f"📊 BERTScore F1: {result['f1']:.3f} (P: {result['precision']:.3f}, R: {result['recall']:.3f})")
+            logger.info(
+                f"📊 BERTScore F1: {result['f1']:.3f} (P: {result['precision']:.3f}, R: {result['recall']:.3f})"
+            )
             return result
 
         except Exception as e:
@@ -218,7 +239,13 @@ class AdvancedQualityEvaluator:
         reference_words = set(reference.lower().split())
 
         if not reference_words:
-            return {"precision": 0.0, "recall": 0.0, "f1": 0.0, "confidence": "low", "fallback": "basic_word_overlap"}
+            return {
+                "precision": 0.0,
+                "recall": 0.0,
+                "f1": 0.0,
+                "confidence": "low",
+                "fallback": "basic_word_overlap",
+            }
 
         # Precision: How many answer words are in reference
         intersection = answer_words & reference_words
@@ -228,21 +255,22 @@ class AdvancedQualityEvaluator:
         recall = len(intersection) / len(reference_words)
 
         # F1 score
-        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        f1 = (
+            2 * (precision * recall) / (precision + recall)
+            if (precision + recall) > 0
+            else 0.0
+        )
 
         return {
             "precision": precision,
             "recall": recall,
             "f1": f1,
             "confidence": "high" if f1 > 0.7 else "medium" if f1 > 0.4 else "low",
-            "fallback": "basic_word_overlap"
+            "fallback": "basic_word_overlap",
         }
 
     def evaluate_hallucination(
-        self,
-        answer: str,
-        context: str,
-        context_sources: Optional[List[Dict]] = None
+        self, answer: str, context: str, context_sources: Optional[List[Dict]] = None
     ) -> Dict[str, Any]:
         """
         Detect potential hallucinations in the answer
@@ -266,11 +294,20 @@ class AdvancedQualityEvaluator:
 
             # Check 2: Contains uncertainty markers
             uncertainty_markers = [
-                "maybe", "perhaps", "possibly", "might be", "could be",
-                "not sure", "uncertain", "unknown", "???"
+                "maybe",
+                "perhaps",
+                "possibly",
+                "might be",
+                "could be",
+                "not sure",
+                "uncertain",
+                "unknown",
+                "???",
             ]
             answer_lower = answer.lower()
-            found_markers = [marker for marker in uncertainty_markers if marker in answer_lower]
+            found_markers = [
+                marker for marker in uncertainty_markers if marker in answer_lower
+            ]
             if found_markers:
                 hallucination_indicators.append(f"uncertainty_markers: {found_markers}")
                 hallucination_score += 0.2 * len(found_markers)
@@ -283,10 +320,16 @@ class AdvancedQualityEvaluator:
 
             # Check 4: Generic/vague phrases
             generic_phrases = [
-                "it depends", "various factors", "multiple reasons",
-                "in general", "typically", "usually"
+                "it depends",
+                "various factors",
+                "multiple reasons",
+                "in general",
+                "typically",
+                "usually",
             ]
-            found_generic = [phrase for phrase in generic_phrases if phrase in answer_lower]
+            found_generic = [
+                phrase for phrase in generic_phrases if phrase in answer_lower
+            ]
             if found_generic:
                 hallucination_indicators.append(f"generic_phrases: {found_generic}")
                 hallucination_score += 0.1 * len(found_generic)
@@ -306,10 +349,12 @@ class AdvancedQualityEvaluator:
                 "hallucination_score": hallucination_score,
                 "indicators": hallucination_indicators,
                 "is_hallucination": hallucination_score > 0.5,
-                "confidence": "low" if hallucination_score > 0.5 else "high"
+                "confidence": "low" if hallucination_score > 0.5 else "high",
             }
 
-            logger.info(f"🔍 Hallucination score: {hallucination_score:.3f} ({len(hallucination_indicators)} indicators)")
+            logger.info(
+                f"🔍 Hallucination score: {hallucination_score:.3f} ({len(hallucination_indicators)} indicators)"
+            )
             return result
 
         except Exception as e:
@@ -319,7 +364,7 @@ class AdvancedQualityEvaluator:
                 "indicators": [],
                 "is_hallucination": False,
                 "confidence": "medium",
-                "error": str(e)
+                "error": str(e),
             }
 
     def evaluate_answer_quality(
@@ -328,7 +373,7 @@ class AdvancedQualityEvaluator:
         answer: str,
         context: str,
         context_sources: Optional[List[Dict]] = None,
-        reference: Optional[str] = None
+        reference: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Comprehensive quality evaluation combining all metrics
@@ -345,7 +390,9 @@ class AdvancedQualityEvaluator:
         """
         try:
             # Evaluate semantic similarity
-            semantic_result = self.evaluate_semantic_similarity(answer, context, context_sources)
+            semantic_result = self.evaluate_semantic_similarity(
+                answer, context, context_sources
+            )
 
             # Evaluate factual correctness (BERTScore)
             if reference:
@@ -355,7 +402,9 @@ class AdvancedQualityEvaluator:
                 factual_result = self.evaluate_bertscore(answer, context)
 
             # Detect hallucination
-            hallucination_result = self.evaluate_hallucination(answer, context, context_sources)
+            hallucination_result = self.evaluate_hallucination(
+                answer, context, context_sources
+            )
 
             # Basic length and coherence checks
             length_score = self._evaluate_length(answer)
@@ -364,11 +413,11 @@ class AdvancedQualityEvaluator:
             # Calculate overall quality score
             # Weight: Semantic 30%, Factual 30%, Length 15%, Coherence 15%, Hallucination 10%
             overall_quality = (
-                semantic_result["similarity"] * 0.30 +
-                factual_result["f1"] * 0.30 +
-                length_score * 0.15 +
-                coherence_score * 0.15 +
-                (1 - hallucination_result["hallucination_score"]) * 0.10
+                semantic_result["similarity"] * 0.30
+                + factual_result["f1"] * 0.30
+                + length_score * 0.15
+                + coherence_score * 0.15
+                + (1 - hallucination_result["hallucination_score"]) * 0.10
             )
 
             result = {
@@ -378,11 +427,17 @@ class AdvancedQualityEvaluator:
                 "hallucination": hallucination_result,
                 "length": {"score": length_score},
                 "coherence": {"score": coherence_score},
-                "confidence": "high" if overall_quality > 0.7 else "medium" if overall_quality > 0.5 else "low",
-                "is_high_quality": overall_quality > 0.7
+                "confidence": (
+                    "high"
+                    if overall_quality > 0.7
+                    else "medium" if overall_quality > 0.5 else "low"
+                ),
+                "is_high_quality": overall_quality > 0.7,
             }
 
-            logger.info(f"✅ Overall quality: {overall_quality:.3f} ({result['confidence']} confidence)")
+            logger.info(
+                f"✅ Overall quality: {overall_quality:.3f} ({result['confidence']} confidence)"
+            )
             return result
 
         except Exception as e:
@@ -391,7 +446,7 @@ class AdvancedQualityEvaluator:
                 "overall_quality": 0.5,
                 "error": str(e),
                 "confidence": "low",
-                "is_high_quality": False
+                "is_high_quality": False,
             }
 
     def _evaluate_length(self, answer: str) -> float:

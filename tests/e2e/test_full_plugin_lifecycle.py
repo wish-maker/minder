@@ -40,7 +40,9 @@ class TestPluginLifecycle:
         """
         # Step 1: Discover available plugins
         discovery_response = gateway_client.get(
-            "/v1/marketplace/plugins", headers=auth_headers, params={"search": "weather"}
+            "/v1/marketplace/plugins",
+            headers=auth_headers,
+            params={"search": "weather"},
         )
 
         assert discovery_response.status_code in [200, 404]
@@ -50,7 +52,9 @@ class TestPluginLifecycle:
 
         # Step 2: Install plugin (if available)
         install_response = gateway_client.post(
-            "/v1/plugin-registry/plugins/install", headers=auth_headers, json={"name": "weather", "version": "1.0.0"}
+            "/v1/plugin-registry/plugins/install",
+            headers=auth_headers,
+            json={"name": "weather", "version": "1.0.0"},
         )
 
         # Accept 404 (plugin not found) or 200/201 (installed)
@@ -124,7 +128,9 @@ class TestPluginLifecycle:
 
         # Step 3: Search for specific plugin
         search_response = gateway_client.get(
-            "/v1/marketplace/plugins", headers=auth_headers, params={"search": "test-plugin"}
+            "/v1/marketplace/plugins",
+            headers=auth_headers,
+            params={"search": "test-plugin"},
         )
 
         assert search_response.status_code in [200, 404]
@@ -155,7 +161,11 @@ class TestUserAuthenticationFlow:
         )
 
         # Accept 201 (created) or 409 (conflict - already exists)
-        assert register_response.status_code in [201, 409, 501]  # 501 if not implemented
+        assert register_response.status_code in [
+            201,
+            409,
+            501,
+        ]  # 501 if not implemented
 
         # Step 2: Login
         login_response = gateway_client.post(
@@ -176,7 +186,9 @@ class TestUserAuthenticationFlow:
             token = login_data.get("token") or login_data.get("access_token")
 
             # Step 3: Use token to access protected endpoint
-            protected_response = gateway_client.get("/v1/plugins", headers={"Authorization": f"Bearer {token}"})
+            protected_response = gateway_client.get(
+                "/v1/plugins", headers={"Authorization": f"Bearer {token}"}
+            )
 
             assert protected_response.status_code in [200, 404]
 
@@ -185,7 +197,8 @@ class TestUserAuthenticationFlow:
         # This would test API key generation and usage
         # For now, we just verify the endpoint exists
         api_key_response = gateway_client.post(
-            "/v1/auth/api-keys", json={"name": "test-e2e-key", "scopes": ["read:plugins", "write:plugins"]}
+            "/v1/auth/api-keys",
+            json={"name": "test-e2e-key", "scopes": ["read:plugins", "write:plugins"]},
         )
 
         # Accept 201 (created) or 501 (not implemented)
@@ -209,7 +222,13 @@ class TestRAGPipelineE2E:
         upload_response = gateway_client.post(
             "/v1/rag/documents/upload",
             headers=auth_headers,
-            files={"file": ("test.txt", b"This is a test document for E2E testing.", "text/plain")},
+            files={
+                "file": (
+                    "test.txt",
+                    b"This is a test document for E2E testing.",
+                    "text/plain",
+                )
+            },
             data={"title": "Test Document", "description": "E2E test document"},
         )
 
@@ -224,7 +243,9 @@ class TestRAGPipelineE2E:
 
             # Step 2: Query documents
             query_response = gateway_client.post(
-                "/v1/rag/query", headers=auth_headers, json={"query": "What is this document about?", "top_k": 5}
+                "/v1/rag/query",
+                headers=auth_headers,
+                json={"query": "What is this document about?", "top_k": 5},
             )
 
             # Accept 200 (success) or 503 (service unavailable)
@@ -248,7 +269,12 @@ class TestAIIntegrationE2E:
         ai_response = gateway_client.post(
             "/v1/ai/inference",
             headers=auth_headers,
-            json={"prompt": "What is the weather in Istanbul?", "model": "llama2", "context": [], "max_tokens": 100},
+            json={
+                "prompt": "What is the weather in Istanbul?",
+                "model": "llama2",
+                "context": [],
+                "max_tokens": 100,
+            },
         )
 
         # Accept 200 (success) or 503 (service unavailable)
@@ -350,7 +376,10 @@ class TestPerformanceE2E:
         # Make 100 concurrent requests
         with concurrent.futures.ThreadPoolExecutor(max_workers=100) as executor:
             futures = [executor.submit(make_request) for _ in range(100)]
-            results = [future.result(timeout=5) for future in concurrent.futures.as_completed(futures)]
+            results = [
+                future.result(timeout=5)
+                for future in concurrent.futures.as_completed(futures)
+            ]
 
         # Calculate success rate
         status_codes, times = zip(*results)
@@ -371,7 +400,9 @@ class TestSecurityE2E:
     def test_authentication_required(self, gateway_client):
         """Test that authentication is required for protected endpoints"""
         # Try to access protected endpoint without auth
-        protected_response = gateway_client.post("/v1/plugins/install", json={"name": "weather"})
+        protected_response = gateway_client.post(
+            "/v1/plugins/install", json={"name": "weather"}
+        )
 
         # Should return 401 or 403
         assert protected_response.status_code in [401, 403, 422]
@@ -379,7 +410,9 @@ class TestSecurityE2E:
     def test_sql_injection_prevention(self, gateway_client):
         """Test that SQL injection is prevented"""
         # Try SQL injection
-        injection_response = gateway_client.get("/v1/marketplace/plugins", params={"search": "1' OR '1'='1"})
+        injection_response = gateway_client.get(
+            "/v1/marketplace/plugins", params={"search": "1' OR '1'='1"}
+        )
 
         # Should not return 500 (internal error)
         assert injection_response.status_code != 500
@@ -387,7 +420,10 @@ class TestSecurityE2E:
     def test_xss_prevention(self, gateway_client):
         """Test that XSS is prevented"""
         # Try XSS
-        xss_response = gateway_client.get("/v1/marketplace/plugins", params={"search": "<script>alert('xss')</script>"})
+        xss_response = gateway_client.get(
+            "/v1/marketplace/plugins",
+            params={"search": "<script>alert('xss')</script>"},
+        )
 
         # Should not return 500 (internal error)
         assert xss_response.status_code != 500

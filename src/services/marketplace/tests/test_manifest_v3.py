@@ -206,7 +206,9 @@ def test_manifest_validation():
     assert len(warnings) == 0
 
     # Check tier compatibility
-    compatibility = PluginManifestValidator.check_tier_compatibility(manifest, PluginTier.COMMUNITY)
+    compatibility = PluginManifestValidator.check_tier_compatibility(
+        manifest, PluginTier.COMMUNITY
+    )
     assert compatibility["is_compatible"] == True
     assert compatibility["total_tools"] == 1
     assert len(compatibility["available_tools"]) == 1

@@ -2,6 +2,7 @@
 Redis client factory - Centralized Redis initialization
 Reduces duplicate code across services
 """
+
 import logging
 from typing import Optional
 
@@ -17,7 +18,7 @@ def create_redis_client(
     password: Optional[str] = None,
     db: int = 0,
     decode_responses: bool = True,
-    **kwargs
+    **kwargs,
 ) -> Redis:
     """
     Create and configure a Redis client with standard settings
@@ -47,7 +48,7 @@ def create_redis_client(
             password=password,
             decode_responses=decode_responses,
             db=db,
-            **kwargs
+            **kwargs,
         )
         # Test connection
         client.ping()
@@ -70,9 +71,9 @@ def create_redis_client_from_settings(settings) -> Redis:
         Configured Redis client instance
     """
     return create_redis_client(
-        host=getattr(settings, 'REDIS_HOST', 'localhost'),
-        port=getattr(settings, 'REDIS_PORT', 6379),
-        password=getattr(settings, 'REDIS_PASSWORD', None),
+        host=getattr(settings, "REDIS_HOST", "localhost"),
+        port=getattr(settings, "REDIS_PORT", 6379),
+        password=getattr(settings, "REDIS_PASSWORD", None),
         decode_responses=True,
-        db=0
+        db=0,
     )

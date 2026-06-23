@@ -61,13 +61,17 @@ class MarketplaceSettings(BaseSettings):
 
     # Neo4j Graph Database - use platform-standard NEO4J_AUTH (format: neo4j/password)
     NEO4J_URI: str = "bolt://neo4j:7687"
-    NEO4J_AUTH: str  # Required: must be set via environment variable (format: neo4j/password)
+    NEO4J_AUTH: (
+        str  # Required: must be set via environment variable (format: neo4j/password)
+    )
 
     @field_validator("NEO4J_AUTH")
     @classmethod
     def check_neo4j_auth(cls, v: str) -> str:
         if not v:
-            raise ValueError("NEO4J_AUTH must be set via environment variable (format: neo4j/password)")
+            raise ValueError(
+                "NEO4J_AUTH must be set via environment variable (format: neo4j/password)"
+            )
         return v
 
     # Application

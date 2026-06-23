@@ -62,7 +62,7 @@ class KnowledgeBaseRepository:
         llm_model: str = "llama3",
         chunk_size: int = 512,
         chunk_overlap: int = 50,
-        parent_child_enabled: bool = False
+        parent_child_enabled: bool = False,
     ) -> Dict[str, Any]:
         """
         Create new knowledge base
@@ -99,9 +99,17 @@ class KnowledgeBaseRepository:
                     INSERT INTO knowledge_bases (id, name, description, embedding_model, llm_model, chunk_size, chunk_overlap, parent_child_enabled, document_count, vector_count, created_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                     """,
-                    kb_id, name, description, embedding_model, llm_model,
-                    chunk_size, chunk_overlap, parent_child_enabled,
-                    0, 0, created_at
+                    kb_id,
+                    name,
+                    description,
+                    embedding_model,
+                    llm_model,
+                    chunk_size,
+                    chunk_overlap,
+                    parent_child_enabled,
+                    0,
+                    0,
+                    created_at,
                 )
 
             logger.info(f"✅ Created knowledge base in database: {kb_id}")
@@ -143,8 +151,7 @@ class KnowledgeBaseRepository:
         try:
             async with self.db_pool.acquire() as conn:
                 row = await conn.fetchrow(
-                    "SELECT * FROM knowledge_bases WHERE id = $1",
-                    kb_id
+                    "SELECT * FROM knowledge_bases WHERE id = $1", kb_id
                 )
 
             if not row:
@@ -183,7 +190,7 @@ class KnowledgeBaseRepository:
         self,
         kb_id: str,
         document_count: Optional[int] = None,
-        vector_count: Optional[int] = None
+        vector_count: Optional[int] = None,
     ) -> bool:
         """
         Update knowledge base counters
@@ -215,17 +222,21 @@ class KnowledgeBaseRepository:
                         SET document_count = $1, vector_count = $2
                         WHERE id = $3
                         """,
-                        document_count, vector_count, kb_id
+                        document_count,
+                        vector_count,
+                        kb_id,
                     )
                 elif document_count is not None:
                     await conn.execute(
                         "UPDATE knowledge_bases SET document_count = $1 WHERE id = $2",
-                        document_count, kb_id
+                        document_count,
+                        kb_id,
                     )
                 else:
                     await conn.execute(
                         "UPDATE knowledge_bases SET vector_count = $1 WHERE id = $2",
-                        vector_count, kb_id
+                        vector_count,
+                        kb_id,
                     )
 
             logger.debug(f"✅ Updated knowledge base counters: {kb_id}")
@@ -255,8 +266,7 @@ class KnowledgeBaseRepository:
         try:
             async with self.db_pool.acquire() as conn:
                 result = await conn.execute(
-                    "DELETE FROM knowledge_bases WHERE id = $1",
-                    kb_id
+                    "DELETE FROM knowledge_bases WHERE id = $1", kb_id
                 )
 
             logger.info(f"✅ Deleted knowledge base: {kb_id}")

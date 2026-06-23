@@ -16,7 +16,9 @@ from uuid import uuid4
 import pytest
 from locust import HttpUser, between, events, task
 
-pytestmark = pytest.mark.skip(reason="Performance testing infrastructure not yet fully implemented")
+pytestmark = pytest.mark.skip(
+    reason="Performance testing infrastructure not yet fully implemented"
+)
 
 
 class EDAUser(HttpUser):
@@ -56,7 +58,10 @@ class EDAUser(HttpUser):
 
         start_time = time.time()
         with self.client.post(
-            "/api/models/register", json=payload, catch_response=True, name="Register Model"
+            "/api/models/register",
+            json=payload,
+            catch_response=True,
+            name="Register Model",
         ) as response:
             latency_ms = (time.time() - start_time) * 1000
 
@@ -90,7 +95,9 @@ class EDAUser(HttpUser):
         - Query performance under load
         """
         start_time = time.time()
-        with self.client.get("/api/models", catch_response=True, name="Get Models") as response:
+        with self.client.get(
+            "/api/models", catch_response=True, name="Get Models"
+        ) as response:
             latency_ms = (time.time() - start_time) * 1000
 
             if response.status_code == 200:
@@ -122,11 +129,18 @@ class EDAUser(HttpUser):
         - Fallback endpoint activation
         - End-to-end query latency
         """
-        payload = {"query": f"test query {int(time.time())}", "use_hybrid_endpoint": True}
+        payload = {
+            "query": f"test query {int(time.time())}",
+            "use_hybrid_endpoint": True,
+        }
 
         start_time = time.time()
         with self.client.post(
-            "/api/rag/query", json=payload, catch_response=True, name="RAG Query", timeout=10.0
+            "/api/rag/query",
+            json=payload,
+            catch_response=True,
+            name="RAG Query",
+            timeout=10.0,
         ) as response:
             latency_ms = (time.time() - start_time) * 1000
 
@@ -159,11 +173,19 @@ class EDAUser(HttpUser):
         - Event store write for deployment
         - Deployment status update events
         """
-        payload = {"deployment_id": str(uuid4()), "model_id": self.model_id, "version": "v1.0", "runtime_env": "ollama"}
+        payload = {
+            "deployment_id": str(uuid4()),
+            "model_id": self.model_id,
+            "version": "v1.0",
+            "runtime_env": "ollama",
+        }
 
         start_time = time.time()
         with self.client.post(
-            "/api/deployments/request", json=payload, catch_response=True, name="Request Deployment"
+            "/api/deployments/request",
+            json=payload,
+            catch_response=True,
+            name="Request Deployment",
         ) as response:
             latency_ms = (time.time() - start_time) * 1000
 
@@ -178,7 +200,9 @@ class EDAUser(HttpUser):
                 )
 
                 if latency_ms > 150:
-                    response.failure(f"Deployment request slow: {latency_ms:.2f}ms > 150ms")
+                    response.failure(
+                        f"Deployment request slow: {latency_ms:.2f}ms > 150ms"
+                    )
                 else:
                     response.success()
             else:
@@ -194,7 +218,9 @@ class EDAUser(HttpUser):
         - Real-time status update latency
         """
         with self.client.get(
-            f"/api/deployments/{self.deployment_id}/status", catch_response=True, name="Get Deployment Status"
+            f"/api/deployments/{self.deployment_id}/status",
+            catch_response=True,
+            name="Get Deployment Status",
         ) as response:
             if response.status_code == 200:
                 response.success()
@@ -245,24 +271,34 @@ def on_test_stop(environment, **kwargs):
     Prints summary of SLA compliance and performance metrics
     """
     if environment.stats.total.fail_ratio > 0.05:
-        print(f"\n⚠️  WARNING: Failure rate {environment.stats.total.fail_ratio:.2%} exceeds 5%")
+        print(
+            f"\n⚠️  WARNING: Failure rate {environment.stats.total.fail_ratio:.2%} exceeds 5%"
+        )
 
     if environment.stats.total.avg_response_time > 500:
-        print(f"\n⚠️  WARNING: Average response time {environment.stats.total.avg_response_time:.2f}ms exceeds 500ms")
+        print(
+            f"\n⚠️  WARNING: Average response time {environment.stats.total.avg_response_time:.2f}ms exceeds 500ms"
+        )
 
     print("\n=== Performance Summary ===")
     print(f"Total requests: {environment.stats.total.num_requests}")
     print(f"Failure rate: {environment.stats.total.fail_ratio:.2%}")
     print(f"Average response time: {environment.stats.total.avg_response_time:.2f}ms")
     print(f"Median response time: {environment.stats.total.median_response_time:.2f}ms")
-    print(f"95th percentile: {environment.stats.total.get_response_time_percentile(0.95):.2f}ms")
-    print(f"99th percentile: {environment.stats.total.get_response_time_percentile(0.99):.2f}ms")
+    print(
+        f"95th percentile: {environment.stats.total.get_response_time_percentile(0.95):.2f}ms"
+    )
+    print(
+        f"99th percentile: {environment.stats.total.get_response_time_percentile(0.99):.2f}ms"
+    )
     print(f"Requests/s: {environment.stats.total.total_rps:.2f}")
     print("========================\n")
 
 
 @events.request.add_listener
-def on_request(request_type, name, response_time, response_length, exception, context, **kwargs):
+def on_request(
+    request_type, name, response_time, response_length, exception, context, **kwargs
+):
     """
     Request-level logging for detailed analysis
 
@@ -304,5 +340,7 @@ if __name__ == "__main__":
     """
     import sys
 
-    print("Load test file loaded. Run with: locust -f locustfile.py --host http://localhost:8000")
+    print(
+        "Load test file loaded. Run with: locust -f locustfile.py --host http://localhost:8000"
+    )
     sys.exit(0)

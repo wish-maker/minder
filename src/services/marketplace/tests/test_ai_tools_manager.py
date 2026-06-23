@@ -77,9 +77,12 @@ async def test_register_tool_configuration(cleanup_pool):
         # Clean up
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM marketplace_ai_tools_configurations WHERE plugin_id = $1", plugin_id
+                "DELETE FROM marketplace_ai_tools_configurations WHERE plugin_id = $1",
+                plugin_id,
             )
-            await conn.execute("DELETE FROM marketplace_plugins WHERE id = $1", plugin_id)
+            await conn.execute(
+                "DELETE FROM marketplace_plugins WHERE id = $1", plugin_id
+            )
 
 
 @pytest.mark.asyncio
@@ -108,7 +111,10 @@ async def test_tool_configuration_validation(cleanup_pool):
     try:
         config_schema = {
             "type": "object",
-            "properties": {"api_key": {"type": "string"}, "timeout": {"type": "integer"}},
+            "properties": {
+                "api_key": {"type": "string"},
+                "timeout": {"type": "integer"},
+            },
             "required": ["api_key"],
         }
 
@@ -127,7 +133,9 @@ async def test_tool_configuration_validation(cleanup_pool):
         valid_config = {"api_key": "test-key", "timeout": 30}
 
         result = await manager.validate_tool_configuration(
-            plugin_id=plugin_id, tool_name="validation_test_tool", configuration=valid_config
+            plugin_id=plugin_id,
+            tool_name="validation_test_tool",
+            configuration=valid_config,
         )
 
         assert result["is_valid"] == True
@@ -137,7 +145,9 @@ async def test_tool_configuration_validation(cleanup_pool):
         invalid_config = {"timeout": 30}
 
         result = await manager.validate_tool_configuration(
-            plugin_id=plugin_id, tool_name="validation_test_tool", configuration=invalid_config
+            plugin_id=plugin_id,
+            tool_name="validation_test_tool",
+            configuration=invalid_config,
         )
 
         assert result["is_valid"] == False
@@ -147,9 +157,12 @@ async def test_tool_configuration_validation(cleanup_pool):
         # Clean up
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM marketplace_ai_tools_configurations WHERE plugin_id = $1", plugin_id
+                "DELETE FROM marketplace_ai_tools_configurations WHERE plugin_id = $1",
+                plugin_id,
             )
-            await conn.execute("DELETE FROM marketplace_plugins WHERE id = $1", plugin_id)
+            await conn.execute(
+                "DELETE FROM marketplace_plugins WHERE id = $1", plugin_id
+            )
 
 
 @pytest.mark.asyncio
@@ -216,7 +229,9 @@ async def test_enable_disable_tool(cleanup_pool):
 
         # Disable tool
         disable_result = await manager.disable_tool(
-            plugin_id=plugin_id, tool_name="enable_test_tool", installation_id=installation_id
+            plugin_id=plugin_id,
+            tool_name="enable_test_tool",
+            installation_id=installation_id,
         )
 
         assert disable_result["is_enabled"] == False
@@ -226,15 +241,19 @@ async def test_enable_disable_tool(cleanup_pool):
         # Clean up
         async with pool.acquire() as conn:
             await conn.execute(
-                "DELETE FROM marketplace_ai_tools_registrations WHERE plugin_id = $1", plugin_id
+                "DELETE FROM marketplace_ai_tools_registrations WHERE plugin_id = $1",
+                plugin_id,
             )
             await conn.execute(
-                "DELETE FROM marketplace_ai_tools_configurations WHERE plugin_id = $1", plugin_id
+                "DELETE FROM marketplace_ai_tools_configurations WHERE plugin_id = $1",
+                plugin_id,
             )
             await conn.execute(
                 "DELETE FROM marketplace_installations WHERE id = $1", installation_id
             )
-            await conn.execute("DELETE FROM marketplace_plugins WHERE id = $1", plugin_id)
+            await conn.execute(
+                "DELETE FROM marketplace_plugins WHERE id = $1", plugin_id
+            )
 
 
 if __name__ == "__main__":

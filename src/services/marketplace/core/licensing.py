@@ -138,7 +138,9 @@ async def validate_license(license_key: str, plugin_id: str) -> Dict:
             "user_id": row["user_id"],
             "plugin_id": row["plugin_id"],
             "tier": row["tier"],
-            "valid_until": row["valid_until"].isoformat() if row["valid_until"] else None,
+            "valid_until": (
+                row["valid_until"].isoformat() if row["valid_until"] else None
+            ),
             "usage_count": row["usage_count"] + 1,
         }
 
@@ -174,7 +176,9 @@ async def get_user_licenses(user_id: str) -> list:
                     "tier": row["tier"],
                     "license_key": row["license_key"],
                     "valid_from": row["valid_from"].isoformat(),
-                    "valid_until": row["valid_until"].isoformat() if row["valid_until"] else None,
+                    "valid_until": (
+                        row["valid_until"].isoformat() if row["valid_until"] else None
+                    ),
                     "active": row["active"],
                     "usage_count": row["usage_count"],
                     "last_used_at": (

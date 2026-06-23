@@ -36,7 +36,9 @@ async def test_end_to_end():
 
         print(f"✓ API Status: {health['status']}")
         print(f"✓ System Uptime: {health['system']['uptime_seconds']:.0f}s")
-        print(f"✓ Plugins Ready: {health['system']['plugins']['ready']}/{health['system']['plugins']['total']}")
+        print(
+            f"✓ Plugins Ready: {health['system']['plugins']['ready']}/{health['system']['plugins']['total']}"
+        )
         print(f"✓ Authentication: {health['authentication']}")
         print(f"✓ Network Detection: {health['network_detection']}")
 
@@ -66,7 +68,9 @@ async def test_end_to_end():
 
                         # Check if real data was collected
                         if result.get("records_collected", 0) > 0:
-                            print(f"  ✓ Real data collected: {result['records_collected']} records")
+                            print(
+                                f"  ✓ Real data collected: {result['records_collected']} records"
+                            )
                             real_data_results[plugin] = True
                         else:
                             print("  ⚠ No data collected - might be API rate limiting")
@@ -149,7 +153,8 @@ async def test_end_to_end():
         # Test with auth (for protected endpoints)
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{base_url}/auth/login", json={"username": "admin", "password": "wrong_password"}
+                f"{base_url}/auth/login",
+                json={"username": "admin", "password": "wrong_password"},
             ) as resp:
                 if resp.status == 401:
                     print("✓ Authentication working (invalid credentials rejected)")
@@ -167,14 +172,17 @@ async def test_end_to_end():
 
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                    f"{base_url}/plugins/{plugin}/analyze", timeout=aiohttp.ClientTimeout(total=30)
+                    f"{base_url}/plugins/{plugin}/analyze",
+                    timeout=aiohttp.ClientTimeout(total=30),
                 ) as resp:
                     if resp.status == 200:
                         result = await resp.json()
 
                         if result.get("metrics"):
                             print("  ✓ Analysis completed")
-                            print(f"  Metrics: {list(result.get('metrics', {}).keys())}")
+                            print(
+                                f"  Metrics: {list(result.get('metrics', {}).keys())}"
+                            )
                         else:
                             print("  ⚠ No metrics - collect data first")
                     else:
@@ -201,7 +209,9 @@ async def test_end_to_end():
         print("\n✅ ALL TESTS PASSED - REAL DATA CONFIRMED")
         return True
     elif real_data_count > 0:
-        print(f"\n⚠️ PARTIAL SUCCESS - {real_data_count}/{total_plugins} plugins collecting real data")
+        print(
+            f"\n⚠️ PARTIAL SUCCESS - {real_data_count}/{total_plugins} plugins collecting real data"
+        )
         print("   (Some plugins may be rate-limited by external APIs)")
         return True
     else:

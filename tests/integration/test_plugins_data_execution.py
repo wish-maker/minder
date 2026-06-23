@@ -222,19 +222,25 @@ class TestPluginErrorHandlingData:
 
     def test_invalid_tefas_fund_id(self):
         """Test invalid TEFAS fund ID returns 404"""
-        response = requests.get("http://localhost:8000/v1/plugins/tefas/funds/INVALID_FUND")
+        response = requests.get(
+            "http://localhost:8000/v1/plugins/tefas/funds/INVALID_FUND"
+        )
         # 404 (not found), 401 (auth required), or 405 (method not allowed)
         assert response.status_code in [404, 401, 405]
 
     def test_invalid_location_weather(self):
         """Test invalid location for weather returns error"""
-        response = requests.get("http://localhost:8000/v1/plugins/weather/current?location=INVALID_CITY")
+        response = requests.get(
+            "http://localhost:8000/v1/plugins/weather/current?location=INVALID_CITY"
+        )
         # 400 (bad request), 404 (not found), 401 (auth required), or 405 (method not allowed)
         assert response.status_code in [400, 404, 401, 405]
 
     def test_invalid_crypto_symbol(self):
         """Test invalid crypto symbol returns error"""
-        response = requests.get("http://localhost:8000/v1/plugins/crypto/prices?symbol=INVALID_SYMBOL")
+        response = requests.get(
+            "http://localhost:8000/v1/plugins/crypto/prices?symbol=INVALID_SYMBOL"
+        )
         # 400 (bad request), 404 (not found), 401 (auth required), or 405 (method not allowed)
         assert response.status_code in [400, 404, 401, 405]
 

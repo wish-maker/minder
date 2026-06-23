@@ -9,7 +9,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from pydantic import BaseModel
 
 # Ollama client for real embeddings and LLM
@@ -31,7 +37,9 @@ logger = logging.getLogger(__name__)
 if not logger.handlers:
     handler = logging.StreamHandler()
     handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -43,7 +51,9 @@ if not logger.handlers:
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
 QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-MODEL_MANAGEMENT_URL = os.getenv("MODEL_MANAGEMENT_URL", "http://minder-model-management:8005")
+MODEL_MANAGEMENT_URL = os.getenv(
+    "MODEL_MANAGEMENT_URL", "http://minder-model-management:8005"
+)
 
 # Default models (can be overridden per knowledge base)
 DEFAULT_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
@@ -71,21 +81,29 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
 
 http_request_duration_seconds = Histogram(
     "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
 )
 
-knowledge_bases_total = Gauge("knowledge_bases_total", "Total number of knowledge bases")
+knowledge_bases_total = Gauge(
+    "knowledge_bases_total", "Total number of knowledge bases"
+)
 
-documents_processed_total = Counter("documents_processed_total", "Total documents processed", ["status"])
+documents_processed_total = Counter(
+    "documents_processed_total", "Total documents processed", ["status"]
+)
 
 embedding_generation_duration = Histogram(
     "embedding_generation_duration_seconds", "Time to generate embeddings", ["model"]
 )
 
-llm_generation_duration = Histogram("llm_generation_duration_seconds", "Time to generate LLM response", ["model"])
+llm_generation_duration = Histogram(
+    "llm_generation_duration_seconds", "Time to generate LLM response", ["model"]
+)
 
 
 # ============================================================================
@@ -132,7 +150,9 @@ class QueryRequest(BaseModel):
     question: str
     top_k: int = 5
     stream: bool = False
-    conversation_id: Optional[str] = None  # For conversational RAG - enables conversation history
+    conversation_id: Optional[str] = (
+        None  # For conversational RAG - enables conversation history
+    )
 
 
 class QueryResponse(BaseModel):
@@ -161,6 +181,7 @@ class DocumentUploadResponse(BaseModel):
 # Import PostgreSQL client functions
 try:
     from . import pg_client
+
     save_kb_to_postgres = pg_client.save_kb_to_postgres
     load_kb_from_postgres = pg_client.load_kb_from_postgres
     save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
@@ -171,6 +192,7 @@ try:
 except ImportError:
     try:
         import pg_client
+
         save_kb_to_postgres = pg_client.save_kb_to_postgres
         load_kb_from_postgres = pg_client.load_kb_from_postgres
         save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
@@ -182,6 +204,7 @@ except ImportError:
         PG_AVAILABLE = False
         try:
             import pg_client
+
             save_kb_to_postgres = pg_client.save_kb_to_postgres
             load_kb_from_postgres = pg_client.load_kb_from_postgres
             save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
@@ -196,10 +219,12 @@ except ImportError:
 # Conversation Repository for conversational RAG
 try:
     from .repositories.conversation_repository import ConversationRepository
+
     CONVERSATION_REPO_AVAILABLE = True
 except ImportError:
     try:
         from repositories.conversation_repository import ConversationRepository
+
         CONVERSATION_REPO_AVAILABLE = True
     except ImportError:
         CONVERSATION_REPO_AVAILABLE = False
@@ -263,7 +288,8 @@ class OllamaManager:
 
             # Check if model exists with any version tag
             model_exists = any(
-                model_name in available_model or available_model.startswith(model_name + ":")
+                model_name in available_model
+                or available_model.startswith(model_name + ":")
                 for available_model in available
             )
 
@@ -277,7 +303,9 @@ class OllamaManager:
         except Exception as e:
             logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
 
-    async def generate_embeddings(self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL) -> List[List[float]]:
+    async def generate_embeddings(
+        self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
+    ) -> List[List[float]]:
         """Generate embeddings using Ollama"""
         if not self._initialized:
             await self.initialize()
@@ -330,7 +358,8 @@ class OllamaManager:
                 "text": response.get("response", ""),
                 "model": model,
                 "context": context,
-                "tokens_used": response.get("prompt_eval_count", 0) + response.get("eval_count", 0),
+                "tokens_used": response.get("prompt_eval_count", 0)
+                + response.get("eval_count", 0),
             }
 
         except Exception as e:
@@ -450,7 +479,9 @@ async def initialize_ollama():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/knowledge-base", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"])
+@app.post(
+    "/knowledge-base", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"]
+)
 async def create_knowledge_base(request: KnowledgeBaseCreate):
     """Create a new knowledge base"""
     import uuid
@@ -484,7 +515,9 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
         logger.info(f"✅ Created Qdrant collection: {kb_id} (dim={embed_dim})")
     except Exception as e:
         logger.error(f"❌ Failed to create Qdrant collection: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create collection: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create collection: {str(e)}"
+        )
 
     # Save to PostgreSQL if available
     if PG_AVAILABLE:
@@ -512,7 +545,11 @@ async def list_knowledge_bases():
     return list(knowledge_bases.values())
 
 
-@app.post("/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
+@app.post(
+    "/knowledge-base/{kb_id}/upload",
+    response_model=DocumentUploadResponse,
+    tags=["Knowledge Base"],
+)
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
     """Upload document to knowledge base"""
     if kb_id not in knowledge_bases:
@@ -527,14 +564,18 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     text = await extract_text_from_file(content, file.filename)
 
     # Chunk text
-    chunks = chunk_text(text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"])
+    chunks = chunk_text(
+        text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"]
+    )
 
     if not chunks:
         raise HTTPException(status_code=400, detail="No text content extracted")
 
     # Generate embeddings
     with embedding_generation_duration.labels(model=kb["embedding_model"]).time():
-        embeddings = await ollama_manager.generate_embeddings(chunks, model=kb["embedding_model"])
+        embeddings = await ollama_manager.generate_embeddings(
+            chunks, model=kb["embedding_model"]
+        )
 
     # Store in Qdrant
     client = get_qdrant_client()
@@ -596,7 +637,9 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
     # Validate knowledge bases exist
     for kb_id in request.knowledge_base_ids:
         if kb_id not in knowledge_bases:
-            raise HTTPException(status_code=404, detail=f"Knowledge base {kb_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Knowledge base {kb_id} not found"
+            )
 
     rag_pipelines[pipeline_id] = {
         "id": pipeline_id,
@@ -623,7 +666,9 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
     }
 
 
-@app.post("/pipeline/{pipeline_id}/query", response_model=QueryResponse, tags=["Pipeline"])
+@app.post(
+    "/pipeline/{pipeline_id}/query", response_model=QueryResponse, tags=["Pipeline"]
+)
 async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     """Query a RAG pipeline"""
     if pipeline_id not in rag_pipelines:
@@ -645,10 +690,12 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             conversation_context = await conversation_repository.build_context(
                 user_id="default",  # TODO: Single-user limitation - add real user_id when multi-user support needed
                 conversation_id=request.conversation_id,
-                max_turns=3
+                max_turns=3,
             )
             if conversation_context:
-                logger.info(f"🔄 Loaded conversation context for {request.conversation_id}")
+                logger.info(
+                    f"🔄 Loaded conversation context for {request.conversation_id}"
+                )
         except Exception as e:
             logger.warning(f"⚠️  Failed to load conversation context: {e}")
             conversation_context = ""
@@ -661,7 +708,9 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         combined_context += f"Relevant documents:\n{context_result['context']}"
 
     # Generate answer
-    with llm_generation_duration.labels(model=pipeline.get("llm_model", DEFAULT_LLM_MODEL)).time():
+    with llm_generation_duration.labels(
+        model=pipeline.get("llm_model", DEFAULT_LLM_MODEL)
+    ).time():
         answer_result = await ollama_manager.generate_response(
             prompt=request.question,
             context=combined_context,
@@ -680,8 +729,8 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
                     "pipeline_id": pipeline_id,
                     "model_used": answer_result.get("model", "unknown"),
                     "sources_count": len(context_result.get("sources", [])),
-                    "timestamp": None  # Will be set by DB default
-                }
+                    "timestamp": None,  # Will be set by DB default
+                },
             )
             logger.info(f"💾 Stored conversation turn for {request.conversation_id}")
         except Exception as e:
@@ -697,7 +746,9 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     )
 
 
-async def retrieve_relevant_documents(pipeline: Dict, question: str, top_k: int) -> Dict:
+async def retrieve_relevant_documents(
+    pipeline: Dict, question: str, top_k: int
+) -> Dict:
     """Retrieve relevant documents from knowledge bases"""
     client = get_qdrant_client()
 
@@ -706,7 +757,9 @@ async def retrieve_relevant_documents(pipeline: Dict, question: str, top_k: int)
     embed_model = knowledge_bases[first_kb_id]["embedding_model"]
 
     # Create embedding for question
-    question_embeddings = await ollama_manager.generate_embeddings([question], model=embed_model)
+    question_embeddings = await ollama_manager.generate_embeddings(
+        [question], model=embed_model
+    )
     question_embedding = question_embeddings[0]
 
     # Search across all knowledge bases
@@ -781,7 +834,9 @@ async def startup_event():
 
             loaded_pipelines = await load_pipelines_from_postgres()
             rag_pipelines.update(loaded_pipelines)
-            logger.info(f"✅ Loaded {len(loaded_pipelines)} RAG pipelines from PostgreSQL")
+            logger.info(
+                f"✅ Loaded {len(loaded_pipelines)} RAG pipelines from PostgreSQL"
+            )
 
             # Initialize ConversationRepository for conversational RAG
             global conversation_repository
@@ -793,7 +848,9 @@ async def startup_event():
                     logger.error(f"❌ Failed to initialize ConversationRepository: {e}")
                     conversation_repository = None
             else:
-                logger.warning("⚠️  ConversationRepository not available (pg_pool or module missing)")
+                logger.warning(
+                    "⚠️  ConversationRepository not available (pg_pool or module missing)"
+                )
                 conversation_repository = None
         except Exception as e:
             logger.error(f"❌ Failed to load from PostgreSQL: {e}")

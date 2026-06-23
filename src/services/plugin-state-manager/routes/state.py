@@ -39,7 +39,8 @@ async def list_all_plugin_states(state: Optional[str] = Query(None)):
         states = await list_plugin_states(conn, state)
 
         return PluginStateListResponse(
-            plugins=[PluginStateResponse(**state) for state in states], count=len(states)
+            plugins=[PluginStateResponse(**state) for state in states],
+            count=len(states),
         )
 
 
@@ -52,7 +53,9 @@ async def get_plugin_state_by_name(plugin_name: str):
         state = await get_plugin_state(conn, plugin_name)
 
         if not state:
-            raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Plugin {plugin_name} not found"
+            )
 
         return PluginStateResponse(**state)
 
@@ -108,7 +111,9 @@ async def update_plugin_config(plugin_name: str, request: UpdatePluginConfigRequ
         state = await get_plugin_state(conn, plugin_name)
 
         if not state:
-            raise HTTPException(status_code=404, detail=f"Plugin {plugin_name} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Plugin {plugin_name} not found"
+            )
 
         # Update config
         await conn.execute(
@@ -134,7 +139,11 @@ async def get_plugin_dependencies(plugin_name: str):
 
     async with db.acquire() as conn:
         dependents = await get_dependent_plugins(conn, plugin_name)
-        return {"plugin_name": plugin_name, "dependents": dependents, "count": len(dependents)}
+        return {
+            "plugin_name": plugin_name,
+            "dependents": dependents,
+            "count": len(dependents),
+        }
 
 
 @router.post("/{plugin_name}/dependencies/resolve")
@@ -149,7 +158,11 @@ async def resolve_plugin_dependencies(plugin_name: str):
     try:
         async with db.acquire() as conn:
             order = await resolve_dependencies(conn, plugin_name)
-            return {"plugin_name": plugin_name, "enable_order": order, "count": len(order)}
+            return {
+                "plugin_name": plugin_name,
+                "enable_order": order,
+                "count": len(order),
+            }
     except Exception as e:
         logger.error(f"Failed to resolve dependencies for {plugin_name}: {e}")
         raise HTTPException(status_code=400, detail=str(e))

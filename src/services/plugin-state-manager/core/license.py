@@ -13,7 +13,9 @@ from models.plugin_state import LicenseTier
 logger = logging.getLogger(__name__)
 
 
-async def validate_tool_access(conn: asyncpg.Connection, user_id: str, tool_name: str) -> dict:
+async def validate_tool_access(
+    conn: asyncpg.Connection, user_id: str, tool_name: str
+) -> dict:
     """
     Validate if user has access to a tool based on license tier
 
@@ -67,9 +69,7 @@ async def validate_tool_access(conn: asyncpg.Connection, user_id: str, tool_name
     allowed = user_level >= required_level
 
     if not allowed:
-        reason = (
-            f"This tool requires {required_tier} tier or higher. Your current tier: {user_tier}"
-        )
+        reason = f"This tool requires {required_tier} tier or higher. Your current tier: {user_tier}"
     else:
         reason = None
 
@@ -81,7 +81,9 @@ async def validate_tool_access(conn: asyncpg.Connection, user_id: str, tool_name
     }
 
 
-async def get_plugin_license_tier(conn: asyncpg.Connection, plugin_name: str) -> LicenseTier:
+async def get_plugin_license_tier(
+    conn: asyncpg.Connection, plugin_name: str
+) -> LicenseTier:
     """Get plugin's required license tier"""
     row = await conn.fetchrow(
         "SELECT license_tier FROM plugin_states WHERE plugin_name = $1", plugin_name
@@ -120,7 +122,11 @@ async def check_plugin_license(
 
     # For free/community plugins, no license key needed
     if required_tier in [LicenseTier.FREE, LicenseTier.COMMUNITY]:
-        return {"valid": True, "tier": required_tier.value, "message": "No license key required"}
+        return {
+            "valid": True,
+            "tier": required_tier.value,
+            "message": "No license key required",
+        }
 
     # For paid plugins, validate license key
     if not license_key:
@@ -132,7 +138,11 @@ async def check_plugin_license(
 
     # TODO: Implement actual license key validation
     # For now, accept any non-empty key
-    return {"valid": True, "tier": required_tier.value, "message": "License key validated"}
+    return {
+        "valid": True,
+        "tier": required_tier.value,
+        "message": "License key validated",
+    }
 
 
 async def update_plugin_license(

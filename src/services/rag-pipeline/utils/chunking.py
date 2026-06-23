@@ -15,18 +15,17 @@ logger = logging.getLogger(__name__)
 # Optional dependency handling
 try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
     RecursiveCharacterTextSplitter = None
-    logging.warning("langchain-text-splitters not available. Install with: pip install langchain-text-splitters")
+    logging.warning(
+        "langchain-text-splitters not available. Install with: pip install langchain-text-splitters"
+    )
 
 
-def chunk_text(
-    text: str,
-    chunk_size: int = 512,
-    chunk_overlap: int = 50
-) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 512, chunk_overlap: int = 50) -> List[str]:
     """
     Chunk text into smaller pieces for processing
 
@@ -60,10 +59,14 @@ def chunk_text(
         raise ValueError(f"chunk_overlap must be non-negative, got {chunk_overlap}")
 
     if chunk_overlap >= chunk_size:
-        raise ValueError(f"chunk_overlap must be less than chunk_size, got {chunk_overlap} >= {chunk_size}")
+        raise ValueError(
+            f"chunk_overlap must be less than chunk_size, got {chunk_overlap} >= {chunk_size}"
+        )
 
     if not LANGCHAIN_AVAILABLE:
-        raise RuntimeError("langchain-text-splitters not available. Install with: pip install langchain-text-splitters")
+        raise RuntimeError(
+            "langchain-text-splitters not available. Install with: pip install langchain-text-splitters"
+        )
 
     try:
         text_splitter = RecursiveCharacterTextSplitter(
@@ -75,7 +78,9 @@ def chunk_text(
 
         chunks = text_splitter.split_text(text)
 
-        logger.debug(f"✅ Chunked text into {len(chunks)} chunks (size={chunk_size}, overlap={chunk_overlap})")
+        logger.debug(
+            f"✅ Chunked text into {len(chunks)} chunks (size={chunk_size}, overlap={chunk_overlap})"
+        )
 
         return chunks
 
@@ -85,9 +90,7 @@ def chunk_text(
 
 
 def chunk_text_fallback(
-    text: str,
-    chunk_size: int = 512,
-    chunk_overlap: int = 50
+    text: str, chunk_size: int = 512, chunk_overlap: int = 50
 ) -> List[str]:
     """
     Fallback chunking without langchain dependency
@@ -119,7 +122,9 @@ def chunk_text_fallback(
         raise ValueError(f"chunk_overlap must be non-negative, got {chunk_overlap}")
 
     if chunk_overlap >= chunk_size:
-        raise ValueError(f"chunk_overlap must be less than chunk_size, got {chunk_overlap} >= {chunk_size}")
+        raise ValueError(
+            f"chunk_overlap must be less than chunk_size, got {chunk_overlap} >= {chunk_size}"
+        )
 
     chunks = []
     start = 0

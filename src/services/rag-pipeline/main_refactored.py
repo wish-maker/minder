@@ -100,13 +100,20 @@ app = FastAPI(
 # Prometheus Metrics
 # ============================================================================
 
-http_requests_total = Counter("http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"])
-http_request_duration_seconds = Histogram("http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"])
-documents_processed_total = Counter("documents_processed_total", "Total documents processed", ["status"])
+http_requests_total = Counter(
+    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
+)
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
+)
+documents_processed_total = Counter(
+    "documents_processed_total", "Total documents processed", ["status"]
+)
 
 # ============================================================================
 # Lifespan Management
 # ============================================================================
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -127,6 +134,7 @@ async def lifespan(app: FastAPI):
 
         # Import Qdrant client here to avoid early import errors
         from qdrant_client import QdrantClient
+
         qdrant_client = QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
 
         logger.info(f"✅ Qdrant client initialized: {QDRANT_HOST}:{QDRANT_PORT}")
@@ -134,7 +142,7 @@ async def lifespan(app: FastAPI):
         knowledge_base_service = KnowledgeBaseService(
             ollama_manager=ollama_manager,
             qdrant_client=qdrant_client,
-            parent_child_chunker=None  # Optional
+            parent_child_chunker=None,  # Optional
         )
 
         retrieval_service = RetrievalService(
@@ -146,7 +154,7 @@ async def lifespan(app: FastAPI):
             reranker=reranker,
             crag_retriever=crag_retriever,
             parent_child_retriever=parent_child_retriever,
-            context_compressor=context_compressor
+            context_compressor=context_compressor,
         )
 
         logger.info("✅ Services initialized with clean architecture")
@@ -159,6 +167,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("🛑 Shutting down RAG Pipeline service...")
+
 
 app = FastAPI(
     title="Minder RAG Pipeline",
@@ -173,6 +182,7 @@ app = FastAPI(
 
 from pydantic import BaseModel
 
+
 class KnowledgeBaseCreate(BaseModel):
     name: str
     description: str
@@ -181,6 +191,7 @@ class KnowledgeBaseCreate(BaseModel):
     chunk_size: int = 512
     chunk_overlap: int = 50
     parent_child_enabled: bool = False
+
 
 class KnowledgeBaseResponse(BaseModel):
     id: str
@@ -192,11 +203,13 @@ class KnowledgeBaseResponse(BaseModel):
     vector_count: int
     created_at: str
 
+
 class QueryRequest(BaseModel):
     question: str
     pipeline_id: str
     top_k: int = 5
     stream: bool = False
+
 
 class QueryResponse(BaseModel):
     answer: str
@@ -205,15 +218,18 @@ class QueryResponse(BaseModel):
     model_used: str
     tokens_used: Optional[int] = None
 
+
 class DocumentUploadResponse(BaseModel):
     message: str
     chunks_processed: int
     vectors_created: int
     filename: str
 
+
 # ============================================================================
 # Health & Metrics
 # ============================================================================
+
 
 @app.get("/health", tags=["Health"])
 async def health_check():
@@ -228,16 +244,21 @@ async def health_check():
         "knowledge_bases": len(knowledge_bases),
     }
 
+
 @app.get("/metrics")
 async def metrics():
     """Prometheus metrics endpoint"""
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+
 # ============================================================================
 # Knowledge Base Endpoints (Thin - Delegate to Service)
 # ============================================================================
 
-@app.post("/knowledge-base", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"])
+
+@app.post(
+    "/knowledge-base", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"]
+)
 async def create_knowledge_base(request: KnowledgeBaseCreate):
     """
     Create knowledge base using service layer
@@ -257,7 +278,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
             llm_model=request.llm_model,
             chunk_size=request.chunk_size,
             chunk_overlap=request.chunk_overlap,
-            parent_child_enabled=request.parent_child_enabled
+            parent_child_enabled=request.parent_child_enabled,
         )
 
         # Also store in legacy dict for backward compatibility
@@ -281,12 +302,18 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
         logger.error(f"❌ Failed to create knowledge base: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.get("/knowledge-bases", tags=["Knowledge Base"])
 async def list_knowledge_bases():
     """List all knowledge bases"""
     return list(knowledge_bases.values())
 
-@app.post("/knowledge-base/{kb_id}/upload", response_model=DocumentUploadResponse, tags=["Knowledge Base"])
+
+@app.post(
+    "/knowledge-base/{kb_id}/upload",
+    response_model=DocumentUploadResponse,
+    tags=["Knowledge Base"],
+)
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
     """
     Upload document using service layer
@@ -305,9 +332,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         content = await file.read()
 
         result = await knowledge_base_service.upload_document(
-            kb_id=kb_id,
-            filename=file.filename,
-            content=content
+            kb_id=kb_id, filename=file.filename, content=content
         )
 
         # Update legacy stats
@@ -327,11 +352,15 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         logger.error(f"❌ Upload failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
 # Query Endpoints (Thin - Delegate to Service)
 # ============================================================================
 
-@app.post("/pipeline/{pipeline_id}/query", response_model=QueryResponse, tags=["Pipeline"])
+
+@app.post(
+    "/pipeline/{pipeline_id}/query", response_model=QueryResponse, tags=["Pipeline"]
+)
 async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     """
     Query RAG pipeline using service layer
@@ -355,7 +384,7 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             pipeline_id=pipeline_id,
             question=request.question,
             top_k=request.top_k,
-            knowledge_bases=knowledge_bases
+            knowledge_bases=knowledge_bases,
         )
 
         logger.info(f"✅ Query completed: {len(result.sources)} sources")
@@ -367,14 +396,17 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         logger.error(f"❌ Query failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
 # Legacy Endpoints (Will be migrated to services)
 # ============================================================================
+
 
 @app.post("/pipeline", tags=["Pipeline"])
 async def create_rag_pipeline(request: Dict):
     """Create RAG pipeline (legacy - will migrate to service)"""
     import uuid
+
     pipeline_id = str(uuid.uuid4())
 
     rag_pipelines[pipeline_id] = {
@@ -387,6 +419,7 @@ async def create_rag_pipeline(request: Dict):
     logger.info(f"✅ Pipeline created: {pipeline_id}")
     return {"pipeline_id": pipeline_id, "message": "Pipeline created"}
 
+
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint"""
@@ -397,10 +430,12 @@ async def root():
         "status": "operational",
     }
 
+
 # ============================================================================
 # Main
 # ============================================================================
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8004)

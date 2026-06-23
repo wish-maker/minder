@@ -1,6 +1,7 @@
 """
 CORS configuration utility - Standardized CORS setup across services
 """
+
 from typing import List, Optional
 
 from fastapi import FastAPI

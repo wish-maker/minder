@@ -15,13 +15,9 @@ MVP_MANIFEST_SCHEMA = {
         "apiVersion": {
             "type": "string",
             "enum": ["minder.dev/v1alpha1"],
-            "description": "API version for the manifest"
+            "description": "API version for the manifest",
         },
-        "kind": {
-            "type": "string",
-            "enum": ["Plugin"],
-            "description": "Resource kind"
-        },
+        "kind": {"type": "string", "enum": ["Plugin"], "description": "Resource kind"},
         "metadata": {
             "type": "object",
             "required": ["name", "version"],
@@ -31,19 +27,19 @@ MVP_MANIFEST_SCHEMA = {
                     "pattern": "^[a-z][a-z0-9-]*$",
                     "minLength": 2,
                     "maxLength": 63,
-                    "description": "Plugin name (lowercase, alphanumeric, hyphens)"
+                    "description": "Plugin name (lowercase, alphanumeric, hyphens)",
                 },
                 "version": {
                     "type": "string",
                     "pattern": r"^[0-9]+\.[0-9]+\.[0-9]+$",
-                    "description": "Semantic version"
+                    "description": "Semantic version",
                 },
                 "description": {
                     "type": "string",
                     "maxLength": 500,
-                    "description": "Short description"
-                }
-            }
+                    "description": "Short description",
+                },
+            },
         },
         "spec": {
             "type": "object",
@@ -56,7 +52,7 @@ MVP_MANIFEST_SCHEMA = {
                         "type": {
                             "type": "string",
                             "enum": ["webhook"],
-                            "description": "Trigger type - only webhook supported in MVP"
+                            "description": "Trigger type - only webhook supported in MVP",
                         },
                         "webhook": {
                             "type": "object",
@@ -67,21 +63,21 @@ MVP_MANIFEST_SCHEMA = {
                                     "pattern": "^/[a-z0-9-/]+$",
                                     "minLength": 2,
                                     "maxLength": 100,
-                                    "description": "Webhook path (e.g., /discord/webhook)"
+                                    "description": "Webhook path (e.g., /discord/webhook)",
                                 },
                                 "method": {
                                     "type": "string",
                                     "enum": ["POST"],
-                                    "default": "POST"
+                                    "default": "POST",
                                 },
                                 "secretRef": {
                                     "type": "string",
                                     "pattern": "^[a-z][a-z0-9._-]*$",
-                                    "description": "Reference to secret in secrets store"
-                                }
-                            }
-                        }
-                    }
+                                    "description": "Reference to secret in secrets store",
+                                },
+                            },
+                        },
+                    },
                 },
                 "action": {
                     "type": "object",
@@ -90,7 +86,7 @@ MVP_MANIFEST_SCHEMA = {
                         "type": {
                             "type": "string",
                             "enum": ["store-vector"],
-                            "description": "Action type - only store-vector supported in MVP"
+                            "description": "Action type - only store-vector supported in MVP",
                         },
                         "store": {
                             "type": "object",
@@ -102,7 +98,7 @@ MVP_MANIFEST_SCHEMA = {
                                     "pattern": "^[a-z][a-z0-9-_]*$",
                                     "minLength": 3,
                                     "maxLength": 63,
-                                    "description": "Qdrant collection name"
+                                    "description": "Qdrant collection name",
                                 },
                                 "input": {
                                     "type": "object",
@@ -110,27 +106,31 @@ MVP_MANIFEST_SCHEMA = {
                                     "properties": {
                                         "text": {
                                             "type": "string",
-                                            "description": "Template for text to embed (e.g., {{ .content }})"
+                                            "description": "Template for text to embed (e.g., {{ .content }})",
                                         },
                                         "metadata": {
                                             "type": "object",
-                                            "description": "Additional metadata to store with vector"
-                                        }
-                                    }
+                                            "description": "Additional metadata to store with vector",
+                                        },
+                                    },
                                 },
                                 "embedModel": {
                                     "type": "string",
-                                    "enum": ["all-minilm", "nomic-embed-text", "mxbai-embed-large"],
+                                    "enum": [
+                                        "all-minilm",
+                                        "nomic-embed-text",
+                                        "mxbai-embed-large",
+                                    ],
                                     "default": "all-minilm",
-                                    "description": "Embedding model to use"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+                                    "description": "Embedding model to use",
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    },
 }
 
 # Example MVP manifest

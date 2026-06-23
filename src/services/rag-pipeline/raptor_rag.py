@@ -46,6 +46,7 @@ from typing import Any, Dict, List, Optional
 # Optional imports for enhanced functionality
 try:
     import numpy as np
+
     NUMPY_AVAILABLE = True
 except ImportError:
     NUMPY_AVAILABLE = False
@@ -58,6 +59,7 @@ logger = logging.getLogger(__name__)
 # ============================================================================
 # Custom Exceptions
 # ============================================================================
+
 
 class RAPTORError(Exception):
     """Base exception for RAPTOR-related errors"""
@@ -78,6 +80,7 @@ class RAPTORRetrievalError(RAPTORError):
 # ============================================================================
 # RAPTOR Chunker
 # ============================================================================
+
 
 class RAPTORChunker:
     """
@@ -114,7 +117,7 @@ class RAPTORChunker:
         chunk_overlap: int = 50,
         max_tree_depth: int = 3,
         cluster_size: int = 6,
-        summary_length: int = 150
+        summary_length: int = 150,
     ):
         """
         Initialize RAPTOR chunker with configuration parameters
@@ -135,13 +138,19 @@ class RAPTORChunker:
         if chunk_overlap < 0:
             raise ValueError(f"chunk_overlap must be non-negative, got {chunk_overlap}")
         if chunk_overlap >= chunk_size:
-            raise ValueError(f"chunk_overlap ({chunk_overlap}) must be less than chunk_size ({chunk_size})")
+            raise ValueError(
+                f"chunk_overlap ({chunk_overlap}) must be less than chunk_size ({chunk_size})"
+            )
         if max_tree_depth < 1 or max_tree_depth > 5:
-            raise ValueError(f"max_tree_depth must be between 1 and 5, got {max_tree_depth}")
+            raise ValueError(
+                f"max_tree_depth must be between 1 and 5, got {max_tree_depth}"
+            )
         if cluster_size < 2:
             raise ValueError(f"cluster_size must be at least 2, got {cluster_size}")
         if summary_length < 50:
-            raise ValueError(f"summary_length must be at least 50, got {summary_length}")
+            raise ValueError(
+                f"summary_length must be at least 50, got {summary_length}"
+            )
 
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -160,7 +169,7 @@ class RAPTORChunker:
         text: str,
         llm_manager,
         embeddings: Optional[List[List[float]]] = None,
-        embedding_model: Optional[str] = None
+        embedding_model: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create RAPTOR tree structure from input text
@@ -196,12 +205,16 @@ class RAPTORChunker:
             raise ValueError("Text must be a non-empty string")
 
         if len(text.strip()) < 50:
-            raise ValueError(f"Text too short for RAPTOR (min 50 chars): {len(text)} chars")
+            raise ValueError(
+                f"Text too short for RAPTOR (min 50 chars): {len(text)} chars"
+            )
 
         try:
             # Step 1: Create base chunks
             base_chunks = self._chunk_text(text)
-            logger.info(f"📄 Created {len(base_chunks)} base chunks from {len(text)} chars")
+            logger.info(
+                f"📄 Created {len(base_chunks)} base chunks from {len(text)} chars"
+            )
 
             if len(base_chunks) < self.min_cluster_size:
                 logger.warning(
@@ -215,8 +228,8 @@ class RAPTORChunker:
                         "tree_depth": 1,
                         "clusters_created": 0,
                         "base_chunks": len(base_chunks),
-                        "algorithm": "flat"
-                    }
+                        "algorithm": "flat",
+                    },
                 }
 
             # Step 2: Generate embeddings if not provided
@@ -225,11 +238,13 @@ class RAPTORChunker:
                 embeddings = self._generate_embeddings(
                     chunks=base_chunks,
                     llm_manager=llm_manager,
-                    model=embedding_model or "nomic-embed-text"
+                    model=embedding_model or "nomic-embed-text",
                 )
 
                 if not embeddings or len(embeddings) != len(base_chunks):
-                    raise RAPTORChunkingError("Failed to generate embeddings for all chunks")
+                    raise RAPTORChunkingError(
+                        "Failed to generate embeddings for all chunks"
+                    )
 
             # Step 3: Build tree recursively
             logger.info("🌳 Building hierarchical tree structure...")
@@ -238,7 +253,7 @@ class RAPTORChunker:
                 embeddings=embeddings,
                 level=0,
                 llm_manager=llm_manager,
-                embedding_model=embedding_model or "nomic-embed-text"
+                embedding_model=embedding_model or "nomic-embed-text",
             )
 
             # Step 4: Validate and count nodes
@@ -259,8 +274,8 @@ class RAPTORChunker:
                     "tree_depth": stats["max_depth"],
                     "clusters_created": stats["clusters"],
                     "base_chunks": len(base_chunks),
-                    "algorithm": "raptor"
-                }
+                    "algorithm": "raptor",
+                },
             }
 
         except Exception as e:
@@ -268,10 +283,7 @@ class RAPTORChunker:
             raise RAPTORClusteringError(f"Failed to create tree structure: {str(e)}")
 
     def _generate_embeddings(
-        self,
-        chunks: List[str],
-        llm_manager,
-        model: str
+        self, chunks: List[str], llm_manager, model: str
     ) -> List[List[float]]:
         """Generate embeddings for text chunks"""
         try:
@@ -305,7 +317,7 @@ class RAPTORChunker:
                 chunk_size=self.chunk_size,
                 chunk_overlap=self.chunk_overlap,
                 length_function=len,
-                separators=["\n\n", "\n", ". ", " ", ""]
+                separators=["\n\n", "\n", ". ", " ", ""],
             )
 
             chunks = text_splitter.split_text(text)
@@ -355,7 +367,7 @@ class RAPTORChunker:
         level: int,
         llm_manager,
         embedding_model: str,
-        parent_id: Optional[str] = None
+        parent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Recursively build tree structure from chunks and embeddings
@@ -413,7 +425,7 @@ class RAPTORChunker:
                     "summary": summary,
                     "chunk_count": len(cluster_chunks),
                     "children_indices": cluster,
-                    "parent_id": parent_id
+                    "parent_id": parent_id,
                 }
 
                 # Create leaf children for this cluster
@@ -422,7 +434,7 @@ class RAPTORChunker:
                         "id": f"{node_id}_child_{i}",
                         "type": "leaf",
                         "text": chunk,
-                        "parent_id": node_id
+                        "parent_id": node_id,
                     }
                     for i, chunk in enumerate(cluster_chunks)
                 ]
@@ -441,14 +453,14 @@ class RAPTORChunker:
             "type": "level",
             "level": level,
             "clusters": cluster_nodes,
-            "total_chunks": len(chunks)
+            "total_chunks": len(chunks),
         }
 
     def _create_leaf_nodes(
         self,
         chunks: List[str],
         embeddings: List[List[float]],
-        parent_id: Optional[str] = None
+        parent_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Create leaf nodes for base chunks
@@ -468,21 +480,15 @@ class RAPTORChunker:
                 "type": "leaf",
                 "text": chunk,
                 "parent_id": parent_id,
-                "level": 0
+                "level": 0,
             }
             leaves.append(leaf)
 
         logger.debug(f"Created {len(leaves)} leaf nodes")
-        return {
-            "type": "leaves",
-            "leaves": leaves,
-            "total_chunks": len(chunks)
-        }
+        return {"type": "leaves", "leaves": leaves, "total_chunks": len(chunks)}
 
     def _cluster_chunks(
-        self,
-        chunks: List[str],
-        embeddings: List[List[float]]
+        self, chunks: List[str], embeddings: List[List[float]]
     ) -> List[List[int]]:
         """
         Cluster chunks using lightweight cosine similarity
@@ -512,7 +518,9 @@ class RAPTORChunker:
             similarity_matrix = self._build_similarity_matrix(embeddings, n)
         except Exception as e:
             logger.error(f"Failed to build similarity matrix: {e}")
-            raise RAPTORClusteringError(f"Similarity matrix construction failed: {str(e)}")
+            raise RAPTORClusteringError(
+                f"Similarity matrix construction failed: {str(e)}"
+            )
 
         # Greedy clustering
         clusters = []
@@ -538,7 +546,7 @@ class RAPTORChunker:
 
             # Add top similar chunks to cluster
             min_similarity = 0.3  # Minimum similarity threshold
-            for j, sim in similarities[:self.cluster_size - 1]:
+            for j, sim in similarities[: self.cluster_size - 1]:
                 if sim >= min_similarity:
                     cluster.append(j)
                     assigned.add(j)
@@ -546,15 +554,15 @@ class RAPTORChunker:
             # Only keep cluster if it has enough chunks
             if len(cluster) >= self.min_cluster_size:
                 clusters.append(cluster)
-                logger.debug(f"Created cluster {len(clusters)} with {len(cluster)} chunks")
+                logger.debug(
+                    f"Created cluster {len(clusters)} with {len(cluster)} chunks"
+                )
 
         logger.info(f"Clustering complete: {len(clusters)} clusters from {n} chunks")
         return clusters
 
     def _build_similarity_matrix(
-        self,
-        embeddings: List[List[float]],
-        n: int
+        self, embeddings: List[List[float]], n: int
     ) -> List[List[float]]:
         """
         Build similarity matrix from embeddings
@@ -570,7 +578,9 @@ class RAPTORChunker:
             ValueError: If embeddings are invalid
         """
         if not embeddings or n != len(embeddings):
-            raise ValueError(f"Embedding count mismatch: expected {n}, got {len(embeddings)}")
+            raise ValueError(
+                f"Embedding count mismatch: expected {n}, got {len(embeddings)}"
+            )
 
         # Initialize matrix
         similarity_matrix = [[0.0 for _ in range(n)] for _ in range(n)]
@@ -669,19 +679,21 @@ Summary:"""
             result = llm_manager.generate_response(
                 prompt=prompt,
                 model="llama3.2",
-                temperature=0.3  # Lower temperature for focused summaries
+                temperature=0.3,  # Lower temperature for focused summaries
             )
 
             summary = result.get("text", "").strip()
 
             # Ensure summary is not too long
             if len(summary) > self.summary_length * 2:
-                summary = summary[:self.summary_length * 2] + "..."
+                summary = summary[: self.summary_length * 2] + "..."
 
             if not summary:
                 raise ValueError("LLM produced empty summary")
 
-            logger.debug(f"Generated summary: {len(summary)} chars from {len(chunks)} chunks")
+            logger.debug(
+                f"Generated summary: {len(summary)} chars from {len(chunks)} chunks"
+            )
             return summary
 
         except Exception as e:
@@ -719,11 +731,7 @@ Summary:"""
         Returns:
             Dictionary with node counts and depth statistics
         """
-        stats = {
-            "total_nodes": 0,
-            "max_depth": 0,
-            "clusters": 0
-        }
+        stats = {"total_nodes": 0, "max_depth": 0, "clusters": 0}
 
         def traverse(node: Dict[str, Any], depth: int):
             """Recursively traverse tree and count nodes"""
@@ -750,6 +758,7 @@ Summary:"""
 # ============================================================================
 # RAPTOR Retriever
 # ============================================================================
+
 
 class RAPTORRetriever:
     """
@@ -786,7 +795,7 @@ class RAPTORRetriever:
         self,
         kb_id: str,
         tree: Dict[str, Any],
-        embeddings: Optional[Dict[str, List[float]]] = None
+        embeddings: Optional[Dict[str, List[float]]] = None,
     ) -> None:
         """
         Index RAPTOR tree for knowledge base
@@ -817,7 +826,7 @@ class RAPTORRetriever:
         query: str,
         query_embedding: List[float],
         top_k: int = 5,
-        llm_manager = None
+        llm_manager=None,
     ) -> List[Dict[str, Any]]:
         """
         Retrieve from tree using appropriate level based on query specificity
@@ -856,11 +865,15 @@ class RAPTORRetriever:
             # Threshold: 0.7 (above = specific, below = general)
             if query_specificity > 0.7:
                 # Search leaf nodes (specific details)
-                logger.debug(f"High specificity ({query_specificity:.2f}): searching leaves")
+                logger.debug(
+                    f"High specificity ({query_specificity:.2f}): searching leaves"
+                )
                 results = self._search_leaves(tree, query_embedding, top_k)
             else:
                 # Search cluster nodes (summaries)
-                logger.debug(f"Low specificity ({query_specificity:.2f}): searching clusters")
+                logger.debug(
+                    f"Low specificity ({query_specificity:.2f}): searching clusters"
+                )
                 results = self._search_clusters(tree, query_embedding, top_k)
 
             logger.info(
@@ -873,7 +886,7 @@ class RAPTORRetriever:
             logger.error(f"❌ RAPTOR retrieval failed for KB {kb_id}: {e}")
             raise RAPTORRetrievalError(f"Retrieval failed: {str(e)}")
 
-    def _analyze_query_specificity(self, query: str, llm_manager = None) -> float:
+    def _analyze_query_specificity(self, query: str, llm_manager=None) -> float:
         """
         Analyze query specificity (0 = general, 1 = specific)
 
@@ -903,13 +916,23 @@ class RAPTORRetriever:
         specific_indicators = [
             '"' in query,  # Quotes indicate exact phrases
             any(c.isdigit() for c in query),  # Numbers indicate specifics
-            any(word[0].isupper() and len(word) > 1 for word in query.split()),  # Proper nouns
+            any(
+                word[0].isupper() and len(word) > 1 for word in query.split()
+            ),  # Proper nouns
         ]
 
         score += sum(specific_indicators) * 0.1
 
         # Check for general question words
-        general_words = ["what", "how", "why", "explain", "describe", "overview", "summary"]
+        general_words = [
+            "what",
+            "how",
+            "why",
+            "explain",
+            "describe",
+            "overview",
+            "summary",
+        ]
         if any(word in query.lower() for word in general_words):
             score -= 0.2
 
@@ -922,10 +945,7 @@ class RAPTORRetriever:
         return max(0.0, min(1.0, score))
 
     def _search_leaves(
-        self,
-        tree: Dict[str, Any],
-        query_embedding: List[float],
-        top_k: int
+        self, tree: Dict[str, Any], query_embedding: List[float], top_k: int
     ) -> List[Dict[str, Any]]:
         """
         Search leaf nodes (specific chunks)
@@ -944,24 +964,25 @@ class RAPTORRetriever:
         scored_leaves = []
         for leaf in leaves:
             if "text" in leaf:
-                score = self._calculate_similarity(query_embedding, leaf.get("text", ""))
-                scored_leaves.append({
-                    "id": leaf.get("id", ""),
-                    "text": leaf.get("text", ""),
-                    "score": score,
-                    "node_type": "leaf",
-                    "level": leaf.get("level", 0)
-                })
+                score = self._calculate_similarity(
+                    query_embedding, leaf.get("text", "")
+                )
+                scored_leaves.append(
+                    {
+                        "id": leaf.get("id", ""),
+                        "text": leaf.get("text", ""),
+                        "score": score,
+                        "node_type": "leaf",
+                        "level": leaf.get("level", 0),
+                    }
+                )
 
         # Sort by score (descending) and return top-k
         scored_leaves.sort(key=lambda x: x["score"], reverse=True)
         return scored_leaves[:top_k]
 
     def _search_clusters(
-        self,
-        tree: Dict[str, Any],
-        query_embedding: List[float],
-        top_k: int
+        self, tree: Dict[str, Any], query_embedding: List[float], top_k: int
     ) -> List[Dict[str, Any]]:
         """
         Search cluster nodes (summaries)
@@ -984,14 +1005,16 @@ class RAPTORRetriever:
 
             if cluster_text:
                 score = self._calculate_similarity(query_embedding, cluster_text)
-                scored_clusters.append({
-                    "id": cluster.get("id", ""),
-                    "text": cluster_text,
-                    "score": score,
-                    "node_type": "cluster",
-                    "level": cluster.get("level", 0),
-                    "chunk_count": cluster.get("chunk_count", 0)
-                })
+                scored_clusters.append(
+                    {
+                        "id": cluster.get("id", ""),
+                        "text": cluster_text,
+                        "score": score,
+                        "node_type": "cluster",
+                        "level": cluster.get("level", 0),
+                        "chunk_count": cluster.get("chunk_count", 0),
+                    }
+                )
 
         # Sort by score (descending) and return top-k
         scored_clusters.sort(key=lambda x: x["score"], reverse=True)

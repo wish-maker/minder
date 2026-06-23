@@ -80,7 +80,9 @@ def main():
         plugins = test_list_modules()
 
         # Get first enabled plugin for testing
-        enabled_plugins = [p["name"] for p in plugins["plugins"] if p.get("enabled", False)]
+        enabled_plugins = [
+            p["name"] for p in plugins["plugins"] if p.get("enabled", False)
+        ]
         # disabled_plugins = [
         #     p['name'] for p in plugins['plugins']
         #     if not p.get('enabled', False)]

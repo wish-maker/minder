@@ -10,10 +10,10 @@ This is the API layer data models module.
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel
 
-
 # ============================================================================
 # Knowledge Base Models
 # ============================================================================
+
 
 class KnowledgeBaseCreate(BaseModel):
     """Knowledge base creation request"""
@@ -43,6 +43,7 @@ class KnowledgeBaseResponse(BaseModel):
 # ============================================================================
 # RAG Pipeline Models
 # ============================================================================
+
 
 class RAGPipelineCreate(BaseModel):
     """RAG Pipeline creation request"""
@@ -85,6 +86,7 @@ class DocumentUploadResponse(BaseModel):
 # RAPTOR RAG Models
 # ============================================================================
 
+
 class RAPTORUploadRequest(BaseModel):
     """RAPTOR document upload request"""
 
@@ -124,6 +126,7 @@ class RAPTORUploadResponse(BaseModel):
 # ============================================================================
 # Conversation Memory Models
 # ============================================================================
+
 
 class ConversationTurn(BaseModel):
     """Single conversation turn"""
@@ -189,6 +192,7 @@ class ClearConversationResponse(BaseModel):
 # ============================================================================
 # Health Check Models
 # ============================================================================
+
 
 class HealthResponse(BaseModel):
     """Health check response"""

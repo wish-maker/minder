@@ -54,7 +54,7 @@ class KnowledgeBaseService:
         ollama_manager: Any,
         qdrant_client: Any,
         parent_child_chunker: Any = None,
-        embedding_dimensions: Dict[str, int] = None
+        embedding_dimensions: Dict[str, int] = None,
     ):
         """
         Initialize knowledge base service
@@ -87,7 +87,7 @@ class KnowledgeBaseService:
         llm_model: str = "llama3",
         chunk_size: int = 512,
         chunk_overlap: int = 50,
-        parent_child_enabled: bool = False
+        parent_child_enabled: bool = False,
     ) -> Dict[str, Any]:
         """
         Create a new knowledge base
@@ -151,7 +151,9 @@ class KnowledgeBaseService:
 
         return kb_metadata
 
-    def list_knowledge_bases(self, knowledge_bases: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def list_knowledge_bases(
+        self, knowledge_bases: Dict[str, Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         """
         List all knowledge bases
 
@@ -164,9 +166,7 @@ class KnowledgeBaseService:
         return list(knowledge_bases.values())
 
     def get_knowledge_base(
-        self,
-        kb_id: str,
-        knowledge_bases: Dict[str, Dict[str, Any]]
+        self, kb_id: str, knowledge_bases: Dict[str, Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Get knowledge base by ID
@@ -191,7 +191,7 @@ class KnowledgeBaseService:
         kb_id: str,
         content: bytes,
         filename: str,
-        knowledge_bases: Dict[str, Dict[str, Any]]
+        knowledge_bases: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
         Upload document to knowledge base
@@ -234,8 +234,7 @@ class KnowledgeBaseService:
 
         # Generate embeddings
         embeddings = await self.ollama_manager.generate_embeddings(
-            chunks,
-            model=kb["embedding_model"]
+            chunks, model=kb["embedding_model"]
         )
 
         # Store in Qdrant
@@ -295,12 +294,7 @@ class KnowledgeBaseService:
             logger.error(f"❌ Text extraction failed: {e}")
             raise ValueError(f"Failed to extract text: {str(e)}")
 
-    async def _chunk_text(
-        self,
-        text: str,
-        kb: Dict[str, Any],
-        kb_id: str
-    ) -> List[str]:
+    async def _chunk_text(self, text: str, kb: Dict[str, Any], kb_id: str) -> List[str]:
         """
         Chunk text using appropriate strategy
 
@@ -322,12 +316,15 @@ class KnowledgeBaseService:
 
                 # Index for parent-child retrieval
                 from domain import ParentChildRetriever
+
                 retriever = ParentChildRetriever()
                 retriever.index_hierarchy(kb_id, hierarchy)
 
                 # Use child chunks for embeddings
                 chunks = [item["text"] for item in hierarchy if item["type"] == "child"]
-                logger.info(f"✅ Parent-child chunking: {len(hierarchy)} total ({len(chunks)} children)")
+                logger.info(
+                    f"✅ Parent-child chunking: {len(hierarchy)} total ({len(chunks)} children)"
+                )
                 return chunks
 
             # Regular chunking
@@ -353,7 +350,7 @@ class KnowledgeBaseService:
         kb_id: str,
         chunks: List[str],
         embeddings: List[List[float]],
-        filename: str
+        filename: str,
     ) -> int:
         """
         Store vectors in Qdrant
@@ -388,10 +385,7 @@ class KnowledgeBaseService:
                 points.append(point)
 
             # Batch upsert
-            self.qdrant_client.upsert(
-                collection_name=kb_id,
-                points=points
-            )
+            self.qdrant_client.upsert(collection_name=kb_id, points=points)
 
             return len(points)
 
