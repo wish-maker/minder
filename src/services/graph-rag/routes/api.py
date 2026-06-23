@@ -6,22 +6,14 @@ All FastAPI endpoints for entity extraction, graph construction, and retrieval.
 
 import logging
 
-from fastapi import HTTPException
-
-from models.schemas import (
-    EntityContextRequest,
-    EntityContextResponse,
-    EntityExtractionRequest,
-    EntityExtractionResponse,
-    GraphRetrievalRequest,
-    GraphRetrievalResponse,
-    KnowledgeGraphRequest,
-    KnowledgeGraphResponse,
-)
-
 from core.entity_extractor import EntityExtractor
 from core.graph_constructor import KnowledgeGraphConstructor
 from core.graph_retriever import GraphRetriever
+from fastapi import HTTPException
+from models.schemas import (EntityContextRequest, EntityContextResponse,
+                            EntityExtractionRequest, EntityExtractionResponse,
+                            GraphRetrievalRequest, GraphRetrievalResponse,
+                            KnowledgeGraphRequest, KnowledgeGraphResponse)
 
 logger = logging.getLogger(__name__)
 

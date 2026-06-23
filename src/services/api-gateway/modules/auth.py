@@ -7,10 +7,10 @@ Real PostgreSQL + bcrypt implementation.
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 import asyncpg
-from bcrypt import hashpw, checkpw, gensalt
+from bcrypt import checkpw, gensalt, hashpw
 from fastapi import HTTPException, Request
 from jose import jwt
 

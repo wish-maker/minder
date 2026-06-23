@@ -3,8 +3,8 @@ Plugin Registry Configuration
 Loads settings from environment variables with sensible defaults
 """
 
-from pydantic_settings import BaseSettings
 from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):

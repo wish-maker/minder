@@ -7,9 +7,7 @@ __version__ = "1.0.0"
 __author__ = "Minder Platform Team"
 
 # Import subpackages
-from . import models
-from . import utils
-from . import config
+from . import config, models, utils
 
 __all__ = [
     "models",

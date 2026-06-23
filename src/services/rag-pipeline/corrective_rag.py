@@ -6,6 +6,7 @@ Web search fallback when retrieval quality is poor
 import logging
 import os
 from typing import Any, Dict, List
+
 import httpx
 
 logger = logging.getLogger(__name__)

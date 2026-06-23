@@ -6,16 +6,12 @@ Licensing and subscription management endpoints
 import logging
 from typing import Optional
 
+from core.database import get_db_pool
+from core.license import (check_plugin_license, get_plugin_license_tier,
+                          update_plugin_license)
 from fastapi import APIRouter, HTTPException
 from models.plugin_state import LicenseTier
 from pydantic import BaseModel
-
-from core.database import get_db_pool
-from core.license import (
-    check_plugin_license,
-    get_plugin_license_tier,
-    update_plugin_license,
-)
 
 logger = logging.getLogger(__name__)
 

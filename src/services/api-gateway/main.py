@@ -13,24 +13,18 @@ from typing import Dict
 
 import httpx
 import redis
-from config import settings
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from jose import jwt
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
-
+# Import auth functions
+from modules.auth import create_jwt_token, verify_jwt_token
+from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge, Histogram,
+                               generate_latest)
 # Import AI integration router
 from routes.ai import router as ai_router
 
-# Import auth functions
-from modules.auth import create_jwt_token, verify_jwt_token
+from config import settings
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -388,12 +382,8 @@ async def get_current_user(request: Request):
 # ============================================================================
 
 
-from modules.auth import (
-    create_user,
-    verify_user_credentials,
-    close_pg_pool,
-    init_users_table,
-)
+from modules.auth import (close_pg_pool, create_user, init_users_table,
+                          verify_user_credentials)
 
 
 @app.on_event("startup")

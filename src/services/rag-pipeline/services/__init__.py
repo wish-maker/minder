@@ -5,8 +5,8 @@ This package contains service layer components that orchestrate
 domain business logic with infrastructure components.
 """
 
-from .retrieval_service import RetrievalService
 from .knowledge_base_service import KnowledgeBaseService
+from .retrieval_service import RetrievalService
 
 __all__ = [
     "RetrievalService",

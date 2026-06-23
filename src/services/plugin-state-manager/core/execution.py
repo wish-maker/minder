@@ -9,11 +9,8 @@ import time
 from typing import Any, Dict
 
 import httpx
-from models.tool_execution import (
-    ToolDiscoveryResponse,
-    ToolExecutionResponse,
-    ToolSchema,
-)
+from models.tool_execution import (ToolDiscoveryResponse,
+                                   ToolExecutionResponse, ToolSchema)
 
 logger = logging.getLogger(__name__)
 

@@ -14,32 +14,33 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+# Legacy imports (will be removed after full migration)
+from corrective_rag import CorrectiveRetriever
+from domain.compressors.contextual import ContextualCompressor
+# Domain Layer
+from domain.expansion.hyde import HyDEQueryExpander
+from domain.pipelines.self_rag import SelfRAGPipeline
+from domain.rerankers.cross_encoder import CrossEncoderReranker
+from domain.retrievers.hybrid import HybridSearchRetriever
+from domain.retrievers.parent_child import ParentChildRetriever
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from infrastructure.cache import EmbeddingCache
+# Infrastructure Layer
+from infrastructure.ollama import OLLAMA_AVAILABLE, OllamaManager
+from infrastructure.resource_manager import Pi4ResourceManager
+from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Histogram,
+                               generate_latest)
+# Service Layer
+from services.knowledge_base_service import KnowledgeBaseService
+from services.retrieval_service import RetrievalService
 
 # ============================================================================
 # Clean Architecture Imports
 # ============================================================================
 
-# Service Layer
-from services.knowledge_base_service import KnowledgeBaseService
-from services.retrieval_service import RetrievalService
 
-# Domain Layer
-from domain.expansion.hyde import HyDEQueryExpander
-from domain.retrievers.hybrid import HybridSearchRetriever
-from domain.retrievers.parent_child import ParentChildRetriever
-from domain.compressors.contextual import ContextualCompressor
-from domain.rerankers.cross_encoder import CrossEncoderReranker
-from domain.pipelines.self_rag import SelfRAGPipeline
 
-# Infrastructure Layer
-from infrastructure.ollama import OllamaManager, OLLAMA_AVAILABLE
-from infrastructure.cache import EmbeddingCache
-from infrastructure.resource_manager import Pi4ResourceManager
 
-# Legacy imports (will be removed after full migration)
-from corrective_rag import CorrectiveRetriever
 
 logger = logging.getLogger(__name__)
 

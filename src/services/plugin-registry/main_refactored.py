@@ -11,9 +11,11 @@ import sys
 from datetime import datetime
 from typing import Dict, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import (BackgroundTasks, Depends, FastAPI, HTTPException, Request,
+                     Response)
 from fastapi.responses import RedirectResponse
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_latest
+from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge,
+                               generate_latest)
 from pydantic import BaseModel
 
 # Add paths for module imports
@@ -24,13 +26,14 @@ sys.path.insert(0, "/app/plugins")
 from core.database import initialize_connection_pool
 from core.plugin_loader import load_plugins_from_disk
 
-# Import existing routes
-
+# Import config
+from config import settings
 # Import shared utilities
 from shared.auth.jwt_middleware import get_current_user
 
-# Import config
-from config import settings
+# Import existing routes
+
+
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))

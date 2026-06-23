@@ -16,21 +16,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import all layers
-from domain import (
-    HybridSearchRetriever,
-    CrossEncoderReranker,
-    ContextualCompressor,
-    HyDEQueryExpander,
-)
-
+from domain import (ContextualCompressor, CrossEncoderReranker,
+                    HybridSearchRetriever, HyDEQueryExpander)
 from infrastructure import EmbeddingCache, Pi4ResourceManager
-
-from services import RetrievalService, KnowledgeBaseService
-
-from repositories import KnowledgeBaseRepository, ConversationRepository
-
-
+from repositories import ConversationRepository, KnowledgeBaseRepository
 from utils import chunk_text, chunk_text_fallback, cosine_similarity
+
+from services import KnowledgeBaseService, RetrievalService
 
 
 class MockQdrantClient:

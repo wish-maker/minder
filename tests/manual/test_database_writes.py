@@ -29,7 +29,6 @@ async def test_database_writes():
     import redis
     from influxdb_client import InfluxDBClient
     from qdrant_client import QdrantClient
-
     from src.core.kernel import MinderKernel
 
     # Test results

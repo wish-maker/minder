@@ -6,13 +6,12 @@ Central plugin management, state control, and AI tools execution
 
 from contextlib import asynccontextmanager
 
+from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic_settings import BaseSettings
 from pydantic import field_validator
+from pydantic_settings import BaseSettings
 from routes import licensing, state, tools
-
-from core.database import close_db_pool, get_db_pool, initialize_database
 
 # ============================================================================
 # Settings

@@ -7,24 +7,16 @@ All business logic is in services/, all data access in repositories/.
 
 import logging
 
+# API Models (shared)
+from api.models import (DocumentUploadResponse, KnowledgeBaseCreate,
+                        KnowledgeBaseResponse, QueryRequest, QueryResponse)
 from fastapi import APIRouter, HTTPException, UploadFile
-
-# Service layer imports
-from services.knowledge_base_service import KnowledgeBaseService
-from services.retrieval_service import RetrievalService
-
 # Infrastructure imports
 from infrastructure.ollama import OllamaManager
 from infrastructure.resource_manager import Pi4ResourceManager
-
-# API Models (shared)
-from api.models import (
-    KnowledgeBaseCreate,
-    KnowledgeBaseResponse,
-    QueryRequest,
-    QueryResponse,
-    DocumentUploadResponse,
-)
+# Service layer imports
+from services.knowledge_base_service import KnowledgeBaseService
+from services.retrieval_service import RetrievalService
 
 logger = logging.getLogger(__name__)
 

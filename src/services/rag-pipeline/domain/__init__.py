@@ -10,11 +10,11 @@ for the RAG pipeline service. It has NO dependencies on:
 The domain layer is pure Python logic that can be tested independently.
 """
 
-from .retrievers import HybridSearchRetriever, ParentChildRetriever
-from .rerankers import CrossEncoderReranker
 from .compressors import ContextualCompressor
-from .pipelines import SelfRAGPipeline
 from .expansion import HyDEQueryExpander
+from .pipelines import SelfRAGPipeline
+from .rerankers import CrossEncoderReranker
+from .retrievers import HybridSearchRetriever, ParentChildRetriever
 
 __all__ = [
     "HybridSearchRetriever",

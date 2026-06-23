@@ -5,11 +5,9 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from services.marketplace.core.database import get_pool
-from services.marketplace.models.plugin import (
-    PluginCreate,
-    PluginListResponse,
-    PluginResponse,
-)
+from services.marketplace.models.plugin import (PluginCreate,
+                                                PluginListResponse,
+                                                PluginResponse)
 from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])

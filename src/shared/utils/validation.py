@@ -3,9 +3,10 @@ Input validation and sanitization utilities
 Provides comprehensive validation for common input types
 """
 
-import re
 import html
+import re
 from typing import Any, Dict, List, Optional, Union
+
 from pydantic import BaseModel, field_validator
 
 

@@ -6,24 +6,14 @@ Plugin state management endpoints
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
-from models.plugin_state import (
-    DisablePluginRequest,
-    EnablePluginRequest,
-    PluginStateListResponse,
-    PluginStateResponse,
-    UpdatePluginConfigRequest,
-)
-
 from core.database import get_db_pool
-from core.state import (
-    disable_plugin,
-    enable_plugin,
-    get_dependent_plugins,
-    get_plugin_state,
-    list_plugin_states,
-    resolve_dependencies,
-)
+from core.state import (disable_plugin, enable_plugin, get_dependent_plugins,
+                        get_plugin_state, list_plugin_states,
+                        resolve_dependencies)
+from fastapi import APIRouter, HTTPException, Query
+from models.plugin_state import (DisablePluginRequest, EnablePluginRequest,
+                                 PluginStateListResponse, PluginStateResponse,
+                                 UpdatePluginConfigRequest)
 
 logger = logging.getLogger(__name__)
 

@@ -8,6 +8,7 @@ This is the API layer data models module.
 """
 
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
 
 # ============================================================================

@@ -124,11 +124,9 @@ except Exception as e:
 # Test 5: Import and test UnifiedDataAPI
 print("\n[5/6] Testing UnifiedDataAPI import...")
 try:
-    from plugins.tefas.unified_data_api import (
-        BORSAPY_AVAILABLE,
-        TEFAS_CRAWLER_AVAILABLE,
-        UnifiedDataAPI,
-    )
+    from plugins.tefas.unified_data_api import (BORSAPY_AVAILABLE,
+                                                TEFAS_CRAWLER_AVAILABLE,
+                                                UnifiedDataAPI)
 
     print("  ✅ UnifiedDataAPI imported successfully")
     print(f"  ℹ️  borsapy available: {BORSAPY_AVAILABLE}")

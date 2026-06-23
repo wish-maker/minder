@@ -14,17 +14,14 @@ from typing import Dict, List, Optional
 
 import redis
 import yaml
-from config import settings
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import (BackgroundTasks, Depends, FastAPI, HTTPException, Request,
+                     Response)
 from fastapi.responses import RedirectResponse
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge, Histogram,
+                               generate_latest)
 from pydantic import BaseModel
+
+from config import settings
 
 # Import authentication middleware
 sys.path.insert(0, "/app/src")
@@ -543,6 +540,7 @@ async def register_all_webhooks_on_startup():
 
     # TEMP: Load manifests from /tmp for testing (MVP restart-safety workaround)
     import glob
+
     import yaml
 
     manifest_files = glob.glob("/tmp/*-manifest.yml")
@@ -640,6 +638,7 @@ async def force_webhooks():
     Workaround for MVP restart-safety issue.
     """
     import glob
+
     import yaml
 
     count = 0
@@ -1515,7 +1514,7 @@ async def startup_event():
     import sys
 
     sys.path.insert(0, "/app/services/plugin-registry")
-    from core.execution_engine import set_execution_engine, ExecutionEngine
+    from core.execution_engine import ExecutionEngine, set_execution_engine
 
     engine = ExecutionEngine()
     set_execution_engine(engine)

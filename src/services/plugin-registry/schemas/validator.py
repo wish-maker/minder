@@ -8,10 +8,10 @@ NO code execution - only parameter validation.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
 
 import yaml
-from jsonschema import validate, ValidationError
+from jsonschema import ValidationError, validate
 from schemas.mvp_manifest import MVP_MANIFEST_SCHEMA
 
 logger = logging.getLogger(__name__)

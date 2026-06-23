@@ -2,11 +2,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from services.marketplace.core.licensing import (
-    create_license,
-    get_user_licenses,
-    validate_license,
-)
+from services.marketplace.core.licensing import (create_license,
+                                                 get_user_licenses,
+                                                 validate_license)
 from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace/licenses", tags=["Licensing"])

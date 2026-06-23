@@ -5,10 +5,10 @@ This package contains external service clients and infrastructure components.
 These components manage connections to Ollama, Redis, Qdrant, PostgreSQL, and other services.
 """
 
-from .ollama import OllamaManager
 from .cache import EmbeddingCache
-from .resource_manager import Pi4ResourceManager
+from .ollama import OllamaManager
 from .postgres import PostgreSQLClient
+from .resource_manager import Pi4ResourceManager
 
 __all__ = [
     "OllamaManager",

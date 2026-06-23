@@ -4,7 +4,8 @@ Provides consistent response structures across all Minder services
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional, TypeVar, Generic
+from typing import Any, Dict, Generic, List, Optional, TypeVar
+
 from pydantic import BaseModel, Field
 
 # ============================================================================

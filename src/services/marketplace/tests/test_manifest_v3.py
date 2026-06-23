@@ -15,14 +15,8 @@ os.environ.setdefault("MARKETPLACE_DATABASE_PASSWORD", "dev_password_change_me")
 os.environ.setdefault("MARKETPLACE_DATABASE_NAME", "minder_marketplace")
 
 from services.marketplace.models.manifest_schema_v3 import (
-    EXAMPLE_MANIFEST,
-    AIToolCategory,
-    AIToolDefinition,
-    AIToolType,
-    PluginManifestV3,
-    PluginManifestValidator,
-    PluginTier,
-)
+    EXAMPLE_MANIFEST, AIToolCategory, AIToolDefinition, AIToolType,
+    PluginManifestV3, PluginManifestValidator, PluginTier)
 
 
 def test_basic_manifest_creation():

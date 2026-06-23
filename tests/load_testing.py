@@ -6,16 +6,17 @@ SKIPPED: Load testing framework not yet integrated with CI/CD
 """
 
 import asyncio
-import time
+import logging
 import statistics
-from typing import List, Dict, Any, Callable, Optional
+import time
+import tracemalloc
 from dataclasses import dataclass, field
 from enum import Enum
-import logging
+from typing import Any, Callable, Dict, List, Optional
+
 import aiohttp
 import psutil
 import pytest
-import tracemalloc
 
 logger = logging.getLogger("minder.load_testing")
 

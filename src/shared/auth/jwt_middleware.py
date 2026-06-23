@@ -7,11 +7,11 @@ All services must use the same JWT_SECRET environment variable.
 
 import os
 from datetime import datetime, timedelta
+from functools import wraps
 from typing import Dict, Optional
 
 from fastapi import HTTPException, Request
 from jose import jwt
-from functools import wraps
 
 # ============================================================================
 # Configuration

@@ -19,7 +19,8 @@ print("🔍 Testing layer imports...")
 
 try:
     # Domain layer
-    from domain import HybridSearchRetriever, CrossEncoderReranker, ContextualCompressor
+    from domain import (ContextualCompressor, CrossEncoderReranker,
+                        HybridSearchRetriever)
 
     print("✅ Domain layer imports successful")
 
@@ -29,12 +30,12 @@ try:
     print("✅ Infrastructure layer imports successful")
 
     # Service layer
-    from services import RetrievalService, KnowledgeBaseService
+    from services import KnowledgeBaseService, RetrievalService
 
     print("✅ Service layer imports successful")
 
     # Repository layer
-    from repositories import KnowledgeBaseRepository, ConversationRepository
+    from repositories import ConversationRepository, KnowledgeBaseRepository
 
     print("✅ Repository layer imports successful")
 

@@ -8,6 +8,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import asyncpg
+
 from config import settings
 
 logger = logging.getLogger(__name__)

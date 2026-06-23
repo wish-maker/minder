@@ -3,10 +3,11 @@ Common Pydantic models for standard API requests
 Provides consistent request validation across all Minder services
 """
 
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field, field_validator
-import re
 
 # ============================================================================
 # Pagination

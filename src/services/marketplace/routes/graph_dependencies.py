@@ -13,7 +13,8 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from services.marketplace.core.neo4j_client import Neo4jClient, get_neo4j_client
+from services.marketplace.core.neo4j_client import (Neo4jClient,
+                                                    get_neo4j_client)
 from shared.auth.jwt_middleware import get_current_user
 
 logger = logging.getLogger("minder.graph_dependencies")

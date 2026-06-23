@@ -7,9 +7,9 @@ Analyzes query characteristics and selects optimal RAG techniques.
 
 import json
 import logging
-from typing import Dict, List, Any
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 

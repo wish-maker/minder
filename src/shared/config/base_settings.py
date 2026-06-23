@@ -4,6 +4,7 @@ Provides common configuration defaults to reduce duplication across services
 """
 
 from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 

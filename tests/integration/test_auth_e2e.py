@@ -8,14 +8,16 @@ Run: docker compose -f docker-compose.test.yml up -d
 """
 
 import asyncio
+
 import pytest
 import pytest_asyncio
+
+# Config is loaded by conftest.py BEFORE this file runs
+from config import settings
 
 # Comment out to run tests (requires docker-compose.test.yml up)
 # pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
-# Config is loaded by conftest.py BEFORE this file runs
-from config import settings
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -57,7 +59,7 @@ async def clean_database(verify_postgres_running):
     Teardown: Drop all data and table
     """
     import asyncpg
-    from modules.auth import init_users_table, get_pg_pool, close_pg_pool
+    from modules.auth import close_pg_pool, get_pg_pool, init_users_table
 
     # Close any existing pool
     await close_pg_pool()
@@ -89,10 +91,9 @@ async def api_client(clean_database):
         except Exception:
             pass
 
-    from httpx import ASGITransport, AsyncClient
-
     # Import main module (prometheus metrics will be created fresh)
     import main
+    from httpx import ASGITransport, AsyncClient
 
     app = main.app
 
@@ -301,9 +302,10 @@ class TestAuthProtectedEndpoints:
     async def test_expired_jwt_returns_401(self):
         """Expired JWT returns 401"""
         from datetime import datetime, timedelta
+
+        from fastapi import HTTPException
         from jose import jwt
         from modules.auth import verify_jwt_token
-        from fastapi import HTTPException
 
         # Create expired token
         expired_payload = {
@@ -322,8 +324,8 @@ class TestAuthProtectedEndpoints:
 
     async def test_invalid_jwt_returns_401(self):
         """Invalid JWT returns 401"""
-        from modules.auth import verify_jwt_token
         from fastapi import HTTPException
+        from modules.auth import verify_jwt_token
 
         with pytest.raises(HTTPException) as exc:
             verify_jwt_token("not.a.valid.jwt.token")

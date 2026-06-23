@@ -135,7 +135,7 @@ class KnowledgeBaseService:
 
         # Create Qdrant collection
         try:
-            from qdrant_client.models import VectorParams, Distance
+            from qdrant_client.models import Distance, VectorParams
 
             self.qdrant_client.create_collection(
                 collection_name=kb_id,
@@ -329,7 +329,8 @@ class KnowledgeBaseService:
 
             # Regular chunking
             else:
-                from langchain_text_splitters import RecursiveCharacterTextSplitter
+                from langchain_text_splitters import \
+                    RecursiveCharacterTextSplitter
 
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=kb["chunk_size"],
