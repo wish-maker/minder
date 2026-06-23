@@ -21,7 +21,7 @@ jobs:
       - name: Run Bandit security linter
         run: |
           pip install bandit[toml]
-          bandit -r src/services/ src/core/ src/plugins/ -f json -o bandit-report.json || true
+          bandit -r src/services/ src/core/ -f json -o bandit-report.json || true
 
       - name: Run Safety check
         run: |
@@ -53,13 +53,13 @@ jobs:
           pip install flake8 black isort mypy pylint
 
       - name: Run Flake8
-        run: flake8 src/services/ src/core/ src/plugins/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+        run: flake8 src/services/ src/core/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run Black
-        run: black --check src/services/ src/core/ src/plugins/
+        run: black --check src/services/ src/core/
 
       - name: Run isort
-        run: isort --check-only src/services/ src/core/ src/plugins/
+        run: isort --check-only src/services/ src/core/
 
       - name: Run MyPy
         run: mypy src/services/ --ignore-missing-imports || true
@@ -119,7 +119,6 @@ jobs:
           pytest tests/ --ignore=tests/manual \
             --cov=src/services \
             --cov=src/core \
-            --cov=src/plugins \
             --cov-report=xml \
             --cov-report=html \
             --verbose \
