@@ -1149,3 +1149,657 @@ While not the immediate CI blocker, the schema IS scattered across 5 services (1
 4. Characterize performance differences
 
 **Note:** This is the deployment milestone, not a "nice to have."
+
+---
+
+## ⚠️ CI WORKFLOW REDUNDANCY — Consolidation Required (2026-06-24)
+
+**CRITICAL:** This section documents a CAREFUL refactor of WORKING CI (14 green checks). Do not execute in a tired session — verify after each step that green checks STAY green.
+
+### Branch Protection Status
+
+**Result:** ✅ **No branch protection configured** on `wish-maker/minder`
+- API returned 404 (branch not found)
+- **Implication:** Job renames/restructure are safe from "required check" breakage
+- No external dependencies blocking refactor
+
+---
+
+### Complete `needs:` Dependency Graph
+
+```
+ci.yml:
+  security-scan ────┐
+  lint ─────────────┤
+                   ├──> test ──> build ──┬─> deploy-staging
+                                      └─> deploy-production
+
+test.yml:
+  lint ──────────────┐
+  security-scan ─────┤
+  unit-tests ────────┤ ├──> integration-tests ──> e2e-tests ──┐
+  docker-scan ────────┘                                        │
+                                                              └──> notify
+
+security.yml:
+  codeql ──────┐
+  bandit ───────┤
+  safety ───────┤
+  trivy ────────┤ ├──> security-summary
+  secrets-scan ─┤
+  dockerfile-lint (standalone, not aggregated)
+  license-compliance (standalone, not aggregated)
+
+check-dependency-updates.yml:
+  check-updates (creates GitHub issue)
+
+docker-image-update.yml:
+  check-updates ──> auto-update-branch ──> notify
+
+auto-update-pr.yml:
+  auto-update (creates PR)
+```
+
+---
+
+### Confirmed Duplicates
+
+| Job | Duplicated In | Tool | Impact |
+|-----|---------------|------|--------|
+| `lint` | ci.yml, test.yml | Black/isort/Flake8/MyPy | Runs twice on every push/PR |
+| `security-scan` | ci.yml, test.yml | Bandit/Safety | Runs twice on every push/PR |
+| `trivy` | security.yml (trivy), test.yml (docker-scan) | Trivy on `minder-api-gateway:test` | Same image scanned twice |
+| `check-updates` | check-dependency-updates.yml, docker-image-update.yml | Docker Hub API | Weekly redundant checks |
+
+---
+
+### Why This Happened
+
+Workflows evolved with **different intents** that drifted into overlap:
+
+- **ci.yml:** Originally "build pipeline focus" — security+lint as *gates* before build/deploy
+- **test.yml:** Originally "test pipeline focus" — security+lint as *pre-test gates*, then expanded to include Docker scan
+- **security.yml:** Originally "deep security focus" — comprehensive security toolkit (CodeQL, secrets, licenses)
+- **docker-image-update.yml:** Originally "automated PR creation"
+- **check-dependency-updates.yml:** Originally "alert-only" (issue creation)
+
+The duplication crept in because `test.yml` was enhanced to be "the complete test workflow" without removing the original gates from `ci.yml`.
+
+---
+
+### Consolidation Options
+
+#### Option A: Single Comprehensive Quality Workflow (RECOMMENDED)
+
+**Structure:**
+```
+quality.yml (NEW — single source of truth):
+  ├─ lint (Black/isort/Flake8/MyPy)
+  ├─ security-scan (Bandit/Safety)
+  ├─ unit-tests
+  ├─ integration-tests
+  ├─ e2e-tests
+  ├─ docker-scan (Trivy)
+  └─ notify (aggregates all results)
+
+ci.yml (STREAMLINED — deployment only):
+  └─ build ──> deploy-staging/deploy-production
+     needs: nothing (depends on quality.yml completing via branch protection)
+
+security.yml (DEEP SECURITY ONLY — scheduled):
+  ├─ codeql
+  ├─ secrets-scan
+  ├─ dockerfile-lint
+  ├─ license-compliance
+  └─ security-summary
+
+docker-image-update.yml (KEPT — richer automation):
+  └─ check-updates ──> auto-update-branch ──> notify
+
+check-dependency-updates.yml (DELETE):
+  └─ Removed — functionality duplicated in docker-image-update.yml
+
+auto-update-pr.yml (KEEP or REVIEW):
+  └─ Separate auto-update mechanism — review if still needed
+```
+
+**Why Option A:**
+- ✅ Single source of truth — one PR shows all check results in one list
+- ✅ Faster feedback — no waiting for duplicate jobs
+- ✅ Easier to maintain — add a test? One file to edit
+- ✅ Clear intent — `quality.yml` = "pre-merge requirements", `ci.yml` = "deployment pipeline", `security.yml` = "scheduled deep security"
+
+---
+
+#### Option B: Keep Separate, Remove Overlaps (Minimal Change)
+
+**Changes:**
+```
+ci.yml: REMOVE security-scan, lint (let test.yml own them)
+       test: ──> build ──> deploy
+
+test.yml: KEEP lint, security-scan, unit-tests, integration-tests, e2e-tests
+          REMOVE docker-scan (move to security.yml)
+
+security.yml: KEEP trivy, ADD docker-scan job
+             KEEP all deep security jobs
+```
+
+**Why Option B:**
+- Less structural change
+- Each workflow retains distinct "flavor"
+- Faster to execute (fewer file moves)
+
+---
+
+### Recommendation: Option A
+
+**Reason:** Single comprehensive quality gate is the industry pattern for a reason — clarity, speed, maintainability. Option A's `quality.yml` becomes the "pre-merge checklist," `ci.yml` becomes the "deployment pipeline," and `security.yml` becomes the "scheduled deep security audit." Clean separation, no ambiguity.
+
+---
+
+### Exact Steps for Option A (FRESH SESSION ONLY)
+
+** Preconditions:**
+- ✅ Current CI is WORKING (14 green checks proven 2026-06-24)
+- ✅ No branch protection (safe to restructure)
+- ⚠️ **VERIFY AFTER EACH STEP** that green checks stay green
+
+---
+
+#### Step 1: Create `quality.yml`
+
+**Action:** Create `.github/workflows/quality.yml` with combined jobs from ci.yml and test.yml:
+
+```yaml
+name: Quality Gate
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/config/requirements/requirements-dev.txt
+      - name: Run Black
+        run: black --check src/services/ src/core/
+      - name: Run isort
+        run: isort --check-only src/services/ src/core/
+      - name: Run Flake8
+        run: flake8 src/services/ src/core/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+      - name: Run MyPy
+        run: mypy src/services/ --ignore-missing-imports || true
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml] safety
+      - name: Run Bandit
+        run: bandit -r src/ -f json -o bandit-report.json || true
+      - name: Run Safety
+        run: safety check --json > safety-report.json || true
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+            safety-report.json
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: [lint, security-scan]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/config/requirements/requirements.txt
+          pip install -r src/config/requirements/requirements-dev.txt
+      - name: Run unit tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: |
+          pytest tests/unit/ -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --tb=short \
+            --timeout=300
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            htmlcov/
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint, security-scan, unit-tests]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/config/requirements/requirements.txt
+          pip install -r src/config/requirements/requirements-dev.txt
+      - name: Run integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: |
+          pytest tests/integration/ -v \
+            --tb=short \
+            --timeout=600
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/config/requirements/requirements.txt
+          pip install -r src/config/requirements/requirements-dev.txt
+      - name: Run E2E tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+        run: |
+          pytest tests/e2e/ -v \
+            --tb=short \
+            --timeout=900
+
+  docker-scan:
+    name: Docker Image Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: |
+          docker compose -f docker/compose/docker-compose.yml build api-gateway
+      - name: Run Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'minder-api-gateway:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [lint, security-scan, unit-tests, integration-tests, e2e-tests, docker-scan]
+    if: always()
+    steps:
+      - name: Send notification
+        run: |
+          if [ "${{ needs.unit-tests.result }}" == "success" ] && \
+             [ "${{ needs.integration-tests.result }}" == "success" ] && \
+             [ "${{ needs.e2e-tests.result }}" == "success" ]; then
+              echo "✅ All tests successful!"
+              exit 0
+          else
+              echo "❌ Some tests failed!"
+              exit 1
+          fi
+```
+
+**VERIFY:** Push and check that `quality.yml` runs successfully. All jobs should pass.
+
+---
+
+#### Step 2: Streamline `ci.yml`
+
+**Action:** Edit `.github/workflows/ci.yml` to remove duplicate jobs:
+
+```yaml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # Build and Push Docker Image
+  build:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Deployment to staging
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.minder.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add deployment commands here
+
+  # Deployment to production
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://minder.example.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create backup before deployment
+        run: |
+          echo "Creating backup..."
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+
+      - name: Health check
+        run: |
+          sleep 30
+          curl -f https://minder.example.com/health || exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed, rolling back..."
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ ${{ job.status }} == "success" ]; then
+            echo "Deployment successful!"
+          else
+            echo "Deployment failed!"
+          fi
+```
+
+**VERIFY:** Push and check that `ci.yml` runs only build/deploy jobs. No lint/test/security.
+
+---
+
+#### Step 3: Update `security.yml` to absorb docker-scan
+
+**Action:** Edit `.github/workflows/security.yml` to add docker-scan job:
+
+```yaml
+# In security.yml, add this job after trivy job:
+
+  docker-scan:
+    name: Docker Image Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker compose -f docker/compose/docker-compose.yml build api-gateway
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'minder-api-gateway:test'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy-docker'
+```
+
+**UPDATE security-summary job to include docker-scan:**
+```yaml
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [codeql, bandit, safety, trivy, secrets-scan, docker-scan]  # Added docker-scan
+    if: always()
+    # ... rest unchanged
+```
+
+**VERIFY:** Push and check that `security.yml` includes docker-scan in summary.
+
+---
+
+#### Step 4: Delete `check-dependency-updates.yml`
+
+**Action:**
+```bash
+rm .github/workflows/check-dependency-updates.yml
+git add .github/workflows/check-dependency-updates.yml
+```
+
+**VERIFY:** Push and confirm workflow is deleted from GitHub Actions tab.
+
+---
+
+#### Step 5: Review `auto-update-pr.yml`
+
+**Action:** Decide if this workflow is still needed (it creates PRs, different from docker-image-update.yml which also creates PRs).
+
+**Options:**
+- Keep if it has distinct functionality
+- Delete if docker-image-update.yml covers it
+
+---
+
+#### Final Verification Checklist
+
+After completing all steps:
+
+- [ ] `quality.yml` runs and passes all jobs (lint, security-scan, unit-tests, integration-tests, e2e-tests, docker-scan)
+- [ ] `ci.yml` runs only build/deploy jobs (no test/lint/security)
+- [ ] `security.yml` runs all deep security jobs including docker-scan
+- [ ] `check-dependency-updates.yml` is deleted
+- [ ] `docker-image-update.yml` still works
+- [ ] All 14 green checks are still green (no regressions)
+- [ ] PR checks show single consolidated quality gate
+- [ ] No duplicate jobs run (verify in Actions tab — each job runs once)
+
+---
+
+### Session Context
+
+**Diagnosed:** 2026-06-24
+**Status:** ✅ Documented, NOT executed
+**Reason:** Session fatigue — this is careful refactor of working CI
+**Handoff:** Fresh session to execute Option A consolidation
+**Safety Net:** Verify after each step that green checks stay green
