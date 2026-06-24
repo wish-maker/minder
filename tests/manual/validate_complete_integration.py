@@ -76,15 +76,15 @@ try:
 
     print("  ✅ UnifiedDataAPI import successful")
 
-    from plugins.tefas.collectors.risk_metrics_collector import (
+    from plugins.tefas.collectors.risk_metrics_collector import (  # noqa: F401
         RiskMetricsCollector,
-    )  # noqa: F401
+    )
 
     print("  ✅ RiskMetricsCollector import successful")
 
-    from plugins.tefas.collectors.allocation_collector import (
+    from plugins.tefas.collectors.allocation_collector import (  # noqa: F401
         AllocationCollector,
-    )  # noqa: F401
+    )
 
     print("  ✅ AllocationCollector import successful")
 
