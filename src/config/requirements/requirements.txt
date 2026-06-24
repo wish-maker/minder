@@ -39,3 +39,6 @@ requests==2.31.0
 # System & Performance Testing
 psutil==5.9.6
 locust==2.15.1
+
+# Password Hashing
+passlib[bcrypt]==1.7.4
