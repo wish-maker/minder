@@ -35,3 +35,7 @@ pyjwt==2.8.0
 
 # HTTP Client (test dependency)
 requests==2.31.0
+
+# System & Performance Testing
+psutil==5.9.6
+locust==2.15.1
