@@ -19,7 +19,7 @@ from config import settings
 # pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def verify_postgres_running():
     """
     Verify PostgreSQL test container is running before any tests.
