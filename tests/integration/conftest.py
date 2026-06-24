@@ -9,7 +9,7 @@ import sys
 # Test environment - MUST match docker-compose.test.yml
 # IMPORTANT: Set env vars BEFORE importing any app code
 os.environ["POSTGRES_HOST"] = "localhost"
-os.environ["POSTGRES_PORT"] = "5433"
+os.environ.setdefault("POSTGRES_PORT", "5433")  # local default; CI sets via env
 os.environ["POSTGRES_USER"] = "postgres"
 os.environ["POSTGRES_PASSWORD"] = "testpass"
 os.environ["POSTGRES_DB"] = "minder_test"
@@ -33,9 +33,9 @@ sys.path.insert(
 import config
 from config import settings
 
-# Override directly to ensure test values
+# Override directly to ensure test values (respect env for CI compatibility)
 settings.POSTGRES_HOST = "localhost"
-settings.POSTGRES_PORT = 5433
+settings.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5433"))  # CI can override
 settings.POSTGRES_USER = "postgres"
 settings.POSTGRES_PASSWORD = "testpass"
 settings.POSTGRES_DB = "minder_test"
