@@ -189,13 +189,15 @@ async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
             return {}
 
         async with conn.acquire() as connection:
-            rows = await connection.fetch("""
+            rows = await connection.fetch(
+                """
                 SELECT id, name, description, embedding_model, llm_model,
                        chunk_size, chunk_overlap, chunking_strategy,
                        parent_size, document_count, vector_count, created_at
                 FROM knowledge_bases
                 ORDER BY created_at DESC
-            """)
+            """
+            )
 
         kbs = {}
         for row in rows:
@@ -279,11 +281,13 @@ async def load_pipelines_from_postgres() -> Dict[str, Dict[str, Any]]:
             return {}
 
         async with conn.acquire() as connection:
-            rows = await connection.fetch("""
+            rows = await connection.fetch(
+                """
                 SELECT id, name, knowledge_base_ids, retrieval_config, generation_config, created_at
                 FROM rag_pipelines
                 ORDER BY created_at DESC
-            """)
+            """
+            )
 
         pipelines = {}
         for row in rows:

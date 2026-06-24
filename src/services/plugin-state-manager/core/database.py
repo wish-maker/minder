@@ -102,7 +102,8 @@ async def initialize_database():
     pool = await get_db_pool()
 
     # Create plugin_states table
-    await pool.execute("""
+    await pool.execute(
+        """
         CREATE TABLE IF NOT EXISTS plugin_states (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             plugin_name VARCHAR(255) UNIQUE NOT NULL,
@@ -120,10 +121,12 @@ async def initialize_database():
                           'INSTALLED', 'ENABLED', 'DISABLED', 'ERROR')
             )
         )
-    """)
+    """
+    )
 
     # Create default_plugins table
-    await pool.execute("""
+    await pool.execute(
+        """
         CREATE TABLE IF NOT EXISTS default_plugins (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             plugin_name VARCHAR(255) UNIQUE NOT NULL,
@@ -135,10 +138,12 @@ async def initialize_database():
             version VARCHAR(50),
             config JSONB DEFAULT '{}'::jsonb
         )
-    """)
+    """
+    )
 
     # Create plugin_dependencies table
-    await pool.execute("""
+    await pool.execute(
+        """
         CREATE TABLE IF NOT EXISTS plugin_dependencies (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             plugin_name VARCHAR(255) NOT NULL,
@@ -146,10 +151,12 @@ async def initialize_database():
             required BOOLEAN NOT NULL,
             UNIQUE(plugin_name, depends_on)
         )
-    """)
+    """
+    )
 
     # Create user_subscriptions table
-    await pool.execute("""
+    await pool.execute(
+        """
         CREATE TABLE IF NOT EXISTS user_subscriptions (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id VARCHAR(255) UNIQUE NOT NULL,
@@ -161,6 +168,7 @@ async def initialize_database():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    """)
+    """
+    )
 
     logger.info("Database tables initialized successfully")

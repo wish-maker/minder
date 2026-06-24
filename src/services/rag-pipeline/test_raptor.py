@@ -164,14 +164,17 @@ def test_raptor_tree_creation_basic():
         )
 
         # Create test text
-        test_text = """
+        test_text = (
+            """
         Machine learning is a subset of artificial intelligence.
         It enables systems to learn from data without explicit programming.
         There are three main types: supervised, unsupervised, and reinforcement learning.
         Supervised learning uses labeled data for training.
         Unsupervised learning finds patterns in unlabeled data.
         Reinforcement learning learns through trial and error.
-        """ * 3  # Repeat to make it longer
+        """
+            * 3
+        )  # Repeat to make it longer
 
         # Test chunking
         chunks = chunker._chunk_text(test_text)
@@ -293,7 +296,8 @@ def test_raptor_end_to_end_mock():
         chunker = RAPTORChunker(chunk_size=256, max_tree_depth=2, cluster_size=4)
 
         # Create test document
-        test_text = """
+        test_text = (
+            """
         Introduction to Neural Networks
 
         Neural networks are computing systems inspired by biological neural networks.
@@ -308,7 +312,9 @@ def test_raptor_end_to_end_mock():
         Applications
 
         Neural networks are used in image recognition, speech processing, and natural language understanding.
-        """ * 2  # Repeat for longer text
+        """
+            * 2
+        )  # Repeat for longer text
 
         # Chunk text
         chunks = chunker._chunk_text(test_text)

@@ -282,12 +282,14 @@ async def resolve_dependencies(conn: asyncpg.Connection, plugin_name: str) -> Li
     plugins = {}
 
     # Get all plugins and their dependencies
-    rows = await conn.fetch("""
+    rows = await conn.fetch(
+        """
         SELECT dp.plugin_name, pd.depends_on, pd.required
         FROM default_plugins dp
         LEFT JOIN plugin_dependencies pd ON dp.plugin_name = pd.plugin_name
         ORDER BY dp.priority DESC
-        """)
+        """
+    )
 
     for row in rows:
         name = row["plugin_name"]

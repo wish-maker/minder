@@ -351,9 +351,9 @@ async def health_check():
     elif optional_unhealthy:
         # Only degraded if optional services are unhealthy
         health_status["status"] = "degraded"
-        health_status["message"] = (
-            f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
-        )
+        health_status[
+            "message"
+        ] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
         status_code = 200  # Degraded is still functional, return 200
     else:
         health_status["status"] = "healthy"

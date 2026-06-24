@@ -22,13 +22,15 @@ async def test_ai_tools_enhanced_schema():
 
     try:
         # Check new AI tools tables exist
-        tables = await conn.fetch("""
+        tables = await conn.fetch(
+            """
             SELECT table_name
             FROM information_schema.tables
             WHERE table_schema = 'public'
             AND (table_name LIKE 'marketplace_ai%' OR table_name LIKE '%ai%')
             ORDER BY table_name
-        """)
+        """
+        )
 
         table_names = [row["table_name"] for row in tables]
 
@@ -38,12 +40,14 @@ async def test_ai_tools_enhanced_schema():
         assert "marketplace_plugin_ai_tools" in table_names
 
         # Check enhanced columns in marketplace_ai_tools
-        columns = await conn.fetch("""
+        columns = await conn.fetch(
+            """
             SELECT column_name, data_type
             FROM information_schema.columns
             WHERE table_name = 'marketplace_ai_tools'
             ORDER BY column_name
-        """)
+        """
+        )
 
         column_names = [row["column_name"] for row in columns]
 
@@ -58,13 +62,15 @@ async def test_ai_tools_enhanced_schema():
         assert "allow_user_configuration" in column_names
 
         # Check indexes
-        indexes = await conn.fetch("""
+        indexes = await conn.fetch(
+            """
             SELECT indexname
             FROM pg_indexes
             WHERE schemaname = 'public'
             AND (indexname LIKE 'ai_%' OR indexname LIKE '%ai%')
             ORDER BY indexname
-        """)
+        """
+        )
 
         index_names = [row["indexname"] for row in indexes]
         assert len(index_names) > 0
@@ -202,10 +208,12 @@ async def test_ai_tools_constraints():
             )
 
         # Clean up
-        await conn.execute("""
+        await conn.execute(
+            """
             DELETE FROM marketplace_ai_tools_registrations
             WHERE tool_name LIKE 'test_tool_%'
-        """)
+        """
+        )
         await conn.execute(
             "DELETE FROM marketplace_installations WHERE user_id = '00000000-0000-0000-0000-000000000001'"
         )

@@ -150,9 +150,9 @@ class QueryRequest(BaseModel):
     question: str
     top_k: int = 5
     stream: bool = False
-    conversation_id: Optional[str] = (
-        None  # For conversational RAG - enables conversation history
-    )
+    conversation_id: Optional[
+        str
+    ] = None  # For conversational RAG - enables conversation history
 
 
 class QueryResponse(BaseModel):

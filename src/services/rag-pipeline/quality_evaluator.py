@@ -146,7 +146,9 @@ class AdvancedQualityEvaluator:
                 "confidence": (
                     "high"
                     if similarity > 0.7
-                    else "medium" if similarity > 0.4 else "low"
+                    else "medium"
+                    if similarity > 0.4
+                    else "low"
                 ),
             }
 
@@ -430,7 +432,9 @@ class AdvancedQualityEvaluator:
                 "confidence": (
                     "high"
                     if overall_quality > 0.7
-                    else "medium" if overall_quality > 0.5 else "low"
+                    else "medium"
+                    if overall_quality > 0.5
+                    else "low"
                 ),
                 "is_high_quality": overall_quality > 0.7,
             }
