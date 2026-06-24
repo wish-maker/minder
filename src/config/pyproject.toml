@@ -80,7 +80,7 @@ where = ["src"]
 "*" = ["*.yml", "*.yaml", "*.json"]
 
 [tool.black]
-line-length = 100
+line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
 exclude = '''
@@ -165,7 +165,7 @@ exclude_lines = [
 directory = "htmlcov"
 
 [tool.flake8]
-max-line-length = 100
+max-line-length = 88
 extend-ignore = ["E203", "W503"]
 exclude = [
     ".git",
