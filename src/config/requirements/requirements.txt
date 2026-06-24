@@ -10,7 +10,24 @@ ollama==0.1.7
 qdrant-client==1.17.1
 neo4j==5.15.0
 
+# Server
+uvicorn==0.30.0
+
+# Configuration & Settings
+pydantic-settings==2.6.0
+python-dotenv==1.0.0
+
 # Utilities
 python-multipart==0.0.6
-python-jose==3.3.0
-python-dotenv==1.2.2
+python-jose[cryptography]==3.3.0
+
+# Monitoring
+prometheus-client==0.19.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# File & Data Handling
+aiofiles==23.2.1
+pyyaml==6.0.1
+pyjwt==2.8.0
