@@ -1043,6 +1043,98 @@ While not the immediate CI blocker, the schema IS scattered across 5 services (1
 
 ---
 
+## CI Integration Tests Fix Session (2026-06-24)
+
+**Session Summary:** Fixed CI plumbing for integration tests — now reaches pytest and executes tests, but hit pytest-asyncio fixture scope mismatch.
+
+**What Was Done (2026-06-24):**
+- ✅ **Fixed requirements paths** (commit 3f24ea64)
+  - integration-tests and e2e-tests jobs now use `src/config/requirements/`
+  - Matched unit-tests' proven pattern
+  
+- ✅ **Replaced Docker Compose with postgres service** (commit 25afc181)
+  - integration-tests and e2e-tests now use lightweight postgres:16 + redis services
+  - Removed full docker compose stack (overkill — test_auth_e2e uses ASGI in-memory)
+  - Mirrored unit-tests' working pattern exactly
+
+- ✅ **CI plumbing now COMPLETE** — pytest actually runs
+  - Dependencies install: ✅
+  - Services start: ✅
+  - Tests execute: ✅
+
+**Current Status:**
+- 2 tests PASS: `test_expired_jwt_returns_401`, `test_invalid_jwt_returns_401` (non-DB tests)
+- 7 tests ERROR: pytest-asyncio fixture scope mismatch
+- 127 tests SKIPPED: Other integration tests (marked "Requires running Minder services")
+
+**Current Error (DIAGNOSED, NOT FIXED):**
+```
+ScopeMismatch: You tried to access the function scoped fixture event_loop
+with a session scoped request object, involved factories:
+tests/integration/test_auth_e2e.py:22:  def verify_postgres_running()
+```
+
+**Diagnostic Information:**
+
+**Fixtures in test_auth_e2e.py:**
+```python
+@pytest_asyncio.fixture(scope="session")  # ← Session-scoped
+async def verify_postgres_running():
+    """Verify PostgreSQL test container is running before any tests."""
+    # Connects to DB, verifies it's up, runs ONCE per session
+
+@pytest_asyncio.fixture(scope="function")  # ← Function-scoped, depends on above
+async def clean_database(verify_postgres_running):
+    """Setup: Create users table, Teardown: Drop table"""
+    # Runs per test, calls init_users_table()
+```
+
+**pytest-asyncio config (src/config/pytest.ini):**
+```ini
+asyncio_mode = auto
+asyncio_default_fixture_loop_scope = function  # ← This sets event_loop to function scope
+```
+
+**pytest-asyncio version:** 0.21.x (requirements-dev.txt: `pytest-asyncio>=0.21.0,<0.22.0`)
+
+**Root Cause:**
+- pytest.ini sets `asyncio_default_fixture_loop_scope = function`
+- `verify_postgres_running()` is `scope="session"`
+- Session-scoped async fixtures cannot use function-scoped event_loop
+
+**Two Fix Options (NEITHER APPLIED — next session to decide):**
+
+**Option A: Change pytest.ini config (RECOMMENDED)**
+```ini
+# Change from:
+asyncio_default_fixture_loop_scope = function
+# To:
+asyncio_default_fixture_loop_scope = session
+```
+- ✅ Keeps performance optimization (verify Postgres once per session, not per test)
+- ✅ Matches fixture intent (session-scoped connection verification)
+- ⚠️ Global setting — affects all async tests (but unit-tests have no async tests)
+
+**Option B: Downgrade fixture scope**
+```python
+# Change verify_postgres_running from:
+@pytest_asyncio.fixture(scope="session")
+# To:
+@pytest_asyncio.fixture(scope="function")
+```
+- ✅ Minimal change, isolated to this test
+- ❌ Loses performance (re-verifies Postgres connection every test)
+- ❌ Masks the real config mismatch
+
+**Recommendation:** Option A — fix the config to match the fixture design intent. The function-scoped event_loop was likely a pytest-asyncio default, not intentional.
+
+**Files to Review for Fix:**
+- `src/config/pytest.ini` — asyncio_default_fixture_loop_scope setting
+- `tests/integration/test_auth_e2e.py` — verify_postgres_running fixture scope
+- `src/config/requirements/requirements-dev.txt` — pytest-asyncio version constraints
+
+---
+
 ## ⚠️ Pending / Carry-over Items
 
 ### 🔴 SECURITY — Revoke GitHub PAT
