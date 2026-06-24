@@ -1029,3 +1029,71 @@ Then:      Tests pass (once schema is set up) → GOAL 🎯
 - DB params fix is ready and committed
 - Schema layer is the genuine next blocker after Docker env fix
 - All configuration is now env-respecting (no hardcoded swaps)
+
+---
+
+## ⚠️ Pending / Carry-over Items
+
+### 🔴 SECURITY — Revoke GitHub PAT
+
+**Status:** OPEN — Deferred repeatedly, needs resolution
+
+**Issue:** A GitHub Personal Access Token (PAT) with prefix `ghp_` is embedded in `.git/config` remote URL and has appeared in session output. Token is compromised and should be revoked.
+
+**Evidence:**
+- Token appeared in session output (ghp_...)
+- Blocked an API call once on lifetime restriction
+- Verified NOT in any commit/tracked file (only in local .git/config)
+
+**Action Required:**
+1. Revoke the compromised PAT via GitHub Settings → Developer Settings → Personal Access Tokens
+2. Clean the remote URL: switch to SSH (`git@github.com:user/repo.git`) or generate a fresh token
+3. Verify no other references exist in local configs
+
+**Priority:** HIGH — Live credential exposure
+
+---
+
+### 📋 RAG Methods — Next Implementation Sequence
+
+**Current Status:**
+- ✅ **Conversational RAG (#1)** — Fully proven with clean install test
+  - KB upload → query → answer flow working
+  - Confidence scores returning (0.85 in test)
+  - Evidence: `"answer": "Minder is an AI orchestration platform..."`
+
+**Next Methods (TODO):**
+
+**#2 — Self-RAG**
+- Same proof discipline as Conversational (clean install test)
+- Implementation: Self-RAG architecture with reflection/iteration
+- Goal: Demonstrate improved retrieval accuracy via self-reflection
+
+**#3 — HyDE**
+- Experimental — A/B test against Conversational
+- Implementation: HyDE (Hypothetical Document Embeddings)
+- Goal: Compare query-to-document vs query-to-hypothential-doc performance
+
+---
+
+### 🎯 ARM Pi Deploy — Biggest Genuine Next Step
+
+**Current State:** All proof so far is x86-based. ARM deployment unproven.
+
+**Why This Matters:**
+- Minder target platform: Raspberry Pi 4 (ARM architecture)
+- All current testing: x86 containers (CI, local dev)
+- `requirements.txt` container-truth rewrite (2026-06-24) directly enables this
+
+**Blockers:**
+- ARM-specific image builds (multi-arch or native ARM)
+- Real hardware validation (Pi 4 resource constraints)
+- Performance characterization (ARM vs x86 for LLM inference)
+
+**Next Steps:**
+1. Build/pull ARM-compatible images for core services
+2. Deploy on real Raspberry Pi 4 hardware
+3. Run clean install test on ARM (same proof discipline as x86)
+4. Characterize performance differences
+
+**Note:** This is the deployment milestone, not a "nice to have."
