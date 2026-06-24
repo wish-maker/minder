@@ -24,11 +24,7 @@ from domain import (  # noqa: E402
 )
 from infrastructure import EmbeddingCache, Pi4ResourceManager  # noqa: E402
 from repositories import KnowledgeBaseRepository  # noqa: E402
-from utils import (  # noqa: E402
-    chunk_text,
-    chunk_text_fallback,
-    cosine_similarity,
-)
+from utils import chunk_text, chunk_text_fallback, cosine_similarity  # noqa: E402
 
 from services import RetrievalService  # noqa: E402
 
