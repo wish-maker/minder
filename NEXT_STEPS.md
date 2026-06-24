@@ -986,48 +986,59 @@ This is huge progress - we went from "lint fails + deps missing + DB connection 
 
 ### 🔮 Next Session: Database Schema Layer
 
-Once Integration Tests job is fixed to run, the next blocker will be **missing database schema**:
+**DIAGNOSIS CORRECTION (2026-06-24):** The integration tests blocker was NOT a "schema gap" as previously assumed. Investigation revealed:
 
-**Expected Error Progression:**
+1. **Real Error:** Integration/E2E tests fail at "Install dependencies" step with:
+   ```
+   ERROR: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'
+   ```
+
+2. **Root Cause:** `test.yml` integration-tests and e2e-tests jobs point to root `requirements.txt` (doesn't exist) instead of `src/config/requirements/requirements.txt`
+
+3. **Test Fixture Finding:** `test_auth_e2e.py`'s `clean_database` fixture DOES call `init_users_table()` from the real source (`modules/auth.py`). The test creates its own schema — no pre-existing table required.
+
+4. **The Fix:** Update 2 lines in `.github/workflows/test.yml` (integration-tests and e2e-tests jobs) to match unit-tests' correct path pattern:
+   ```diff
+   - pip install -r requirements.txt
+   + pip install -r src/config/requirements/requirements.txt
+   ```
+
+**Corrected Error Progression:**
 ```
-Current:  "password authentication failed" → FIXED ✅
-Next:      "relation does not exist" → EXPECTED ⏳
-Then:      Tests pass (once schema is set up) → GOAL 🎯
+Current (diagnosed):  requirements.txt not found → FIXED ✅
+Next (after fix):    Tests actually run → may pass OR surface REAL next error
+NOT "schema gap"      — test self-creates its table
 ```
 
-**Schema Sources (Scattered Across Codebase):**
-- `src/services/api-gateway/pg_client.py` - has CREATE TABLE logic
-- `src/services/marketplace/schema.sql` - marketplace tables
-- Other services may have their own schema
+**Schema Work Remains Valid (Separate Issue):**
+While not the immediate CI blocker, the schema IS scattered across 5 services (16+ tables, 4 mechanisms) and genuinely needs consolidation. That's architectural work, not a CI unblock.
 
-**Design Decisions Needed:**
-1. **Authoritative Source:** Which schema is the source of truth?
-2. **Setup Method:** SQL script? Migrations? Service endpoint?
-3. **Scope:** All tables or just test-critical ones?
-
-**Files to Review:**
-- `docker-compose.test.yml` - check if postgres has schema init
-- `.github/workflows/test.yml` - check for schema setup step
-- Service-specific schema files
+**Files to Review for Schema Consolidation:**
+- `src/services/api-gateway/modules/auth.py` - `init_users_table()` (inline SQL)
+- `src/services/rag-pipeline/pg_client.py` - `initialize_schema()` (inline SQL)
+- `src/services/plugin-state-manager/core/database.py` - `initialize_database()` (inline SQL)
+- `src/services/plugin-registry/main.py` - `create_plugins_table_if_not_exists()` (inline SQL)
+- `src/services/marketplace/schema.sql` - SQL file (dead duplicate of inline schema)
 
 ### Session Summary
 
 **Commits This Session:**
 1. `c02fc855` - Config sync (Black/isort at 88)
-2. `bdd74795` - DB port configurable  
+2. `bdd74795` - DB port configurable
 3. `0cc3955a` - All DB params env-respecting
 4. `4f77b9ab` - Black 23.12.1 formatting
 5. `132f4c40` - isort formatting fix
 
 **Status:**
 - Unit Tests: ✅ PASSING
-- Integration Tests: ⚠️ Blocked by Docker environment (pre-existing)
+- Integration Tests: ⚠️ Blocked by requirements.txt path bug (NOT schema gap)
 - Lint: ✅ PASSING
 - Security Scan: ⚠️ Blocked by missing image (pre-existing)
 
 **Handoff:**
 - DB params fix is ready and committed
-- Schema layer is the genuine next blocker after Docker env fix
+- Integration tests blocker: requirements.txt path fix in test.yml (ready to apply)
+- Schema consolidation: separate work, not a CI blocker
 - All configuration is now env-respecting (no hardcoded swaps)
 
 ---
