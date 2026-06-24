@@ -158,6 +158,31 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint, security-scan, unit-tests]
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -174,39 +199,50 @@ jobs:
           pip install -r src/config/requirements/requirements.txt
           pip install -r src/config/requirements/requirements-dev.txt
 
-      - name: Start Docker Compose
-        run: |
-          docker compose -f docker/compose/docker-compose.yml up -d
-          sleep 60  # Servisler hazır olana kadar bekle
-
       - name: Run integration tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
         run: |
           pytest tests/integration/ -v \
             --tb=short \
             --timeout=600
-
-      - name: Collect Docker logs on failure
-        if: failure()
-        run: |
-          docker compose -f docker/compose/docker-compose.yml logs > docker-logs.txt
-
-      - name: Upload Docker logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-logs
-          path: docker-logs.txt
-
-      - name: Stop Docker Compose
-        if: always()
-        run: |
-          docker compose -f docker/compose/docker-compose.yml down -v
 
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [integration-tests]
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -223,33 +259,19 @@ jobs:
           pip install -r src/config/requirements/requirements.txt
           pip install -r src/config/requirements/requirements-dev.txt
 
-      - name: Start Docker Compose
-        run: |
-          docker compose -f docker/compose/docker-compose.yml up -d
-          sleep 90  # Tüm servisler hazır olana kadar bekle
-
       - name: Run E2E tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: minder_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
         run: |
           pytest tests/e2e/ -v \
             --tb=short \
             --timeout=900
-
-      - name: Collect Docker logs on failure
-        if: failure()
-        run: |
-          docker compose -f docker/compose/docker-compose.yml logs > docker-logs.txt
-
-      - name: Upload Docker logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-logs
-          path: docker-logs.txt
-
-      - name: Stop Docker Compose
-        if: always()
-        run: |
-          docker compose -f docker/compose/docker-compose.yml down -v
 
   docker-scan:
     name: Docker Image Security Scan
