@@ -1848,6 +1848,7 @@ After completing all steps:
 - **build job (Dockerfile path)** — ci.yml build job may have wrong Dockerfile path
 - **Trivy real CVEs** — Investigate actual vulnerabilities (what CVEs? base image or dependency?) THEN decide patch vs threshold
 - **GitHub token revocation** — Revoke compromised PAT (ghp_ prefix) in `.git/config` remote URL
+- **Trivy SARIF neutral check** — Trivy SARIF upload step shows neutral/skipping status. This is code-scanning display only (GitHub Advanced Security feature), non-blocking, not required by branch protection. Low-priority fix later — check SARIF upload configuration/file path if code scanning integration desired.
 - **ARM Pi deploy** — Build/pull ARM-compatible images, deploy on real Pi 4 hardware
 
 ---
