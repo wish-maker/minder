@@ -1,18 +1,16 @@
 name: Docker Image Auto-Update
 
 on:
-  # TODO: DISABLED - Docker Hub API logic needs rewrite
-  # Current /tags/latest query returns literal "latest" string, not real version
-  # Needs: paginated tag list + semver parse + handle varied tag formats
-  # See NEXT_STEPS.md "Dependency-update mechanism"
+  # TODO: DISABLED until proven via workflow_dispatch
   # schedule:
-  #   # Her hafta pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
+  #   # Her Pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
   #   - cron: '0 9 * * 1'
   workflow_dispatch:  # Manuel tetikleme için
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
 
 jobs:
   check-updates:
@@ -21,6 +19,8 @@ jobs:
 
     outputs:
       updates-available: ${{ steps.check.outputs.updates-available }}
+      safe-updates-available: ${{ steps.check.outputs.safe-updates-available }}
+      risky-updates-available: ${{ steps.check.outputs.risky-updates-available }}
       services: ${{ steps.check.outputs.services }}
 
     steps:
@@ -35,129 +35,368 @@ jobs:
       - name: Check for updates
         id: check
         run: |
-          pip install requests pyyaml
+          pip install pyyaml requests
 
           python3 << 'EOF'
-          import requests
           import yaml
-          import os
-          from datetime import datetime
+          import requests
+          import re
+          from typing import Dict, List, Tuple, Optional
 
-          # Docker Compose dosyasını oku
-          with open('docker/compose/docker-compose.yml', 'r') as f:
-              compose = yaml.safe_load(f)
+          # ============================================================================
+          # TAG PARSING
+          # ============================================================================
 
-          services = {}
-          updates_available = False
+          def parse_tag(tag: str) -> Tuple[str, str]:
+              """Parse tag into (version, suffix)"""
+              tag = tag.lstrip('v')
+              match = re.match(r'^([0-9]+(?:\.[0-9]+)*)-(.+)$', tag)
+              if match:
+                  return match.group(1), '-' + match.group(2)
+              else:
+                  return tag, ''
 
-          # Her servisi kontrol et
-          for service_name, service_config in compose['services'].items():
-              if 'image' in service_config:
+          def should_skip_tag(tag: str) -> bool:
+              """Skip non-version tags"""
+              skip_patterns = [
+                  r'^latest$', r'^dev$', r'^master$',
+                  r'^sha256-', r'.*-unprivileged$', r'.*-gpu-.*$',
+              ]
+              for pattern in skip_patterns:
+                  if re.match(pattern, tag):
+                      return True
+              return False
+
+          def parse_version_safe(version_str: str) -> Optional[Tuple]:
+              """Parse version string into comparable tuple (handles X.Y.Z, X.Y, X)"""
+              parts = version_str.split('.')
+              try:
+                  int_parts = [int(p) for p in parts]
+                  while len(int_parts) < 3:
+                      int_parts.append(0)
+                  return tuple(int_parts[:3])
+              except (ValueError, AttributeError):
+                  return None
+
+          def detect_version_scheme(version_str: str) -> str:
+              """Detect version scheme: 'semver', 'calver', or 'unknown'"""
+              parts = version_str.split('.')
+              if len(parts) >= 2:
+                  try:
+                      first = int(parts[0])
+                      if first >= 2000 or (len(parts[0]) == 4 and parts[0].isdigit()):
+                          return 'calver'
+                  except ValueError:
+                      pass
+              return 'semver'
+
+          def classify_update(current_tag: str, latest_tag: str) -> str:
+              """
+              Classify update as 'patch', 'minor', 'major', or 'scheme-change'
+              Assumes both tags are in same track (same suffix)
+              """
+              current_ver, current_suffix = parse_tag(current_tag)
+              latest_ver, latest_suffix = parse_tag(latest_tag)
+
+              # Detect version scheme change (e.g., semver 5.x → calver 2026.x)
+              current_scheme = detect_version_scheme(current_ver)
+              latest_scheme = detect_version_scheme(latest_ver)
+
+              if current_scheme != latest_scheme:
+                  return 'scheme-change'
+
+              current_parsed = parse_version_safe(current_ver)
+              latest_parsed = parse_version_safe(latest_ver)
+
+              if not current_parsed or not latest_parsed:
+                  return 'unknown'
+
+              current_major, current_minor, current_patch = current_parsed
+              latest_major, latest_minor, latest_patch = latest_parsed
+
+              if latest_major > current_major:
+                  return 'major'
+              elif latest_minor > current_minor:
+                  return 'minor'
+              elif latest_patch > current_patch:
+                  return 'patch'
+              else:
+                  return 'unknown'
+
+          # ============================================================================
+          # DOCKER HUB API
+          # ============================================================================
+
+          def fetch_all_tags(repo: str) -> List[str]:
+              """Fetch all tags from Docker Hub (paginated)"""
+              tags = []
+              url = f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=100"
+              page = 0
+              while url and page < 5:
+                  try:
+                      response = requests.get(url, timeout=10)
+                      response.raise_for_status()
+                      data = response.json()
+                      for tag_data in data['results']:
+                          tag_name = tag_data['name']
+                          if not should_skip_tag(tag_name):
+                              tags.append(tag_name)
+                      url = data.get('next')
+                      page += 1
+                  except Exception as e:
+                      print(f"    [!] API error: {e}")
+                      break
+              return tags
+
+          def get_latest_in_track(current_tag: str, all_tags: List[str]) -> Optional[Tuple[str, str]]:
+              """Find highest version in same track as current_tag"""
+              current_version, current_suffix = parse_tag(current_tag)
+              same_track = [tag for tag in all_tags if parse_tag(tag)[1] == current_suffix]
+              versions = []
+              for tag in same_track:
+                  ver, _ = parse_tag(tag)
+                  parsed = parse_version_safe(ver)
+                  if parsed is not None:
+                      versions.append((parsed, tag))
+              if not versions:
+                  return None, "no valid versions in track"
+              versions.sort(key=lambda x: x[0], reverse=True)
+              highest_version, latest_tag = versions[0]
+              return latest_tag, "found"
+
+          # ============================================================================
+          # REGISTRY DETECTION
+          # ============================================================================
+
+          def get_registry(image_ref: str) -> str:
+              if image_ref.startswith('ghcr.io/'):
+                  return 'GHCR'
+              elif image_ref.startswith('gcr.io/'):
+                  return 'GCR'
+              elif image_ref.startswith('minder/'):
+                  return 'LOCAL'
+              else:
+                  return 'DOCKER_HUB'
+
+          def normalize_repo(image_name: str) -> str:
+              if '/' not in image_name:
+                  return f'library/{image_name}'
+              else:
+                  return image_name
+
+          # ============================================================================
+          # MAIN CHECK LOGIC
+          # ============================================================================
+
+          def check_updates_from_compose() -> Dict:
+              """Read docker-compose.yml and check for updates"""
+              with open('docker/compose/docker-compose.yml', 'r', encoding='utf-8') as f:
+                  compose = yaml.safe_load(f)
+
+              updates = {}
+              safe_updates = {}
+              risky_updates = {}
+
+              for service_name, service_config in compose['services'].items():
+                  if 'image' not in service_config:
+                      continue
+
                   image = service_config['image']
 
-                  # Image'ı parçala (name:tag)
-                  if ':' in image:
-                      image_name, current_tag = image.rsplit(':', 1)
-                  else:
-                      image_name = image
+                  # Skip local builds
+                  if 'build' in service_config:
+                      continue
+
+                  registry = get_registry(image)
+                  if registry != 'DOCKER_HUB':
+                      continue
+
+                  if ':' not in image:
                       current_tag = 'latest'
+                      image_name = image
+                  else:
+                      image_name, current_tag = image.rsplit(':', 1)
+
+                  if current_tag == 'latest':
+                      continue
 
                   try:
-                      # Docker Hub API'den en son tag'ı al
-                      if '/' not in image_name:
-                          # Official image
-                          api_url = f"https://hub.docker.com/v2/repositories/library/{image_name}/tags/latest"
-                      else:
-                          # User image
-                          parts = image_name.split('/')
-                          api_url = f"https://hub.docker.com/v2/repositories/{parts[1]}/tags/latest"
+                      repo = normalize_repo(image_name)
+                      all_tags = fetch_all_tags(repo)
+                      latest_tag, reason = get_latest_in_track(current_tag, all_tags)
 
-                      response = requests.get(api_url, timeout=10)
-                      if response.status_code == 200:
-                          data = response.json()
-                          latest_tag = data['name']
+                      if latest_tag is None:
+                          continue
 
-                          # Güncelleme kontrolü
-                          if current_tag != latest_tag and current_tag != 'latest':
-                              services[service_name] = {
-                                  'image': image_name,
-                                  'current': current_tag,
-                                  'latest': latest_tag
-                              }
-                              updates_available = True
+                      if latest_tag != current_tag:
+                          classification = classify_update(current_tag, latest_tag)
 
-                              print(f"⚠️  {service_name}: {current_tag} -> {latest_tag}")
+                          update_info = {
+                              'image': image_name,
+                              'current': current_tag,
+                              'latest': latest_tag,
+                              'registry': registry,
+                              'classification': classification
+                          }
+
+                          updates[service_name] = update_info
+
+                          # Split into safe (patch/minor) and risky (major/scheme-change)
+                          if classification in ['patch', 'minor']:
+                              safe_updates[service_name] = update_info
+                          elif classification in ['major', 'scheme-change']:
+                              risky_updates[service_name] = update_info
 
                   except Exception as e:
-                      print(f"⚠️  {service_name}: Kontrol başarısız - {e}")
+                      print(f"    [X] {service_name}: Error - {e}")
+                      continue
 
-          # Çıktıları kaydet
-          if services:
-              print(f"\n✅ {len(services)} servis için güncelleme mevcut!")
+              return updates, safe_updates, risky_updates
 
-              # JSON çıktısı oluştur
-              import json
-              with open('updates.json', 'w') as f:
-                  json.dump(services, f, indent=2)
+          # ============================================================================
+          # EXECUTE
+          # ============================================================================
 
-              # GitHub output
-              services_json = json.dumps(services)
-              services_str = json.dumps(services)
-              print(f"services={services_str}")
+          updates, safe_updates, risky_updates = check_updates_from_compose()
+
+          import json
+
+          # Save full updates
+          with open('updates.json', 'w') as f:
+              json.dump(updates, f, indent=2)
+
+          # Save safe updates (for PR)
+          with open('safe-updates.json', 'w') as f:
+              json.dump(safe_updates, f, indent=2)
+
+          # Save risky updates (for issue only)
+          with open('risky-updates.json', 'w') as f:
+              json.dump(risky_updates, f, indent=2)
+
+          if updates:
+              print(f"services={json.dumps(updates)}")
               print(f"updates-available=true")
           else:
-              print(f"\n✅ Tüm servisler güncel!")
+              print(f"services={{}}")
+              print(f"updates-available=false")
 
-              import json
-              with open('updates.json', 'w') as f:
-                  json.dump({}, f, indent=2)
+          if safe_updates:
+              print(f"safe-updates-available=true")
+          else:
+              print(f"safe-updates-available=false")
 
-              print("services={}")
-              print("updates-available=false")
+          if risky_updates:
+              print(f"risky-updates-available=true")
+          else:
+              print(f"risky-updates-available=false")
           EOF
 
-      - name: Upload updates report
+      - name: Upload updates reports
         uses: actions/upload-artifact@v4
         with:
           name: docker-updates
-          path: updates.json
+          path: |
+            updates.json
+            safe-updates.json
+            risky-updates.json
           retention-days: 7
 
-      - name: Comment on PR/Issue if updates available
+      - name: Create issue if updates available
         if: steps.check.outputs.updates-available == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const updates = JSON.parse(fs.readFileSync('updates.json', 'utf8'));
+            const safeUpdates = JSON.parse(fs.readFileSync('safe-updates.json', 'utf8'));
+            const riskyUpdates = JSON.parse(fs.readFileSync('risky-updates.json', 'utf8'));
 
-            let message = '## 🔔 Docker Image Güncellemeleri Mevcut\n\n';
-            message += 'Aşağıdaki Docker imajları için güncellemeler mevcut:\n\n';
+            let body = '## 📦 Docker Image Updates Available\n\n';
+            body += `*Checked on ${new Date().toISOString().split('T')[0]}*\n\n';
 
-            for (const [service, info] of Object.entries(updates)) {
-              message += `- **${service}**: \`${info.current}\` → \`${info.latest}\`\n`;
+            // Safe updates (patch/minor)
+            if (Object.keys(safeUpdates).length > 0) {
+              body += '### ✅ Safe to Update (Patch/Minor)\n\n';
+              body += 'These updates are backwards-compatible and safe to merge after CI passes:\n\n';
+
+              for (const [service, info] of Object.entries(safeUpdates)) {
+                const classification = info.classification.toUpperCase();
+                body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [${classification}]\n`;
+              }
+
+              body += '\n';
             }
 
-            message += '\n⚠️ **Lütfen güncelleyin:**\n';
-            message += '```bash\n';
-            message += 'docker compose -f docker/compose/docker-compose.yml pull\n';
-            message += 'docker compose -f docker/compose/docker-compose.yml up -d\n';
-            message += '```\n';
+            // Risky updates (major/scheme-change)
+            if (Object.keys(riskyUpdates).length > 0) {
+              body += '### ⚠️ Review Carefully (Major/Scheme-Change)\n\n';
+              body += 'These updates have major version jumps or versioning scheme changes.\n';
+              body += '**Breaking changes are likely. Review changelogs before applying.**\n\n';
 
-            // Issue aç veya PR'a comment
-            github.rest.issues.create({
+              for (const [service, info] of Object.entries(riskyUpdates)) {
+                const classification = info.classification.toUpperCase();
+                if (classification === 'SCHEME-CHANGE') {
+                  body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [🚨 ${classification}]\n`;
+                } else {
+                  body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [${classification}]\n`;
+                }
+              }
+
+              body += '\n';
+            }
+
+            body += '---\n\n';
+            body += '## Next Steps\n\n';
+
+            if (Object.keys(safeUpdates).length > 0) {
+              body += '- ✅ Safe updates will be auto-applied via PR (check below)\n';
+            }
+
+            if (Object.keys(riskyUpdates).length > 0) {
+              body += '- ⚠️ Risky updates require manual review and update\n';
+            }
+
+            body += '- 🔍 Review the [workflow run](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') for details\n';
+
+            // Create or find existing issue
+            const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: '🔔 Docker Image Güncellemeleri',
-              body: message,
+              state: 'open',
               labels: ['dependencies', 'docker']
             });
 
-  auto-update-branch:
-    name: Create Auto-Update PR
+            const today = new Date().toISOString().split('T')[0];
+            const existingIssue = issues.data.find(issue => issue.title.includes(`Docker Image Updates - ${today}`));
+
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: body
+              });
+
+              console.log(`Updated existing issue #${existingIssue.number}`);
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🔄 Docker Image Updates - ${today}`,
+                body: body,
+                labels: ['dependencies', 'docker']
+              });
+
+              console.log('Created new issue');
+            }
+
+  auto-update-safe:
+    name: Create Auto-Update PR (Safe Updates Only)
     runs-on: ubuntu-latest
     needs: check-updates
-    if: needs.check-updates.outputs.updates-available == 'true'
+    if: needs.check-updates.outputs.safe-updates-available == 'true'
     permissions:
       contents: write
       pull-requests: write
@@ -166,10 +405,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download updates report
+      - name: Download safe updates
         uses: actions/download-artifact@v4
         with:
           name: docker-updates
+          pattern: safe-updates.json
+          path: ./
 
       - name: Configure Git
         run: |
@@ -178,9 +419,11 @@ jobs:
 
       - name: Create auto-update branch
         run: |
-          git checkout -b auto/docker-image-update-$(date +%Y%m%d)
+          BRANCH_NAME="auto/docker-safe-update-$(date +%Y%m%d)"
+          git checkout -b $BRANCH_NAME
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
-      - name: Update Docker images
+      - name: Update Docker images (safe only)
         run: |
           pip install pyyaml
 
@@ -188,90 +431,129 @@ jobs:
           import yaml
           import json
 
-          # Updates dosyasını oku
-          with open('updates.json', 'r') as f:
+          # Read safe updates only
+          with open('safe-updates.json', 'r') as f:
               updates = json.load(f)
 
-          # Docker Compose dosyasını oku
+          if not updates:
+              print("No safe updates to apply")
+              exit(0)
+
+          # Read docker-compose.yml
           with open('docker/compose/docker-compose.yml', 'r') as f:
               compose = yaml.safe_load(f)
 
-          # Servisleri güncelle
+          # Apply safe updates
           for service_name, info in updates.items():
               if service_name in compose['services']:
                   old_image = compose['services'][service_name]['image']
                   new_image = f"{info['image']}:{info['latest']}"
                   compose['services'][service_name]['image'] = new_image
-                  print(f"✅ {service_name}: {old_image} -> {new_image}")
+                  print(f"  [+] {service_name}: {old_image} -> {new_image}")
 
-          # Güncellenmiş Docker Compose dosyasını yaz
+          # Write updated docker-compose.yml
           with open('docker/compose/docker-compose.yml', 'w') as f:
               yaml.dump(compose, f, default_flow_style=False, sort_keys=False)
 
-          print(f"\n✅ {len(updates)} servis güncellendi!")
+          print(f"\n[*] Applied {len(updates)} safe update(s)")
           EOF
 
       - name: Commit changes
         run: |
-          git add docker/compose/docker-compose.yml
-          git commit -m "chore: update Docker images to latest versions
+          if [ -n "$(git status --porcelain docker/compose/docker-compose.yml)" ]; then
+            git add docker/compose/docker-compose.yml
+            git commit -m "chore: update Docker images (safe updates only)
 
-          This PR automatically updates Docker images to their latest versions.
-          Please review the changes and merge if everything looks correct."
+            This PR auto-applies backwards-compatible Docker image updates.
+            All updates are patch/minor version bumps - safe to merge after CI passes.
+
+            Updated services:
+            $(python3 << 'PYEOF'
+          import json
+          with open('safe-updates.json', 'r') as f:
+              updates = json.load(f)
+          for service, info in updates.items():
+              print(f"- {service}: {info['current']} -> {info['latest']}")
+          PYEOF
+            )
+            "
+          else
+            echo "No changes to commit"
+          fi
 
       - name: Create PR
+        if: success()
         run: |
-          gh pr create \
-            --title "🔄 Docker Image Güncellemeleri (Otomatik)" \
-            --body "Bu PR otomatik olarak oluşturulmuş Docker image güncellemelerini içerir.
+          if git diff --quiet origin/main...HEAD docker/compose/docker-compose.yml; then
+            echo "No PR needed (no changes)"
+          else
+            gh pr create \
+              --title "🔄 Docker Safe Updates (Auto-Applied) - $(date +%Y-%m-%d)" \
+              --body "This PR automatically applies safe Docker image updates (patch/minor only).
 
-            ## Güncellenen Servisler
+            ## ✅ Safe Updates Applied
 
             $(python3 << 'PYEOF'
           import json
-          with open('updates.json', 'r') as f:
+          with open('safe-updates.json', 'r') as f:
               updates = json.load(f)
           for service, info in updates.items():
-              print(f"- **{service}**: \`${info['current']}\` → \`${info['latest']}\`")
+              classification = info['classification'].upper()
+              print(f"- **{service}**: \`${info['current']}\` → \`${info['latest']}\` [{classification}]")
           PYEOF
-          )
+            )
 
-            ## ⚠️ Test Etmek İçin
+            ## ✅ Why This Is Safe
 
-            Güncellemeleri test etmek için:
+            - All updates are patch or minor version bumps
+            - No major version jumps included
+            - No versioning scheme changes included
+            - Breaking changes are unlikely
+
+            ## 🧪 Test After Merge
+
             \`\`\`bash
             docker compose -f docker/compose/docker-compose.yml pull
             docker compose -f docker/compose/docker-compose.yml up -d
-            ./scripts/health-check.sh
+            docker ps --filter health=healthy
             \`\`\`
 
             ## 📋 Checklist
 
-            - [ ] Tüm servisler başlatılıyor
-            - [ ] Health check geçiyor
-            - [ ] Entegrasyon testleri başarılı
-            - [ ] Manuel test yapıldı
+            - [ ] CI passes
+            - [ ] All services start healthy
+            - [ ] Manual smoke test passes
 
             ---
-            *Bu PR GitHub Actions tarafından otomatik olarak oluşturuldu.*" \
-            --base main \
-            --label "dependencies" \
-            --label "docker" \
-            --label "automated"
+            *Generated by GitHub Actions*" \
+              --base main \
+              --label "dependencies" \
+              --label "docker" \
+              --label "automated" \
+              --label "safe-update"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   notify:
-    name: Notify on completion
+    name: Report Results
     runs-on: ubuntu-latest
-    needs: [check-updates, auto-update-branch]
+    needs: [check-updates, auto-update-safe]
     if: always()
 
     steps:
-      - name: Send notification
+      - name: Report
         run: |
           if [ "${{ needs.check-updates.outputs.updates-available }}" == "true" ]; then
-              echo "✅ Güncelleme PR'ı oluşturuldu!"
+            echo "[*] Updates found:"
+
+            if [ "${{ needs.check-updates.outputs.safe-updates-available }}" == "true" ]; then
+              echo "  - Safe updates: PR created"
+            fi
+
+            if [ "${{ needs.check-updates.outputs.risky-updates-available }}" == "true" ]; then
+              echo "  - Risky updates: Issue created (manual review required)"
+            fi
           else
-              echo "✅ Tüm servisler güncel, güncelleme gerekmiyor."
+            echo "[*] All services up to date"
           fi
