@@ -288,7 +288,7 @@ jobs:
       - name: Run Trivy scan
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'minder-api-gateway:test'
+          image-ref: 'minder/api-gateway:1.0.0'
           format: 'sarif'
           output: 'trivy-results.sarif'
 
