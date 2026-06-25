@@ -236,6 +236,8 @@ monitoring-log.txt
 test-results/
 test-reports/
 *.test.log
+test_output.txt
+test_version_logic.py
 
 # AI Agent Working Directories (if needed in future)
 # docs/superpowers/
