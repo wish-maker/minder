@@ -491,6 +491,13 @@ jobs:
             echo "No changes to commit"
           fi
 
+      - name: Push branch
+        if: success()
+        run: |
+          if git rev-parse --verify HEAD > /dev/null 2>&1 && [ -n "$(git status --porcelain docker/compose/docker-compose.yml)" ]; then
+            git push -u origin $BRANCH_NAME
+          fi
+
       - name: Create PR
         if: success()
         run: |
