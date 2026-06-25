@@ -7,7 +7,7 @@ WORKDIR /app
 ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     postgresql-client \
     gcc \

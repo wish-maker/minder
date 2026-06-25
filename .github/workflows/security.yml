@@ -150,11 +150,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Hadolint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: docker/compose/docker-compose.yml
-          ignore: DL3008,DL3013
+      - name: Run Hadolint on all Dockerfiles
+        run: |
+          # Install hadolint
+          curl -Lo /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+
+          # Track failures
+          failures=0
+
+          # Lint each Dockerfile
+          for dockerfile in src/services/*/Dockerfile; do
+            echo "=== Linting $dockerfile ==="
+            if hadolint --ignore DL3008 --ignore DL3013 --failure-threshold warning "$dockerfile"; then
+              echo "✓ $dockerfile passed"
+            else
+              echo "✗ $dockerfile has issues"
+              failures=$((failures + 1))
+            fi
+          done
+
+          # Exit with error if any failures
+          if [ $failures -gt 0 ]; then
+            echo "::error::$failures Dockerfile(s) failed linting"
+            exit 1
+          fi
 
   license-compliance:
     name: License Compliance
