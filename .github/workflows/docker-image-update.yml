@@ -435,11 +435,9 @@ jobs:
 
       - name: Update Docker images (safe only)
         run: |
-          pip install pyyaml
-
           python3 << 'EOF'
-          import yaml
           import json
+          import re
 
           # Read safe updates only
           with open('safe-updates.json', 'r') as f:
@@ -449,23 +447,35 @@ jobs:
               print("No safe updates to apply")
               exit(0)
 
-          # Read docker-compose.yml
+          # Read docker-compose.yml as plain text
           with open('docker/compose/docker-compose.yml', 'r') as f:
-              compose = yaml.safe_load(f)
+              compose_text = f.read()
 
-          # Apply safe updates
+          # Apply safe updates with targeted line edits
+          lines_changed = 0
           for service_name, info in updates.items():
-              if service_name in compose['services']:
-                  old_image = compose['services'][service_name]['image']
-                  new_image = f"{info['image']}:{info['latest']}"
-                  compose['services'][service_name]['image'] = new_image
+              old_image = f"{info['image']}:{info['current']}"
+              new_image = f"{info['image']}:{info['latest']}"
+
+              # Match the exact line: "image: old_image" with proper indentation
+              # This pattern matches: optional whitespace + "image:" + space + old_image
+              pattern = r'(\s*)image:\s*' + re.escape(old_image) + r'(\s*)$'
+
+              replacement = r'\1image: ' + new_image + r'\2'
+
+              new_text, count = re.subn(pattern, replacement, compose_text, flags=re.MULTILINE)
+              if count > 0:
+                  compose_text = new_text
+                  lines_changed += count
                   print(f"  [+] {service_name}: {old_image} -> {new_image}")
+              else:
+                  print(f"  [!] {service_name}: Pattern not found for {old_image}")
 
-          # Write updated docker-compose.yml
+          # Write back the modified text (only changed lines)
           with open('docker/compose/docker-compose.yml', 'w') as f:
-              yaml.dump(compose, f, default_flow_style=False, sort_keys=False)
+              f.write(compose_text)
 
-          print(f"\n[*] Applied {len(updates)} safe update(s)")
+          print(f"\n[*] Applied {lines_changed} safe update(s)")
           EOF
 
       - name: Commit changes
