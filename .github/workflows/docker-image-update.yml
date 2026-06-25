@@ -494,7 +494,8 @@ jobs:
       - name: Push branch
         if: success()
         run: |
-          if git rev-parse --verify HEAD > /dev/null 2>&1 && [ -n "$(git status --porcelain docker/compose/docker-compose.yml)" ]; then
+          # Push if there are any commits to push (branch ahead of main)
+          if ! git diff --quiet origin/main...HEAD; then
             git push -u origin $BRANCH_NAME
           fi
 
