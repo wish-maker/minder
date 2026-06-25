@@ -41,6 +41,7 @@ jobs:
           import yaml
           import requests
           import re
+          import os
           from typing import Dict, List, Tuple, Optional
 
           # ============================================================================
@@ -98,7 +99,7 @@ jobs:
               current_ver, current_suffix = parse_tag(current_tag)
               latest_ver, latest_suffix = parse_tag(latest_tag)
 
-              # Detect version scheme change (e.g., semver 5.x → calver 2026.x)
+              # Detect version scheme change (e.g., semver 5.x -> calver 2026.x)
               current_scheme = detect_version_scheme(current_ver)
               latest_scheme = detect_version_scheme(latest_ver)
 
@@ -274,12 +275,11 @@ jobs:
               json.dump(risky_updates, f, indent=2)
 
           # Write outputs to GITHUB_OUTPUT
-          import os
           output_file = os.environ.get('GITHUB_OUTPUT', '/dev/stdout')
 
           if updates:
               with open(output_file, 'a') as f:
-                  f.write(f"services={json.dumps(updates)}\n")
+                  f.write("services=" + json.dumps(updates) + "\n")
                   f.write("updates-available=true\n")
           else:
               with open(output_file, 'a') as f:
@@ -321,17 +321,17 @@ jobs:
             const safeUpdates = JSON.parse(fs.readFileSync('safe-updates.json', 'utf8'));
             const riskyUpdates = JSON.parse(fs.readFileSync('risky-updates.json', 'utf8'));
 
-            let body = '## 📦 Docker Image Updates Available\n\n';
-            body += `*Checked on ${new Date().toISOString().split('T')[0]}*\n\n';
+            let body = '## Docker Image Updates Available\n\n';
+            body += '*Checked on ' + new Date().toISOString().split('T')[0] + '*\n\n';
 
             // Safe updates (patch/minor)
             if (Object.keys(safeUpdates).length > 0) {
-              body += '### ✅ Safe to Update (Patch/Minor)\n\n';
+              body += '### Safe to Update (Patch/Minor)\n\n';
               body += 'These updates are backwards-compatible and safe to merge after CI passes:\n\n';
 
               for (const [service, info] of Object.entries(safeUpdates)) {
                 const classification = info.classification.toUpperCase();
-                body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [${classification}]\n`;
+                body += '- **' + service + '**: `' + info.current + '` → `' + info.latest + '` [' + classification + ']\n';
               }
 
               body += '\n';
@@ -339,16 +339,16 @@ jobs:
 
             // Risky updates (major/scheme-change)
             if (Object.keys(riskyUpdates).length > 0) {
-              body += '### ⚠️ Review Carefully (Major/Scheme-Change)\n\n';
+              body += '### Review Carefully (Major/Scheme-Change)\n\n';
               body += 'These updates have major version jumps or versioning scheme changes.\n';
               body += '**Breaking changes are likely. Review changelogs before applying.**\n\n';
 
               for (const [service, info] of Object.entries(riskyUpdates)) {
                 const classification = info.classification.toUpperCase();
                 if (classification === 'SCHEME-CHANGE') {
-                  body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [🚨 ${classification}]\n`;
+                  body += '- **' + service + '**: `' + info.current + '` → `' + info.latest + '` [ALERT: ' + classification + ']\n';
                 } else {
-                  body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [${classification}]\n`;
+                  body += '- **' + service + '**: `' + info.current + '` → `' + info.latest + '` [' + classification + ']\n';
                 }
               }
 
@@ -359,14 +359,14 @@ jobs:
             body += '## Next Steps\n\n';
 
             if (Object.keys(safeUpdates).length > 0) {
-              body += '- ✅ Safe updates will be auto-applied via PR (check below)\n';
+              body += '- Safe updates will be auto-applied via PR (check below)\n';
             }
 
             if (Object.keys(riskyUpdates).length > 0) {
-              body += '- ⚠️ Risky updates require manual review and update\n';
+              body += '- Risky updates require manual review and update\n';
             }
 
-            body += '- 🔍 Review the [workflow run](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') for details\n';
+            body += '- Review the [workflow run](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') for details\n';
 
             // Create or find existing issue
             const issues = await github.rest.issues.listForRepo({
@@ -377,7 +377,7 @@ jobs:
             });
 
             const today = new Date().toISOString().split('T')[0];
-            const existingIssue = issues.data.find(issue => issue.title.includes(`Docker Image Updates - ${today}`));
+            const existingIssue = issues.data.find(issue => issue.title.includes('Docker Image Updates - ' + today));
 
             if (existingIssue) {
               // Update existing issue
@@ -388,13 +388,13 @@ jobs:
                 body: body
               });
 
-              console.log(`Updated existing issue #${existingIssue.number}`);
+              console.log('Updated existing issue #' + existingIssue.number);
             } else {
               // Create new issue
               await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: `🔄 Docker Image Updates - ${today}`,
+                title: 'Docker Image Updates - ' + today,
                 body: body,
                 labels: ['dependencies', 'docker']
               });
@@ -498,10 +498,10 @@ jobs:
             echo "No PR needed (no changes)"
           else
             gh pr create \
-              --title "🔄 Docker Safe Updates (Auto-Applied) - $(date +%Y-%m-%d)" \
+              --title "Docker Safe Updates (Auto-Applied) - $(date +%Y-%m-%d)" \
               --body "This PR automatically applies safe Docker image updates (patch/minor only).
 
-            ## ✅ Safe Updates Applied
+            ## Safe Updates Applied
 
             $(python3 << 'PYEOF'
           import json
@@ -513,14 +513,14 @@ jobs:
           PYEOF
             )
 
-            ## ✅ Why This Is Safe
+            ## Why This Is Safe
 
             - All updates are patch or minor version bumps
             - No major version jumps included
             - No versioning scheme changes included
             - Breaking changes are unlikely
 
-            ## 🧪 Test After Merge
+            ## Test After Merge
 
             \`\`\`bash
             docker compose -f docker/compose/docker-compose.yml pull
@@ -528,7 +528,7 @@ jobs:
             docker ps --filter health=healthy
             \`\`\`
 
-            ## 📋 Checklist
+            ## Checklist
 
             - [ ] CI passes
             - [ ] All services start healthy
