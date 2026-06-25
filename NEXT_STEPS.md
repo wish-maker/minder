@@ -1803,3 +1803,56 @@ After completing all steps:
 **Reason:** Session fatigue — this is careful refactor of working CI
 **Handoff:** Fresh session to execute Option A consolidation
 **Safety Net:** Verify after each step that green checks stay green
+
+---
+
+## CI Workflow Consolidation — Incremental Progress (2026-06-25)
+
+### ✅ DONE: Lint Duplicate Removed (commit ad95cc12)
+
+**What Was Done:**
+- Removed duplicate `lint` job from `ci.yml` (27 lines deleted)
+- Updated `ci.yml` test job `needs: [security-scan, lint]` → `needs: [security-scan]`
+- **test.yml owns lint** — "Code Quality & Linting" job runs and passes (28s)
+
+**Verification Results:**
+- ✅ ci.yml's `test` job passed WITHOUT its own lint dependency
+- ✅ test.yml's `lint` job passed (quality gate preserved)
+- ✅ No green lost due to this change (failures: build, docker-scan are pre-existing)
+
+**TRADEOFF NOTED (Deliberate State, Not Silent Gap):**
+- ci.yml's `test` job now runs **without a lint gate**
+- Acceptable because test.yml's lint runs in parallel on every push/PR
+- **Risk:** If someone pushes Black-noncompliant code, ci.yml's `test` could fail mid-run with no lint gate catching it first
+- **Real fix:** Branch protection (Settings→Branches) required before further consolidations — lets test.yml be the real gate so ci.yml can safely drop its copies
+
+---
+
+### ⏸️ REMAINING CONSOLIDATION (Fresh Session Required)
+
+**Duplicates to Address:**
+1. **security-scan dup** — Bandit/Safety runs in both ci.yml and test.yml
+2. **trivy dup** — security.yml (trivy job) vs test.yml (docker-scan job) scan same `minder-api-gateway:test` image
+3. **check-updates dup** — check-dependency-updates.yml vs docker-image-update.yml (VERIFY first: is it issue-vs-PR distinction or truly redundant?)
+
+**PREREQUISITE (Do This First):**
+- **Branch protection** (GitHub Settings→Branches) should come BEFORE consolidating security-scan/lint further
+- Without branch protection, removing security-scan from one workflow leaves that workflow's downstream jobs without a security gate (cross-workflow needs: not supported)
+- Branch protection lets test.yml be the real gate so ci.yml can drop its copies safely
+- **Note:** This is a Settings→Branches change you do yourself (not a code change)
+
+---
+
+### Still Pending (Separate from CI Consolidation)
+
+- **build job (Dockerfile path)** — ci.yml build job may have wrong Dockerfile path
+- **Trivy real CVEs** — Investigate actual vulnerabilities (what CVEs? base image or dependency?) THEN decide patch vs threshold
+- **GitHub token revocation** — Revoke compromised PAT (ghp_ prefix) in `.git/config` remote URL
+- **ARM Pi deploy** — Build/pull ARM-compatible images, deploy on real Pi 4 hardware
+
+---
+
+**Session End (2026-06-25):**
+- ✅ Lint duplicate removed, green verified, tradeoff documented
+- ⏸️ Further consolidations deferred to fresh session (requires branch protection first)
+- 📋 NEXT_STEPS updated with handoff notes
