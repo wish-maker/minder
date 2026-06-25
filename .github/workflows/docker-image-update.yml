@@ -273,22 +273,32 @@ jobs:
           with open('risky-updates.json', 'w') as f:
               json.dump(risky_updates, f, indent=2)
 
+          # Write outputs to GITHUB_OUTPUT
+          import os
+          output_file = os.environ.get('GITHUB_OUTPUT', '/dev/stdout')
+
           if updates:
-              print(f"services={json.dumps(updates)}")
-              print(f"updates-available=true")
+              with open(output_file, 'a') as f:
+                  f.write(f"services={json.dumps(updates)}\n")
+                  f.write("updates-available=true\n")
           else:
-              print(f"services={{}}")
-              print(f"updates-available=false")
+              with open(output_file, 'a') as f:
+                  f.write("services={}\n")
+                  f.write("updates-available=false\n")
 
           if safe_updates:
-              print(f"safe-updates-available=true")
+              with open(output_file, 'a') as f:
+                  f.write("safe-updates-available=true\n")
           else:
-              print(f"safe-updates-available=false")
+              with open(output_file, 'a') as f:
+                  f.write("safe-updates-available=false\n")
 
           if risky_updates:
-              print(f"risky-updates-available=true")
+              with open(output_file, 'a') as f:
+                  f.write("risky-updates-available=true\n")
           else:
-              print(f"risky-updates-available=false")
+              with open(output_file, 'a') as f:
+                  f.write("risky-updates-available=false\n")
           EOF
 
       - name: Upload updates reports
