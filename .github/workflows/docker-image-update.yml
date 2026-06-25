@@ -429,7 +429,7 @@ jobs:
 
       - name: Create auto-update branch
         run: |
-          BRANCH_NAME="auto/docker-safe-update-$(date +%Y%m%d)"
+          BRANCH_NAME="auto/docker-safe-update-$(date +%Y%m%d-%H%M%S)"
           git checkout -b $BRANCH_NAME
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
 
