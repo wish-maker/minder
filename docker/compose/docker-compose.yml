@@ -19,7 +19,7 @@ services:
   # ==========================================================================
 
   traefik:
-    image: traefik:v3.7.0
+    image: traefik:v3.7.5
     container_name: minder-traefik
     restart: on-failure
     command:
@@ -109,7 +109,7 @@ services:
   #   - traefik.http.routers.authelia.entrypoints=websecure
   #   - traefik.http.services.authelia.loadbalancer.server.port=9091
   postgres:
-    image: postgres:18.3-trixie
+    image: postgres:18.4-trixie
     container_name: minder-postgres
     restart: on-failure
     environment:
@@ -294,7 +294,7 @@ services:
     networks:
     - minder-network
   qdrant:
-    image: qdrant/qdrant:v1.17.1
+    image: qdrant/qdrant:v1.18.2
     container_name: minder-qdrant
     restart: on-failure
     volumes:
@@ -587,7 +587,7 @@ services:
   # ==========================================================================
 
   influxdb:
-    image: influxdb:3.9.1-core
+    image: influxdb:3.10.0-core
     container_name: minder-influxdb
     restart: on-failure
     command:
@@ -613,7 +613,7 @@ services:
     networks:
     - minder-network
   telegraf:
-    image: telegraf:1.34.0
+    image: telegraf:1.39.0
     container_name: minder-telegraf
     restart: on-failure
     volumes:
@@ -654,7 +654,7 @@ services:
     pid: host
     user: root
   prometheus:
-    image: prom/prometheus:v3.1.0
+    image: prom/prometheus:v3.12.0
     container_name: minder-prometheus
     restart: on-failure
     volumes:
@@ -947,7 +947,7 @@ services:
     - minder-network
     # PILLAR 4: Always active - removed monitoring profile
   redis-exporter:
-    image: oliver006/redis_exporter:v1.83.0
+    image: oliver006/redis_exporter:v1.86.0
     container_name: minder-redis-exporter
     restart: on-failure
     environment:
@@ -988,7 +988,7 @@ services:
 
   # Node Exporter (for host metrics - optional for production)
   node-exporter:
-    image: prom/node-exporter:v1.8.2
+    image: prom/node-exporter:v1.11.1
     container_name: minder-node-exporter
     restart: on-failure
     command:
@@ -1043,7 +1043,7 @@ services:
 
   # Blackbox Exporter (for remote endpoint monitoring - e.g., remote Ollama)
   blackbox-exporter:
-    image: prom/blackbox-exporter:v0.25.0
+    image: prom/blackbox-exporter:v0.28.0
     container_name: minder-blackbox-exporter
     restart: on-failure
     volumes:
@@ -1106,7 +1106,7 @@ services:
     - traefik.http.services.jaeger.loadbalancer.server.port=16686
 
   otel-collector:
-    image: otel/opentelemetry-collector:0.114.0
+    image: otel/opentelemetry-collector:0.155.0
     container_name: minder-otel-collector
     restart: on-failure
     command:
