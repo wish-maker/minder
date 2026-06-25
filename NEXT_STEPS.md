@@ -1890,6 +1890,14 @@ b59c978b fix(security): TruffleHog use actual commit SHA range (github.event.bef
 - **NOT fake-fixed:** These are real, acknowledged, tracked — not hidden by lowering thresholds or fake patching
 
 ### DEFERRED (Carry-over, Still Open)
+- **Dependency-update mechanism** — Both `docker-image-update.yml` and `check-dependency-updates.yml` have broken Docker Hub API logic. Querying `/tags/latest` returns literal "latest" string, not real version numbers — comparison is nonsense (v3.7.0 ≠ "latest" → "update!"). Needs rewrite:
+  - Query paginated tag list (not `/tags/latest`)
+  - Parse semantic versions from varied tag formats (v3.7.0, 18.3-trixie, 7.4-alpine, v1.17.1)
+  - Compare real versions, not "latest"
+  - Skip local `minder/*` builds
+  - Path fix done: docker-image-update.yml now reads `docker/compose/docker-compose.yml` (not phantom `infrastructure/docker/`)
+  - Target design: docker-image-update.yml (dynamic compose read + issue + PR, user merges). Then delete check-dependency-updates.yml.
+  - **Status:** Both schedules DISABLED (workflow_dispatch only) to prevent Monday garbage PRs. Manual testing confirmed API bug.
 - **CI workflow consolidation** — security-scan/trivy/check-updates duplicates + branch-protection prerequisite (YOUR settings change in GitHub→Settings→Branches, not code)
 - **Trivy failure-threshold decision** — Currently reports-only (non-failing). Decide: fail on CRITICAL/HIGH or keep reporting-only?
 - **RAG methods** — Self-RAG/HyDE implementation (advanced retrieval techniques)

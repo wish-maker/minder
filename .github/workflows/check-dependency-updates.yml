@@ -1,9 +1,13 @@
 name: Check Docker Image Updates
 
 on:
-  schedule:
-    # Her Pazartesi 09:00 UTC - Haftalık kontrol
-    - cron: '0 9 * * 1'
+  # TODO: DISABLED - Docker Hub API logic needs rewrite
+  # Current /tags/latest query returns literal "latest" string, not real version
+  # Needs: paginated tag list + semver parse + handle varied tag formats
+  # See NEXT_STEPS.md "Dependency-update mechanism"
+  # schedule:
+  #   # Her Pazartesi 09:00 UTC - Haftalık kontrol
+  #   - cron: '0 9 * * 1'
   workflow_dispatch:
 
 permissions:

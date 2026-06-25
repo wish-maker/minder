@@ -1,9 +1,13 @@
 name: Docker Image Auto-Update
 
 on:
-  schedule:
-    # Her hafta pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
-    - cron: '0 9 * * 1'
+  # TODO: DISABLED - Docker Hub API logic needs rewrite
+  # Current /tags/latest query returns literal "latest" string, not real version
+  # Needs: paginated tag list + semver parse + handle varied tag formats
+  # See NEXT_STEPS.md "Dependency-update mechanism"
+  # schedule:
+  #   # Her hafta pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
+  #   - cron: '0 9 * * 1'
   workflow_dispatch:  # Manuel tetikleme için
 
 env:
@@ -40,7 +44,7 @@ jobs:
           from datetime import datetime
 
           # Docker Compose dosyasını oku
-          with open('infrastructure/docker/docker-compose.yml', 'r') as f:
+          with open('docker/compose/docker-compose.yml', 'r') as f:
               compose = yaml.safe_load(f)
 
           services = {}
@@ -136,8 +140,8 @@ jobs:
 
             message += '\n⚠️ **Lütfen güncelleyin:**\n';
             message += '```bash\n';
-            message += 'docker compose -f infrastructure/docker/docker-compose.yml pull\n';
-            message += 'docker compose -f infrastructure/docker/docker-compose.yml up -d\n';
+            message += 'docker compose -f docker/compose/docker-compose.yml pull\n';
+            message += 'docker compose -f docker/compose/docker-compose.yml up -d\n';
             message += '```\n';
 
             // Issue aç veya PR'a comment
@@ -189,7 +193,7 @@ jobs:
               updates = json.load(f)
 
           # Docker Compose dosyasını oku
-          with open('infrastructure/docker/docker-compose.yml', 'r') as f:
+          with open('docker/compose/docker-compose.yml', 'r') as f:
               compose = yaml.safe_load(f)
 
           # Servisleri güncelle
@@ -201,7 +205,7 @@ jobs:
                   print(f"✅ {service_name}: {old_image} -> {new_image}")
 
           # Güncellenmiş Docker Compose dosyasını yaz
-          with open('infrastructure/docker/docker-compose.yml', 'w') as f:
+          with open('docker/compose/docker-compose.yml', 'w') as f:
               yaml.dump(compose, f, default_flow_style=False, sort_keys=False)
 
           print(f"\n✅ {len(updates)} servis güncellendi!")
@@ -209,7 +213,7 @@ jobs:
 
       - name: Commit changes
         run: |
-          git add infrastructure/docker/docker-compose.yml
+          git add docker/compose/docker-compose.yml
           git commit -m "chore: update Docker images to latest versions
 
           This PR automatically updates Docker images to their latest versions.
@@ -236,8 +240,8 @@ jobs:
 
             Güncellemeleri test etmek için:
             \`\`\`bash
-            docker compose -f infrastructure/docker/docker-compose.yml pull
-            docker compose -f infrastructure/docker/docker-compose.yml up -d
+            docker compose -f docker/compose/docker-compose.yml pull
+            docker compose -f docker/compose/docker-compose.yml up -d
             ./scripts/health-check.sh
             \`\`\`
 
