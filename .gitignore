@@ -236,6 +236,12 @@ monitoring-log.txt
 test-results/
 test-reports/
 *.test.log
+test_output.txt
+test_version_logic.py
+test_auth_demo.py
+test_auth_e2e_simple.py
+test_jwt_validation.sh
+test_model_management.sh
 
 # AI Agent Working Directories (if needed in future)
 # docs/superpowers/

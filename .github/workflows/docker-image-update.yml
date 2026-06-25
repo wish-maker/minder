@@ -1,10 +1,9 @@
 name: Docker Image Auto-Update
 
 on:
-  # TODO: DISABLED until proven via workflow_dispatch
-  # schedule:
-  #   # Her Pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
-  #   - cron: '0 9 * * 1'
+  # Her Pazartesi 09:00 UTC'de çalıştır (Türkiye 12:00)
+  schedule:
+    - cron: '0 9 * * 1'
   workflow_dispatch:  # Manuel tetikleme için
 
 permissions:
