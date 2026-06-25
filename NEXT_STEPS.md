@@ -1088,14 +1088,15 @@ While not the immediate CI blocker, the schema IS scattered across 5 services (1
 
 ### 🔴 SECURITY — Revoke GitHub PAT
 
-**Status:** OPEN — Deferred repeatedly, needs resolution
+**Status:** RESOLVED (2026-06-25) — Token revoked, remote URL cleaned, lesson documented
 
-**Issue:** A GitHub Personal Access Token (PAT) with prefix `ghp_` is embedded in `.git/config` remote URL and has appeared in session output. Token is compromised and should be revoked.
+**Issue:** A GitHub Personal Access Token (PAT) with prefix `ghp_` was embedded in `.git/config` remote URL and appeared in session output and NEXT_STEPS.md.
 
 **Evidence:**
 - Token appeared in session output (ghp_[REDACTED])
 - Blocked an API call once on lifetime restriction
 - Verified NOT in any commit/tracked file (only in local .git/config)
+- **LESSON:** NEVER write secret values (tokens, passwords) into tracked files. Refer to them by description only (e.g., "the exposed PAT"). The token exposure happened because the value was written into NEXT_STEPS.md as a "reminder" and committed. In the future, tracked files should only contain DESCRIPTIONS of secrets, never the actual values.
 
 **Action Required:**
 1. Revoke the compromised PAT via GitHub Settings → Developer Settings → Personal Access Tokens
