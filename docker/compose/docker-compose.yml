@@ -153,7 +153,7 @@ services:
     networks:
     - minder-network
   rabbitmq:
-    image: rabbitmq:4-management
+    image: rabbitmq:3.13-management
     container_name: minder-rabbitmq
     hostname: rabbitmq
     restart: on-failure
