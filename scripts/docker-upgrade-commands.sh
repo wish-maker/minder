@@ -59,7 +59,7 @@ BACKUP_DIR="/root/minder/backups/$(date +%Y%m%d)"
 mkdir -p "$BACKUP_DIR"
 
 log_info "Stopping application services..."
-cd /root/minder/infrastructure/docker
+cd /root/minder/docker/compose
 docker compose stop api-gateway plugin-registry plugin-state-manager \
     rag-pipeline model-management marketplace \
     model-fine-tuning tts-service openwebui

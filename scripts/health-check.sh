@@ -21,7 +21,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-COMPOSE_FILE="/root/minder/infrastructure/docker/docker-compose.yml"
+COMPOSE_FILE="/root/minder/docker/compose/docker-compose.yml"
 REPORT_DIR="/root/minder/health-reports"
 LOG_FILE="/root/minder/logs/health-check.log"
 
@@ -72,7 +72,7 @@ get_stopped_services() {
 restart_service() {
     local service_name=$1
     log "Restarting service: $service_name"
-    cd /root/minder/infrastructure/docker
+    cd /root/minder/docker/compose
     docker compose restart "$service_name" 2>&1 | tee -a "$LOG_FILE"
 
     # Wait for service to restart
@@ -313,7 +313,7 @@ case "${1:-}" in
         # Fix stopped services
         get_stopped_services | while read service; do
             log "Attempting to start: $service"
-            cd /root/minder/infrastructure/docker
+            cd /root/minder/docker/compose
             docker compose up -d "$service" 2>&1 | tee -a "$LOG_FILE"
         done
 

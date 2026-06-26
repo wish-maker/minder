@@ -11,8 +11,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 SECRETS_DIR="$PROJECT_ROOT/.secrets"
-ENV_FILE="$PROJECT_ROOT/infrastructure/docker/.env"
-COMPOSE_FILE="$PROJECT_ROOT/infrastructure/docker/docker-compose.yml"
+ENV_FILE="$PROJECT_ROOT/docker/compose/.env"
+COMPOSE_FILE="$PROJECT_ROOT/docker/compose/docker-compose.yml"
 
 # Colors
 GREEN='\033[0;32m'

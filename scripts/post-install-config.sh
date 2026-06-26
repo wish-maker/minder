@@ -53,7 +53,7 @@ fix_ufw_forward_policy() {
 update_telegraf_config() {
     log_info "Checking Telegraf InfluxDB configuration..."
 
-    local telegraf_conf="/root/minder/infrastructure/docker/telegraf/telegraf.conf"
+    local telegraf_conf="/root/minder/docker/services/telegraf/telegraf.conf"
 
     if [[ ! -f "$telegraf_conf" ]]; then
         log_warn "Telegraf config not found, skipping..."
@@ -83,7 +83,7 @@ update_telegraf_config() {
 fix_redis_exporter_config() {
     log_info "Checking Redis Exporter configuration..."
 
-    local compose_file="/root/minder/infrastructure/docker/docker-compose.yml"
+    local compose_file="/root/minder/docker/compose/docker-compose.yml"
 
     if [[ ! -f "$compose_file" ]]; then
         log_warn "docker-compose.yml not found, skipping..."

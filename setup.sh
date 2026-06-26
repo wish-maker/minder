@@ -2203,7 +2203,7 @@ start_services_manually() {
         run docker run -d \
           --name "$(container_name blackbox-exporter)" \
           --network "$NETWORK_NAME" \
-          -v "${SCRIPT_DIR}/docker/services/blackbox/blackbox.yml:/etc/blackbox/blackbox.yml:ro" \
+          -v "${SCRIPT_DIR}/docker/services/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro" \
           --restart unless-stopped \
           prom/blackbox-exporter:latest
     fi
@@ -2305,7 +2305,7 @@ start_services_manually() {
           -p 18888:18888 \
           -p 4317:4317 \
           -p 4318:4318 \
-          -v "${SCRIPT_DIR}/docker/services/otel-collector/otel-collector-config.yml:/etc/otelcol/config.yaml:ro" \
+          -v "${SCRIPT_DIR}/docker/services/otel-collector/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro" \
           --restart unless-stopped \
           otel/opentelemetry-collector-contrib:0.114.0
     fi

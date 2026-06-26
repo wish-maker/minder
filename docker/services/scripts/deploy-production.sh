@@ -19,9 +19,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-COMPOSE_FILE="infrastructure/docker/docker-compose.yml"
-ENV_FILE="infrastructure/docker/.env"
-ENV_EXAMPLE="infrastructure/docker/.env.example"
+COMPOSE_FILE="docker/compose/docker-compose.yml"
+ENV_FILE="docker/compose/.env"
+ENV_EXAMPLE="docker/compose/.env.example"
 
 # Functions
 log_info() {

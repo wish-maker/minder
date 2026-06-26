@@ -12,7 +12,7 @@ cd "$SCRIPT_DIR"
 source ./setup.sh
 
 # Mock environment variables
-export ENV_FILE="${SCRIPT_DIR}/infrastructure/docker/.env"
+export ENV_FILE="${SCRIPT_DIR}/docker/compose/.env"
 
 echo "======================================================================"
 echo "  PHASE 4 VALIDATION TEST"
@@ -59,7 +59,7 @@ echo ""
 # Test 5: Verify Traefik configuration files
 echo "Test 5: Verify Traefik Configuration Files"
 echo "----------------------------------------------------------------------"
-TRAEFIK_DYNAMIC_DIR="${SCRIPT_DIR}/infrastructure/docker/traefik/dynamic"
+TRAEFIK_DYNAMIC_DIR="${SCRIPT_DIR}/docker/services/traefik/dynamic"
 
 echo "Enabled configurations:"
 for config in "${TRAEFIK_DYNAMIC_DIR}"/access-mode-*.yml; do

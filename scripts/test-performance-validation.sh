@@ -4,7 +4,7 @@
 set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/infrastructure/docker/.env"
+ENV_FILE="${SCRIPT_DIR}/../docker/compose/.env"
 
 echo "======================================================================"
 echo "  PHASE 4 DYNAMIC CONFIGURATION TEST"
@@ -81,7 +81,7 @@ echo ""
 # Test 6: Check Traefik configuration files
 echo "Test 6: Verify Traefik dynamic configuration files"
 echo "----------------------------------------------------------------------"
-TRAEFIK_DIR="${SCRIPT_DIR}/infrastructure/docker/traefik/dynamic"
+TRAEFIK_DIR="${SCRIPT_DIR}/../docker/services/traefik/dynamic"
 CONFIG_COUNT=0
 
 for mode in local vpn public; do

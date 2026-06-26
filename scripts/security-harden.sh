@@ -175,8 +175,8 @@ setup_secrets_management() {
     mkdir -p "$SECRETS_DIR/{postgres,redis,rabbitmq,authelia}"
 
     # Move existing secrets to secure location
-    if [ -f "/root/minder/infrastructure/docker/.env" ]; then
-        cp "/root/minder/infrastructure/docker/.env" "$SECRETS_DIR/.env.backup"
+    if [ -f "/root/minder/docker/compose/.env" ]; then
+        cp "/root/minder/docker/compose/.env" "$SECRETS_DIR/.env.backup"
         log "INFO" "Backed up existing .env file"
     fi
 
@@ -278,7 +278,7 @@ enable_authentication() {
     # Ensure Authelia is running
     if ! docker ps --format "{{.Names}}" | grep -q "minder-authelia"; then
         log "INFO" "Starting Authelia service"
-        cd /root/minder/infrastructure/docker
+        cd /root/minder/docker/compose
         docker compose up -d authelia
         log "SUCCESS" "Authelia authentication enabled"
     else
@@ -291,7 +291,7 @@ secure_communication() {
     log "INFO" "Securing communication channels"
 
     # Ensure Traefik HTTPS is configured
-    if [ -f "/root/minder/infrastructure/docker/traefik/traefik.yml" ]; then
+    if [ -f "/root/minder/docker/services/traefik/traefik.yml" ]; then
         log "INFO" "Checking Traefik TLS configuration"
         # Traefik should handle SSL/TLS termination
         log "SUCCESS" "Communication secured via Traefik SSL termination"

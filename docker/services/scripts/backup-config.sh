@@ -6,7 +6,7 @@ set -e  # Exit on error
 
 CONFIG_DIR="/backup/config"
 DATE=$(date +%Y%m%d_%H%M%S)
-SOURCE_DIR="/root/minder/infrastructure/docker"
+SOURCE_DIR="/root/minder/docker/compose"
 LOG_FILE="/var/log/backup.log"
 
 # Function to log messages

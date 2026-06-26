@@ -81,7 +81,7 @@ jobs:
           sed -i 's/postgres:16/postgres:17/' setup.sh
 
           # Update docker-compose.yml
-          sed -i 's/postgres:16/postgres:17/' infrastructure/docker/docker-compose.yml
+          sed -i 's/postgres:16/postgres:17/' docker/compose/docker-compose.yml
 
           echo "Files updated"
 
