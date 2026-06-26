@@ -226,8 +226,6 @@ services:
     - REGISTRY_DATASOURCE_URL=jdbc:postgresql://postgres:5432/minder
     - REGISTRY_DATASOURCE_USERNAME=minder
     - REGISTRY_DATASOURCE_PASSWORD=${POSTGRES_PASSWORD}
-    volumes:
-    - ../../infrastructure/schema-registry/schema-registry-config.yml:/opt/apicurio/config/application.properties:ro
     # PILLAR 1: NO exposed ports - Traefik routing only
     depends_on:
       postgres:
