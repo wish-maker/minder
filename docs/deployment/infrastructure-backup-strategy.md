@@ -39,9 +39,11 @@ Currently, the Minder platform lacks an automated backup system. The following c
 **Retention:** 7 days
 **Method:** pg_dump
 
+Create this script as `backup-postgres.sh` in the project `scripts/` directory:
+
 ```bash
 #!/bin/bash
-# /root/minder/scripts/backup-postgres.sh
+# backup-postgres.sh
 
 BACKUP_DIR="/root/minder/backups/postgres"
 DATE=$(date +%Y%m%d-%H%M%S)
@@ -66,9 +68,11 @@ find "$BACKUP_DIR" -name "minder-postgres-*.sql.gz" -mtime +7 -delete
 **Retention:** 7 days
 **Method:** Redis SAVE command + file copy
 
+Create this script as `backup-redis.sh` in the project `scripts/` directory:
+
 ```bash
 #!/bin/bash
-# /root/minder/scripts/backup-redis.sh
+# backup-redis.sh
 
 BACKUP_DIR="/root/minder/backups/redis"
 DATE=$(date +%Y%m%d-%H%M%S)
@@ -99,9 +103,11 @@ find "$BACKUP_DIR" -name "redis-*.rdb.gz" -mtime +7 -delete
 **Retention:** 7 days
 **Method:** neo4j-admin backup
 
+Create this script as `backup-neo4j.sh` in the project `scripts/` directory:
+
 ```bash
 #!/bin/bash
-# /root/minder/scripts/backup-neo4j.sh
+# backup-neo4j.sh
 
 BACKUP_DIR="/root/minder/backups/neo4j"
 DATE=$(date +%Y%m%d-%H%M%S)
@@ -134,9 +140,11 @@ find "$BACKUP_DIR" -name "neo4j-*.tar.gz" -mtime +7 -delete
 **Retention:** 4 weeks
 **Method:** tar + gzip
 
+Create this script as `backup-config.sh` in the project `scripts/` directory:
+
 ```bash
 #!/bin/bash
-# /root/minder/scripts/backup-config.sh
+# backup-config.sh
 
 BACKUP_DIR="/root/minder/backups/config"
 DATE=$(date +%Y%m%d-%H%M%S)
@@ -145,10 +153,10 @@ mkdir -p "$BACKUP_DIR"
 # Create config backup
 tar -czf "$BACKUP_DIR/minder-config-$DATE.tar.gz" \
   -C /root/minder \
-  infrastructure/docker/.env \
-  infrastructure/docker/traefik \
-  infrastructure/docker/authelia \
-  infrastructure/docker/docker-compose.yml
+  docker/compose/.env \
+  docker/services/traefik \
+  docker/compose/authelia \
+  docker/compose/docker-compose.yml
 
 # Cleanup old backups (keep 4 weeks)
 find "$BACKUP_DIR" -name "minder-config-*.tar.gz" -mtime +28 -delete
@@ -167,16 +175,18 @@ find "$BACKUP_DIR" -name "minder-config-*.tar.gz" -mtime +28 -delete
 **Retention:** 3 months
 **Method:** Docker volume snapshots
 
+Create this script as `backup-snapshot.sh` in the project `scripts/` directory:
+
 ```bash
 #!/bin/bash
-# /root/minder/scripts/backup-snapshot.sh
+# backup-snapshot.sh
 
 BACKUP_DIR="/root/minder/backups/snapshots"
 DATE=$(date +%Y%m%d-%H%M%S)
 mkdir -p "$BACKUP_DIR"
 
 # Stop services
-cd /root/minder/infrastructure/docker
+cd /root/minder/docker/compose
 docker compose stop
 
 # Create volume snapshots

@@ -286,22 +286,22 @@ User → API Gateway → Marketplace → Payment Gateway
 ### Local Development
 ```bash
 # Start development environment
-docker compose -f infrastructure/docker/docker-compose.yml up -d
+docker compose -f docker/compose/docker-compose.yml up -d
 
 # Run tests
 pytest tests/unit/ -v
 
 # View logs
-docker compose -f infrastructure/docker/docker-compose.yml logs -f <service>
+docker compose -f docker/compose/docker-compose.yml logs -f <service>
 ```
 
 ### Service Development
 ```bash
 # Build specific service
-docker compose -f infrastructure/docker/docker-compose.yml build <service>
+docker compose -f docker/compose/docker-compose.yml build <service>
 
 # Rebuild and restart
-docker compose -f infrastructure/docker/docker-compose.yml up -d --build <service>
+docker compose -f docker/compose/docker-compose.yml up -d --build <service>
 ```
 
 ## Deployment Strategies

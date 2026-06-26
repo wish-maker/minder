@@ -4,71 +4,70 @@
 
 ```
 minder/                              # Project root
-├── README.md                       # Main project documentation
-├── LICENSE                         # MIT License
-├── setup.sh                        # Automated setup script ⭐
-├── deploy.sh                       # Full deployment automation
-├── install.sh                      # Alternative installation script
+├── README.md                        # Main project documentation
+├── CONTRIBUTING.md                  # Contribution guidelines
+├── LICENSE                          # MIT License
+├── setup.sh                         # Automated setup script ⭐
+├── pyproject.toml                   # Python project configuration
+├── docker-compose.test.yml          # CI / test compose file
 │
-├── docs/                           # Documentation (8 guides)
-│   ├── QUICK_START.md             # 5-minute setup guide
-│   ├── INSTALLATION.md            # Detailed installation
-│   ├── ARCHITECTURE.md            # System architecture
-│   ├── DEVELOPMENT.md             # Development workflow
-│   ├── DEPLOYMENT.md              # Production deployment
-│   ├── TROUBLESHOOTING.md         # Common issues
-│   ├── PROJECT_STRUCTURE.md       # This file
-│   └── CONTRIBUTING.md            # Contribution guidelines
+├── docs/                            # Documentation
+│   ├── QUICKSTART.md                # 5-minute setup guide
+│   ├── EXTERNAL_SERVICES_GUIDE.md   # External (cloud) services guide
+│   ├── getting-started/             # Installation & first steps
+│   ├── architecture/                # System architecture & roadmap
+│   ├── development/                 # Development workflow
+│   ├── deployment/                  # Production deployment
+│   ├── guides/                      # How-to guides (auth, security, ...)
+│   ├── operations/                  # Operational runbooks
+│   ├── troubleshooting/             # Common issues
+│   └── api/                         # API reference
 │
-├── infrastructure/                 # Infrastructure configuration
-│   └── docker/
-│       ├── docker-compose.yml      # Main compose file (32 services)
-│       ├── .env.example           # Environment template
-│       ├── .env                   # Actual environment (gitignored)
-│       ├── postgres-init.sql      # Database initialization
-│       ├── telegraf/              # Monitoring config
-│       ├── prometheus/            # Metrics config
-│       ├── grafana/               # Dashboards
-│       ├── nginx/                 # Reverse proxy
-│       └── alertmanager/          # Alert rules
+├── docker/                          # Docker configuration
+│   ├── compose/                     # Deployment dir (compose runs from here)
+│   │   ├── docker-compose.yml        # Main compose file (31 services)
+│   │   ├── .env.example             # Environment template
+│   │   ├── .env                     # Actual environment (gitignored)
+│   │   └── authelia/                # Authelia SSO config
+│   ├── services/                    # Per-service configs (source of truth)
+│   │   ├── postgres/                # DB init (init.sql)
+│   │   ├── prometheus/              # Metrics config
+│   │   ├── alertmanager/            # Alert routing
+│   │   ├── grafana/                 # Dashboards & datasources
+│   │   ├── telegraf/                # Metrics agent config
+│   │   └── traefik/                 # Reverse proxy config
+│   ├── templates/                   # Compose templates (rendered by setup.sh)
+│   └── scripts/                     # Docker helper scripts
 │
-├── services/                      # Microservices (9 services)
-│   ├── api-gateway/              # API Gateway (port 8000)
-│   ├── plugin-registry/          # Plugin Registry (port 8001)
-│   ├── marketplace/              # Marketplace (port 8002)
-│   ├── plugin-state-manager/     # State Manager (port 8003)
-│   ├── rag-pipeline/             # AI Services (port 8004)
-│   ├── model-management/         # Model Management (port 8005)
-│   ├── tts-stt/                  # TTS/STT Service (port 8006)
-│   ├── model-fine-tuning/        # Fine-tuning (port 8007)
-│   └── openwebui/               # Web UI (port 8080)
+├── src/                             # Application source
+│   ├── services/                    # Microservices
+│   │   ├── api-gateway/             # API Gateway (port 8000)
+│   │   ├── plugin-registry/         # Plugin Registry (port 8001)
+│   │   ├── marketplace/             # Marketplace (port 8002)
+│   │   ├── plugin-state-manager/    # State Manager (port 8003)
+│   │   ├── rag-pipeline/            # RAG Pipeline (port 8004)
+│   │   ├── model-management/        # Model Management (port 8005)
+│   │   ├── tts-stt/                 # TTS / STT (port 8006)
+│   │   └── graph-rag/               # Graph RAG / correlation analysis
+│   ├── core/                        # Core framework
+│   ├── plugins/                     # Plugin implementations
+│   ├── config/                      # Configuration modules
+│   └── shared/                      # Shared utilities
 │
-├── src/                          # Shared utilities
-│   └── shared/                   # Common modules
-│       ├── rate_limiter.py       # Rate limiting
-│       ├── validators.py         # Input validation
-│       ├── database.py           # Database utilities
-│       └── security.py           # Security helpers
+├── tests/                           # Test suite
+│   ├── unit/                        # Unit tests
+│   ├── integration/                 # Integration tests
+│   ├── e2e/                         # End-to-end tests
+│   ├── performance/                 # Performance tests
+│   ├── manual/                      # Manual test scripts
+│   └── fixtures/                    # Test data
 │
-├── tests/                        # Test suite
-│   ├── unit/                    # Unit tests (115 tests, 98% coverage)
-│   ├── integration/             # Integration tests
-│   └── fixtures/                # Test data
-│
-├── scripts/                      # Utility scripts
-│   ├── health-check.sh          # Health monitoring ⭐
-│   ├── diagnostics.sh           # System diagnostics
-│   ├── cleanup.sh               # Resource cleanup
-│   ├── logs.sh                  # Log viewer
-│   ├── admin.sh                 # Admin utilities
-│   └── update_libraries.sh      # Dependency updates
-│
-├── pyproject.toml                # Python project configuration
-├── pytest.ini                    # Test configuration
-├── mypy.ini                      # Type checking configuration
-├── requirements.txt              # Production dependencies
-├── requirements-dev.txt          # Development dependencies
-└── requirements-ml.txt           # ML/AI dependencies
+└── scripts/                         # Setup & utility scripts
+    ├── health-check.sh              # Health monitoring ⭐
+    ├── security-harden.sh           # Security hardening
+    ├── generate-secrets.sh          # Secret generation
+    ├── rolling-update.sh            # Rolling updates
+    └── validate-installation.sh     # Install validation
 ```
 
 ## Service Structure
@@ -204,13 +203,13 @@ Every service has:
 ./setup.sh
 
 # 2. Start specific service
-docker compose -f infrastructure/docker/docker-compose.yml up -d api-gateway
+docker compose -f docker/compose/docker-compose.yml up -d api-gateway
 
 # 3. View logs
-docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
+docker compose -f docker/compose/docker-compose.yml logs -f api-gateway
 
 # 4. Restart with rebuild
-docker compose -f infrastructure/docker/docker-compose.yml up -d --build api-gateway
+docker compose -f docker/compose/docker-compose.yml up -d --build api-gateway
 
 # 5. Run tests
 pytest tests/unit/ -v
@@ -227,7 +226,7 @@ pip install new-package
 pip freeze > requirements.txt
 
 # Rebuild container
-docker compose -f infrastructure/docker/docker-compose.yml build api-gateway
+docker compose -f docker/compose/docker-compose.yml build api-gateway
 ```
 
 ### Testing
@@ -240,7 +239,7 @@ pytest tests/unit/ -v
 pytest tests/ --cov=src --cov-report=html
 
 # Specific test
-pytest tests/unit/test_rate_limiter.py -v
+pytest tests/unit/test_module_management.py -v
 
 # Integration tests
 pytest tests/integration/ -v
@@ -296,7 +295,7 @@ QDRANT_HOST=http://qdrant:6333
 INFLUXDB_TOKEN=your_influxdb_token
 ```
 
-See `infrastructure/docker/.env.example` for complete list.
+See `docker/compose/.env.example` for complete list.
 
 ## Build Process
 
@@ -365,7 +364,7 @@ docker exec minder-postgres pg_dump -U minder > backup.sql
 Stateless services can be scaled:
 ```bash
 # Scale API Gateway to 3 instances
-docker compose -f infrastructure/docker/docker-compose.yml up -d --scale api-gateway=3
+docker compose -f docker/compose/docker-compose.yml up -d --scale api-gateway=3
 ```
 
 ### Resource Limits
@@ -398,7 +397,7 @@ curl http://localhost:8000/health
 
 ```bash
 # View all logs
-docker compose -f infrastructure/docker/docker-compose.yml logs -f
+docker compose -f docker/compose/docker-compose.yml logs -f
 
 # View service logs
 docker logs minder-api-gateway --tail 100 -f
@@ -410,8 +409,8 @@ docker logs minder-api-gateway > api-gateway.log
 ### Diagnostics
 
 ```bash
-# Run diagnostics
-./scripts/diagnostics.sh
+# Run health check
+./scripts/health-check.sh
 
 # Container stats
 docker stats
@@ -456,7 +455,7 @@ docker logs <service-name>
 lsof -i :8000
 
 # Reset service
-docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+docker compose -f docker/compose/docker-compose.yml restart <service>
 ```
 
 **Database connection errors**:
@@ -465,7 +464,7 @@ docker compose -f infrastructure/docker/docker-compose.yml restart <service>
 docker exec minder-postgres pg_isready -U minder
 
 # Reset database
-docker compose -f infrastructure/docker/docker-compose.yml down -v
+docker compose -f docker/compose/docker-compose.yml down -v
 ./setup.sh
 ```
 
@@ -475,12 +474,12 @@ docker compose -f infrastructure/docker/docker-compose.yml down -v
 docker stats
 
 # Clean up unused resources
-./scripts/cleanup.sh
+docker system prune -f
 
 # Increase Docker memory limit (Docker Desktop settings)
 ```
 
-See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more details.
+See [TROUBLESHOOTING.md](../troubleshooting/TROUBLESHOOTING.md) for more details.
 
 ## Contributing
 

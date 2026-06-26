@@ -27,7 +27,7 @@ This guide covers local development setup, workflow, and best practices for cont
 
 ```bash
 # Clone repository
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 
 # Run setup
@@ -43,7 +43,7 @@ cd minder
 
 ```bash
 # Create environment file
-cp infrastructure/docker/.env.example infrastructure/docker/.env
+cp docker/compose/.env.example docker/compose/.env
 
 # Generate secure passwords
 POSTGRES_PASSWORD=$(openssl rand -base64 32)
@@ -52,7 +52,7 @@ JWT_SECRET=$(openssl rand -base64 64)
 INFLUXDB_TOKEN=$(openssl rand -base64 32)
 
 # Update .env file
-cat >> infrastructure/docker/.env << EOF
+cat >> docker/compose/.env << EOF
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 REDIS_PASSWORD=$REDIS_PASSWORD
 JWT_SECRET=$JWT_SECRET
@@ -66,7 +66,7 @@ EOF
 
 ```bash
 # Start databases and core services
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres redis qdrant ollama neo4j
+docker compose -f docker/compose/docker-compose.yml up -d postgres redis qdrant ollama neo4j
 
 # Wait for services to be ready
 sleep 30
@@ -76,16 +76,16 @@ sleep 30
 
 ```bash
 # Start security layer
-docker compose -f infrastructure/docker/docker-compose.yml up -d traefik authelia
+docker compose -f docker/compose/docker-compose.yml up -d traefik authelia
 
 # Start core APIs
-docker compose -f infrastructure/docker/docker-compose.yml up -d api-gateway plugin-registry marketplace plugin-state-manager
+docker compose -f docker/compose/docker-compose.yml up -d api-gateway plugin-registry marketplace plugin-state-manager
 
 # Start AI services
-docker compose -f infrastructure/docker/docker-compose.yml up -d rag-pipeline model-management
+docker compose -f docker/compose/docker-compose.yml up -d rag-pipeline model-management
 
 # Start AI enhancement and monitoring
-docker compose -f infrastructure/docker/docker-compose.yml up -d openwebui tts-service model-fine-tuning prometheus grafana
+docker compose -f docker/compose/docker-compose.yml up -d openwebui tts-service model-fine-tuning prometheus grafana
 ```
 
 #### Step 4: Verify Setup
@@ -136,7 +136,7 @@ touch main.py config.py Dockerfile requirements.txt
 # Add service definition
 
 # Build and test
-docker compose -f infrastructure/docker/docker-compose.yml up -d --build new-service
+docker compose -f docker/compose/docker-compose.yml up -d --build new-service
 ```
 
 #### Service Template
@@ -172,7 +172,7 @@ pytest tests/integration/ -v
 pytest tests/ --cov=src --cov-report=html
 
 # Specific test file
-pytest tests/unit/test_rate_limiter.py -v
+pytest tests/unit/test_module_management.py -v
 
 # Watch mode (auto-rerun on changes)
 pytest tests/unit/ -f
@@ -201,7 +201,7 @@ def test_invalid_plugin_name():
 mypy src/
 
 # Check specific module
-mypy src/shared/validators.py
+mypy src/shared/utils/validation.py
 ```
 
 #### Linting
@@ -242,8 +242,8 @@ pip install new-package
 pip freeze > requirements.txt
 
 # Rebuild container
-docker compose -f infrastructure/docker/docker-compose.yml build api-gateway
-docker compose -f infrastructure/docker/docker-compose.yml up -d api-gateway
+docker compose -f docker/compose/docker-compose.yml build api-gateway
+docker compose -f docker/compose/docker-compose.yml up -d api-gateway
 ```
 
 ### Database Development
@@ -287,7 +287,7 @@ MONITOR
 
 ```bash
 # All services
-docker compose -f infrastructure/docker/docker-compose.yml logs -f
+docker compose -f docker/compose/docker-compose.yml logs -f
 
 # Specific service
 docker logs minder-api-gateway -f
@@ -356,7 +356,7 @@ services:
 ### Add New API Endpoint
 
 ```python
-# In services/api-gateway/routes/plugins.py
+# In a new route module under src/services/api-gateway/routes/
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 
@@ -393,7 +393,7 @@ pip install --upgrade fastapi
 pip freeze > requirements.txt
 
 # Rebuild container
-docker compose -f infrastructure/docker/docker-compose.yml build <service>
+docker compose -f docker/compose/docker-compose.yml build <service>
 ```
 
 ## Git Workflow
@@ -552,7 +552,7 @@ pip install missing-package
 docker exec minder-postgres pg_isready -U minder
 
 # Check connection string
-cat infrastructure/docker/.env | grep POSTGRES
+cat docker/compose/.env | grep POSTGRES
 ```
 
 **Port Already in Use**:
@@ -575,9 +575,9 @@ kill -9 <PID>
 
 ### Internal Documentation
 
-- `docs/ARCHITECTURE.md` - System design
-- `docs/API.md` - API documentation
-- `docs/TROUBLESHOOTING.md` - Common issues
+- `docs/architecture/overview.md` - System design
+- `docs/api/reference.md` - API documentation
+- `docs/troubleshooting/TROUBLESHOOTING.md` - Common issues
 
 ### Getting Help
 

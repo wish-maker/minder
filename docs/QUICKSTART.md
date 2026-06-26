@@ -20,7 +20,7 @@ The enhanced `setup.sh` script provides complete lifecycle management:
 
 ```bash
 # Clone and setup
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 ./setup.sh
 ```
@@ -35,10 +35,10 @@ cd minder
 #### Option 2: Manual
 ```bash
 # 1. Configure environment
-cp infrastructure/docker/.env.example infrastructure/docker/.env
+cp docker/compose/.env.example docker/compose/.env
 
 # 2. Start services
-docker compose -f infrastructure/docker/docker-compose.yml up -d
+docker compose -f docker/compose/docker-compose.yml up -d
 
 # 3. Wait for services to be healthy (~9 minutes)
 ./setup.sh status  # Check if all services are healthy
@@ -135,7 +135,7 @@ The `setup.sh` script provides comprehensive enterprise-grade management:
 
 **Port already in use?**
 ```bash
-# Change ports in infrastructure/docker/docker-compose.yml
+# Change ports in docker/compose/docker-compose.yml
 # Example: ports: - "8080:8000"
 ```
 

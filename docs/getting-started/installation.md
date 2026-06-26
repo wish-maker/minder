@@ -24,7 +24,7 @@ The `setup.sh` script now provides a complete lifecycle management system for th
 
 ```bash
 # Clone the repository
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 
 # Run automated setup
@@ -45,27 +45,27 @@ That's it! The platform will be fully operational in ~9 minutes with:
 
 ```bash
 # Create environment file
-cp infrastructure/docker/.env.example infrastructure/docker/.env
+cp docker/compose/.env.example docker/compose/.env
 
 # Edit environment variables (optional)
-nano infrastructure/docker/.env
+nano docker/compose/.env
 ```
 
 #### Step 2: Start Infrastructure Services
 
 ```bash
 # Start databases and core infrastructure
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres redis qdrant ollama neo4j
+docker compose -f docker/compose/docker-compose.yml up -d postgres redis qdrant ollama neo4j
 ```
 
 #### Step 3: Start Microservices
 
 ```bash
 # Start all services
-docker compose -f infrastructure/docker/docker-compose.yml up -d
+docker compose -f docker/compose/docker-compose.yml up -d
 ```
 
-This will start 32 services:
+This will start 31 services:
 - Security Layer (2): Traefik, Authelia
 - Core Infrastructure (6): PostgreSQL, Redis, RabbitMQ, Qdrant, Ollama, Neo4j
 - Core APIs (6): API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management
@@ -212,8 +212,8 @@ All services should show "healthy" status.
 ./setup.sh logs api-gateway         # Specific service
 
 # Or using Docker Compose directly
-docker compose -f infrastructure/docker/docker-compose.yml logs -f
-docker compose -f infrastructure/docker/docker-compose.yml logs -f api-gateway
+docker compose -f docker/compose/docker-compose.yml logs -f
+docker compose -f docker/compose/docker-compose.yml logs -f api-gateway
 ```
 
 ### Run Tests
@@ -244,13 +244,13 @@ When running `./setup.sh`, expect the following timeline:
 **7-8 min:** Monitoring (Prometheus, Grafana, InfluxDB)
 **8-9 min:** AI enhancement (OpenWebUI, TTS/STT, Fine-tuning)
 
-**Final Status:** 32 services, all healthy, ready to use
+**Final Status:** 31 services, all healthy, ready to use
 
 ## Troubleshooting
 
 ### Port Conflicts
 
-If you have port conflicts, edit the ports in `infrastructure/docker/docker-compose.yml`:
+If you have port conflicts, edit the ports in `docker/compose/docker-compose.yml`:
 
 ```yaml
 ports:
@@ -272,8 +272,8 @@ If you experience memory issues, increase Docker memory limit:
 ./setup.sh start
 
 # Or manual reset
-docker compose -f infrastructure/docker/docker-compose.yml down -v
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
+docker compose -f docker/compose/docker-compose.yml down -v
+docker compose -f docker/compose/docker-compose.yml up -d postgres
 ```
 
 ### Services Not Starting
@@ -286,7 +286,7 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
 ./setup.sh logs
 
 # Restart specific service
-docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+docker compose -f docker/compose/docker-compose.yml restart <service>
 ```
 
 ### Docker Image Issues
@@ -299,7 +299,7 @@ docker compose -f infrastructure/docker/docker-compose.yml restart <service>
 ./setup.sh update
 
 # Force rebuild
-docker compose -f infrastructure/docker/docker-compose.yml build --no-cache <service>
+docker compose -f docker/compose/docker-compose.yml build --no-cache <service>
 ```
 
 ## Next Steps
@@ -318,7 +318,7 @@ docker compose -f infrastructure/docker/docker-compose.yml build --no-cache <ser
 ./setup.sh uninstall --keep-data
 
 # Or manual
-docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down
+docker compose -f docker/compose/docker-compose.yml --profile monitoring down
 ```
 
 ### Remove Everything (Including Data)
@@ -328,7 +328,7 @@ docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring 
 ./setup.sh uninstall
 
 # Or manual
-docker compose -f infrastructure/docker/docker-compose.yml --profile monitoring down -v
+docker compose -f docker/compose/docker-compose.yml --profile monitoring down -v
 docker volume rm docker_postgres_data docker_redis_data docker_qdrant_data docker_ollama_data
 ```
 

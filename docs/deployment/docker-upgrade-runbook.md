@@ -42,7 +42,7 @@ mkdir -p /root/minder/backups/$(date +%Y%m%d)
 **Goal:** Prevent data changes during backup
 
 ```bash
-cd /root/minder/infrastructure/docker
+cd /root/minder/docker/compose
 
 # Stop all services except databases and monitoring
 docker compose stop api-gateway plugin-registry plugin-state-manager
@@ -369,7 +369,7 @@ docker compose up -d
 ### Full System Rollback:
 ```bash
 # Revert docker-compose.yml to previous version
-cd /root/minder/infrastructure/docker
+cd /root/minder/docker/compose
 git checkout docker-compose.yml
 
 # Restart all services

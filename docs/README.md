@@ -75,11 +75,11 @@ This directory contains all documentation for the Minder platform.
 ## 📊 Current System Status
 
 **Platform Version:** 1.0.0
-**Services Running:** 32 (29 healthy, 3 no-healthcheck)
+**Services Running:** 31 (29 healthy, 3 no-healthcheck)
 **Production Readiness:** 99%
 **Documentation Status:** ✅ 100% English, 100% Current
 
 ---
 
-**Last Updated:** 2026-05-13
+**Last Updated:** 2026-06-26
 **Language:** English

@@ -657,9 +657,8 @@ Most services implement rate limiting:
 
 ## 📖 More Information
 
-- [Shared Components README](../services/shared/README.md)
-- [Code Quality Improvements](../docs/CODE_QUALITY_IMPROVEMENTS.md)
-- [Architecture Documentation](../docs/architecture/)
+- [Shared Components README](../../src/shared/README.md)
+- [Architecture Documentation](../architecture/)
 
 ---
 

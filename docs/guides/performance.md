@@ -555,11 +555,11 @@ jobs:
     steps:
       - name: Run benchmarks
         run: |
-          pytest tests/test_performance.py --benchmark-json=benchmark.json
+          bash scripts/benchmark-performance.sh
 
-      - name: Compare with baseline
+      - name: Validate performance
         run: |
-          python scripts/compare_benchmarks.py benchmark.json baseline.json
+          bash scripts/validate-performance-simple.sh
 
       - name: Comment on PR
         if: failure()

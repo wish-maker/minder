@@ -476,7 +476,6 @@ async def create_item(item):
 
 ## 📚 Related Documentation
 
-- [Code Quality Improvements](../../docs/CODE_QUALITY_IMPROVEMENTS.md)
 - [API Documentation](../../docs/api/)
 - [Architecture Overview](../../docs/architecture/)
 

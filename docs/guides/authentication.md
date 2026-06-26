@@ -50,7 +50,7 @@ Minder Platform uses enterprise-grade security with Authelia for SSO and 2FA, pr
 - Dashboard: `http://localhost:8081` (admin only)
 - Public: `https://minder.local` (or `http://localhost`)
 
-**Configuration**: `infrastructure/docker/traefik/`
+**Configuration**: `docker/services/traefik/`
 
 ### Authelia (SSO & 2FA)
 
@@ -67,7 +67,7 @@ Minder Platform uses enterprise-grade security with Authelia for SSO and 2FA, pr
 
 **Access**: `https://auth.minder.local` (or `http://localhost:9091`)
 
-**Configuration**: `infrastructure/docker/authelia/`
+**Configuration**: `docker/services/authelia/`
 
 ## Default Users
 
@@ -89,7 +89,7 @@ docker exec -it minder-authelia authelia hashes password generate \
   --password "your_new_secure_password"
 ```
 
-2. Update `infrastructure/docker/authelia/users_database.yml`:
+2. Update `docker/services/authelia/users_database.yml`:
 ```yaml
 users:
   admin:
@@ -103,7 +103,7 @@ users:
 
 3. Restart Authelia:
 ```bash
-docker compose -f infrastructure/docker/docker-compose.yml restart authelia
+docker compose -f docker/compose/docker-compose.yml restart authelia
 ```
 
 ### Option 2: Via Authelia Portal
@@ -197,7 +197,7 @@ Authelia can send email notifications for:
 
 ### Setup
 
-Edit `infrastructure/docker/.env`:
+Edit `docker/compose/.env`:
 
 ```bash
 # Gmail Example (use App Passwords)
@@ -209,7 +209,7 @@ SMTP_PASSWORD=your-app-password  # Generate at Google Account Settings
 
 Restart Authelia:
 ```bash
-docker compose -f infrastructure/docker/docker-compose.yml restart authelia
+docker compose -f docker/compose/docker-compose.yml restart authelia
 ```
 
 ## OIDC / OAuth2 Integration
@@ -218,7 +218,7 @@ Authelia provides OpenID Connect for applications:
 
 ### Configuration
 
-Clients are pre-configured in `infrastructure/docker/authelia/configuration.yml`:
+Clients are pre-configured in `docker/services/authelia/configuration.yml`:
 
 ```yaml
 identity_providers:
@@ -232,7 +232,7 @@ identity_providers:
 
 ### Environment Variables
 
-Set in `infrastructure/docker/.env`:
+Set in `docker/compose/.env`:
 
 ```bash
 # Generate with: openssl rand -base64 32
@@ -250,7 +250,7 @@ OIDC_CLIENT_SECRET_MINDER_API=your-secret-here
 
 ### Configuration
 
-Edit `infrastructure/docker/authelia/configuration.yml`:
+Edit `docker/services/authelia/configuration.yml`:
 
 ```yaml
 session:
@@ -272,7 +272,7 @@ Authelia automatically bans IPs after:
 
 ### Configuration
 
-Edit `infrastructure/docker/authelia/configuration.yml`:
+Edit `docker/services/authelia/configuration.yml`:
 
 ```yaml
 regulation:
@@ -325,7 +325,7 @@ docker logs minder-authelia
 2. Accept browser warning for `*.minder.local`
 3. For production, configure Let's Encrypt:
 
-Edit `infrastructure/docker/traefik/traefik.yml`:
+Edit `docker/services/traefik/traefik.yml`:
 ```yaml
 certificatesResolvers:
   default:

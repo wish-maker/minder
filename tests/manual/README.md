@@ -14,26 +14,11 @@ These tests are excluded from CI/CD because they:
 
 ## Available Tests
 
-### test_tefas_crawler.py
-Tests the tefas-crawler package by making real API calls to TEFAS.
+### test_database_writes.py
+Tests that plugins write data to their backing databases using real connections.
 
-### test_tefas_real.py
-Tests TEFAS plugin with real TEFAS API calls.
-
-### test_tefas_v2.py
-Tests TEFAS v2 module integration.
-
-### test_tefas_v3_integration.py
-Tests TEFAS v3 module with full integration scenarios.
-
-### test_unified_api.py
-Tests the unified data API across multiple modules.
-
-### test_plugins_real_data.py
-Tests plugins with real data sources.
-
-### test_kap_site.py
-Tests KAP (Kamuyu Aydınlatma Platformu) site scraping.
+### test_end_to_end.py
+Exercises end-to-end flows against running services.
 
 ### validate_complete_integration.py
 Validates complete integration across all modules.
@@ -49,13 +34,13 @@ Validates Phase 1 implementation milestones.
 pytest tests/manual/ -v
 
 # Or run individual tests
-python tests/manual/test_tefas_crawler.py
+python tests/manual/test_end_to_end.py
 ```
 
 ### Run specific test
 ```bash
-pytest tests/manual/test_tefas_real.py -v
-pytest tests/manual/test_kap_site.py -v
+pytest tests/manual/test_database_writes.py -v
+pytest tests/manual/validate_phase1.py -v
 ```
 
 ## Expected Behavior

@@ -60,7 +60,7 @@ Minder isn't just another AI toolset — it's your **complete private AI infrast
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 
 # 2️⃣ Run the setup script
@@ -382,7 +382,7 @@ We welcome contributions from developers of all skill levels!
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/YOUR-USERNAME/minder.git
+git clone git@github.com:YOUR-USERNAME/minder.git
 cd minder
 
 # 2. Create feature branch
@@ -511,7 +511,7 @@ Built with amazing open-source technologies:
 
 **Get started in 30 seconds:**
 ```bash
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 bash setup.sh start
 # Open: http://localhost:8000

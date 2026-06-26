@@ -88,10 +88,10 @@ def test_validate_plugin_name():
 pytest tests/unit/ -v
 
 # Run specific test file
-pytest tests/unit/test_validators.py -v
+pytest tests/unit/test_module_management.py -v
 
 # Run specific test
-pytest tests/unit/test_validators.py::TestValidatePluginName::test_valid_plugin_names -v
+pytest tests/unit/test_module_management.py::TestValidatePluginName::test_valid_plugin_names -v
 ```
 
 ---
@@ -158,7 +158,7 @@ def test_full_plugin_installation_flow(gateway_test_client):
 pytest tests/e2e/ -v -m e2e
 
 # Run specific E2E test
-pytest tests/e2e/test_full_user_flow.py -v
+pytest tests/e2e/test_full_plugin_lifecycle.py -v
 ```
 
 ---
@@ -246,7 +246,7 @@ pytest
 pytest -v
 
 # Run specific test file
-pytest tests/unit/test_validators.py -v
+pytest tests/unit/test_module_management.py -v
 
 # Run with coverage
 pytest --cov=src/ services/ --cov-report=html

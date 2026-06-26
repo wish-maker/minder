@@ -28,8 +28,8 @@ URL: https://auth.minder.local
 ```
 
 **Step 2: Login**
-- Username: See `infrastructure/docker/authelia/users_database.yml`
-- Password: See `infrastructure/docker/authelia/users_database.yml`
+- Username: See `docker/services/authelia/users_database.yml`
+- Password: See `docker/services/authelia/users_database.yml`
 - 2FA: If enabled, enter TOTP code
 
 **Step 3: Access Services**

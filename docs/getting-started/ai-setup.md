@@ -15,7 +15,7 @@ Minder Platform features zero-configuration AI setup with automatic model downlo
 
 ### Configuration
 
-**Environment Variables** (in `infrastructure/docker/.env`):
+**Environment Variables** (in `docker/compose/.env`):
 
 ```bash
 # Enable automatic model download (default: true)
@@ -96,7 +96,7 @@ curl -X POST http://localhost:8004/api/v1/embeddings \
 
 ### Change Auto-Download Models
 
-Edit `infrastructure/docker/.env`:
+Edit `docker/compose/.env`:
 
 ```bash
 # Download different models
@@ -108,7 +108,7 @@ OLLAMA_AUTOMATIC_PULL=false
 
 Then restart:
 ```bash
-docker compose -f infrastructure/docker/docker-compose.yml restart ollama
+docker compose -f docker/compose/docker-compose.yml restart ollama
 ```
 
 ### Manual Model Management

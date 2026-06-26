@@ -8,7 +8,7 @@ This guide covers deploying Minder Platform to production environments.
 
 ### Environment Variables
 
-- [ ] Review all environment variables in `infrastructure/docker/.env`
+- [ ] Review all environment variables in `docker/compose/.env`
 - [ ] Generate strong, unique passwords (use `openssl rand -base64 32`)
 - [ ] Set `ENVIRONMENT=production`
 - [ ] Configure `JWT_SECRET` (minimum 64 characters)
@@ -42,7 +42,7 @@ This guide covers deploying Minder Platform to production environments.
 
 ```bash
 # Clone repository
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 
 # Run deployment script
@@ -63,10 +63,10 @@ The `deploy.sh` script handles:
 
 ```bash
 # Create environment file
-cp infrastructure/docker/.env.example infrastructure/docker/.env
+cp docker/compose/.env.example docker/compose/.env
 
 # Edit with production values
-nano infrastructure/docker/.env
+nano docker/compose/.env
 ```
 
 Critical variables:
@@ -86,28 +86,28 @@ LOG_LEVEL=INFO
 
 ```bash
 # Start security layer (Traefik + Authelia)
-docker compose -f infrastructure/docker/docker-compose.yml up -d traefik authelia
+docker compose -f docker/compose/docker-compose.yml up -d traefik authelia
 
 # Wait for security layer (10s)
 sleep 10
 
 # Start infrastructure
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres redis qdrant ollama neo4j
+docker compose -f docker/compose/docker-compose.yml up -d postgres redis qdrant ollama neo4j
 
 # Wait for infrastructure (30s)
 sleep 30
 
 # Start core services
-docker compose -f infrastructure/docker/docker-compose.yml up -d api-gateway plugin-registry marketplace plugin-state-manager
+docker compose -f docker/compose/docker-compose.yml up -d api-gateway plugin-registry marketplace plugin-state-manager
 
 # Start AI services
-docker compose -f infrastructure/docker/docker-compose.yml up -d rag-pipeline model-management
+docker compose -f docker/compose/docker-compose.yml up -d rag-pipeline model-management
 
 # Start AI enhancement and monitoring
-docker compose -f infrastructure/docker/docker-compose.yml up -d openwebui tts-service model-fine-tuning prometheus grafana alertmanager telegraf
+docker compose -f docker/compose/docker-compose.yml up -d openwebui tts-service model-fine-tuning prometheus grafana alertmanager telegraf
 
 # Start metrics exporters
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres-exporter redis-exporter
+docker compose -f docker/compose/docker-compose.yml up -d postgres-exporter redis-exporter
 ```
 ```
 
@@ -134,7 +134,7 @@ curl http://localhost:3000/api/health  # Grafana
 
 ### Resource Limits
 
-Edit `infrastructure/docker/docker-compose.yml` to set resource limits:
+Edit `docker/compose/docker-compose.yml` to set resource limits:
 
 ```yaml
 services:
@@ -182,7 +182,7 @@ The Minder platform uses **Traefik v3** as its reverse proxy, which provides:
 
 **Current Traefik Configuration:**
 ```yaml
-# Already configured in infrastructure/docker/docker-compose.yml
+# Already configured in docker/compose/docker-compose.yml
 # Traefik Dashboard: http://localhost:8081
 # SSL: Auto-generated or configure via Traefik
 # Service Discovery: Automatic via Docker labels
@@ -239,7 +239,7 @@ certbot renew --dry-run
 
 Access: http://localhost:9090
 
-Configure targets in `infrastructure/docker/prometheus/prometheus.yml`:
+Configure targets in `docker/services/prometheus/prometheus.yml`:
 ```yaml
 scrape_configs:
   - job_name: 'minder-services'
@@ -255,13 +255,13 @@ Default credentials:
 - Username: `admin`
 - Password: `admin` (change on first login)
 
-Import dashboards from `infrastructure/docker/grafana/dashboards/`
+Import dashboards from `docker/services/grafana/dashboards/`
 
 ### Alertmanager
 
 Access: http://localhost:9093
 
-Configure alerts in `infrastructure/docker/alertmanager/alerts.yml`
+Configure alerts in `docker/services/alertmanager/alertmanager.yml`
 
 ## Backup Strategy
 
@@ -300,10 +300,10 @@ rsync -avz /backups/ user@backup-server:/backups/minder/
 Scale stateless services:
 ```bash
 # Scale API Gateway to 3 instances
-docker compose -f infrastructure/docker/docker-compose.yml up -d --scale api-gateway=3
+docker compose -f docker/compose/docker-compose.yml up -d --scale api-gateway=3
 
 # Scale Plugin Registry
-docker compose -f infrastructure/docker/docker-compose.yml up -d --scale plugin-registry=2
+docker compose -f docker/compose/docker-compose.yml up -d --scale plugin-registry=2
 ```
 
 ### Load Balancing
@@ -341,12 +341,12 @@ backend api_gateway
 git pull origin main
 
 # Rebuild specific service
-docker compose -f infrastructure/docker/docker-compose.yml build api-gateway
+docker compose -f docker/compose/docker-compose.yml build api-gateway
 
 # Rolling update (zero downtime)
-docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps --scale api-gateway=2
-docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps api-gateway
-docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps --scale api-gateway=1
+docker compose -f docker/compose/docker-compose.yml up -d --no-deps --scale api-gateway=2
+docker compose -f docker/compose/docker-compose.yml up -d --no-deps api-gateway
+docker compose -f docker/compose/docker-compose.yml up -d --no-deps --scale api-gateway=1
 ```
 
 ## Troubleshooting
@@ -355,16 +355,16 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d --no-deps --sca
 
 ```bash
 # Check service status
-docker compose -f infrastructure/docker/docker-compose.yml ps
+docker compose -f docker/compose/docker-compose.yml ps
 
 # View logs
 docker logs <service-name> --tail 100
 
 # Restart service
-docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+docker compose -f docker/compose/docker-compose.yml restart <service>
 
 # Reset service
-docker compose -f infrastructure/docker/docker-compose.yml up -d --force-recreate <service>
+docker compose -f docker/compose/docker-compose.yml up -d --force-recreate <service>
 ```
 
 ### Performance Issues
@@ -374,10 +374,10 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d --force-recreat
 docker stats
 
 # Identify bottlenecks
-./scripts/diagnostics.sh
+./scripts/health-check.sh
 
 # Scale services
-docker compose -f infrastructure/docker/docker-compose.yml up -d --scale api-gateway=3
+docker compose -f docker/compose/docker-compose.yml up -d --scale api-gateway=3
 ```
 
 ### Database Issues
@@ -474,16 +474,16 @@ class Settings:
 
 ```bash
 # Clean up unused Docker resources
-./scripts/cleanup.sh
+docker system prune -f
 
 # Update dependencies
 ./scripts/update_libraries.sh
 
 # Restart services
-docker compose -f infrastructure/docker/docker-compose.yml restart
+docker compose -f docker/compose/docker-compose.yml restart
 
-# Backup before updates
-./scripts/backup.sh
+# Backup before updates (see docs/deployment/infrastructure-backup-strategy.md)
+docker exec minder-postgres pg_dump -U minder minder > backup.sql
 ```
 
 ### Log Rotation
@@ -508,7 +508,7 @@ EOF
 
 ```bash
 # Stop services
-docker compose -f infrastructure/docker/docker-compose.yml down
+docker compose -f docker/compose/docker-compose.yml down
 
 # Restore volumes
 docker run --rm -v /backups:/backup -v docker_postgres_data:/data \
@@ -522,21 +522,21 @@ docker run --rm -v /backups:/backup -v docker_postgres_data:/data \
 
 ```bash
 # Full system reset
-docker compose -f infrastructure/docker/docker-compose.yml down -v
+docker compose -f docker/compose/docker-compose.yml down -v
 ./setup.sh
 
 # Partial reset (specific service)
-docker compose -f infrastructure/docker/docker-compose.yml stop <service>
-docker compose -f infrastructure/docker/docker-compose.yml rm -f <service>
-docker compose -f infrastructure/docker/docker-compose.yml up -d <service>
+docker compose -f docker/compose/docker-compose.yml stop <service>
+docker compose -f docker/compose/docker-compose.yml rm -f <service>
+docker compose -f docker/compose/docker-compose.yml up -d <service>
 ```
 
 ## Support
 
 For production issues:
-1. Check logs: `./scripts/logs.sh`
-2. Run diagnostics: `./scripts/diagnostics.sh`
-3. Review troubleshooting guide: `docs/TROUBLESHOOTING.md`
+1. Check logs: `docker compose -f docker/compose/docker-compose.yml logs`
+2. Run health check: `./scripts/health-check.sh`
+3. Review troubleshooting guide: `docs/troubleshooting/TROUBLESHOOTING.md`
 4. Contact support: support@minder-platform.com
 # Minder Platform - Production Deployment Guide
 **Version**: 1.0
@@ -735,9 +735,9 @@ docker exec minder-neo4j neo4j-admin database dump --to-path=/backups/neo4j
 ```bash
 # Backup all configuration files
 tar -czf config_backup_$(date +%Y%m%d).tar.gz \
-  infrastructure/docker/ \
-  infrastructure/docker/traefik/ \
-  infrastructure/docker/authelia/ \
+  docker/compose/ \
+  docker/services/traefik/ \
+  docker/services/authelia/ \
   .env
 ```
 
@@ -958,7 +958,7 @@ ab -n 50000 -c 500 https://api.minder.local/api/v1/rag/query
 git checkout -b deployment/production
 
 # 2. Update configuration
-cp infrastructure/docker/.env.example infrastructure/docker/.env
+cp docker/compose/.env.example docker/compose/.env
 # Edit .env with production values
 
 # 3. Generate secrets

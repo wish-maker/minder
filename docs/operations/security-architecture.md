@@ -336,7 +336,7 @@ tls:
 ./setup.sh doctor --check-passwords
 
 # Update .env file
-nano infrastructure/docker/.env
+nano docker/compose/.env
 
 # Rotate passwords regularly
 ./setup.sh doctor --rotate-passwords
@@ -345,10 +345,10 @@ nano infrastructure/docker/.env
 **Access Control:**
 ```bash
 # Review Authelia users
-cat infrastructure/docker/authelia/users_database.yml
+cat docker/services/authelia/users_database.yml
 
 # Review access rules
-cat infrastructure/docker/authelia/configuration.yml | grep -A 20 "access_control"
+cat docker/services/authelia/configuration.yml | grep -A 20 "access_control"
 
 # Audit logs
 docker logs minder-authelia | grep -i "audit\|access\|denied"

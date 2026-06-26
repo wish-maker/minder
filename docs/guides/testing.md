@@ -33,13 +33,13 @@ pytest --cov=services/shared --cov-report=html
 #### Run Specific Tests
 ```bash
 # Run specific test file
-pytest tests/test_shared_utils_redis.py
+pytest tests/unit/test_module_management.py
 
 # Run specific test class
-pytest tests/test_shared_utils_redis.py::TestCreateRedisClient
+pytest tests/unit/test_module_management.py::TestCreateRedisClient
 
 # Run specific test
-pytest tests/test_shared_utils_redis.py::TestCreateRedisClient::test_create_redis_client_basic
+pytest tests/unit/test_module_management.py::TestCreateRedisClient::test_create_redis_client_basic
 ```
 
 #### Run by Marker
@@ -485,9 +485,8 @@ Before committing code, ensure:
 - [Pydantic Validation](https://pydantic-docs.helpmanual.io/usage/validators/)
 
 ### Internal Resources
-- [Shared Components README](../services/shared/README.md)
-- [API Documentation](./API_DOCUMENTATION.md)
-- [Code Quality Improvements](./CODE_QUALITY_IMPROVEMENTS.md)
+- [Shared Components README](../../src/shared/README.md)
+- [API Documentation](./api.md)
 
 ---
 

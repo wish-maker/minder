@@ -19,7 +19,7 @@ Minder platform supports both local Docker services (development) and external c
 
 **Configuration:**
 ```bash
-# infrastructure/docker/.env
+# docker/compose/.env
 REDIS_HOST=your-redis-cluster.example.com
 REDIS_PORT=6379
 REDIS_PASSWORD=your-secure-password
@@ -44,7 +44,7 @@ REDIS_PASSWORD=your-elasticache-password
 
 **Configuration:**
 ```bash
-# infrastructure/docker/.env
+# docker/compose/.env
 POSTGRES_HOST=your-postgres-db.example.com
 POSTGRES_PORT=5432
 POSTGRES_USER=minder
@@ -74,7 +74,7 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname
 
 **Configuration:**
 ```bash
-# infrastructure/docker/.env
+# docker/compose/.env
 QDRANT_HOST=your-cluster.qdrant.io
 QDRANT_PORT=6333
 QDRANT_API_KEY=your-qdrant-cloud-api-key
@@ -96,7 +96,7 @@ QDRANT_API_KEY=xyz-your-api-key
 All services run in local Docker containers.
 
 ```bash
-cd infrastructure/docker
+cd docker/compose
 docker compose up -d
 ```
 
@@ -111,7 +111,7 @@ Some services local, some external.
 
 **Example: Local Redis + Cloud PostgreSQL**
 ```bash
-# infrastructure/docker/.env
+# docker/compose/.env
 POSTGRES_HOST=aws-rds.amazonaws.com
 POSTGRES_PASSWORD=production-password
 
@@ -120,7 +120,7 @@ REDIS_PORT=6379
 ```
 
 ```bash
-cd infrastructure/docker
+cd docker/compose
 docker compose up -d postgres redis  # Only start local Redis, use external PostgreSQL
 ```
 
@@ -129,14 +129,14 @@ docker compose up -d postgres redis  # Only start local Redis, use external Post
 All services external, no local databases.
 
 ```bash
-# infrastructure/docker/.env
+# docker/compose/.env
 REDIS_HOST=redis-cloud.example.com
 POSTGRES_HOST=rds.amazonaws.com
 QDRANT_HOST=qdrant-cloud.io
 ```
 
 ```bash
-cd infrastructure/docker
+cd docker/compose
 docker compose up -d api-gateway plugin-registry  # Only start microservices
 ```
 
@@ -175,7 +175,7 @@ docker compose --env-file .env.production up -d
 The API Gateway reads connection settings from environment variables:
 
 ```python
-# services/api-gateway/config.py
+# src/services/api-gateway/config.py
 class Settings:
     REDIS_HOST: str = "minder-redis"           # Default: local container
     REDIS_PORT: int = 6379
@@ -187,7 +187,7 @@ class Settings:
 ### Plugin Registry Configuration
 
 ```python
-# services/plugin-registry/config.py
+# src/services/plugin-registry/config.py
 class Settings:
     POSTGRES_HOST: str = "minder-postgres"       # Default: local container
     POSTGRES_PORT: int = 5432
@@ -199,7 +199,7 @@ class Settings:
 ### RAG Pipeline Configuration
 
 ```python
-# services/rag-pipeline/config.py (Phase 2)
+# src/services/rag-pipeline/main.py (Phase 2)
 class Settings:
     QDRANT_HOST: str = "minder-qdrant"         # Default: local container
     QDRANT_PORT: int = 6333
@@ -232,7 +232,7 @@ class Settings:
 1. **Create external PostgreSQL** (e.g., AWS RDS)
 2. **Run init script on external database:**
    ```bash
-   psql -h your-rds.amazonaws.com -U minder -d postgres < infrastructure/docker/postgres-init.sql
+   psql -h your-rds.amazonaws.com -U minder -d postgres < docker/services/postgres/init.sql
    ```
 3. **Update .env file:**
    ```bash

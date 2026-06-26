@@ -32,10 +32,10 @@
 docker logs minder-traefik --tail 50
 
 # Verify environment variables
-cat infrastructure/docker/.env | grep TRAEFIK
+cat docker/compose/.env | grep TRAEFIK
 
 # Restart Traefik
-cd infrastructure/docker
+cd docker/compose
 docker compose restart traefik
 ```
 
@@ -170,7 +170,7 @@ docker logs minder-service-name --tail 100
 # 4. Port conflicts
 
 # Solution: Fix configuration, then recreate
-cd infrastructure/docker
+cd docker/compose
 docker compose stop service-name
 docker compose rm -f service-name
 docker compose up -d service-name
@@ -291,7 +291,7 @@ docker exec minder-redis redis-cli -a YOUR_REDIS_PASSWORD ping
 1. **Authentication Failed:**
    ```bash
    # Check password in .env
-   grep REDIS_PASSWORD infrastructure/docker/.env
+   grep REDIS_PASSWORD docker/compose/.env
 
    # Test with correct password
    docker exec minder-redis redis-cli -a ACTUAL_PASSWORD ping
@@ -333,7 +333,7 @@ curl -X POST http://172.19.0.12:7474/db/neo4j/tx/commit \
 2. **Authentication Issues:**
    ```bash
    # Check password
-   grep NEO4J_AUTH infrastructure/docker/.env
+   grep NEO4J_AUTH docker/compose/.env
 
    # Test connection
    curl -u neo4j:PASSWORD http://172.19.0.12:7474

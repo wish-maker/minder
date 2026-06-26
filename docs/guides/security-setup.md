@@ -33,7 +33,7 @@ The following default credentials are present in the codebase and **MUST be repl
 ### Option 1: Automated Setup (Fastest)
 
 ```bash
-cd infrastructure/docker
+cd docker/compose
 ./setup-security.sh
 ```
 
@@ -46,7 +46,7 @@ This will:
 ### Option 2: Manual Setup
 
 ```bash
-cd infrastructure/docker
+cd docker/compose
 cp .env.example .env
 
 # Edit .env with your secure values
@@ -95,7 +95,7 @@ openssl rand -base64 64 | tr -dc 'a-zA-Z0-9!@#$%^&*' | head -c 64
 
 ## Environment File Structure
 
-Create `.env` file in `infrastructure/docker/`:
+Create `.env` file in `docker/compose/`:
 
 ```bash
 # Minder Platform - Environment Configuration
@@ -146,7 +146,7 @@ After creating `.env`, the `docker-compose.yml` file will automatically use thes
 ### 1. Check .env File Exists
 
 ```bash
-cd infrastructure/docker
+cd docker/compose
 test -f .env && echo "✅ .env exists" || echo "❌ .env missing"
 ```
 
@@ -213,7 +213,7 @@ stringData:
 ### Environment-Specific Files
 
 ```
-infrastructure/docker/
+docker/compose/
 ├── .env.example        # Template (committed to git)
 ├── .env.development    # Dev environment (not committed)
 ├── .env.staging        # Staging environment (not committed)
@@ -233,7 +233,7 @@ docker compose --env-file .env.production up -d
 
 1. **Generate new credentials**
    ```bash
-   cd infrastructure/docker
+   cd docker/compose
    ./setup-security.sh
    ```
 

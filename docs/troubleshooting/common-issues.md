@@ -16,7 +16,7 @@
 #### Problem: Service immediately exits
 ```bash
 # Check logs
-docker compose -f infrastructure/docker/docker-compose.yml logs <service>
+docker compose -f docker/compose/docker-compose.yml logs <service>
 
 # Common causes:
 # 1. Port already in use
@@ -44,8 +44,8 @@ kill -9 <PID>
 docker exec -it minder-postgres psql -U minder -c "SELECT 1"
 
 # Reset database
-docker compose -f infrastructure/docker/docker-compose.yml down -v
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
+docker compose -f docker/compose/docker-compose.yml down -v
+docker compose -f docker/compose/docker-compose.yml up -d postgres
 ```
 
 #### Problem: Database migration failed
@@ -83,7 +83,7 @@ docker network rm docker_minder-network
 docker network create docker_minder-network
 
 # Restart services
-docker compose -f infrastructure/docker/docker-compose.yml up -d
+docker compose -f docker/compose/docker-compose.yml up -d
 ```
 
 ### Plugin Issues
@@ -128,7 +128,7 @@ docker logs minder-redis | grep masterauth
 **If issue persists:**
 ```bash
 # Restart Redis service
-docker compose -f infrastructure/docker/docker-compose.yml restart redis
+docker compose -f docker/compose/docker-compose.yml restart redis
 
 # Check logs
 docker logs minder-redis
@@ -209,7 +209,7 @@ docker exec minder-postgres psql -U minder -c "SELECT count(*) FROM pg_stat_acti
 ### Collect Diagnostic Information
 ```bash
 # Save diagnostics
-./scripts/diagnostics.sh > diagnostics.txt
+./scripts/health-check.sh > diagnostics.txt
 
 # Include in issue report
 ```
@@ -224,20 +224,20 @@ docker ps
 docker stats
 
 # Logs
-docker compose -f infrastructure/docker/docker-compose.yml logs
+docker compose -f docker/compose/docker-compose.yml logs
 
 # Health check
 ./scripts/health-check.sh
 
 # Restart service
-docker compose -f infrastructure/docker/docker-compose.yml restart <service>
+docker compose -f docker/compose/docker-compose.yml restart <service>
 ```
 
 ### Emergency Reset
 
 ```bash
 # Full reset (WARNING: Deletes all data)
-docker compose -f infrastructure/docker/docker-compose.yml down -v
+docker compose -f docker/compose/docker-compose.yml down -v
 docker system prune -a
 ./setup.sh
 ```

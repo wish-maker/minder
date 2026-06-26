@@ -123,7 +123,7 @@ NEO4J_AUTH=neo4j/strong_password
 
 ### Prometheus
 - **URL:** http://localhost:9090
-- **What it monitors:** All 32 services
+- **What it monitors:** All 31 services
 - **Scrape interval:** 15 seconds
 
 ### Grafana

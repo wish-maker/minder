@@ -19,7 +19,7 @@ The Minder Platform includes a comprehensive monitoring stack:
 ### 1. Start Monitoring Stack
 
 ```bash
-cd /root/minder/infrastructure/docker
+cd /root/minder/docker/compose
 docker compose up -d prometheus grafana telegraf postgres-exporter redis-exporter
 ```
 
@@ -88,7 +88,7 @@ curl http://localhost:9090/api/v1/targets
 ### Default Configuration
 
 ```yaml
-# infrastructure/docker/prometheus.yml
+# docker/services/prometheus/prometheus.yml
 
 global:
   scrape_interval: 15s
@@ -209,7 +209,7 @@ data_collection_duration = Histogram(
 ### Create Alert Rules
 
 ```yaml
-# infrastructure/docker/alerts.yml
+# docker/services/prometheus/alerts.yml
 
 groups:
   - name: minder_alerts
@@ -246,7 +246,7 @@ groups:
 ### Configure Alertmanager
 
 ```yaml
-# infrastructure/docker/alertmanager.yml
+# docker/services/alertmanager/alertmanager.yml
 
 global:
   resolve_timeout: 5m
@@ -304,7 +304,7 @@ receivers:
 
 ```bash
 #!/bin/bash
-# scripts/monitoring/health_check.sh
+# health_check.sh
 
 SERVICES=(
     "minder-api-gateway:8000/health"
@@ -330,7 +330,7 @@ done
 
 ```bash
 #!/bin/bash
-# scripts/monitoring/collect_metrics.sh
+# collect_metrics.sh
 
 # Collect Prometheus metrics
 curl -s http://localhost:9090/api/v1/query?query=up | jq '.'
@@ -346,8 +346,8 @@ docker exec minder-postgres psql -U minder -d minder -c "SELECT count(*) FROM pl
 
 ## 📚 Related Documentation
 
-- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Complete deployment guide
-- **[API Reference](../api/README.md)** - API documentation
+- **[Deployment Guide](production.md)** - Complete deployment guide
+- **[API Reference](../api/reference.md)** - API documentation
 - **[Common Issues](../troubleshooting/common-issues.md)** - Troubleshooting
 
 ---

@@ -154,7 +154,7 @@ pytest --cov=src --cov-report=html
 
 ```bash
 # Clone repository
-git clone https://github.com/wish-maker/minder.git
+git clone git@github.com:wish-maker/minder.git
 cd minder
 
 # Create virtual environment
@@ -213,16 +213,16 @@ Add endpoint to filter plugins by name, category, and status.
 
 ```
 minder/
-├── src/                  # Source code
-│   ├── core/           # Core framework
-│   ├── plugins/        # Plugin implementations
-│   ├── shared/         # Shared utilities
-│   └── services/       # Service interfaces
-├── services/           # Microservices
-├── tests/              # Test suite
-├── docs/              # Documentation
-├── infrastructure/     # Docker & deployment
-└── scripts/            # Utility scripts
+├── src/                  # Application source
+│   ├── core/             # Core framework
+│   ├── services/         # Microservices
+│   ├── plugins/          # Plugin implementations
+│   ├── config/           # Configuration modules
+│   └── shared/           # Shared utilities
+├── docker/               # Docker configuration (compose, services, templates)
+├── tests/                # Test suite
+├── docs/                 # Documentation
+└── scripts/              # Setup & utility scripts
 ```
 
 ## 🎯 Development Priorities

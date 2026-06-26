@@ -116,11 +116,11 @@ docker exec minder-postgres psql -U minder -d minder -c "SELECT * FROM audit_log
 # 4. Reset all credentials
 # Regenerate database passwords
 NEW_PASS=$(openssl rand -hex 32)
-sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_PASS/" infrastructure/docker/.env
+sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_PASS/" docker/compose/.env
 
 # Regenerate JWT secret
 NEW_SECRET=$(openssl rand -hex 32)
-sed -i "s/JWT_SECRET=.*/JWT_SECRET=$NEW_SECRET/" infrastructure/docker/.env
+sed -i "s/JWT_SECRET=.*/JWT_SECRET=$NEW_SECRET/" docker/compose/.env
 
 # 5. Update all containers with new credentials
 docker compose down
@@ -261,8 +261,8 @@ docker compose down
 
 # 2. Backup current state (for recovery if needed)
 tar czf rollback_backup_$(date +%Y%m%d_%H%M%S).tar.gz \
-  infrastructure/docker/.env \
-  infrastructure/docker/*.yml \
+  docker/compose/.env \
+  docker/compose/*.yml \
   /var/lib/docker/volumes/
 
 # 3. Checkout previous version

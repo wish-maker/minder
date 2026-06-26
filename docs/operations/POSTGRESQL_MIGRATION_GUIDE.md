@@ -104,7 +104,7 @@ fi
 
 # Update docker-compose.yml to use PostgreSQL 17
 echo "Updating docker-compose.yml..."
-sed -i 's/postgres:16/postgres:17.2/g' infrastructure/docker/docker-compose.yml
+sed -i 's/postgres:16/postgres:17.2/g' docker/compose/docker-compose.yml
 
 # Remove old volume (WARNING: Irreversible!)
 echo "Removing old PostgreSQL 16 volume..."
@@ -112,7 +112,7 @@ docker volume rm docker_postgres_data
 
 # Start PostgreSQL 17
 echo "Starting PostgreSQL 17..."
-docker compose -f infrastructure/docker/docker-compose.yml up -d postgres
+docker compose -f docker/compose/docker-compose.yml up -d postgres
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL 17 to start..."
@@ -186,7 +186,7 @@ echo "=== Rolling Back to PostgreSQL 16 ==="
 ./setup.sh stop
 
 # Restore docker-compose.yml
-git checkout infrastructure/docker/docker-compose.yml
+git checkout docker/compose/docker-compose.yml
 
 # Remove PostgreSQL 17 volume
 docker volume rm docker_postgres_data

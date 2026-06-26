@@ -556,7 +556,7 @@ class ExampleModule(BaseModule):
 ### Test Structure
 
 ```python
-# tests/plugins/test_weather.py
+# test_weather.py
 import pytest
 from datetime import datetime
 from src.plugins.weather.plugin import WeatherModule
@@ -745,9 +745,9 @@ git commit --no-verify
 - [MyPy](http://mypy-lang.org/)
 
 **Internal Documentation:**
-- [Plugin Development Guide](PLUGIN_DEVELOPMENT.md)
-- [Architecture Documentation](architecture.md)
-- [API Documentation](docs/api/README.md)
+- [Plugin Development Guide](plugin-development.md)
+- [Architecture Documentation](../architecture/overview.md)
+- [API Documentation](../api/reference.md)
 
 ---
 

@@ -46,7 +46,7 @@ Minder Platform provides a local AI orchestration platform with 7 core services 
 - Rate limiting
 - Forward auth integration
 
-**Configuration**: `infrastructure/docker/traefik/`
+**Configuration**: `docker/services/traefik/`
 
 **Health Check**: `http://localhost:8081/ping`
 
@@ -63,7 +63,7 @@ Minder Platform provides a local AI orchestration platform with 7 core services 
 
 **Storage**: PostgreSQL (`minder_authelia`)
 
-**Configuration**: `infrastructure/docker/authelia/`
+**Configuration**: `docker/services/authelia/`
 
 **Health Check**: `http://localhost:9091/api/health`
 
@@ -344,8 +344,8 @@ docker compose up -d --scale api-gateway=3
 
 ### Environment Variables
 All services use environment variables for configuration:
-- Located in `infrastructure/docker/.env`
-- Template in `infrastructure/docker/.env.example`
+- Located in `docker/compose/.env`
+- Template in `docker/compose/.env.example`
 - Never commit `.env` to git
 
 ### Health Checks

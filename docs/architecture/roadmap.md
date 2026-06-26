@@ -1,6 +1,6 @@
 # Minder Platform - Development Roadmap
 
-> **Last Updated:** 2026-05-02
+> **Last Updated:** 2026-06-26
 > **Current Status:** Phase 1 Complete ✅ | Phase 2 Complete ✅ | Phase 3 Complete ✅ | Microservices Analysis Complete ✅ | Security Layer Complete ✅ | AI Auto-Setup Complete ✅
 > **Production Readiness:** 100%
 > **Repository:** /root/minder
@@ -18,7 +18,7 @@ Minder is a modular RAG (Retrieval-Augmented Generation) platform with microserv
 
 **Latest Achievements (May 2, 2026):**
 - ✅ **SECURITY LAYER:** Traefik reverse proxy + Authelia SSO/2FA fully integrated
-- ✅ **SERVICE EXPANSION:** 32 services running (29 healthy, 3 no-healthcheck, 0 unhealthy)
+- ✅ **SERVICE EXPANSION:** 31 services running (29 healthy, 3 no-healthcheck, 0 unhealthy)
 - ✅ **MESSAGE QUEUE:** RabbitMQ 3.13-management integrated for async messaging
 - ✅ **TEST COVERAGE:** 115 tests passing with 98% coverage
 - ✅ **AI AUTO-SETUP:** Automatic AI model downloads (llama3.2 + nomic-embed-text)
@@ -47,9 +47,9 @@ Minder is a modular RAG (Retrieval-Augmented Generation) platform with microserv
 - Network configuration (minder-network bridge, 172.28.0.0/16)
 
 **Files:**
-- `infrastructure/docker/docker-compose.yml`
-- `infrastructure/docker/.env`
-- `infrastructure/docker/postgres-init.sql`
+- `docker/compose/docker-compose.yml`
+- `docker/compose/.env`
+- `docker/services/postgres/init.sql`
 
 **Verification:**
 ```bash
@@ -74,10 +74,10 @@ docker ps | grep minder
 - All other paths proxy to appropriate services
 
 **Files:**
-- `services/api-gateway/main.py`
-- `services/api-gateway/config.py`
-- `services/api-gateway/requirements.txt`
-- `services/api-gateway/Dockerfile`
+- `src/services/api-gateway/main.py`
+- `src/services/api-gateway/config.py`
+- `src/services/api-gateway/requirements.txt`
+- `src/services/api-gateway/Dockerfile`
 
 **Verification:**
 ```bash
@@ -109,10 +109,10 @@ curl http://localhost:8000/v1/plugins | jq '.count'
 - `POST /v1/services/register` - Register service for discovery
 
 **Files:**
-- `services/plugin-registry/main.py`
-- `services/plugin-registry/config.py`
-- `services/plugin-registry/requirements.txt`
-- `services/plugin-registry/Dockerfile`
+- `src/services/plugin-registry/main.py`
+- `src/services/plugin-registry/config.py`
+- `src/services/plugin-registry/requirements.txt`
+- `src/services/plugin-registry/Dockerfile`
 
 **Plugin Loading Mechanism:**
 1. Scans `/app/plugins` directory
@@ -132,11 +132,6 @@ curl http://localhost:8001/v1/plugins | jq '.plugins[] | .name'
 - All other methods optional with base implementations
 - `ModuleMetadata` and `ModuleStatus` classes
 - Backward compatibility layer (v1 re-exports v2)
-
-**Files:**
-- `src/core/module_interface_v2.py` (285 lines)
-- `src/core/module_interface.py` (compatibility layer)
-- `src/core/__init__.py` (makes src a package)
 
 **Key Changes from v1:**
 - Only `register()` method required (vs 10+ methods in v1)
@@ -225,22 +220,18 @@ cd /root/minder && bash tests/integration/test_phase1_infrastructure.sh
 - **PostgreSQL:** AWS RDS, Heroku Postgres, Neon, Supabase, Google Cloud SQL, Railway
 - **Qdrant:** Qdrant Cloud, self-hosted clusters
 
-**Configuration Files:**
-- `infrastructure/config/services.conf` - Configuration template with examples
-- `infrastructure/docker/docker-compose.external.yml` - Docker Compose override
-- `infrastructure/EXTERNAL_SERVICES_GUIDE.md` - Complete usage guide
+**Configuration:**
+- `docker/compose/.env` - Set external service endpoints via environment variables (see `docker/compose/.env.example` for the full list)
+- `docs/EXTERNAL_SERVICES_GUIDE.md` - Complete usage guide
 
 **Usage:**
 ```bash
-# 1. Edit services.conf with external service endpoints
-vim infrastructure/config/services.conf
-
-# 2. Override environment variables
+# 1. Set external service endpoints in docker/compose/.env (or export them)
 export REDIS_HOST=your-redis-cluster.example.com
 export POSTGRES_HOST=your-postgres-db.example.com
 export QDRANT_HOST=your-cluster.qdrant.io
 
-# 3. Restart affected services
+# 2. Restart affected services
 docker compose restart api-gateway plugin-registry
 ```
 
@@ -278,10 +269,9 @@ docker exec minder-api-gateway python /tmp/test_config.py
 - `GET /v1/documents/search` - Semantic search (placeholder)
 
 **Files:**
-- `services/rag-pipeline/main.py`
-- `services/rag-pipeline/config.py`
-- `services/rag-pipeline/requirements.txt`
-- `services/rag-pipeline/Dockerfile`
+- `src/services/rag-pipeline/main.py`
+- `src/services/rag-pipeline/requirements.txt`
+- `src/services/rag-pipeline/Dockerfile`
 
 #### 2.2 Model Management Service (Port 8005) ✅
 - Model registry and versioning
@@ -299,10 +289,9 @@ docker exec minder-api-gateway python /tmp/test_config.py
 - `GET /v1/constraints` - List model constraints
 
 **Files:**
-- `services/model-management-service/main.py`
-- `services/model-management-service/config.py`
-- `services/model-management-service/requirements.txt`
-- `services/model-management-service/Dockerfile`
+- `src/services/model-management/main.py`
+- `src/services/model-management/requirements.txt`
+- `src/services/model-management/Dockerfile`
 
 #### 2.3 Qdrant Integration ✅
 - Collection creation and management verified
@@ -355,10 +344,10 @@ curl http://localhost:6333/health
 - Model Management: Models registered, fine-tuning jobs
 
 **Files:**
-- `infrastructure/docker/prometheus/prometheus.yml`
-- `infrastructure/docker/grafana/datasources/prometheus.yml`
-- `infrastructure/docker/grafana/dashboards/minder-overview.json`
-- `infrastructure/docker/docker-compose.yml` (monitoring profile)
+- `docker/services/prometheus/prometheus.yml`
+- `docker/services/grafana/datasources/prometheus.yml`
+- `docker/services/grafana/dashboards/minder-overview.json`
+- `docker/compose/docker-compose.yml` (monitoring profile)
 
 **Grafana Dashboard:**
 - Minder Overview dashboard with 7 panels
@@ -389,9 +378,8 @@ curl http://localhost:8005/metrics | grep models_registered_total
 - Plugin development guide with v2 interface examples, best practices, API reference
 
 **Files:**
-- `docs/DEPLOYMENT.md` - Comprehensive deployment guide (795 lines)
-- `docs/PLUGIN_DEVELOPMENT.md` - Complete plugin development tutorial (470+ lines)
-- `docs/CURRENT_STATUS.md` - Updated to reflect Phase 3 completion
+- `docs/deployment/production.md` - Comprehensive deployment guide
+- `docs/development/plugin-development.md` - Complete plugin development tutorial
 
 **Deployment Guide Covers:**
 - Prerequisites and system requirements
@@ -462,8 +450,6 @@ curl http://localhost:8005/metrics | grep models_registered_total
 - Ingress configuration
 - HPA (Horizontal Pod Autoscaling)
 
-**Implementation Plan:** See `docs/superpowers/plans/2026-04-21-phase4-production-readiness.md`
-
 ---
 
 ## Current System Status
@@ -486,7 +472,7 @@ curl http://localhost:8005/metrics | grep models_registered_total
 
 *API Gateway shows "degraded" because some Phase 2 services not started (expected)
 
-**Total Services:** 32 services running (29 healthy, 3 no-healthcheck, 91% health rate)
+**Total Services:** 31 services running (29 healthy, 3 no-healthcheck, 91% health rate)
 **Monitoring:** Prometheus scraping all targets with comprehensive dashboards
 **Dashboards:** Grafana Minder Overview dashboard operational + enhanced dashboards
 
@@ -625,21 +611,17 @@ Phase 1-3 are complete. The platform is fully functional with monitoring and doc
 
 ## References
 
-**Design Documents:**
-- `docs/IMPLEMENTATION_ANALYSIS.md` - 4-phase analysis
-- `docs/superpowers/specs/2026-04-21-minder-production-rag-platform-design.md` - Complete specification
-- `docs/superpowers/plans/` - Detailed implementation plans
+**Architecture & Design:**
+- `docs/architecture/overview.md` - System architecture overview
+- `docs/architecture/microservices.md` - Microservices breakdown
 
 **External Services:**
-- `infrastructure/EXTERNAL_SERVICES_GUIDE.md` - External services usage guide
-- `infrastructure/config/services.conf` - Configuration template
+- `docs/EXTERNAL_SERVICES_GUIDE.md` - External services usage guide
+- `docker/compose/.env.example` - Environment variable template (external service endpoints)
 
 **Testing:**
 - `tests/integration/test_phase1_infrastructure.sh` - Phase 1 test suite
 - `tests/integration/test_external_config.sh` - External config test
-
-**Issue Tracking:**
-- `docs/ISSUES.md` - Known issues and solutions
 
 ---
 
@@ -649,5 +631,5 @@ Phase 1-3 are complete. The platform is fully functional with monitoring and doc
 **Documentation:** docs/
 **Tests:** tests/integration/
 
-**Last Update:** 2026-04-22
+**Last Update:** 2026-06-26
 **Status:** ✅ Phase 1 Complete | ✅ Phase 2 Complete | ✅ Phase 3 Complete

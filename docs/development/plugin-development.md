@@ -502,7 +502,7 @@ def test_plugin_execute():
 
 ### Integration Tests
 
-**tests/integration/test_plugin_loading.sh:**
+Create an integration test script such as `test_plugin_loading.sh`:
 
 ```bash
 #!/bin/bash
@@ -533,7 +533,7 @@ fi
 pytest tests/unit/test_my_plugin.py
 
 # Integration tests
-bash tests/integration/test_plugin_loading.sh
+bash test_plugin_loading.sh
 ```
 
 ---
