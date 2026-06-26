@@ -117,8 +117,8 @@ declare -A SERVICE_PORTS=(
 readonly -a THIRD_PARTY_IMAGE_SPECS=(
     # image_ref                                              | stable_tag | constraint
     "postgres:18.4-trixie|18|none"
-    "redis:8-alpine|8|none"
-    "rabbitmq:4-management|4|none"
+    "redis:8.8.0-alpine|8|none"
+    "rabbitmq:4.3.2-management|4|none"
     "qdrant/qdrant:v1.18.2|v1|none"
     "neo4j:2026.05.0-community|2026|none"
     "ollama/ollama:0.30.10|0|none"

@@ -9,7 +9,6 @@ on:
 permissions:
   contents: write
   issues: write
-  pull-requests: write
 
 jobs:
   check-updates:
@@ -20,7 +19,9 @@ jobs:
       updates-available: ${{ steps.check.outputs.updates-available }}
       safe-updates-available: ${{ steps.check.outputs.safe-updates-available }}
       risky-updates-available: ${{ steps.check.outputs.risky-updates-available }}
-      services: ${{ steps.check.outputs.services }}
+      up-to-date: ${{ steps.check.outputs.up-to-date }}
+      manual-check-needed: ${{ steps.check.outputs.manual-check-needed }}
+      excluded-local: ${{ steps.check.outputs.excluded-local }}
 
     steps:
       - name: Checkout code
@@ -42,6 +43,7 @@ jobs:
           import re
           import os
           from typing import Dict, List, Tuple, Optional
+          from datetime import datetime
 
           # ============================================================================
           # TAG PARSING
@@ -50,6 +52,11 @@ jobs:
           def parse_tag(tag: str) -> Tuple[str, str]:
               """Parse tag into (version, suffix)"""
               tag = tag.lstrip('v')
+
+              # Handle apicurio X.Y.Z.Final format
+              if tag.endswith('.Final'):
+                  return tag[:-6], '.Final'
+
               match = re.match(r'^([0-9]+(?:\.[0-9]+)*)-(.+)$', tag)
               if match:
                   return match.group(1), '-' + match.group(2)
@@ -164,6 +171,45 @@ jobs:
               highest_version, latest_tag = versions[0]
               return latest_tag, "found"
 
+          def get_latest_minio_release(current_tag: str, all_tags: List[str]) -> Optional[Tuple[str, str]]:
+              """Find latest RELEASE.* base date for minio (variants like -cpuv1 are NOT updates)"""
+              import re
+              release_tags = [tag for tag in all_tags if tag.startswith('RELEASE.')]
+              if not release_tags:
+                  return None, "no RELEASE tags found"
+
+              # Extract base dates (RELEASE.YYYY-MM-DDTHH-MM-SSZ) ignoring variant suffixes
+              base_dates = {}
+              for tag in release_tags:
+                  match = re.match(r'(RELEASE\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z)', tag)
+                  if match:
+                      base = match.group(1)
+                      if base not in base_dates:
+                          base_dates[base] = tag
+                      # Prefer non-variant tags (base tag without -cpuv1 etc)
+                      if tag == base:
+                          base_dates[base] = tag
+
+              if not base_dates:
+                  return None, "no valid RELEASE base dates found"
+
+              # Find latest base date
+              latest_base = max(base_dates.keys())
+              latest_tag = base_dates[latest_base]
+
+              # Extract current base date
+              current_match = re.match(r'(RELEASE\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z)', current_tag)
+              if not current_match:
+                  return None, "invalid current tag format"
+
+              current_base = current_match.group(1)
+
+              # If current base is latest, return current tag (not a variant)
+              if current_base == latest_base:
+                  return current_tag, "up to date"
+              else:
+                  return latest_tag, f"update available (base: {latest_base})"
+
           # ============================================================================
           # REGISTRY DETECTION
           # ============================================================================
@@ -196,6 +242,9 @@ jobs:
               updates = {}
               safe_updates = {}
               risky_updates = {}
+              up_to_date = {}
+              manual_check = {}
+              excluded_local = {}
 
               for service_name, service_config in compose['services'].items():
                   if 'image' not in service_config:
@@ -203,29 +252,84 @@ jobs:
 
                   image = service_config['image']
 
-                  # Skip local builds
+                  # Skip local builds (minder/* images)
                   if 'build' in service_config:
+                      excluded_local[service_name] = {
+                          'image': image,
+                          'note': 'Local build — excluded from auto-update checks'
+                      }
                       continue
 
                   registry = get_registry(image)
+
+                  # Handle latest-tagged images
+                  if ':' not in image or image.endswith(':latest'):
+                      if ':' not in image:
+                          current_tag = 'latest'
+                          image_name = image
+                      else:
+                          image_name, current_tag = image.rsplit(':', 1)
+
+                      manual_check[service_name] = {
+                          'image': image_name,
+                          'current': current_tag,
+                          'latest': 'latest',
+                          'registry': registry,
+                          'note': 'Uses :latest tag — manual verification required'
+                      }
+                      continue
+
+                  image_name, current_tag = image.rsplit(':', 1)
+
+                  # Special handling for minio RELEASE.* tags
+                  if image_name == 'minio/minio' and current_tag.startswith('RELEASE.'):
+                      try:
+                          repo = normalize_repo(image_name)
+                          all_tags = fetch_all_tags(repo)
+                          latest_release, reason = get_latest_minio_release(current_tag, all_tags)
+
+                          if latest_release and latest_release != current_tag:
+                              updates[service_name] = {
+                                  'image': image_name,
+                                  'current': current_tag,
+                                  'latest': latest_release,
+                                  'registry': registry,
+                                  'classification': 'patch'  # Date bumps are safe-ish
+                              }
+                              safe_updates[service_name] = updates[service_name]
+                          elif latest_release == current_tag:
+                              up_to_date[service_name] = {
+                                  'image': image_name,
+                                  'current': current_tag,
+                                  'registry': registry
+                              }
+                      except Exception as e:
+                          print(f"    [X] {service_name}: Error - {e}")
+                      continue
+
+                  # Skip non-Docker Hub registries (GHCR, GCR)
                   if registry != 'DOCKER_HUB':
+                      manual_check[service_name] = {
+                          'image': image_name,
+                          'current': current_tag,
+                          'registry': registry,
+                          'note': f'{registry} registry — manual verification required'
+                      }
                       continue
 
-                  if ':' not in image:
-                      current_tag = 'latest'
-                      image_name = image
-                  else:
-                      image_name, current_tag = image.rsplit(':', 1)
-
-                  if current_tag == 'latest':
-                      continue
-
+                  # Standard semver check
                   try:
                       repo = normalize_repo(image_name)
                       all_tags = fetch_all_tags(repo)
                       latest_tag, reason = get_latest_in_track(current_tag, all_tags)
 
                       if latest_tag is None:
+                          manual_check[service_name] = {
+                              'image': image_name,
+                              'current': current_tag,
+                              'registry': registry,
+                              'note': f'Could not determine latest: {reason}'
+                          }
                           continue
 
                       if latest_tag != current_tag:
@@ -246,58 +350,54 @@ jobs:
                               safe_updates[service_name] = update_info
                           elif classification in ['major', 'scheme-change']:
                               risky_updates[service_name] = update_info
+                      else:
+                          up_to_date[service_name] = {
+                              'image': image_name,
+                              'current': current_tag,
+                              'registry': registry
+                          }
 
                   except Exception as e:
                       print(f"    [X] {service_name}: Error - {e}")
                       continue
 
-              return updates, safe_updates, risky_updates
+              return updates, safe_updates, risky_updates, up_to_date, manual_check, excluded_local
 
           # ============================================================================
           # EXECUTE
           # ============================================================================
 
-          updates, safe_updates, risky_updates = check_updates_from_compose()
+          updates, safe_updates, risky_updates, up_to_date, manual_check, excluded_local = check_updates_from_compose()
 
           import json
 
-          # Save full updates
+          # Save all reports
           with open('updates.json', 'w') as f:
               json.dump(updates, f, indent=2)
-
-          # Save safe updates (for PR)
           with open('safe-updates.json', 'w') as f:
               json.dump(safe_updates, f, indent=2)
-
-          # Save risky updates (for issue only)
           with open('risky-updates.json', 'w') as f:
               json.dump(risky_updates, f, indent=2)
+          with open('up-to-date.json', 'w') as f:
+              json.dump(up_to_date, f, indent=2)
+          with open('manual-check.json', 'w') as f:
+              json.dump(manual_check, f, indent=2)
+          with open('excluded-local.json', 'w') as f:
+              json.dump(excluded_local, f, indent=2)
 
           # Write outputs to GITHUB_OUTPUT
           output_file = os.environ.get('GITHUB_OUTPUT', '/dev/stdout')
 
-          if updates:
+          def write_flag(flag, value):
               with open(output_file, 'a') as f:
-                  f.write("services=" + json.dumps(updates) + "\n")
-                  f.write("updates-available=true\n")
-          else:
-              with open(output_file, 'a') as f:
-                  f.write("services={}\n")
-                  f.write("updates-available=false\n")
+                  f.write(f"{flag}={str(value).lower()}\n")
 
-          if safe_updates:
-              with open(output_file, 'a') as f:
-                  f.write("safe-updates-available=true\n")
-          else:
-              with open(output_file, 'a') as f:
-                  f.write("safe-updates-available=false\n")
-
-          if risky_updates:
-              with open(output_file, 'a') as f:
-                  f.write("risky-updates-available=true\n")
-          else:
-              with open(output_file, 'a') as f:
-                  f.write("risky-updates-available=false\n")
+          write_flag('updates-available', bool(updates))
+          write_flag('safe-updates-available', bool(safe_updates))
+          write_flag('risky-updates-available', bool(risky_updates))
+          write_flag('up-to-date', bool(up_to_date))
+          write_flag('manual-check-needed', bool(manual_check))
+          write_flag('excluded-local', bool(excluded_local))
           EOF
 
       - name: Upload updates reports
@@ -308,64 +408,137 @@ jobs:
             updates.json
             safe-updates.json
             risky-updates.json
+            up-to-date.json
+            manual-check.json
+            excluded-local.json
           retention-days: 7
 
-      - name: Create issue if updates available
-        if: steps.check.outputs.updates-available == 'true'
+      - name: Create issue with full report
+        if: steps.check.outputs.updates-available == 'true' || steps.check.outputs.manual-check-needed == 'true' || steps.check.outputs.up-to-date == 'true'
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const updates = JSON.parse(fs.readFileSync('updates.json', 'utf8'));
             const safeUpdates = JSON.parse(fs.readFileSync('safe-updates.json', 'utf8'));
             const riskyUpdates = JSON.parse(fs.readFileSync('risky-updates.json', 'utf8'));
+            const upToDate = JSON.parse(fs.readFileSync('up-to-date.json', 'utf8'));
+            const manualCheck = JSON.parse(fs.readFileSync('manual-check.json', 'utf8'));
+            const excludedLocal = JSON.parse(fs.readFileSync('excluded-local.json', 'utf8'));
 
-            let body = '## Docker Image Updates Available\n\n';
-            body += '*Checked on ' + new Date().toISOString().split('T')[0] + '*\n\n';
+            const today = new Date().toISOString().split('T')[0];
+            let body = `# Docker Image Updates Report\n\n`;
+            body += `*Checked on ${today}*  \n`;
+            body += `*This report covers ALL 3rd-party images in docker-compose.yml*\n\n`;
 
-            // Safe updates (patch/minor)
+            // Section 1: Safe Updates (Patch/Minor)
             if (Object.keys(safeUpdates).length > 0) {
-              body += '### Safe to Update (Patch/Minor)\n\n';
-              body += 'These updates are backwards-compatible and safe to merge after CI passes:\n\n';
+              body += `## ✅ Updates Available (Safe: Patch/Minor)\n\n`;
+              body += `These updates are backwards-compatible and safe to apply:\n\n`;
 
               for (const [service, info] of Object.entries(safeUpdates)) {
                 const classification = info.classification.toUpperCase();
-                body += '- **' + service + '**: `' + info.current + '` → `' + info.latest + '` [' + classification + ']\n';
+                body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [${classification}]\n`;
               }
-
-              body += '\n';
+              body += `\n`;
             }
 
-            // Risky updates (major/scheme-change)
+            // Section 2: Risky Updates (Major/Scheme-Change)
             if (Object.keys(riskyUpdates).length > 0) {
-              body += '### Review Carefully (Major/Scheme-Change)\n\n';
-              body += 'These updates have major version jumps or versioning scheme changes.\n';
-              body += '**Breaking changes are likely. Review changelogs before applying.**\n\n';
+              body += `## ⚠️ Updates Available (Risky: Major/Scheme-Change)\n\n`;
+              body += `These updates have major version jumps or versioning scheme changes.\n`;
+              body += `**Breaking changes are likely. Review changelogs before applying.**\n\n`;
 
               for (const [service, info] of Object.entries(riskyUpdates)) {
                 const classification = info.classification.toUpperCase();
                 if (classification === 'SCHEME-CHANGE') {
-                  body += '- **' + service + '**: `' + info.current + '` → `' + info.latest + '` [ALERT: ' + classification + ']\n';
+                  body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [🚨 ${classification}]\n`;
                 } else {
-                  body += '- **' + service + '**: `' + info.current + '` → `' + info.latest + '` [' + classification + ']\n';
+                  body += `- **${service}**: \`${info.current}\` → \`${info.latest}\` [${classification}]\n`;
                 }
               }
-
-              body += '\n';
+              body += `\n`;
             }
 
-            body += '---\n\n';
-            body += '## Next Steps\n\n';
+            // Section 3: Up to Date
+            if (Object.keys(upToDate).length > 0) {
+              body += `## ✅ Up to Date\n\n`;
+              body += `These images are confirmed current (no newer version in track):\n\n`;
 
-            if (Object.keys(safeUpdates).length > 0) {
-              body += '- Safe updates will be auto-applied via PR (check below)\n';
+              for (const [service, info] of Object.entries(upToDate)) {
+                body += `- **${service}**: \`${info.image}:${info.current}\`\n`;
+              }
+              body += `\n`;
             }
 
-            if (Object.keys(riskyUpdates).length > 0) {
-              body += '- Risky updates require manual review and update\n';
+            // Section 4: Manual Check Needed
+            if (Object.keys(manualCheck).length > 0) {
+              body += `## 🔍 Manual Check Needed\n\n`;
+              body += `These images require manual verification (engine cannot auto-detect):\n\n`;
+
+              for (const [service, info] of Object.entries(manualCheck)) {
+                body += `### ${service}\n\n`;
+                body += `- **Image**: \`${info.image}:${info.current}\`\n`;
+                body += `- **Registry**: ${info.registry}\n`;
+                body += `- **Reason**: ${info.note}\n`;
+
+                // Add specific guidance based on image type
+                if (info.image.includes('minio')) {
+                  body += `- **How to check**: Latest RELEASE.* tag on [Docker Hub](https://hub.docker.com/r/minio/minio/tags)\n`;
+                } else if (info.registry === 'GHCR') {
+                  body += `- **How to check**: [GitHub Container Registry](https://github.com/orgs/orgname/packages)\n`;
+                } else if (info.registry === 'GCR') {
+                  body += `- **How to check**: [Google Container Registry](https://console.cloud.google.com/gcr)\n`;
+                } else if (info.current === 'latest') {
+                  body += `- **How to check**: Switch to a specific version tag instead of :latest\n`;
+                }
+                body += `\n`;
+              }
             }
 
-            body += '- Review the [workflow run](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ') for details\n';
+            // Section 5: Excluded (Local Builds)
+            if (Object.keys(excludedLocal).length > 0) {
+              body += `## 🏠 Excluded (Local Builds)\n\n`;
+              body += `These images are built locally and excluded from 3rd-party update checks:\n\n`;
+
+              for (const [service, info] of Object.entries(excludedLocal)) {
+                body += `- **${service}**: \`${info.image}\` — ${info.note}\n`;
+              }
+              body += `\n`;
+              body += `*Note: Local builds stay at 1.0.0 until production readiness*\n\n`;
+            }
+
+            // Footer
+            body += `---\n\n`;
+            body += `## How to Apply Updates\n\n`;
+
+            if (Object.keys(safeUpdates).length > 0 || Object.keys(riskyUpdates).length > 0) {
+              body += `1. Review the update(s) above\n`;
+              body += `2. Edit \`docker/compose/docker-compose.yml\` to update the image tag\n`;
+              body += `3. Run \`docker compose -f docker/compose/docker-compose.yml pull\`\n`;
+              body += `4. Run \`docker compose -f docker/compose/docker-compose.yml up -d\`\n`;
+              body += `5. Verify all services are healthy: \`docker ps --filter health=healthy\`\n\n`;
+              body += `**Your commit message should include:**\n`;
+              body += `\`\`\`\n`;
+              body += `chore: bump [service] to [version] (Closes #XX)\n`;
+              body += `\`\`\`\n`;
+              body += `where **#XX** is this issue's number (above the title).\n`;
+              body += `This auto-closes this issue when the commit lands on main.\n\n`;
+            } else {
+              body += `No auto-detectable updates available at this time.\n\n`;
+              if (Object.keys(manualCheck).length > 0) {
+                body += `> **Note**: Manual-check items still require periodic verification.\n`;
+                body += `> See the "Manual Check Needed" section above.\n\n`;
+              }
+            }
+
+            body += `## Summary\n\n`;
+            body += `- **Safe updates**: ${Object.keys(safeUpdates).length}\n`;
+            body += `- **Risky updates**: ${Object.keys(riskyUpdates).length}\n`;
+            body += `- **Up to date**: ${Object.keys(upToDate).length}\n`;
+            body += `- **Manual check needed**: ${Object.keys(manualCheck).length}\n`;
+            body += `- **Excluded (local)**: ${Object.keys(excludedLocal).length}\n\n`;
+
+            body += `*Generated by [Docker Image Auto-Update](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})*`;
 
             // Create or find existing issue
             const issues = await github.rest.issues.listForRepo({
@@ -375,210 +548,88 @@ jobs:
               labels: ['dependencies', 'docker']
             });
 
-            const today = new Date().toISOString().split('T')[0];
             const existingIssue = issues.data.find(issue => issue.title.includes('Docker Image Updates - ' + today));
 
             if (existingIssue) {
-              // Update existing issue
+              // Update existing issue with actual issue number
+              const updatedBody = body.replace('#XX', '#' + existingIssue.number);
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: existingIssue.number,
-                body: body
+                body: updatedBody
               });
 
               console.log('Updated existing issue #' + existingIssue.number);
             } else {
-              // Create new issue
-              await github.rest.issues.create({
+              // Create new issue with actual issue number
+              const result = await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 title: 'Docker Image Updates - ' + today,
-                body: body,
+                body: body.replace('#XX', '#' + '${{ steps.create-issue.outputs.issue_number }}'),
                 labels: ['dependencies', 'docker']
               });
 
-              console.log('Created new issue');
+              // Update the body with the actual issue number (post-creation update)
+              const issueNumber = result.data.number;
+              const finalBody = body.replace('#XX', '#' + issueNumber);
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: finalBody
+              });
+
+              console.log('Created new issue #' + issueNumber);
             }
 
-  auto-update-safe:
-    name: Create Auto-Update PR (Safe Updates Only)
-    runs-on: ubuntu-latest
-    needs: check-updates
-    if: needs.check-updates.outputs.safe-updates-available == 'true'
-    permissions:
-      contents: write
-      pull-requests: write
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download safe updates
-        uses: actions/download-artifact@v4
+      - name: Close resolved issues (auto-reconcile)
+        if: steps.check.outputs.safe-updates-available == 'false' && steps.check.outputs.risky-updates-available == 'false'
+        uses: actions/github-script@v7
         with:
-          name: docker-updates
-          pattern: safe-updates.json
-          path: ./
+          script: |
+            const today = new Date().toISOString().split('T')[0];
 
-      - name: Configure Git
+            // Find open dependency issues (strict bot title pattern)
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: ['dependencies', 'docker']
+            });
+
+            // Only close bot-created issues with title pattern "Docker Image Updates - YYYY-MM-DD"
+            const botIssuePattern = /^Docker Image Updates - \d{4}-\d{2}-\d{2}$/;
+            const botIssues = issues.data.filter(issue => botIssuePattern.test(issue.title));
+
+            if (botIssues.length === 0) {
+              console.log('No bot-created issues to close');
+              return;
+            }
+
+            for (const issue of botIssues) {
+              // Add closing comment explaining why
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `✅ **Resolved**\n\nAll auto-detectable Docker image updates have been applied.\n\nChecked: ${today}\n\n---\n\n**Note**: Manual-check items (GHCR, GCR, :latest tags) still require periodic human verification. See the latest report for details.\n\nThis issue was automatically closed because all safe/risky updates have been resolved.`
+              });
+
+              // Close the issue
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+
+              console.log('Closed resolved issue #' + issue.number);
+            }
+
+      - name: No updates notification
+        if: steps.check.outputs.updates-available == 'false' && steps.check.outputs.manual-check-needed == 'false'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Create auto-update branch
-        run: |
-          BRANCH_NAME="auto/docker-safe-update-$(date +%Y%m%d-%H%M%S)"
-          git checkout -b $BRANCH_NAME
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-
-      - name: Update Docker images (safe only)
-        run: |
-          python3 << 'EOF'
-          import json
-          import re
-
-          # Read safe updates only
-          with open('safe-updates.json', 'r') as f:
-              updates = json.load(f)
-
-          if not updates:
-              print("No safe updates to apply")
-              exit(0)
-
-          # Read docker-compose.yml as plain text
-          with open('docker/compose/docker-compose.yml', 'r') as f:
-              compose_text = f.read()
-
-          # Apply safe updates with targeted line edits
-          lines_changed = 0
-          for service_name, info in updates.items():
-              old_image = f"{info['image']}:{info['current']}"
-              new_image = f"{info['image']}:{info['latest']}"
-
-              # Match the exact line: "image: old_image" with proper indentation
-              # This pattern matches: optional whitespace + "image:" + space + old_image
-              pattern = r'(\s*)image:\s*' + re.escape(old_image) + r'(\s*)$'
-
-              replacement = r'\1image: ' + new_image + r'\2'
-
-              new_text, count = re.subn(pattern, replacement, compose_text, flags=re.MULTILINE)
-              if count > 0:
-                  compose_text = new_text
-                  lines_changed += count
-                  print(f"  [+] {service_name}: {old_image} -> {new_image}")
-              else:
-                  print(f"  [!] {service_name}: Pattern not found for {old_image}")
-
-          # Write back the modified text (only changed lines)
-          with open('docker/compose/docker-compose.yml', 'w') as f:
-              f.write(compose_text)
-
-          print(f"\n[*] Applied {lines_changed} safe update(s)")
-          EOF
-
-      - name: Commit changes
-        run: |
-          if [ -n "$(git status --porcelain docker/compose/docker-compose.yml)" ]; then
-            git add docker/compose/docker-compose.yml
-            git commit -m "chore: update Docker images (safe updates only)
-
-            This PR auto-applies backwards-compatible Docker image updates.
-            All updates are patch/minor version bumps - safe to merge after CI passes.
-
-            Updated services:
-            $(python3 << 'PYEOF'
-          import json
-          with open('safe-updates.json', 'r') as f:
-              updates = json.load(f)
-          for service, info in updates.items():
-              print(f"- {service}: {info['current']} -> {info['latest']}")
-          PYEOF
-            )
-            "
-          else
-            echo "No changes to commit"
-          fi
-
-      - name: Push branch
-        if: success()
-        run: |
-          # Push if there are any commits to push (branch ahead of main)
-          if ! git diff --quiet origin/main...HEAD; then
-            git push -u origin $BRANCH_NAME
-          fi
-
-      - name: Create PR
-        if: success()
-        run: |
-          if git diff --quiet origin/main...HEAD docker/compose/docker-compose.yml; then
-            echo "No PR needed (no changes)"
-          else
-            gh pr create \
-              --title "Docker Safe Updates (Auto-Applied) - $(date +%Y-%m-%d)" \
-              --body "This PR automatically applies safe Docker image updates (patch/minor only).
-
-            ## Safe Updates Applied
-
-            $(python3 << 'PYEOF'
-          import json
-          with open('safe-updates.json', 'r') as f:
-              updates = json.load(f)
-          for service, info in updates.items():
-              classification = info['classification'].upper()
-              print(f"- **{service}**: \`${info['current']}\` → \`${info['latest']}\` [{classification}]")
-          PYEOF
-            )
-
-            ## Why This Is Safe
-
-            - All updates are patch or minor version bumps
-            - No major version jumps included
-            - No versioning scheme changes included
-            - Breaking changes are unlikely
-
-            ## Test After Merge
-
-            \`\`\`bash
-            docker compose -f docker/compose/docker-compose.yml pull
-            docker compose -f docker/compose/docker-compose.yml up -d
-            docker ps --filter health=healthy
-            \`\`\`
-
-            ## Checklist
-
-            - [ ] CI passes
-            - [ ] All services start healthy
-            - [ ] Manual smoke test passes
-
-            ---
-            *Generated by GitHub Actions*" \
-              --base main \
-              --label "dependencies" \
-              --label "docker"
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  notify:
-    name: Report Results
-    runs-on: ubuntu-latest
-    needs: [check-updates, auto-update-safe]
-    if: always()
-
-    steps:
-      - name: Report
-        run: |
-          if [ "${{ needs.check-updates.outputs.updates-available }}" == "true" ]; then
-            echo "[*] Updates found:"
-
-            if [ "${{ needs.check-updates.outputs.safe-updates-available }}" == "true" ]; then
-              echo "  - Safe updates: PR created"
-            fi
-
-            if [ "${{ needs.check-updates.outputs.risky-updates-available }}" == "true" ]; then
-              echo "  - Risky updates: Issue created (manual review required)"
-            fi
-          else
-            echo "[*] All services up to date"
-          fi
+          echo "[*] All 3rd-party images up to date"
+          echo "[*] No action required"
