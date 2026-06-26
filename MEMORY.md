@@ -1,1 +1,0 @@
-- [Session 2025-06-25 — Infra Complete](memory/session-2025-06-25-infra-complete.md) — Security resolved, dependency engine LIVE, ready for program work
