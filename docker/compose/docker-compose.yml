@@ -153,7 +153,7 @@ services:
     networks:
     - minder-network
   rabbitmq:
-    image: rabbitmq:3.13-management
+    image: rabbitmq:4-management
     container_name: minder-rabbitmq
     hostname: rabbitmq
     restart: on-failure
@@ -218,7 +218,7 @@ services:
     networks:
     - minder-network
   schema-registry:
-    image: apicurio/apicurio-registry-sql:2.5.7.Final
+    image: apicurio/apicurio-registry-sql:2.6.5.Final
     container_name: minder-schema-registry
     restart: on-failure
     environment:

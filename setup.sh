@@ -116,25 +116,31 @@ declare -A SERVICE_PORTS=(
 
 readonly -a THIRD_PARTY_IMAGE_SPECS=(
     # image_ref                                              | stable_tag | constraint
-    "postgres:18.3-trixie|18|none"
-    "redis:7.4-alpine|7|none"
-    "qdrant/qdrant:v1.17.1|v1|none"
+    "postgres:18.4-trixie|18|none"
+    "redis:8-alpine|8|none"
+    "rabbitmq:4-management|4|none"
+    "qdrant/qdrant:v1.18.2|v1|none"
     "neo4j:5.26.25-community|5|none"
     "ollama/ollama:0.30.10|0|none"
-    "prom/prometheus:v3.1.0|v3|none"
-    "grafana/grafana:11.6.0|11|none"
+    "prom/prometheus:v3.12.0|v3|none"
+    "grafana/grafana:13.1|13|none"
     "prom/alertmanager:v0.33.0|v0|none"
     # authelia disabled pending proper configuration
     # "authelia/authelia:4.38.7|4|none"
-    "traefik:v3.7.0|v3|none"
-    "influxdb:3.9.1-core|3|none"
-    "telegraf:1.34.0|1|none"
-    "prometheuscommunity/postgres-exporter:v0.19.1|v0|none"
-    "oliver006/redis_exporter:v1.83.0|v1|none"
+    "traefik:v3.7.5|v3|none"
+    "influxdb:3.10.0-core|3|none"
+    "telegraf:1.39.0|1|none"
+    "apicurio/apicurio-registry-sql:2.6.5.Final|2|none"
     "minio/minio:RELEASE.2025-09-07T16-13-09Z|RELEASE|none"
     "jaegertracing/all-in-one:latest|1|none"
-    "otel/opentelemetry-collector:0.114.0|0|none"
+    "otel/opentelemetry-collector:0.155.0|0|none"
     "ghcr.io/open-webui/open-webui:latest|main|none"
+    "prometheuscommunity/postgres-exporter:v0.19.1|v0|none"
+    "oliver006/redis_exporter:v1.86.0|v1|none"
+    "kbudde/rabbitmq-exporter:v1.0.0-RC9|v1|none"
+    "prom/node-exporter:v1.11.1|v1|none"
+    "gcr.io/cadvisor:v0.51.0|v0|none"
+    "prom/blackbox-exporter:v0.28.0|v0|none"
 )
 
 # Build a plain array of pinned image refs (for backward compat / fallback)
