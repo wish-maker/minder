@@ -76,7 +76,7 @@ safety check
 
 - **Test Results**: GitHub Actions tab
 - **Coverage Reports**: Codecov
-- **Security Reports: Actions artifacts
+- **Security Reports**: Actions artifacts
 - **Deployment Logs**: Workflow runs
 
 ## Troubleshooting
