@@ -1904,20 +1904,20 @@ start_services_manually() {
     fi
 
     # Schema Registry
-    if ! container_running ; then
+    if ! container_running schema-registry; then
         log_detail "Starting Schema Registry..."
         run docker run -d \
-          --name "$(container_name )" \
+          --name "$(container_name schema-registry)" \
           --network "$NETWORK_NAME" \
-          -e QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://$(container_name postgres):5432/minder \
+          -e QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://$(container_name postgres):5432/minder_schemaregistry \
           -e QUARKUS_DATASOURCE_USERNAME=minder \
           -e QUARKUS_DATASOURCE_PASSWORD="$postgres_pass" \
-          -e REGISTRY_DATASOURCE_URL=jdbc:postgresql://$(container_name postgres):5432/minder \
+          -e REGISTRY_DATASOURCE_URL=jdbc:postgresql://$(container_name postgres):5432/minder_schemaregistry \
           -e REGISTRY_DATASOURCE_USERNAME=minder \
           -e REGISTRY_DATASOURCE_PASSWORD="$postgres_pass" \
           -e QUARKUS_DATASOURCE_DRIVER=org.postgresql.Driver \
           -e REGISTRY_DATASOURCE_DRIVER=org.postgresql.Driver \
-          apicurio/apicurio-registry-sql:2.5.7.Final
+          apicurio/apicurio-registry-sql:2.6.13.Final
     fi
 
     # RabbitMQ-Exporter

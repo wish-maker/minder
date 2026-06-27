@@ -206,6 +206,11 @@ backups/**/*
 *.backup
 *.sql
 *.dump
+# Exception: track the Postgres init script (infrastructure, not a dump). It is mounted
+# into postgres and creates all required databases on a clean install (apicurio fix).
+# NOTE: the blanket *.sql rule still wrongly hides 7 other infra SQL files (postgres/rag
+# migrations, marketplace schemas) — separate follow-up audit, see memory.
+!docker/services/postgres/init.sql
 
 # Configuration Backups
 *.backup.*
