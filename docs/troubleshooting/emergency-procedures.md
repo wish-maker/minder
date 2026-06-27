@@ -343,9 +343,8 @@ echo "[Date] [Service] [Description] [Resolution]" >> /var/log/emergency.log
 ## 📚 Related Documentation
 
 - **[Common Issues](common-issues.md)** - Common problems and solutions
-- **[Troubleshooting Guide](README.md)** - Overview
-- **[Deployment Guide](../deployment/README.md)** - Deployment troubleshooting
-- **[Known Issues](../references/ISSUES.md)** - Known problems
+- **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Overview
+- **[Deployment Guide](../deployment/production.md)** - Deployment troubleshooting
 
 ---
 

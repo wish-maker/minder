@@ -115,4 +115,4 @@ curl -X POST http://localhost:8004/ingest -F "file=@doc.pdf"
 
 ## Platform
 
-Host: RPi-4-01 (Raspberry Pi 4) · Setup: `bash setup.sh` · Containers: 32
+Host: RPi-4-01 (Raspberry Pi 4) · Setup: `bash setup.sh` · Containers: 31

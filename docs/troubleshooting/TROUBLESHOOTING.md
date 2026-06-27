@@ -1,8 +1,8 @@
 # 🔧 Troubleshooting Guide - Minder Platform
 
-**Last Updated:** 2026-05-10
+**Last Updated:** 2026-06-26
 **Platform Version:** 1.0.0
-**Status:** Production Ready (32 containers, 27 healthy)
+**Status:** Production Ready (31 containers, 29 healthy)
 
 ---
 
@@ -613,7 +613,6 @@ docker system df
 - [Architecture Overview](../architecture/overview.md)
 - [Security Architecture](../operations/security-architecture.md)
 - [Service Access Guide](../operations/service-access.md)
-- [Version Manifest](../VERSION_MANIFEST.md)
 - [Setup.sh Documentation](../../setup.sh)
 
 ---

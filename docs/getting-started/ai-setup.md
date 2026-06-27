@@ -256,6 +256,5 @@ docker stats minder-ollama
 
 ## Next Steps
 
-- 📖 Read [RAG Pipeline Guide](../guides/rag-pipeline.md)
-- 🔧 Configure [Model Fine-tuning](../development/model-fine-tuning.md)
+- 📖 Read [RAG Methods Guide](../rag-methods.md)
 - 🚀 Deploy to [Production](../deployment/production.md)

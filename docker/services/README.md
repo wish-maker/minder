@@ -2,7 +2,7 @@
 
 This directory contains the Docker Compose deployment configuration for the Minder platform.
 
-## 🐳 Services (32 Containers)
+## 🐳 Services (31 Containers)
 
 ### Core Infrastructure
 - **Traefik** - Reverse proxy and load balancer (Port: 80, 443, 8081)
@@ -235,7 +235,7 @@ docker compose up -d --scale api-gateway=3
 4. Start system: `docker compose up -d`
 5. Check status: `docker ps`
 
-For detailed information: [UPGRADE-RUNBOOK.md](UPGRADE-RUNBOOK.md)
+For detailed information: [Docker Upgrade Runbook](../../docs/deployment/docker-upgrade-runbook.md)
 
 ---
 

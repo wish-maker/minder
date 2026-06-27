@@ -171,8 +171,8 @@ docker system prune -a
 
 ### Next Steps
 
-- 📖 Read [Architecture Overview](../architecture/overview.md)
-- 🔐 Configure [Authentication & Security](../guides/authentication.md)
-- 🔧 See [Development Guide](../development/development.md)
-- 🐛 Check [Troubleshooting Guide](../troubleshooting/common-issues.md)
+- 📖 Read [Architecture Overview](architecture/overview.md)
+- 🔐 Configure [Authentication & Security](guides/authentication.md)
+- 🔧 See [Development Guide](development/development.md)
+- 🐛 Check [Troubleshooting Guide](troubleshooting/common-issues.md)
 - 📚 See all commands: `./setup.sh --help`

@@ -490,4 +490,4 @@ When contributing:
 4. Follow PEP 8 style guide
 5. Run type checking with mypy
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) for guidelines.

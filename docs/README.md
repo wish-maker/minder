@@ -6,7 +6,7 @@ This directory contains all documentation for the Minder platform.
 
 ### 🚀 Getting Started (`getting-started/`)
 - [Installation](getting-started/installation.md) - System installation
-- [Quick Start](getting-started/quick-start.md) - Get started in 5 minutes
+- [Quick Start](QUICKSTART.md) - Get started in 5 minutes
 - [AI Setup](getting-started/ai-setup.md) - AI services configuration
 
 ### 🏗️ Architecture (`architecture/`)
@@ -28,10 +28,9 @@ This directory contains all documentation for the Minder platform.
 - [Monitoring](deployment/monitoring.md) - Monitoring setup
 
 ### 🔧 Operations (`operations/`)
-- [Operations Guide](operations/README.md) - Daily operations
-- [Reports](operations/reports/) - System status reports
-  - [Current Status](operations/reports/SYSTEM-STATUS-2026-05-06.md) - Latest status
-  - [API Tests](operations/reports/API-ENDPOINTS-TEST-RESULTS.md) - Endpoint tests
+- [Service Access Guide](operations/service-access.md) - Daily operations and service access
+- [Security Architecture](operations/security-architecture.md) - Security model
+- [PostgreSQL Migration Guide](operations/POSTGRESQL_MIGRATION_GUIDE.md) - Database migrations
 
 ### 🔒 Security (`guides/`)
 - [Authentication](guides/authentication.md) - Authelia SSO
@@ -41,13 +40,8 @@ This directory contains all documentation for the Minder platform.
 - [Common Issues](troubleshooting/common-issues.md) - Common problems
 - [Emergency Procedures](troubleshooting/emergency-procedures.md) - Crisis management
 
-### 📔 Archive (`archive/`)
-- [Old Reports](archive/reports/) - Historical reports
-- [Session Summaries](archive/sessions/) - Work session summaries
-
 ### 🔌 API Reference (`api/`)
 - [API Documentation](api/reference.md) - Endpoints
-- [API Guide](api/README.md) - API usage
 
 ---
 
@@ -55,7 +49,7 @@ This directory contains all documentation for the Minder platform.
 
 ### For Users
 - Start here: [Installation Guide](getting-started/installation.md)
-- Learn basics: [Quick Start](getting-started/quick-start.md)
+- Learn basics: [Quick Start](QUICKSTART.md)
 - Get help: [Troubleshooting](troubleshooting/common-issues.md)
 
 ### For Developers
@@ -66,7 +60,7 @@ This directory contains all documentation for the Minder platform.
 
 ### For Operators
 - Deploy to production: [Production Deployment](deployment/production.md)
-- Daily operations: [Operations Guide](operations/README.md)
+- Daily operations: [Service Access Guide](operations/service-access.md)
 - Monitor system: [Monitoring](deployment/monitoring.md)
 - Security setup: [Security Setup](guides/security-setup.md)
 

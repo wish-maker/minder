@@ -611,7 +611,7 @@ The plugin will be automatically discovered and loaded.
 
 ### Plugin API Reference
 
-See [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md) for detailed plugin development guide.
+See [Plugin Development Guide](../development/plugin-development.md) for detailed plugin development guide.
 
 ---
 
@@ -714,9 +714,9 @@ console.log(`Collected ${result.records_collected} records`);
 ## Support
 
 **Documentation:**
-- [Plugin Development Guide](PLUGIN_DEVELOPMENT.md)
-- [Architecture Documentation](architecture.md)
-- [Code Style Guide](CODE_STYLE_GUIDE.md)
+- [Plugin Development Guide](../development/plugin-development.md)
+- [Architecture Documentation](../architecture/overview.md)
+- [Code Style Guide](../development/code-style.md)
 
 **Issues:**
 - Report bugs: [GitHub Issues](https://github.com/yourusername/minder/issues)
