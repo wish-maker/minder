@@ -59,4 +59,7 @@ jobs:
           echo "Informational only — warnings/notes below do NOT fail the build."
           echo "(Dominated by SC2034 'unused', a false positive of the modular"
           echo " split: globals defined in config.sh are used by other modules.)"
-          shellcheck --shell=bash "${files[@]}"
+          # || true: shellcheck exits non-zero when nits exist; this step is
+          # informational, so swallow it to avoid a misleading "exit code 1"
+          # annotation on green runs. continue-on-error below is the backstop.
+          shellcheck --shell=bash "${files[@]}" || true
