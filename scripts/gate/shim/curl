@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Gate shim — deterministic curl. Any health/registry probe returns a fixed
+# success body so traces don't vary with network/service state.
+echo "200"
+exit 0

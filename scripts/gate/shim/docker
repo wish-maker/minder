@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Gate shim — deterministic docker. Shadows the real docker binary on PATH so the
+# gate NEVER touches a real daemon. Only the READ subcommands setup.sh issues
+# outside run() (dry-run doesn't gate these) need fixed output; everything else is
+# a no-op success.
+case "$1" in
+  ps)
+    # emit all minder container names so container_running/container_exists => true
+    for s in postgres redis qdrant ollama neo4j rabbitmq api-gateway plugin-registry \
+             marketplace plugin-state-manager rag-pipeline model-management graph-rag \
+             openwebui tts-stt influxdb telegraf prometheus grafana alertmanager jaeger \
+             otel-collector traefik minio postgres-exporter redis-exporter \
+             rabbitmq-exporter blackbox-exporter cadvisor node-exporter; do
+      echo "minder-$s"
+    done ;;
+  inspect)  echo "healthy" ;;
+  network)  [[ "$2" == "ls" ]] && echo "docker_minder-network" || exit 0 ;;
+  version)  echo "29.0.0" ;;
+  *)        exit 0 ;;
+esac
+exit 0

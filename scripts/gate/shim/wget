@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Gate shim — deterministic wget (health probes). Always succeeds, no output.
+exit 0
