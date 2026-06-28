@@ -28,9 +28,10 @@ _cache_expired() {
     local cache_time cache_age
     cache_time="$(stat -c %Y "$cache_file" 2>/dev/null || echo 0)"
     cache_age=$((now - cache_time))
-    
-    # Cache expired if older than TTL
-    [[ $cache_age -gt $CACHE_TTL ]]
+
+    # Cache expired if older than TTL. cache_age is in SECONDS; the global is
+    # CACHE_TTL_HOURS, so convert to seconds (was a typo'd, unitless $CACHE_TTL).
+    [[ $cache_age -gt $((CACHE_TTL_HOURS * 3600)) ]]
 }
 
 # Load cached tags from disk
@@ -43,11 +44,15 @@ _load_cached_tags() {
         return 1
     fi
     
-    # Extract tags array from JSON cache
+    # Extract tags array from JSON cache. _cache_tags writes a pretty-printed
+    # array spanning multiple lines, so flatten newlines first — line-oriented
+    # grep otherwise never matches the multi-line "tags": [ ... ] block.
     if [[ -f "$cache_file" ]]; then
-        grep -oE '"tags"[[:space:]]*:[[:space:]]*\[[^]]+\]' "$cache_file" 2>/dev/null | \
-            sed 's/"tags"[[:space:]]*:[[:space:]]*\[//;s/\]$//;s/"//g;s/,/\n/g' | \
-            grep -v '^$' || echo ""
+        tr '\n' ' ' < "$cache_file" 2>/dev/null \
+            | grep -oE '"tags"[[:space:]]*:[[:space:]]*\[[^]]*\]' \
+            | sed -E 's/.*\[//; s/\].*//; s/"//g; s/,/\n/g' \
+            | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' \
+            | grep -v '^$' || echo ""
     else
         echo ""
     fi

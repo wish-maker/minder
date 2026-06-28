@@ -43,6 +43,7 @@ source "${LIB_DIR}/config.sh"      # paths, service arrays, image specs, flags, 
 source "${LIB_DIR}/log.sh"         # _cleanup + trap, mkdir logs, logging, spinner, progress
 source "${LIB_DIR}/docker.sh"      # run() dry-run gate, compose helpers, container/wait helpers
 source "${LIB_DIR}/secrets.sh"     # secret generation, postgres password sync
+source "${LIB_DIR}/cache.sh"       # tag cache (must precede versions.sh — its driver fns call these)
 source "${LIB_DIR}/versions.sh"    # smart version resolution engine (calls cache.sh fns)
 source "${LIB_DIR}/preflight.sh"   # prerequisites, GPU, access/compute validation
 source "${LIB_DIR}/env.sh"         # .env generation / validation
@@ -105,10 +106,3 @@ main() {
 }
 
 main "$@"
-
-# ─────────────────────────────────────────────────────────────
-# TAG CACHE FUNCTIONS — sourced AFTER main "$@" to PRESERVE the
-# monolith's original ordering (defined after main ran → undefined
-# during main → caching no-ops). Fixing this is a separate follow-up.
-# ─────────────────────────────────────────────────────────────
-source "${LIB_DIR}/cache.sh"
