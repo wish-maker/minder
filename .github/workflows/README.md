@@ -1,96 +1,62 @@
 # Minder CI/CD Pipeline
 
-## Overview
-
-This repository uses GitHub Actions for continuous integration and deployment.
+GitHub Actions workflows for this repository. Four workflows, each a single
+concern. There is **no** build/push or deploy workflow — this is a self-hosted
+Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 
 ## Workflows
 
-### 1. Test Workflow (`.github/workflows/test.yml`)
+### 1. Test Suite — `test.yml`
+**Triggers:** push & PR to `main`/`develop`, manual dispatch.
+**Jobs:** Python lint (Black, isort, Flake8, MyPy on `src/`) → security scan
+(Bandit, Safety) → unit tests → integration tests → e2e tests (pytest, with
+Postgres + Redis service containers) → notify. Later test stages depend on the
+earlier ones passing.
 
-**Triggers**: Push to main/develop, Pull Requests
+### 2. Security Scan — `security.yml`
+**Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual
+dispatch.
+**Jobs:** CodeQL (Python), Bandit, Safety, Trivy (builds `api-gateway` from the
+compose file and scans the image), TruffleHog (secret scan), Hadolint
+(`src/services/*/Dockerfile`), pip-licenses, and a summary.
 
-**Jobs**:
-- **Unit Tests**: Runs all pytest tests
-- **Code Coverage**: Generates coverage reports
-- **Linting**: Python code quality checks
-- **Security Scan**: Bandit security analysis
-- **Vulnerability Scan**: Safety dependency checks
+### 3. Shell Lint — `shell-lint.yml`
+**Triggers:** push & PR to `main`/`develop`, manual dispatch.
+**Jobs:** lints `setup.sh` + all `scripts/lib/*.sh` modules.
+- `bash -n` (syntax) — **blocking**.
+- `shellcheck --shell=bash --severity=error` — **blocking** (`--shell=bash` is
+  required because the modules are sourced and carry no shebang).
+- `shellcheck` at full severity — **informational** (`continue-on-error`),
+  surfaces style/warning nits without failing the build.
 
-### 2. Build Workflow
+The file list is a glob, so newly added modules are covered automatically.
 
-**Triggers**: Push to main branch (after tests pass)
+### 4. Docker Image Auto-Update — `docker-image-update.yml`
+**Triggers:** weekly cron (Mon 09:00 UTC), manual dispatch.
+**Behavior:** **issue-only** dependency engine. Reads
+`docker/compose/docker-compose.yml`, classifies third-party image updates as
+safe/risky (local `minder/*` builds excluded), and opens (or updates) a single
+tracking **issue** — it does not open PRs or modify files.
 
-**Jobs**:
-- **Docker Build**: Builds container image
-- **Image Push**: Pushes to Docker Hub
-- **Security Scan**: Trivy vulnerability scanner
+> The older auto-PR workflow (`auto-update-pr.yml`) that edited files and opened
+> a PR was **retired** — it was superseded by the issue-only engine above (the
+> PR approach edited compose without a rebuild, a "deploy illusion").
 
-### 3. Deploy Workflow
-
-**Triggers**: Successful build on main branch
-
-**Jobs**:
-- **Production Deployment**: Deploys to production environment
-- **Notifications**: Sends deployment status notifications
-
-## Setup Required
-
-### GitHub Secrets
-
-Configure these secrets in your repository settings:
-
-```
-DOCKER_USERNAME=your_dockerhub_username
-DOCKER_PASSWORD=your_dockerhub_token
-```
-
-### Docker Hub
-
-1. Create account at https://hub.docker.com
-2. Create repository `minderproject/minder-api`
-3. Generate access token
-4. Add token to GitHub Secrets
-
-## Local Testing
-
-Test CI/CD pipeline locally:
+## Local checks
 
 ```bash
-# Run tests
-pytest tests/ -v --cov=.
+# Shell (matches the Shell Lint workflow)
+bash -n setup.sh scripts/lib/*.sh
+shellcheck --shell=bash --severity=error setup.sh scripts/lib/*.sh
 
-# Run linting
-flake8 . --count --show-source --statistics
-
-# Security scan
-pip install bandit
-bandit -r api/ -f json
-
-# Vulnerability scan
-pip install safety
-safety check
+# Python (matches the Test Suite workflow)
+black --check src/services/ src/core/
+flake8 src/services/ src/core/ --max-line-length=120
+pytest tests/ -v --cov=src
 ```
 
-## Monitoring
+## Notes
 
-- **Test Results**: GitHub Actions tab
-- **Coverage Reports**: Codecov
-- **Security Reports**: Actions artifacts
-- **Deployment Logs**: Workflow runs
-
-## Troubleshooting
-
-**Tests failing locally?**
-```bash
-pip install -r requirements.txt
-pytest tests/ -v
-```
-
-**Docker build failing?**
-```bash
-docker build -t minder-api:test .
-```
-
-**Deployment issues?**
-Check workflow logs in GitHub Actions tab.
+- Branch protection is permissive (solo dev): direct pushes to `main` are
+  allowed; PRs are gated by the required status checks.
+- Reports (coverage, security, licenses) are uploaded as workflow artifacts.
