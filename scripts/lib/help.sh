@@ -110,7 +110,6 @@ ${BOLD}FLAGS${NC}
     VERBOSE=1               Enable debug-level output
     NONINTERACTIVE=1        Disable interactive prompts (for CI)
     SKIP_VERSION_CHECK=1    Use exact pinned versions, skip registry queries
-    MINDER_USE_MANUAL_DOCKER=true  Use manual docker run instead of docker compose (YAML error workaround)
 
 ${BOLD}EXAMPLES${NC}
     ./${SCRIPT_NAME}                                # Fresh install

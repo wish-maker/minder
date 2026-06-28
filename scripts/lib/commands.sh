@@ -443,12 +443,6 @@ cmd_status() {
 cmd_stop() {
     log_step "Stopping all services"
 
-    # Check if manual docker mode is enabled
-    if [[ "${MINDER_USE_MANUAL_DOCKER:-false}" == "true" ]]; then
-        stop_services_manually
-        return $?
-    fi
-
     compose_monitoring down
 
     if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
