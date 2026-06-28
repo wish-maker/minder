@@ -20,19 +20,11 @@ run() {
 # ─────────────────────────────────────────────────────────────
 
 compose() {
-    if [[ "${MINDER_USE_SECRETS:-false}" == "true" ]] && [[ -f "$SECRETS_FILE" ]]; then
-        run docker compose -f "$COMPOSE_FILE" -f "$SECRETS_FILE" "$@"
-    else
-        run docker compose -f "$COMPOSE_FILE" "$@"
-    fi
+    run docker compose -f "$COMPOSE_FILE" "$@"
 }
 
 compose_monitoring() {
-    if [[ "${MINDER_USE_SECRETS:-false}" == "true" ]] && [[ -f "$SECRETS_FILE" ]]; then
-        run docker compose -f "$COMPOSE_FILE" -f "$SECRETS_FILE" --profile monitoring "$@"
-    else
-        run docker compose -f "$COMPOSE_FILE" --profile monitoring "$@"
-    fi
+    run docker compose -f "$COMPOSE_FILE" --profile monitoring "$@"
 }
 
 container_name() { echo "${CONTAINER_PREFIX}-${1}"; }

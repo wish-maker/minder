@@ -80,8 +80,9 @@ ${BOLD}OPERATIONS${NC}
     shell [service]         Open an interactive shell in a container
     migrate [target]        Run Alembic migrations (default: head)
     doctor                  Deep diagnostics: disk, ports, secrets, images, version drift
-    generate-secrets        Generate production secrets in .secrets/ directory
-    sync-postgres-password  Sync PostgreSQL password with secret file
+    sync-postgres-password  Apply POSTGRES_PASSWORD from .env to the running DB
+                            (editing a stateful secret in .env does NOT rotate the
+                             live credential by itself — run this after changing it)
 
 ${BOLD}DATA MANAGEMENT${NC}
     backup                  Full backup: Postgres, Neo4j, InfluxDB, Qdrant, .env

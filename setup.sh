@@ -93,7 +93,6 @@ main() {
         doctor)     cmd_doctor ;;
         update)     cmd_update "${arg1:-}" ;;
         regenerate-compose) cmd_regenerate_compose ;;
-        generate-secrets) generate_secrets ;;
         sync-postgres-password) sync_postgres_password ;;
         uninstall)  cmd_uninstall "$arg1" ;;
         -h|--help|help) show_help ;;

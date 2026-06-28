@@ -1,4 +1,18 @@
 # ─────────────────────────────────────────────────────────────
+# SECRET GENERATION  (relocated from secrets.sh — sole consumer is the
+# .env fill below; behavior unchanged)
+# ─────────────────────────────────────────────────────────────
+
+gen_secret() {
+    local bytes="${1:-32}"
+    if command -v openssl &>/dev/null; then
+        openssl rand -hex "$bytes"
+    else
+        LC_ALL=C tr -dc 'a-f0-9' < /dev/urandom | head -c $(( bytes * 2 ))
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────
 # ENVIRONMENT SETUP
 # ─────────────────────────────────────────────────────────────
 

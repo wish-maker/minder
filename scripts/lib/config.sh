@@ -3,7 +3,6 @@
 # ─────────────────────────────────────────────────────────────
 
 readonly COMPOSE_FILE="${SCRIPT_DIR}/docker/compose/docker-compose.yml"
-readonly SECRETS_FILE="${SCRIPT_DIR}/docker/compose/docker-compose.secrets.yml"
 readonly ENV_FILE="${SCRIPT_DIR}/docker/compose/.env"
 readonly ENV_EXAMPLE="${SCRIPT_DIR}/docker/compose/.env.example"
 readonly LOGS_DIR="${SCRIPT_DIR}/logs"
