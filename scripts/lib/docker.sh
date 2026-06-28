@@ -3,10 +3,15 @@
 # ─────────────────────────────────────────────────────────────
 
 run() {
-    if [[ "$DRY_RUN" == "true" ]]; then
-        echo -e "${DIM}[dry-run] $*${NC}"
-        return 0
-    fi
+    # DRY_RUN honors both the --dry-run flag (sets DRY_RUN=true) and the
+    # documented env-var form (header line 17 advertises DRY_RUN=1). Normalize
+    # the documented truthy values so DRY_RUN=1/true/yes all short-circuit.
+    case "${DRY_RUN,,}" in
+        1|true|yes)
+            echo -e "${DIM}[dry-run] $*${NC}"
+            return 0
+            ;;
+    esac
     "$@"
 }
 
