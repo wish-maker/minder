@@ -106,7 +106,7 @@ readonly -a THIRD_PARTY_IMAGE_SPECS=(
     "oliver006/redis_exporter:v1.86.0|v1|none"
     "kbudde/rabbitmq-exporter:v1.0.0-RC9|v1|none"
     "prom/node-exporter:v1.11.1|v1|none"
-    "gcr.io/cadvisor:v0.51.0|v0|none"
+    "gcr.io/cadvisor/cadvisor:v0.51.0|v0|none"
     "prom/blackbox-exporter:v0.28.0|v0|none"
 )
 

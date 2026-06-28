@@ -2,6 +2,23 @@
 # SERVICE STARTUP
 # ─────────────────────────────────────────────────────────────
 
+# Resolve a third-party image ref from THIRD_PARTY_IMAGE_SPECS by its repo base
+# (everything before the :tag). Single source of truth for the manual-docker
+# path, so its image versions can't drift from the compose path. Arg is the
+# bare repo, e.g. "postgres" or "grafana/grafana".
+manual_image() {
+    local base="$1" spec ref
+    for spec in "${THIRD_PARTY_IMAGE_SPECS[@]}"; do
+        ref="${spec%%|*}"          # strip the |stable_tag|constraint suffix
+        if [[ "${ref%:*}" == "$base" ]]; then
+            echo "$ref"
+            return 0
+        fi
+    done
+    log_error "manual_image: no THIRD_PARTY_IMAGE_SPECS entry for image base '${base}'"
+    return 1
+}
+
 start_services() {
     # Check if manual docker mode is enabled
     if [[ "${MINDER_USE_MANUAL_DOCKER:-false}" == "true" ]]; then
@@ -114,7 +131,7 @@ start_services_manually() {
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=5 \
-          postgres:17.4-alpine
+          "$(manual_image postgres)"
     fi
 
     # Wait for PostgreSQL
@@ -128,7 +145,7 @@ start_services_manually() {
           --network "$NETWORK_NAME" \
           -v docker_redis_data:/data \
           -v "${SCRIPT_DIR}/.secrets/redis_password.secret:/run/secrets/redis_password:ro" \
-          redis:7.2.13-alpine \
+          "$(manual_image redis)" \
           sh -c 'redis-server --appendonly yes --requirepass "$(cat /run/secrets/redis_password)" --masterauth "$(cat /run/secrets/redis_password)"'
     fi
 
@@ -150,7 +167,7 @@ start_services_manually() {
           --health-interval=30s \
           --health-timeout=30s \
           --health-retries=3 \
-          rabbitmq:3.13.7-management-alpine
+          "$(manual_image rabbitmq)"
     fi
 
     sleep 5
@@ -175,7 +192,7 @@ start_services_manually() {
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=5 \
-          grafana/grafana:11.3.1
+          "$(manual_image grafana/grafana)"
     fi
 
     # InfluxDB
@@ -199,7 +216,7 @@ start_services_manually() {
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=5 \
-          influxdb:2.7.12
+          "$(manual_image influxdb)"
     fi
 
     sleep 5
@@ -252,7 +269,7 @@ start_services_manually() {
           -v docker_openwebui_data:/app/backend/data \
           -v "${SCRIPT_DIR}/docker/services/openwebui/functions.json:/app/config/functions.json:ro" \
           --restart unless-stopped \
-          ghcr.io/open-webui/open-webui:latest
+          "$(manual_image ghcr.io/open-webui/open-webui)"
     fi
 
     # Schema Registry
@@ -269,7 +286,7 @@ start_services_manually() {
           -e REGISTRY_DATASOURCE_PASSWORD="$postgres_pass" \
           -e QUARKUS_DATASOURCE_DRIVER=org.postgresql.Driver \
           -e REGISTRY_DATASOURCE_DRIVER=org.postgresql.Driver \
-          apicurio/apicurio-registry-sql:2.6.13.Final
+          "$(manual_image apicurio/apicurio-registry-sql)"
     fi
 
     # RabbitMQ-Exporter
@@ -284,7 +301,7 @@ start_services_manually() {
           -e PUBLISH_PORT=9419 \
           -e RABBIT_CAPABILITIES=sort,bert \
           --restart unless-stopped \
-          kbudde/rabbitmq-exporter:latest
+          "$(manual_image kbudde/rabbitmq-exporter)"
     fi
 
     sleep 5
@@ -306,7 +323,7 @@ start_services_manually() {
           -v "${SCRIPT_DIR}/docker/services/traefik/traefik.yml:/etc/traefik/traefik.yml:ro" \
           -v "${SCRIPT_DIR}/docker/services/traefik/dynamic:/etc/traefik/dynamic:ro" \
           --restart unless-stopped \
-          traefik:v3.3.4
+          "$(manual_image traefik)"
     fi
 
     # Authelia - DISABLED due to configuration issue
@@ -349,7 +366,7 @@ start_services_manually() {
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=5 \
-          neo4j:5.26-community
+          "$(manual_image neo4j)"
     fi
 
     # Qdrant
@@ -360,7 +377,7 @@ start_services_manually() {
           --network "$NETWORK_NAME" \
           -p 6333:6333 \
           -v docker_qdrant_data:/qdrant/storage \
-          qdrant/qdrant:v1.17.1
+          "$(manual_image qdrant/qdrant)"
     fi
 
     # Ollama
@@ -372,7 +389,7 @@ start_services_manually() {
           -p 11434:11434 \
           -v docker_ollama_data:/root/.ollama \
           --restart unless-stopped \
-          ollama/ollama:0.5.12
+          "$(manual_image ollama/ollama)"
     fi
 
     sleep 5
@@ -511,7 +528,7 @@ start_services_manually() {
           -v "${SCRIPT_DIR}/docker/services/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro" \
           -v /var/run/docker.sock:/var/run/docker.sock:ro \
           --restart unless-stopped \
-          telegraf:1.34.0
+          "$(manual_image telegraf)"
     fi
 
     # Prometheus
@@ -528,7 +545,7 @@ start_services_manually() {
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=5 \
-          prom/prometheus:v3.1.0
+          "$(manual_image prom/prometheus)"
     fi
 
     # Alertmanager
@@ -541,7 +558,7 @@ start_services_manually() {
           -v "${SCRIPT_DIR}/docker/services/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" \
           -v docker_alertmanager_data:/alertmanager \
           --restart unless-stopped \
-          prom/alertmanager:v0.28.1
+          "$(manual_image prom/alertmanager)"
     fi
 
     sleep 5
@@ -557,7 +574,7 @@ start_services_manually() {
           --network "$NETWORK_NAME" \
           -v "${SCRIPT_DIR}/docker/services/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro" \
           --restart unless-stopped \
-          prom/blackbox-exporter:latest
+          "$(manual_image prom/blackbox-exporter)"
     fi
 
     # Postgres Exporter
@@ -568,7 +585,7 @@ start_services_manually() {
           --network "$NETWORK_NAME" \
           -e DATA_SOURCE_NAME="postgresql://minder:${postgres_pass}@$(container_name postgres):5432/minder?sslmode=disable" \
           --restart unless-stopped \
-          prometheuscommunity/postgres-exporter:v0.15.0
+          "$(manual_image prometheuscommunity/postgres-exporter)"
     fi
 
     # Redis Exporter
@@ -580,7 +597,7 @@ start_services_manually() {
           -e REDIS_ADDR="$(container_name redis):6379" \
           -e REDIS_PASSWORD="$redis_pass" \
           --restart unless-stopped \
-          oliver006/redis_exporter:v1.62.0
+          "$(manual_image oliver006/redis_exporter)"
     fi
 
     # cAdvisor
@@ -594,7 +611,7 @@ start_services_manually() {
           -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
           -v /var/lib/docker/:/var/lib/docker:ro \
           --restart unless-stopped \
-          gcr.io/cadvisor/cadvisor:latest
+          "$(manual_image gcr.io/cadvisor/cadvisor)"
     fi
 
     # Node Exporter
@@ -607,7 +624,7 @@ start_services_manually() {
           -v /sys:/host/sys:ro \
           -v /:/rootfs:ro \
           --restart unless-stopped \
-          prom/node-exporter:latest
+          "$(manual_image prom/node-exporter)"
     fi
 
     sleep 5
@@ -645,7 +662,7 @@ start_services_manually() {
           -p 9411:9411 \
           -p 5778:5778 \
           --restart unless-stopped \
-          jaegertracing/all-in-one:1.57
+          "$(manual_image jaegertracing/all-in-one)"
     fi
 
     # OTEL Collector
@@ -659,7 +676,7 @@ start_services_manually() {
           -p 4318:4318 \
           -v "${SCRIPT_DIR}/docker/services/otel-collector/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro" \
           --restart unless-stopped \
-          otel/opentelemetry-collector-contrib:0.114.0
+          "$(manual_image otel/opentelemetry-collector)"
     fi
 
     # MinIO (Object Storage)
@@ -678,7 +695,7 @@ start_services_manually() {
           --health-interval=10s \
           --health-timeout=5s \
           --health-retries=5 \
-          minio/minio:RELEASE.2025-09-07T16-13-09Z
+          "$(manual_image minio/minio)"
     fi
 
     log_success "All 31 services started manually"
