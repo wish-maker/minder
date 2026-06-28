@@ -208,8 +208,19 @@ backups/**/*
 *.dump
 # Exception: track the Postgres init script (infrastructure, not a dump). It is mounted
 # into postgres and creates all required databases on a clean install (apicurio fix).
-# NOTE: the blanket *.sql rule still wrongly hides 7 other infra SQL files (postgres/rag
-# migrations, marketplace schemas) — separate follow-up audit, see memory.
+# This is the ONLY live infra SQL — keep it tracked.
+#
+# AUDIT (2026-06-28): the 7 other *.sql files this rule hid were checked individually
+# and found NOT clean-install-critical (the rule was not hiding live infra after all):
+#   - postgres migrations 001/002/003 (event_store/projections/idempotency): not mounted,
+#     not \i-included by init.sql, no Alembic versions, tables unused → DELETED as orphans.
+#   - rag-pipeline migrations/001_initial_schema.sql: initialize_schema() is called with no
+#     file arg → inline default schema is used; file never read → DELETED.
+#   - marketplace plugin_tables.sql / schema_complete.sql: zero references → DELETED.
+#   - marketplace migrations/schema.sql: code's primary path but BYTE-IDENTICAL to the
+#     already-tracked fallback ../schema.sql, which covers a fresh clone → left ignored.
+#     (Deduping the two copies is a separate code cleanup.)
+# So no further !-exceptions are needed; the blanket *.sql rule correctly ignores dumps.
 !docker/services/postgres/init.sql
 
 # Configuration Backups
