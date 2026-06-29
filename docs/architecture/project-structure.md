@@ -65,7 +65,6 @@ minder/                              # Project root
 │
 └── scripts/                         # Setup & utility scripts
     ├── health-check.sh              # Health monitoring ⭐
-    ├── security-harden.sh           # Security hardening
     ├── rolling-update.sh            # Rolling updates
     └── validate-installation.sh     # Install validation
     # (secrets are auto-filled by setup.sh into ./.env — no separate generate-secrets step)
