@@ -344,8 +344,9 @@ docker compose up -d --scale api-gateway=3
 
 ### Environment Variables
 All services use environment variables for configuration:
-- Located in `docker/compose/.env`
-- Template in `docker/compose/.env.example`
+- Edited in root `./.env` (single source of truth)
+- `setup.sh` copies it to `docker/compose/.env` (the file Compose reads) — auto-generated, do not edit directly
+- Template in root `./.env.example`
 - Never commit `.env` to git
 
 ### Health Checks

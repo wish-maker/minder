@@ -31,8 +31,8 @@
 # Check Traefik logs
 docker logs minder-traefik --tail 50
 
-# Verify environment variables
-cat docker/compose/.env | grep TRAEFIK
+# Verify environment variables (./.env is the source of truth)
+grep TRAEFIK .env
 
 # Restart Traefik
 cd docker/compose
@@ -291,7 +291,7 @@ docker exec minder-redis redis-cli -a YOUR_REDIS_PASSWORD ping
 1. **Authentication Failed:**
    ```bash
    # Check password in .env
-   grep REDIS_PASSWORD docker/compose/.env
+   grep REDIS_PASSWORD .env
 
    # Test with correct password
    docker exec minder-redis redis-cli -a ACTUAL_PASSWORD ping
@@ -333,7 +333,7 @@ curl -X POST http://172.19.0.12:7474/db/neo4j/tx/commit \
 2. **Authentication Issues:**
    ```bash
    # Check password
-   grep NEO4J_AUTH docker/compose/.env
+   grep NEO4J_AUTH .env
 
    # Test connection
    curl -u neo4j:PASSWORD http://172.19.0.12:7474

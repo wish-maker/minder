@@ -113,18 +113,24 @@ ufw deny 8005/tcp
 docker logs minder-api-gateway | grep -i "unauthorized\|failed\|error"
 docker exec minder-postgres psql -U minder -d minder -c "SELECT * FROM audit_log WHERE event='LOGIN_FAILURE';"
 
-# 4. Reset all credentials
-# Regenerate database passwords
-NEW_PASS=$(openssl rand -hex 32)
-sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_PASS/" docker/compose/.env
+# 4. Reset all credentials  — edit the ROOT ./.env (single source of truth).
+#    Do NOT edit docker/compose/.env: it is an auto-generated copy that setup.sh
+#    overwrites from ./.env on every start/restart.
 
-# Regenerate JWT secret
+# JWT secret is STATELESS — editing ./.env + restart is enough:
 NEW_SECRET=$(openssl rand -hex 32)
-sed -i "s/JWT_SECRET=.*/JWT_SECRET=$NEW_SECRET/" docker/compose/.env
+sed -i "s/JWT_SECRET=.*/JWT_SECRET=$NEW_SECRET/" .env
 
-# 5. Update all containers with new credentials
-docker compose down
-docker compose up -d
+# POSTGRES_PASSWORD is STATEFUL — editing ./.env alone does NOT rotate the live
+# credential (Postgres keeps the password stored in its data volume). Update ./.env,
+# then push the change into the running database:
+NEW_PASS=$(openssl rand -hex 32)
+sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_PASS/" .env
+./setup.sh sync-postgres-password   # runs ALTER USER so the live DB matches ./.env
+
+# 5. Apply to all containers (setup.sh start re-syncs ./.env → docker/compose/.env)
+./setup.sh stop
+./setup.sh start
 
 # 6. Monitor for further suspicious activity
 # Enable detailed logging
@@ -260,8 +266,9 @@ docker stats --no-stream
 docker compose down
 
 # 2. Backup current state (for recovery if needed)
+#    ./.env is the source of truth; docker/compose/.env is regenerated from it.
 tar czf rollback_backup_$(date +%Y%m%d_%H%M%S).tar.gz \
-  docker/compose/.env \
+  .env \
   docker/compose/*.yml \
   /var/lib/docker/volumes/
 

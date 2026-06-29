@@ -44,11 +44,14 @@ That's it! The platform will be fully operational in ~9 minutes with:
 #### Step 1: Environment Configuration
 
 ```bash
-# Create environment file
-cp docker/compose/.env.example docker/compose/.env
+# Create the environment file (root ./.env is the single source of truth)
+cp .env.example .env
 
-# Edit environment variables (optional)
-nano docker/compose/.env
+# Edit environment variables (optional — setup.sh auto-fills any CHANGEME secrets)
+nano .env
+
+# Mirror to the path Compose reads (setup.sh does this for you on start/restart)
+cp .env docker/compose/.env
 ```
 
 #### Step 2: Start Infrastructure Services

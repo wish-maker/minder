@@ -150,10 +150,11 @@ BACKUP_DIR="/root/minder/backups/config"
 DATE=$(date +%Y%m%d-%H%M%S)
 mkdir -p "$BACKUP_DIR"
 
-# Create config backup
+# Create config backup (./.env is the source of truth; docker/compose/.env is
+# regenerated from it by setup.sh, so back up the root file)
 tar -czf "$BACKUP_DIR/minder-config-$DATE.tar.gz" \
   -C /root/minder \
-  docker/compose/.env \
+  .env \
   docker/services/traefik \
   docker/compose/authelia \
   docker/compose/docker-compose.yml

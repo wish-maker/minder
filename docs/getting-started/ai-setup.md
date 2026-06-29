@@ -15,7 +15,7 @@ Minder Platform features zero-configuration AI setup with automatic model downlo
 
 ### Configuration
 
-**Environment Variables** (in `docker/compose/.env`):
+**Environment Variables** (in root `./.env`):
 
 ```bash
 # Enable automatic model download (default: true)
@@ -96,7 +96,7 @@ curl -X POST http://localhost:8004/api/v1/embeddings \
 
 ### Change Auto-Download Models
 
-Edit `docker/compose/.env`:
+Edit root `./.env` (then re-run `setup.sh start`):
 
 ```bash
 # Download different models

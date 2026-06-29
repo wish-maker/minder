@@ -33,34 +33,30 @@ The following default credentials are present in the codebase and **MUST be repl
 ### Option 1: Automated Setup (Fastest)
 
 ```bash
-cd docker/compose
-./setup-security.sh
+bash setup.sh start
 ```
 
 This will:
-- Generate cryptographically secure credentials
-- Create `.env` file with proper values
-- Set restrictive file permissions (600)
-- Display generated values for verification
+- Fill every CHANGEME placeholder in `./.env` with a cryptographically secure value
+- Leave any value you set yourself untouched (self-healing on every start/restart)
+- Keep the generated values visible in `./.env` (so you can record them)
+- Set restrictive file permissions (600) on `./.env` and its `docker/compose/.env` copy
 
 ### Option 2: Manual Setup
 
 ```bash
-cd docker/compose
+# root ./.env is the single source of truth
 cp .env.example .env
 
-# Edit .env with your secure values
+# Optionally set your own values; leave CHANGEME for setup.sh to auto-fill
 nano .env
+
+# Auto-fill remaining secrets + mirror ./.env → docker/compose/.env, then start
+bash setup.sh start
 ```
 
-Generate secure passwords:
-```bash
-# PostgreSQL/Redis/InfluxDB (32 chars)
-openssl rand -base64 32 | tr -dc 'a-zA-Z0-9!@#$%^&*' | head -c 32
-
-# JWT Secret (64 chars)
-openssl rand -base64 64 | tr -dc 'a-zA-Z0-9!@#$%^&*' | head -c 64
-```
+You do not need to generate secrets by hand — `setup.sh` does it. If you prefer
+your own, any non-placeholder value you write is preserved.
 
 ---
 
@@ -146,7 +142,6 @@ After creating `.env`, the `docker-compose.yml` file will automatically use thes
 ### 1. Check .env File Exists
 
 ```bash
-cd docker/compose
 test -f .env && echo "✅ .env exists" || echo "❌ .env missing"
 ```
 
@@ -177,7 +172,11 @@ All services should show "Up" status.
 
 ## Secrets Management (Production)
 
-For production deployment, use a proper secrets management system:
+> **Minder's current mechanism is the single root `./.env`** (auto-filled by
+> `setup.sh`, copied to `docker/compose/.env`). There is **one `.env` per machine** —
+> no `.env.development`/`.staging`/`.production` layering and no `--env-file` selector.
+> For hardened production you may *optionally* layer one of the external systems below
+> on top; they are forward-looking, not built in.
 
 ### Docker Secrets (Swarm/Kubernetes)
 
@@ -210,50 +209,32 @@ stringData:
   INFLUXDB_TOKEN: your_secure_token
 ```
 
-### Environment-Specific Files
-
-```
-docker/compose/
-├── .env.example        # Template (committed to git)
-├── .env.development    # Dev environment (not committed)
-├── .env.staging        # Staging environment (not committed)
-└── .env.production     # Production environment (not committed)
-```
-
-Use with:
-```bash
-docker compose --env-file .env.production up -d
-```
-
 ---
 
 ## Credential Rotation
 
 ### Quarterly Rotation Schedule
 
-1. **Generate new credentials**
+1. **Set new credentials in `./.env`** (the source of truth)
+   - Clear the value (or set it to a new one) for the keys you want rotated, e.g.
+     `JWT_SECRET=` — `setup.sh` regenerates emptied secret keys on the next start.
+   - `setup.sh` backs up `./.env` to `.env.backup-<timestamp>` before any rewrite.
+
+2. **Apply (auto-fills + mirrors `./.env` → `docker/compose/.env`)**
    ```bash
-   cd docker/compose
-   ./setup-security.sh
+   ./setup.sh stop
+   ./setup.sh start
+   ```
+   > ⚠️ **Stateful secrets** (e.g. `POSTGRES_PASSWORD`) are NOT rotated by editing
+   > `./.env` alone — the database keeps its stored password. After changing it, run
+   > `./setup.sh sync-postgres-password` to `ALTER USER` the live credential.
+
+3. **Verify all services started**
+   ```bash
+   ./setup.sh status
    ```
 
-2. **Backup current .env**
-   ```bash
-   cp .env .env.backup.$(date +%Y%m%d)
-   ```
-
-3. **Restart services with new credentials**
-   ```bash
-   docker compose down
-   docker compose up -d
-   ```
-
-4. **Verify all services started**
-   ```bash
-   docker compose ps
-   ```
-
-5. **Test application connectivity**
+4. **Test application connectivity**
    ```bash
    curl http://localhost:8000/health
    ```
@@ -264,23 +245,21 @@ If credentials are suspected to be compromised:
 
 1. **Immediate action:** Stop all services
    ```bash
-   docker compose down
+   ./setup.sh stop
    ```
 
-2. **Generate new credentials**
+2. **Generate new credentials** — clear the compromised keys in `./.env` (e.g.
+   `JWT_SECRET=`, `POSTGRES_PASSWORD=`); `setup.sh` regenerates emptied secret keys.
+
+3. **Rotate the live database password** (stateful — `./.env` alone won't do it)
    ```bash
-   ./setup-security.sh
+   ./setup.sh start                    # fills ./.env, mirrors to docker/compose/.env
+   ./setup.sh sync-postgres-password   # ALTER USER so the live DB matches ./.env
    ```
 
-3. **Change database passwords manually**
+4. **Restart all services with the new credentials**
    ```bash
-   docker compose up -d postgres
-   docker exec -it minder-postgres psql -U minder -c "ALTER USER minder PASSWORD 'new_password';"
-   ```
-
-4. **Update .env and restart all services**
-   ```bash
-   docker compose up -d
+   ./setup.sh start
    ```
 
 5. **Review access logs for suspicious activity**
@@ -299,7 +278,7 @@ Before deploying to production, verify:
 - [ ] File permissions set to 600 (owner read/write only)
 - [ ] `.env` added to `.gitignore`
 - [ ] No `.env` files committed to git repository
-- [ ] Credentials different per environment (dev/staging/prod)
+- [ ] Credentials different per deployment (each machine has its own root `./.env`)
 - [ ] Credential rotation schedule established
 - [ ] Secrets management system configured (production)
 - [ ] Access logs monitored for suspicious activity

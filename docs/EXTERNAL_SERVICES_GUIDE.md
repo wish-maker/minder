@@ -19,7 +19,7 @@ Minder platform supports both local Docker services (development) and external c
 
 **Configuration:**
 ```bash
-# docker/compose/.env
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
 REDIS_HOST=your-redis-cluster.example.com
 REDIS_PORT=6379
 REDIS_PASSWORD=your-secure-password
@@ -44,7 +44,7 @@ REDIS_PASSWORD=your-elasticache-password
 
 **Configuration:**
 ```bash
-# docker/compose/.env
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
 POSTGRES_HOST=your-postgres-db.example.com
 POSTGRES_PORT=5432
 POSTGRES_USER=minder
@@ -74,7 +74,7 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname
 
 **Configuration:**
 ```bash
-# docker/compose/.env
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
 QDRANT_HOST=your-cluster.qdrant.io
 QDRANT_PORT=6333
 QDRANT_API_KEY=your-qdrant-cloud-api-key
@@ -111,7 +111,7 @@ Some services local, some external.
 
 **Example: Local Redis + Cloud PostgreSQL**
 ```bash
-# docker/compose/.env
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
 POSTGRES_HOST=aws-rds.amazonaws.com
 POSTGRES_PASSWORD=production-password
 
@@ -129,7 +129,7 @@ docker compose up -d postgres redis  # Only start local Redis, use external Post
 All services external, no local databases.
 
 ```bash
-# docker/compose/.env
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
 REDIS_HOST=redis-cloud.example.com
 POSTGRES_HOST=rds.amazonaws.com
 QDRANT_HOST=qdrant-cloud.io
@@ -140,30 +140,28 @@ cd docker/compose
 docker compose up -d api-gateway plugin-registry  # Only start microservices
 ```
 
-### Scenario 4: Multi-Environment
+### Scenario 4: Per-Machine Configuration
 
-Different configurations for dev/staging/production.
+Minder uses **one root `./.env` per machine** (no `--env-file` layering). Each
+deployment keeps its own endpoints in its own `./.env`:
 
-**Development (.env.development)**
+**On a development machine — `./.env`**
 ```bash
 POSTGRES_HOST=localhost
 REDIS_HOST=localhost
 QDRANT_HOST=localhost
 ```
 
-**Production (.env.production)**
+**On a production machine — `./.env`**
 ```bash
 POSTGRES_HOST=prod-rds.amazonaws.com
 REDIS_HOST=prod-redis.xxxxx.use1.cache.amazonaws.com
-QdrANT_HOST=https://prod-qdrant.qdrant.io
+QDRANT_HOST=https://prod-qdrant.qdrant.io
 ```
 
+Then on each machine simply:
 ```bash
-# Development
-docker compose --env-file .env.development up -d
-
-# Production
-docker compose --env-file .env.production up -d
+bash setup.sh start   # reads ./.env, mirrors it to docker/compose/.env, starts
 ```
 
 ---

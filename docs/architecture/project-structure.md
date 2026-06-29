@@ -8,6 +8,8 @@ minder/                              # Project root
 ├── CONTRIBUTING.md                  # Contribution guidelines
 ├── LICENSE                          # MIT License
 ├── setup.sh                         # Automated setup script ⭐
+├── .env.example                     # Environment template (tracked)
+├── .env                             # Single source of truth (gitignored; you edit this)
 ├── pyproject.toml                   # Python project configuration
 ├── docker-compose.test.yml          # CI / test compose file
 │
@@ -26,8 +28,7 @@ minder/                              # Project root
 ├── docker/                          # Docker configuration
 │   ├── compose/                     # Deployment dir (compose runs from here)
 │   │   ├── docker-compose.yml        # Main compose file (31 services)
-│   │   ├── .env.example             # Environment template
-│   │   ├── .env                     # Actual environment (gitignored)
+│   │   ├── .env                     # Auto-generated copy of root ./.env (gitignored; do not edit)
 │   │   └── authelia/                # Authelia SSO config
 │   ├── services/                    # Per-service configs (source of truth)
 │   │   ├── postgres/                # DB init (init.sql)
@@ -65,9 +66,9 @@ minder/                              # Project root
 └── scripts/                         # Setup & utility scripts
     ├── health-check.sh              # Health monitoring ⭐
     ├── security-harden.sh           # Security hardening
-    ├── generate-secrets.sh          # Secret generation
     ├── rolling-update.sh            # Rolling updates
     └── validate-installation.sh     # Install validation
+    # (secrets are auto-filled by setup.sh into ./.env — no separate generate-secrets step)
 ```
 
 ## Service Structure
@@ -295,7 +296,7 @@ QDRANT_HOST=http://qdrant:6333
 INFLUXDB_TOKEN=your_influxdb_token
 ```
 
-See `docker/compose/.env.example` for complete list.
+See root `./.env.example` for complete list.
 
 ## Build Process
 

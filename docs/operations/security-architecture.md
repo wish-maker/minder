@@ -335,11 +335,14 @@ tls:
 # Generate strong passwords
 ./setup.sh doctor --check-passwords
 
-# Update .env file
-nano docker/compose/.env
+# Update the env file (root ./.env is the single source of truth; setup.sh
+# mirrors it to docker/compose/.env on start/restart — do not edit that copy)
+nano .env
 
-# Rotate passwords regularly
-./setup.sh doctor --rotate-passwords
+# ⚠️ Changing an ALREADY-RUNNING stateful secret (e.g. POSTGRES_PASSWORD) in ./.env
+#    does NOT rotate the live credential by itself — the database keeps the old one.
+#    After editing POSTGRES_PASSWORD, run:
+./setup.sh sync-postgres-password
 ```
 
 **Access Control:**

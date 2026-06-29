@@ -34,8 +34,11 @@ cd minder
 
 #### Option 2: Manual
 ```bash
-# 1. Configure environment
-cp docker/compose/.env.example docker/compose/.env
+# 1. Configure environment (root ./.env is the single source of truth)
+cp .env.example .env
+# fill in the CHANGEME secrets yourself, then mirror to the path Compose reads
+# (setup.sh does this copy + auto-fill for you; bypassing it means doing it manually):
+cp .env docker/compose/.env
 
 # 2. Start services
 docker compose -f docker/compose/docker-compose.yml up -d

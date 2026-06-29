@@ -42,24 +42,19 @@ cd minder
 #### Step 1: Environment Configuration
 
 ```bash
-# Create environment file
-cp docker/compose/.env.example docker/compose/.env
+# Create the environment file (root ./.env is the single source of truth)
+cp .env.example .env
 
-# Generate secure passwords
-POSTGRES_PASSWORD=$(openssl rand -base64 32)
-REDIS_PASSWORD=$(openssl rand -base64 32)
-JWT_SECRET=$(openssl rand -base64 64)
-INFLUXDB_TOKEN=$(openssl rand -base64 32)
-
-# Update .env file
-cat >> docker/compose/.env << EOF
-POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-REDIS_PASSWORD=$REDIS_PASSWORD
-JWT_SECRET=$JWT_SECRET
-INFLUXDB_TOKEN=$INFLUXDB_TOKEN
+# You do NOT need to generate secrets by hand — setup.sh auto-fills every CHANGEME
+# placeholder with a secure random value on install/start/restart, and leaves any
+# value you set yourself untouched. Just set the non-secret dev options you want:
+cat >> .env << EOF
 ENVIRONMENT=development
 LOG_LEVEL=DEBUG
 EOF
+
+# Then start (auto-fills remaining secrets and mirrors ./.env → docker/compose/.env):
+bash setup.sh start
 ```
 
 #### Step 2: Start Infrastructure
@@ -551,8 +546,8 @@ pip install missing-package
 # Check database is running
 docker exec minder-postgres pg_isready -U minder
 
-# Check connection string
-cat docker/compose/.env | grep POSTGRES
+# Check connection string (./.env is the source of truth)
+grep POSTGRES .env
 ```
 
 **Port Already in Use**:

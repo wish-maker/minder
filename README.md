@@ -78,13 +78,18 @@ Minder uses a secure `.env` file for all secrets and configuration. The setup sc
 
 ```bash
 # Automatic setup (recommended)
-bash setup.sh start  # Creates .env with secure random secrets
+bash setup.sh start  # Fills any missing secrets in ./.env, then starts the stack
 
 # Manual configuration (optional)
-cp docker/compose/.env.example docker/compose/.env
-# Edit .env and replace CHANGEME values with your secrets
-chmod 600 docker/compose/.env
+cp .env.example .env          # root ./.env is the single source of truth
+# Edit ./.env: leave CHANGEME values for setup.sh to auto-fill, or set your own
+bash setup.sh start           # auto-fills remaining secrets, sets perms, starts
 ```
+
+> **`./.env` is the one file you edit.** `setup.sh` copies it to
+> `docker/compose/.env` (the file Compose actually reads) on every install/start/
+> restart — that copy is auto-generated, **do not edit it directly**. Your filled
+> secrets stay visible in `./.env`; change one by editing `./.env` and re-running.
 
 **🔒 What gets auto-generated:**
 
@@ -110,12 +115,11 @@ GPU_MEMORY_UTILIZATION=0.9              # GPU memory allocation
 **⚠️ Security Best Practices:**
 
 - ✅ Never commit `.env` to version control (already in `.gitignore`)
-- ✅ Never commit `.env` to version control (already in `.gitignore`)
-- ✅ Keep `.env` permissions at `600` (owner read/write only)
+- ✅ `setup.sh` keeps `./.env` (and its `docker/compose/.env` copy) at `600`
 - ✅ Regenerate secrets if `.env` is ever exposed
 - ✅ Use strong unique passwords for production deployments
 
-**🔧 Advanced configuration:** See [docker/compose/.env.example](docker/compose/.env.example) for all available options.
+**🔧 Advanced configuration:** See [.env.example](.env.example) for all available options.
 
 ---
 

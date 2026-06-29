@@ -197,7 +197,7 @@ Authelia can send email notifications for:
 
 ### Setup
 
-Edit `docker/compose/.env`:
+Edit root `./.env` (then re-run `setup.sh start`):
 
 ```bash
 # Gmail Example (use App Passwords)
@@ -232,7 +232,7 @@ identity_providers:
 
 ### Environment Variables
 
-Set in `docker/compose/.env`:
+Set in root `./.env`:
 
 ```bash
 # Generate with: openssl rand -base64 32

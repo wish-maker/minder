@@ -8,8 +8,8 @@ This guide covers deploying Minder Platform to production environments.
 
 ### Environment Variables
 
-- [ ] Review all environment variables in `docker/compose/.env`
-- [ ] Generate strong, unique passwords (use `openssl rand -base64 32`)
+- [ ] Review all environment variables in `./.env` (the single source of truth; `docker/compose/.env` is an auto-generated copy — do not edit it)
+- [ ] Let `setup.sh` auto-fill secrets, or set strong unique values yourself in `./.env`
 - [ ] Set `ENVIRONMENT=production`
 - [ ] Configure `JWT_SECRET` (minimum 64 characters)
 - [ ] Set `LOG_LEVEL=INFO` or `WARNING`
@@ -62,11 +62,14 @@ The `deploy.sh` script handles:
 #### Step 1: Configure Environment
 
 ```bash
-# Create environment file
-cp docker/compose/.env.example docker/compose/.env
+# Create the environment file (root ./.env is the single source of truth)
+cp .env.example .env
 
-# Edit with production values
-nano docker/compose/.env
+# Edit with production values (setup.sh auto-fills any CHANGEME secrets you leave)
+nano .env
+
+# Mirror to the path Compose reads (setup.sh does this on start/restart)
+cp .env docker/compose/.env
 ```
 
 Critical variables:
@@ -407,9 +410,13 @@ docker network create --driver bridge minder-internal
 
 ### Secrets Management
 
-Use Docker Secrets or external vault:
+> Minder's current mechanism is the single root `./.env` (auto-filled by `setup.sh`,
+> copied to `docker/compose/.env`). For hardened production you may layer an external
+> secrets manager on top — this is optional/forward-looking, not built in.
+
+Use Docker Swarm Secrets or an external vault:
 ```bash
-# Use Docker secrets
+# Use Docker Swarm secrets
 echo "your_secret" | docker secret create jwt_secret -
 
 # Reference in compose file
@@ -566,7 +573,7 @@ This guide provides a comprehensive roadmap for deploying the Minder AI Platform
 - [x] Rolling Updates: Zero-downtime deployment capability
 
 ### ⚠️ Requires Production Hardening
-- [ ] **Secrets Management**: Implement Docker Secrets
+- [ ] **Secrets Management**: Optionally layer external/Swarm Docker Secrets on the root `./.env` mechanism
 - [ ] **SSL Certificates**: Replace self-signed certificates
 - [ ] **DNS Configuration**: Set up proper domain names
 - [ ] **Backup Strategy**: Database and configuration backups
@@ -655,7 +662,8 @@ This guide provides a comprehensive roadmap for deploying the Minder AI Platform
 #### 1.1 Strong Authentication
 - [ ] Generate production-grade secrets
   ```bash
-  .setup/scripts/generate-secrets.sh
+  # setup.sh auto-fills every CHANGEME secret in ./.env with a secure random value
+  bash setup.sh start
   ```
 - [ ] Use password manager for admin credentials
 - [ ] Enable MFA for all admin accounts
@@ -688,7 +696,7 @@ This guide provides a comprehensive roadmap for deploying the Minder AI Platform
 - [ ] Implement data retention policies
 
 #### 2.2 Secrets Management
-- [ ] Implement Docker Secrets (see DOCKER-SECRETS-IMPLEMENTATION-PLAN.md)
+- [ ] Current mechanism: single root `./.env` (auto-filled by `setup.sh`). Optionally layer external/Swarm Docker Secrets or a vault on top for hardened production
 - [ ] Set up secret rotation schedule
 - [ ] Encrypt secrets at rest
 - [ ] Audit secret access logs
@@ -957,12 +965,12 @@ ab -n 50000 -c 500 https://api.minder.local/api/v1/rag/query
 # 1. Create deployment branch
 git checkout -b deployment/production
 
-# 2. Update configuration
-cp docker/compose/.env.example docker/compose/.env
-# Edit .env with production values
+# 2. Update configuration (root ./.env is the single source of truth)
+cp .env.example .env
+# Edit ./.env with production values (CHANGEME secrets you leave are auto-filled)
 
-# 3. Generate secrets
-.setup/scripts/generate-secrets.sh
+# 3. Generate/heal secrets + mirror ./.env → docker/compose/.env
+bash setup.sh start
 
 # 4. Verify configuration
 docker compose config
@@ -1042,7 +1050,7 @@ docker inspect <service-name>
 ```
 **Solutions**:
 - Check configuration syntax
-- Verify secret files exist
+- Verify `./.env` exists and is populated (setup.sh mirrors it to `docker/compose/.env`)
 - Check resource availability
 - Review dependency health
 
@@ -1166,7 +1174,7 @@ docker logs minder-traefik
 The Minder AI Platform is **ready for production deployment** with the following caveats:
 
 **Must Complete Before Production**:
-1. ✅ Implement Docker Secrets (5-7 hours)
+1. ✅ (Optional) Layer external/Swarm Docker Secrets on the root `./.env` mechanism (5-7 hours)
 2. ✅ Obtain SSL certificates (2-4 hours)
 3. ✅ Configure DNS records (1-2 hours)
 4. ✅ Set up backup procedures (2-3 hours)

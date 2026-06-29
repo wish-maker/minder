@@ -12,7 +12,7 @@ This directory contains the automatic model download system for Ollama.
 
 ### Environment Variables
 
-Set these in `docker/compose/.env`:
+Set these in root `./.env` (then re-run `setup.sh start`):
 
 ```bash
 # Enable automatic model download (default: true)

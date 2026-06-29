@@ -46,9 +46,9 @@ source "${LIB_DIR}/secrets.sh"     # secret generation, postgres password sync
 source "${LIB_DIR}/cache.sh"       # tag cache (must precede versions.sh — its driver fns call these)
 source "${LIB_DIR}/versions.sh"    # smart version resolution engine (calls cache.sh fns)
 source "${LIB_DIR}/preflight.sh"   # prerequisites, GPU, access/compute validation
-source "${LIB_DIR}/env.sh"         # .env generation / validation
+source "${LIB_DIR}/env.sh"         # root .env self-healing fill + compose .env sync
 source "${LIB_DIR}/infra.sh"       # networks, database init, minio init
-source "${LIB_DIR}/lifecycle.sh"   # start/stop services (compose + manual docker), waits
+source "${LIB_DIR}/lifecycle.sh"   # start/stop services (compose), waits
 source "${LIB_DIR}/health.sh"      # health checks, ollama model download
 source "${LIB_DIR}/compose_gen.sh" # compose regeneration + version-spec hashing
 source "${LIB_DIR}/commands.sh"    # cmd_* implementations

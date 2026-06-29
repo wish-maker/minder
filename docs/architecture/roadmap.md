@@ -48,7 +48,7 @@ Minder is a modular RAG (Retrieval-Augmented Generation) platform with microserv
 
 **Files:**
 - `docker/compose/docker-compose.yml`
-- `docker/compose/.env`
+- `./.env` (single source of truth; `setup.sh` copies it to `docker/compose/.env`)
 - `docker/services/postgres/init.sql`
 
 **Verification:**
@@ -221,12 +221,12 @@ cd /root/minder && bash tests/integration/test_phase1_infrastructure.sh
 - **Qdrant:** Qdrant Cloud, self-hosted clusters
 
 **Configuration:**
-- `docker/compose/.env` - Set external service endpoints via environment variables (see `docker/compose/.env.example` for the full list)
+- `./.env` - Set external service endpoints in the root env file (see `./.env.example` for the full list); `setup.sh` mirrors it to `docker/compose/.env`
 - `docs/EXTERNAL_SERVICES_GUIDE.md` - Complete usage guide
 
 **Usage:**
 ```bash
-# 1. Set external service endpoints in docker/compose/.env (or export them)
+# 1. Set external service endpoints in ./.env (or export them)
 export REDIS_HOST=your-redis-cluster.example.com
 export POSTGRES_HOST=your-postgres-db.example.com
 export QDRANT_HOST=your-cluster.qdrant.io
@@ -617,7 +617,7 @@ Phase 1-3 are complete. The platform is fully functional with monitoring and doc
 
 **External Services:**
 - `docs/EXTERNAL_SERVICES_GUIDE.md` - External services usage guide
-- `docker/compose/.env.example` - Environment variable template (external service endpoints)
+- `./.env.example` - Environment variable template (external service endpoints)
 
 **Testing:**
 - `tests/integration/test_phase1_infrastructure.sh` - Phase 1 test suite
