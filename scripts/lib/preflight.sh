@@ -58,7 +58,11 @@ check_prerequisites() {
         fi
     done
     if (( ${#busy_ports[@]} > 0 )); then
-        log_warn "Ports already in use (may conflict): ${busy_ports[*]}"
+        # Join with spaces on ONE line. The script-wide IFS=$'\n\t' would otherwise
+        # expand ${busy_ports[*]} newline-separated (one port per line) — an ugly
+        # multi-line advisory, and live host-port state then leaks past the gate's
+        # single-line "drop advisory" normalize rule. Subshell scopes IFS locally.
+        log_warn "Ports already in use (may conflict): $(IFS=' '; echo "${busy_ports[*]}")"
     fi
 
     if (( failed )); then
