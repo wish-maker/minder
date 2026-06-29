@@ -21,7 +21,7 @@ NC='\033[0m' # No Color
 # Configuration
 COMPOSE_FILE="docker/compose/docker-compose.yml"
 ENV_FILE="docker/compose/.env"
-ENV_EXAMPLE="docker/compose/.env.example"
+ENV_EXAMPLE=".env.example"   # moved to repo root (single source of truth, Commit 2)
 
 # Functions
 log_info() {

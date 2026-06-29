@@ -3,8 +3,12 @@
 # ─────────────────────────────────────────────────────────────
 
 readonly COMPOSE_FILE="${SCRIPT_DIR}/docker/compose/docker-compose.yml"
-readonly ENV_FILE="${SCRIPT_DIR}/docker/compose/.env"
-readonly ENV_EXAMPLE="${SCRIPT_DIR}/docker/compose/.env.example"
+# Root .env is the SINGLE SOURCE OF TRUTH (one per machine). prepare_env() copies
+# it to COMPOSE_ENV_FILE (the path docker compose reads by project-dir default) on
+# install/start/restart — see env.sh. ENV_EXAMPLE is the tracked template.
+readonly ENV_FILE="${SCRIPT_DIR}/.env"
+readonly ENV_EXAMPLE="${SCRIPT_DIR}/.env.example"
+readonly COMPOSE_ENV_FILE="${SCRIPT_DIR}/docker/compose/.env"
 readonly LOGS_DIR="${SCRIPT_DIR}/logs"
 readonly BACKUP_DIR="${SCRIPT_DIR}/backups"
 readonly CACHE_DIR="${SCRIPT_DIR}/.cache"

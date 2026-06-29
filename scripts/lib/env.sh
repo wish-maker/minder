@@ -16,30 +16,47 @@ gen_secret() {
 # ENVIRONMENT SETUP
 # ─────────────────────────────────────────────────────────────
 
-setup_environment() {
-    log_step "Setting up environment"
+# Authoritative secret-key set → "length[:format]". Smart-fill touches ONLY these
+# keys; every other line (OLLAMA_BASE_URL, ACME_EMAIL, GPU vars, models, …) is left
+# exactly as the user wrote it. Mirrors _validate_env's old required-keys list.
+declare -A SECRET_SPEC=(
+    [POSTGRES_PASSWORD]=32
+    [REDIS_PASSWORD]=32
+    [RABBITMQ_PASSWORD]=32
+    [MINIO_ROOT_PASSWORD]=32
+    [JWT_SECRET]=64
+    [NEO4J_AUTH]="16:neo4j/"
+    [INFLUXDB_TOKEN]=40
+    [AUTHELIA_STORAGE_ENCRYPTION_KEY]=32
+    [AUTHELIA_JWT_SECRET]=32
+    [GRAFANA_PASSWORD]=32
+    [WEBUI_SECRET_KEY]=32
+)
 
-    if [[ -f "$ENV_FILE" ]]; then
-        log_info ".env already exists — skipping generation"
-        log_detail "Remove ${ENV_FILE} and re-run to regenerate secrets"
-        _validate_env
-        return 0
+# prepare_env — self-healing environment provisioning. Runs on install/start/restart.
+#
+#   root ./.env  = SINGLE SOURCE OF TRUTH (one per machine; gitignored; chmod 600).
+#   docker/compose/.env (COMPOSE_ENV_FILE) = derived COPY that docker compose reads;
+#                        regenerated from root .env every run, carries a DO-NOT-EDIT
+#                        banner. COPY (not symlink) for Windows + Pi portability.
+#
+# Smart-fill is idempotent and SILENT when .env is already fully populated — this is
+# what keeps the gate's start/stop/restart traces unchanged.
+prepare_env() {
+    if [[ ! -f "$ENV_FILE" ]]; then
+        mkdir -p "$(dirname "$ENV_FILE")"
+        if [[ -f "$ENV_EXAMPLE" ]]; then
+            cp "$ENV_EXAMPLE" "$ENV_FILE"
+            log_success "Created .env from .env.example"
+        else
+            log_info "No .env.example found — generating configuration"
+            _write_default_env
+        fi
     fi
 
-    mkdir -p "$(dirname "$ENV_FILE")"
-
-    if [[ -f "$ENV_EXAMPLE" ]]; then
-        cp "$ENV_EXAMPLE" "$ENV_FILE"
-        log_success "Copied .env from .env.example"
-        _fill_env_secrets
-    else
-        log_info "No .env.example found — generating configuration"
-        _write_default_env
-    fi
-
-    chmod 600 "$ENV_FILE"
-    log_detail "Permissions set to 600 on .env"
-    log_success "Environment ready"
+    _fill_env_secrets               # heal MISSING/EMPTY/PLACEHOLDER secrets (backs up on change)
+    chmod 600 "$ENV_FILE" 2>/dev/null || true
+    _sync_compose_env               # mirror root .env → docker/compose/.env (silent)
 }
 
 _write_default_env() {
@@ -120,132 +137,75 @@ EOF
     log_success "Generated .env with secure random secrets (fallback mode)"
 }
 
+# Smart-fill: for each SECRET_SPEC key, generate a secret iff the value is MISSING,
+# EMPTY, a CHANGEME-style placeholder, or (for prefixed formats) the bare prefix with
+# no password. A REAL user-set value is left untouched — that is the "updatable"
+# property. Backs up .env before any rewrite. SILENT no-op when nothing needs filling.
 _fill_env_secrets() {
-    log_info "Replacing placeholder secrets with secure random values..."
+    local key spec format value
+    local -a to_fill=()
 
-    local changed=0
-    local total=0
+    for key in "${!SECRET_SPEC[@]}"; do
+        spec="${SECRET_SPEC[$key]}"
+        format=""; [[ "$spec" == *:* ]] && format="${spec#*:}"
 
-    while IFS= read -r line; do
-        if [[ "$line" =~ ^([A-Z_]+)=(.+)$ ]]; then
-            local key="${BASH_REMATCH[1]}"
-            local value="${BASH_REMATCH[2]}"
-            local needs_secret=false
-            local secret_length=32
-            local secret_format=""
-
-            # Detect placeholder patterns (including embedded in description)
-            if [[ "$value" =~ CHANGEME ]] || \
-               [[ "$value" =~ REPLACE_ME ]] || \
-               [[ "$value" =~ change-this-to ]] || \
-               [[ "$value" =~ my-super-secret ]]; then
-                needs_secret=true
-            fi
-
-            # Determine appropriate secret length based on key name
-            case "$key" in
-                JWT_SECRET)
-                    secret_length=64
-                    ;;
-                INFLUXDB_TOKEN|INFLUXDB_ADMIN_TOKEN)
-                    secret_length=40
-                    ;;
-                WEBUI_SECRET_KEY|AUTHELIA_*)
-                    secret_length=32
-                    ;;
-                NEO4J_AUTH)
-                    secret_format="neo4j/"
-                    secret_length=16
-                    ;;
-            esac
-
-            if $needs_secret; then
-                total=$(( total + 1 ))
-                local new_secret
-
-                if [[ -n "$secret_format" ]]; then
-                    new_secret="${secret_format}$(gen_secret "$secret_length")"
-                else
-                    new_secret="$(gen_secret "$secret_length")"
-                fi
-
-                # Use different delimiter for sed to avoid conflicts
-                sed -i "s|^${key}=.*|${key}=${new_secret}|" "$ENV_FILE"
-                log_detail "✓ Generated secret for ${key}"
-                changed=$(( changed + 1 ))
-            fi
-        fi
-    done < "$ENV_FILE"
-
-    if (( changed > 0 )); then
-        log_success "${changed} placeholder secret(s) replaced with secure random values"
-    else
-        log_detail "No placeholder secrets found (all secrets already set)"
-    fi
-}
-
-_validate_env() {
-    log_info "Validating environment configuration..."
-
-    # Core required keys that MUST be set
-    local required_keys=(
-        POSTGRES_USER
-        POSTGRES_PASSWORD
-        REDIS_PASSWORD
-        RABBITMQ_PASSWORD
-        MINIO_ROOT_PASSWORD
-        JWT_SECRET
-        NEO4J_AUTH
-        INFLUXDB_TOKEN
-        AUTHELIA_STORAGE_ENCRYPTION_KEY
-        AUTHELIA_JWT_SECRET
-        GRAFANA_PASSWORD
-        WEBUI_SECRET_KEY
-    )
-
-    local missing=()
-    local insecure=()
-
-    for key in "${required_keys[@]}"; do
-        if ! grep -qE "^${key}=.+" "$ENV_FILE"; then
-            missing+=("$key")
+        if grep -qE "^${key}=" "$ENV_FILE"; then
+            value="$(grep -E "^${key}=" "$ENV_FILE" | head -n1 | cut -d= -f2-)"
         else
-            # Check for placeholder/insecure values
-            local value
-            value=$(grep -E "^${key}=" "$ENV_FILE" | cut -d= -f2-)
-            if [[ "$value" =~ ^CHANGEME ]] || \
-               [[ "$value" =~ ^REPLACE_ME ]] || \
-               [[ "$value" =~ ^change-this ]] || \
-               [[ "$value" =~ my-super-secret ]] || \
-               [[ "$value" == "admin" ]] || \
-               [[ "$value" =~ ^password$ ]]; then
-                insecure+=("$key")
-            fi
+            value="__MISSING__"
+        fi
+
+        if [[ "$value" == "__MISSING__" || -z "$value" ]] \
+           || [[ "$value" =~ CHANGEME|REPLACE_ME|change-this-to|my-super-secret ]] \
+           || { [[ -n "$format" ]] && [[ "$value" == "$format" ]]; }; then
+            to_fill+=("$key")
         fi
     done
 
-    if (( ${#missing[@]} > 0 )); then
-        log_warn "Missing required keys in .env: ${missing[*]}"
-        log_detail "Run: sed -i 's/^CHANGEME.*/$(gen_secret 32)/' $ENV_FILE"
-        return 1
-    fi
+    (( ${#to_fill[@]} == 0 )) && return 0   # fully populated → silent no-op (gate-critical)
 
-    if (( ${#insecure[@]} > 0 )); then
-        log_warn "Insecure placeholder values found: ${insecure[*]}"
-        log_detail "Replace them with: ./setup.sh setup-env (re-runs secret generation)"
-        log_detail "Or manually: openssl rand -hex 32"
-    fi
+    # deterministic log/apply order (assoc-array iteration order is unspecified)
+    mapfile -t to_fill < <(printf '%s\n' "${to_fill[@]}" | sort)
 
-    # Check file permissions
-    local perm
-    perm="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || stat -f '%A' "$ENV_FILE" 2>/dev/null || echo '???')"
-    if [[ "$perm" != "600" ]] && [[ "$perm" != "0600" ]]; then
-        log_warn ".env permissions are ${perm} — should be 600"
-        log_detail "Run: chmod 600 $ENV_FILE"
-    fi
+    # back up the source-of-truth BEFORE rewriting it
+    local ts backup
+    ts="$(date -u '+%Y%m%d-%H%M%S')"
+    backup="$(dirname "$ENV_FILE")/.env.backup-${ts}"
+    cp "$ENV_FILE" "$backup"
+    log_detail "Backed up .env → $(basename "$backup")"
 
-    log_detail "Environment validation complete"
-    return 0
+    local length new_secret
+    for key in "${to_fill[@]}"; do
+        spec="${SECRET_SPEC[$key]}"
+        length="${spec%%:*}"
+        format=""; [[ "$spec" == *:* ]] && format="${spec#*:}"
+        new_secret="${format}$(gen_secret "$length")"
+
+        if grep -qE "^${key}=" "$ENV_FILE"; then
+            # '|' delimiter avoids clashing with the '/' in the neo4j/ prefix
+            sed -i "s|^${key}=.*|${key}=${new_secret}|" "$ENV_FILE"
+        else
+            printf '%s=%s\n' "$key" "$new_secret" >> "$ENV_FILE"
+        fi
+        log_detail "✓ Generated secret for ${key}"
+    done
+
+    log_success "${#to_fill[@]} secret(s) generated/healed in .env"
+}
+
+# Mirror the source-of-truth root .env to the path docker compose reads
+# (project-dir default = dirname COMPOSE_FILE). COPY (not symlink) for Windows + Pi
+# portability; prepend a DO-NOT-EDIT banner. Silent — runs every prepare_env.
+_sync_compose_env() {
+    mkdir -p "$(dirname "$COMPOSE_ENV_FILE")"
+    {
+        printf '# ============================================================================\n'
+        printf '# DO NOT EDIT — generated by setup.sh from the root .env (single source of truth).\n'
+        printf '# Edit ./.env and re-run setup.sh (start/restart) to regenerate this file.\n'
+        printf '# ============================================================================\n'
+        cat "$ENV_FILE"
+    } > "$COMPOSE_ENV_FILE"
+    chmod 600 "$COMPOSE_ENV_FILE" 2>/dev/null || true
 }
 
 _env_get() {

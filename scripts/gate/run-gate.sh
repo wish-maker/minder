@@ -35,7 +35,15 @@ VERBS=( "--help" "regenerate-compose" "stop" "start" "restart" )
 # snapshotted + restored so a gate run never dirties the working tree.
 SNAP_FILES=( "docker/compose/docker-compose.yml" ".setup/compose.hash" )
 
+# gitignored env files prepare_env() rewrites OUTSIDE run() (start/restart now call it).
+# Unlike SNAP_FILES these are UNTRACKED — git checkout can't restore them — so we record
+# exact prior state INCLUDING absence and restore/delete accordingly. Before each capture
+# a deterministic fully-filled root .env is seeded so prepare_env is a silent no-op
+# (nothing to fill → no fill logs, no .env.backup-<ts>, no randomness).
+ENV_PATHS=( ".env" "docker/compose/.env" )
+
 SNAP_DIR=""
+ENV_SNAP_DIR=""
 SED_TMP=""
 
 restore_snapshot() {
@@ -47,10 +55,46 @@ restore_snapshot() {
     done
 }
 
+snapshot_env() {
+    ENV_SNAP_DIR="$(mktemp -d)"
+    local rel key
+    for rel in "${ENV_PATHS[@]}"; do
+        key="${rel//\//__}"
+        if [[ -f "${REPO}/${rel}" ]]; then
+            cp "${REPO}/${rel}" "${ENV_SNAP_DIR}/${key}"
+            : > "${ENV_SNAP_DIR}/${key}.present"   # marker: existed before the run
+        fi
+    done
+}
+
+restore_env() {
+    [[ -n "$ENV_SNAP_DIR" && -d "$ENV_SNAP_DIR" ]] || return 0
+    local rel key
+    for rel in "${ENV_PATHS[@]}"; do
+        key="${rel//\//__}"
+        if [[ -f "${ENV_SNAP_DIR}/${key}.present" ]]; then
+            cp "${ENV_SNAP_DIR}/${key}" "${REPO}/${rel}"
+        else
+            rm -f "${REPO}/${rel}"                 # was absent before → keep it absent
+        fi
+    done
+}
+
+seed_env() {
+    # Deterministic, fully-filled root .env: every CHANGEME* placeholder → a fixed
+    # non-placeholder value. OLLAMA_BASE_URL= stays empty (not a secret key → ignored
+    # by prepare_env). Result: prepare_env finds nothing to heal and stays silent.
+    [[ -f "${REPO}/.env.example" ]] || return 0
+    sed -E 's/CHANGEME[A-Z0-9_]*/0000000000000000000000000000000000000000000000000000000000000000/g' \
+        "${REPO}/.env.example" > "${REPO}/.env"
+}
+
 cleanup() {
-    # trap backstop: restore tracked files even on Ctrl-C / error / TERM mid-run
+    # trap backstop: restore tracked files AND env files even on Ctrl-C / error / TERM
     restore_snapshot
+    restore_env
     [[ -n "$SNAP_DIR" ]] && rm -rf "$SNAP_DIR"
+    [[ -n "$ENV_SNAP_DIR" ]] && rm -rf "$ENV_SNAP_DIR"
     [[ -n "$SED_TMP" ]] && rm -f "$SED_TMP"
 }
 trap cleanup EXIT INT TERM
@@ -91,6 +135,11 @@ capture() {
         [[ -f "${REPO}/${rel}" ]] && cp "${REPO}/${rel}" "${SNAP_DIR}/${key}"
     done
 
+    # Preserve the real (untracked) env files, then seed a deterministic fully-filled
+    # root .env so prepare_env (now invoked by start/restart) is a silent no-op.
+    snapshot_env
+    seed_env
+
     local modules; modules="$(cd "$REPO" && ls scripts/lib/*.sh 2>/dev/null | sort | tr '\n' ' ')"
     {
         echo "### GATE TRACE (normalized, value-masked)"
@@ -110,7 +159,9 @@ capture() {
 
     # restore immediately (trap is the interrupt backstop), then drop temps
     restore_snapshot
+    restore_env
     rm -rf "$SNAP_DIR"; SNAP_DIR=""
+    rm -rf "$ENV_SNAP_DIR"; ENV_SNAP_DIR=""
     rm -f "$SED_TMP"; SED_TMP=""
     echo "captured -> ${out}  ($(wc -l < "$out") lines)" >&2
 }

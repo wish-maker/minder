@@ -467,6 +467,10 @@ cmd_stop() {
 cmd_start() {
     check_prerequisites
 
+    # Self-heal env + mirror root .env → docker/compose/.env before anything reads it.
+    # Silent no-op when .env is already fully populated (keeps behavior gate clean).
+    prepare_env
+
     # Phase 3: Validate GPU environment for AI acceleration
     validate_gpu_environment
 
@@ -604,7 +608,7 @@ cmd_install() {
     progress_init 10   # one extra step for image resolution
 
     progress_next "Checking prerequisites";    check_prerequisites
-    progress_next "Setting up environment";    setup_environment
+    progress_next "Setting up environment";    prepare_env
     progress_next "Creating Docker network";   create_networks
     progress_next "Resolving & pulling images";pull_all_images
     progress_next "Initialising databases";    initialize_database
