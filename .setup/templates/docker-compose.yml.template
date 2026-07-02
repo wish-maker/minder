@@ -514,6 +514,9 @@ services:
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=6333
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
+    # main.py reads OLLAMA_HOST (not OLLAMA_BASE_URL) — alias it so the OLLAMA_BASE_URL
+    # knob actually reaches this inference-heavy service in remote/native mode.
+    - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2}
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
@@ -556,6 +559,12 @@ services:
     - POSTGRES_USER=minder
     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     - POSTGRES_DB=minder
+    # main.py reads OLLAMA_HOST (not OLLAMA_BASE_URL); previously NEITHER was injected,
+    # so this service ignored the knob entirely. Inject both: OLLAMA_HOST is what the
+    # code reads today; OLLAMA_BASE_URL is for forward-compat with the code-consolidation
+    # follow-up. Unified default minder-ollama:11434.
+    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
+    - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - MODELS_PATH=/app/models
     - MODEL_CACHE_PATH=/app/model-cache
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
