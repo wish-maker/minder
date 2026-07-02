@@ -22,7 +22,18 @@ s#http://[^ ]+#HEALTHRESULT#g
 s#\(container not running\)#HEALTHRESULT#g
 s#\(TCP port check\)#HEALTHRESULT#g
 s#\(not yet reachable\)#HEALTHRESULT#g
-s#[0-9]+/[0-9]+ endpoints healthy#N/N endpoints healthy#g
+# #3 health SUMMARY — collapse BOTH live-state branches to ONE canonical line:
+#   success (log_success): "N/N endpoints healthy 🎉"
+#   warn    (log_warn):    "M/N endpoints reachable — K still starting"
+# Both go through _log (icon + ts prefix), but we replace the WHOLE line so the result
+# is prefix/count/emoji-independent → byte-identical regardless of which branch fires.
+# Structure is still preserved: the per-service SET is carried by the per-endpoint
+# "MARK <name> HEALTHRESULT" lines below, and removing the summary entirely leaves no
+# match here → the diff shows it.
+/endpoints healthy/   s/.*/  MARK HEALTHSUMMARY/
+/endpoints reachable/ s/.*/  MARK HEALTHSUMMARY/
+# warn-only "Re-check: ./setup.sh status" hint (log_detail; present only when warn_count>0)
+/Re-check: /d
 # influxdb uses a raw bash >/dev/tcp probe (not shimmable, not DRY_RUN-gated), so its
 # branch flaps with live host-port state: success emits url + "(TCP port check)" (two
 # masked tokens), warn emits url + "(not yet reachable)" (two). Collapse repeated
@@ -36,6 +47,12 @@ s#[0-9]+/[0-9]+ endpoints healthy#N/N endpoints healthy#g
 /Ports already in use \(may conflict\)/d
 
 # host resource readings
-s/Disk space: [0-9]+GB free/Disk space: NNNGB free/g
+# #5 disk-space advisory — collapse BOTH live-state branches to ONE canonical line:
+#   ok   (log_detail): "  Disk space: NGB free"            (2-space prefix, no icon/ts)
+#   warn (log_warn):   "⚠ HH:MM:SS  Low disk space: NGB free (recommend ≥10GB)"
+# `df` is live host state; the branches differ in message AND prefix, so replace the
+# WHOLE line (matched case-insensitively on the shared "disk space: NGB free" anchor)
+# to force byte-identical output. Line still present → a removed disk check shows as a diff.
+/[Dd]isk space: [0-9]+GB free/ s/.*/  MARK DISKSPACE/
 s/GPU Memory: [0-9]+ MiB/GPU Memory: N MiB/g
 s/GPUs detected: [0-9]+/GPUs detected: N/g
