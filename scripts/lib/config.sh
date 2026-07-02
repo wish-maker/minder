@@ -91,7 +91,7 @@ readonly -a THIRD_PARTY_IMAGE_SPECS=(
     "rabbitmq:4.3.2-management|4|none"
     "qdrant/qdrant:v1.18.2|v1|none"
     "neo4j:2026.05.0-community|2026|none"
-    "ollama/ollama:0.30.10|0|none"
+    "ollama/ollama:0.30.11|0|none"
     "prom/prometheus:v3.12.0|v3|none"
     "grafana/grafana:13.1|13|none"
     "prom/alertmanager:v0.33.0|v0|none"
