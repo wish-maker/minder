@@ -78,12 +78,19 @@ initialize_minio() {
     # Wait for MinIO to be fully ready
     sleep 5
 
-    # Install MinIO client if not available
-    if ! docker exec minder-minio which mc &>/dev/null; then
-        log_detail "Installing MinIO client..."
-        docker exec minder-minio wget -q https://dl.min.io/client/mc/release/linux-amd64/mc -O /tmp/mc
-        docker exec minder-minio chmod +x /tmp/mc
-        docker exec minder-minio mv /tmp/mc /usr/local/bin/mc
+    # mc already ships in the minio image (/usr/bin/mc) — no bootstrap needed.
+    # The old block installed it via `wget` (absent from this image → 127 crash
+    # under set -e) behind a `which mc` guard (`which` also absent → guard never
+    # worked). Instead, configure the 'mydata' alias the bucket loop below relies
+    # on: point it at the local server with the root creds from .env. (The default
+    # 'local' alias is unauthenticated → Access Denied, so it can't be reused.)
+    local minio_user minio_pass
+    minio_user="$(_env_get MINIO_ROOT_USER)"
+    minio_pass="$(_env_get MINIO_ROOT_PASSWORD)"
+    if ! docker exec minder-minio mc alias set mydata \
+            "http://localhost:9000" "$minio_user" "$minio_pass" &>/dev/null; then
+        log_warn "Could not configure mc 'mydata' alias — skipping bucket creation"
+        return 0
     fi
 
     # Create buckets
