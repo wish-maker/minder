@@ -61,7 +61,7 @@ initialize_minio() {
     fi
 
     compose up -d minio
-    wait_for_service "minio" "9000/minio/health/live" || exit 1
+    wait_healthy "minio" "$TIMEOUT_SERVICES" || exit 1
 
     log_info "Creating MinIO buckets…"
 
@@ -102,7 +102,7 @@ initialize_minio() {
                         ;;
                 esac
             else
-                log_warning "Failed to create bucket: $bucket"
+                log_warn "Failed to create bucket: $bucket"
             fi
         fi
     done
