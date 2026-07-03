@@ -67,7 +67,7 @@ services:
     - traefik.http.routers.traefik-dashboard.service=api@internal
     - traefik.http.routers.traefik-dashboard.middlewares=ipwhitelist
     # PILLAR 1: Expanded IP whitelist for local network access (LAN + VPN)
-    - traefik.http.middlewares.ipwhitelist.ipwhitelist.trustedIPs=${TRAEFIK_TRUSTED_IPS:-192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1/32}
+    - traefik.http.middlewares.ipwhitelist.ipallowlist.sourceRange=${TRAEFIK_TRUSTED_IPS:-192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1/32}
   # TEMPORARILY DISABLED: Crash loop due to missing database and NTP sync issues
   # Decision deferred: Evaluate if SSO/2FA needed for personal Pi deployment
   # authelia:
