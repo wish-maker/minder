@@ -93,6 +93,7 @@ main() {
         doctor)     cmd_doctor ;;
         update)     cmd_update "${arg1:-}" ;;
         regenerate-compose) cmd_regenerate_compose ;;
+        ollama-mode) cmd_ollama_mode "$arg1" "$arg2" ;;
         sync-postgres-password) sync_postgres_password ;;
         uninstall)  cmd_uninstall "$arg1" ;;
         -h|--help|help) show_help ;;

@@ -246,13 +246,13 @@ services:
   ollama:
     image: ollama/ollama:0.30.11
     container_name: minder-ollama
-    # Present ONLY in local Ollama mode. In remote/native mode (OLLAMA_BASE_URL set)
+    # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
     # compose project at all — nothing, not even a depends_on, can start it (that is
     # why finding #4 could not be fixed with a --scale flag: a flag must be remembered
     # on every `compose up`; an inactive profile cannot be forgotten). Dependents use
     # `required: false` so the project stays valid without it. See lifecycle.sh.
-    profiles: ["local-ollama"]
+    profiles: ["internal-ollama"]
     restart: on-failure
     # PILLAR 3: GPU Passthrough - Hardware acceleration for AI inference (when available)
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
@@ -542,7 +542,7 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
-        required: false   # local-ollama profile only; native mode omits ollama
+        required: false   # internal-ollama profile only; external mode omits ollama
     healthcheck:
       test:
       - CMD
@@ -792,7 +792,7 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
-        required: false   # local-ollama profile only; native mode omits ollama
+        required: false   # internal-ollama profile only; external mode omits ollama
       rag-pipeline:
         condition: service_healthy
     healthcheck:

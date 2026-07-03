@@ -31,6 +31,62 @@ cmd_migrate() {
 }
 
 # ─────────────────────────────────────────────────────────────
+# OLLAMA MODE SWITCH  (ergonomic .env flip — does NOT restart)
+# ─────────────────────────────────────────────────────────────
+# internal            → OLLAMA_BASE_URL= (empty): platform-managed ollama container.
+# external [url]       → OLLAMA_BASE_URL=<url> (default host.docker.internal:11434):
+#                        reach ollama at a URL (same-host daemon OR a remote host).
+# Surgically rewrites ONLY the OLLAMA_BASE_URL line in root .env (the single source of
+# truth; outside SECRET_SPEC so smart-fill never touches it). Prints a restart hint —
+# does NOT restart. start_services/download_ollama_models read this back from .env.
+cmd_ollama_mode() {
+    local mode="${1:-}" url="${2:-}"
+    local default_url="http://host.docker.internal:11434"
+    local new_url
+
+    case "$mode" in
+        internal) new_url="" ;;
+        external)
+            new_url="${url:-$default_url}"
+            if ! [[ "$new_url" =~ ^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/.*)?$ ]]; then
+                log_error "Invalid Ollama URL: '${new_url}'"
+                log_detail "Expected a full URL, e.g. ${default_url} or http://192.168.1.50:11434"
+                log_detail ".env was NOT changed."
+                exit 1
+            fi
+            ;;
+        *)
+            log_error "Usage: ./${SCRIPT_NAME} ollama-mode internal|external [url]"
+            log_detail "  internal        platform-managed ollama container (OLLAMA_BASE_URL empty)"
+            log_detail "  external [url]  reach ollama at a URL (default ${default_url})"
+            exit 1
+            ;;
+    esac
+
+    [[ -f "$ENV_FILE" ]] || { log_error "No .env at ${ENV_FILE} — run ./${SCRIPT_NAME} install first."; exit 1; }
+
+    local before after repl
+    before="$(_env_get OLLAMA_BASE_URL)"
+    repl="${new_url//&/\\&}"                       # escape sed replacement metachar
+    if grep -qE "^OLLAMA_BASE_URL=" "$ENV_FILE"; then
+        sed -i "s|^OLLAMA_BASE_URL=.*|OLLAMA_BASE_URL=${repl}|" "$ENV_FILE"
+    else
+        printf 'OLLAMA_BASE_URL=%s\n' "$new_url" >> "$ENV_FILE"
+    fi
+    after="$(_env_get OLLAMA_BASE_URL)"
+
+    local label
+    [[ -z "$new_url" ]] && label="internal (platform-managed container)" || label="external (${new_url})"
+    if [[ "$before" == "$after" ]]; then
+        log_info "Ollama mode already ${label} — .env unchanged."
+    else
+        log_success "Ollama mode → ${label}"
+        log_detail "OLLAMA_BASE_URL: '${before}' → '${after}'"
+    fi
+    log_warn "Run  ./${SCRIPT_NAME} restart  to apply (recreates services + re-mirrors .env)."
+}
+
+# ─────────────────────────────────────────────────────────────
 # BACKUP
 # ─────────────────────────────────────────────────────────────
 

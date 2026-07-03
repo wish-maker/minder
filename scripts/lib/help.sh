@@ -104,6 +104,11 @@ ${BOLD}VERSION RESOLUTION${NC}
 ${BOLD}CONFIGURATION MANAGEMENT${NC}
     regenerate-compose       Regenerate docker-compose.yml from template using version specs
                              All version changes MUST be done via THIRD_PARTY_IMAGE_SPECS
+    ollama-mode internal|external [url]
+                             Switch the Ollama backend in .env: internal = platform-managed
+                             container; external [url] = reach a URL (same-host daemon or a
+                             remote host; default http://host.docker.internal:11434). Flips
+                             .env only and prints a "run restart to apply" hint — no restart.
 
 ${BOLD}FLAGS${NC}
     DRY_RUN=1               Preview commands without executing

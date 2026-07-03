@@ -117,12 +117,13 @@ run_health_checks() {
 download_ollama_models() {
     section "🤖  AI Model Download"
 
-    # Remote/native Ollama: the local container is scaled to 0 (see start_services),
-    # so there's nothing to pull into and docker-exec would just burn TIMEOUT_OLLAMA.
-    # Mirrors docker/compose/ollama/init-models.sh:12.
-    if [[ -n "${OLLAMA_BASE_URL:-}" ]]; then
-        log_info "🌐 Remote/native Ollama mode (OLLAMA_BASE_URL set) — skipping in-container model pull"
-        log_detail "Pull models on the native host, e.g.:  ollama pull llama3.2 && ollama pull nomic-embed-text"
+    # External Ollama mode: no platform-managed container to pull into (see start_services),
+    # so a docker-exec pull would just burn TIMEOUT_OLLAMA. Mirrors ollama/init-models.sh:12.
+    # Knob source: exported OLLAMA_BASE_URL wins, else .env (single source of truth).
+    local ollama_url="${OLLAMA_BASE_URL:-$(_env_get OLLAMA_BASE_URL)}"
+    if [[ -n "$ollama_url" ]]; then
+        log_info "🌐 External Ollama mode (OLLAMA_BASE_URL set) — skipping in-container model pull"
+        log_detail "Pull models on the external host, e.g.:  ollama pull llama3.2 && ollama pull nomic-embed-text"
         return 0
     fi
 

@@ -5,21 +5,26 @@
 start_services() {
     log_step "Starting all services"
 
-    # Detect Ollama mode. The local ollama container is gated by the compose
-    # 'local-ollama' profile (see docker-compose.yml + config.sh). We activate it via
-    # COMPOSE_PROFILES ONLY in local mode. In remote/native mode the profile stays
-    # inactive, so ollama is not part of the project — no `compose up` here or added
-    # later can start it (this replaces the old --scale ollama=0 flag, which had to be
-    # repeated on every up and silently regressed when one was missed: finding #4).
-    if [[ -n "${OLLAMA_BASE_URL:-}" ]]; then
-        log_info "🌐 Remote Ollama mode DETECTED"
-        log_info "   OLLAMA_BASE_URL: $OLLAMA_BASE_URL"
-        log_info "   Local ollama container will NOT start (compose 'local-ollama' profile inactive)"
+    # Detect Ollama mode. The platform-managed ollama container is gated by the compose
+    # 'internal-ollama' profile (see docker-compose.yml + config.sh). We activate it via
+    # COMPOSE_PROFILES ONLY in internal mode. In external mode the profile stays inactive,
+    # so ollama is not part of the project — no `compose up` here or added later can start
+    # it (this replaces the old --scale ollama=0 flag, which had to be repeated on every
+    # up and silently regressed when one was missed: finding #4).
+    #
+    # Source of the knob: an exported OLLAMA_BASE_URL wins (CLI override); otherwise read
+    # it from .env (the single source of truth) so `ollama-mode` + a plain restart switch
+    # modes without needing to export anything.
+    local ollama_url="${OLLAMA_BASE_URL:-$(_env_get OLLAMA_BASE_URL)}"
+    if [[ -n "$ollama_url" ]]; then
+        log_info "🌐 External Ollama mode (OLLAMA_BASE_URL set)"
+        log_info "   OLLAMA_BASE_URL: $ollama_url"
+        log_info "   Platform-managed ollama container will NOT start (compose 'internal-ollama' profile inactive)"
         unset COMPOSE_PROFILES
     else
-        log_info "🏠 Local Ollama mode (default, zero-config)"
-        log_info "   OLLAMA_BASE_URL: (empty, using local minder-ollama container)"
-        export COMPOSE_PROFILES="local-ollama"
+        log_info "🏠 Internal Ollama mode (platform-managed container, default zero-config)"
+        log_info "   OLLAMA_BASE_URL: (empty, using internal minder-ollama container)"
+        export COMPOSE_PROFILES="internal-ollama"
     fi
 
     log_info "① Security layer…"
