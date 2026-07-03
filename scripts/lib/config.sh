@@ -30,10 +30,15 @@ readonly NETWORK_NAME="docker_minder-network"
 readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
 readonly -a SECURITY_SERVICES=(traefik)
-readonly -a CORE_SERVICES=(postgres redis qdrant ollama neo4j rabbitmq )
-# Note: ollama uses conditional profiles in docker-compose.yml
-# - OLLAMA_BASE_URL empty/unset → local mode, ollama container starts
-# - OLLAMA_BASE_URL set → remote mode, ollama container skipped
+readonly -a CORE_SERVICES=(postgres redis qdrant neo4j rabbitmq )
+# ollama is intentionally NOT listed here. It is gated by the compose 'local-ollama'
+# profile (see docker-compose.yml). start_services activates that profile ONLY when
+# OLLAMA_BASE_URL is empty (local mode); naming a profile-disabled service in a
+# `compose up` errors ("no such service: ollama: disabled"), so it must not appear.
+# - OLLAMA_BASE_URL empty/unset → local mode: profile active, ollama starts as a
+#   dependency of rag-pipeline/openwebui (depends_on … required:false).
+# - OLLAMA_BASE_URL set         → remote/native mode: profile inactive, ollama is not
+#   part of the project at all → nothing can start it.
 readonly -a API_SERVICES=(api-gateway plugin-registry marketplace plugin-state-manager rag-pipeline model-management graph-rag)
 readonly -a AI_SERVICES=(openwebui tts-stt)
 readonly -a MONITORING_SERVICES=(influxdb telegraf prometheus grafana alertmanager jaeger otel-collector)

@@ -5,17 +5,21 @@
 start_services() {
     log_step "Starting all services"
 
-    # Detect Ollama mode
+    # Detect Ollama mode. The local ollama container is gated by the compose
+    # 'local-ollama' profile (see docker-compose.yml + config.sh). We activate it via
+    # COMPOSE_PROFILES ONLY in local mode. In remote/native mode the profile stays
+    # inactive, so ollama is not part of the project — no `compose up` here or added
+    # later can start it (this replaces the old --scale ollama=0 flag, which had to be
+    # repeated on every up and silently regressed when one was missed: finding #4).
     if [[ -n "${OLLAMA_BASE_URL:-}" ]]; then
         log_info "🌐 Remote Ollama mode DETECTED"
         log_info "   OLLAMA_BASE_URL: $OLLAMA_BASE_URL"
-        log_info "   Local ollama container will NOT start (--scale ollama=0)"
-        log_info "   ⚠️  If you bypass setup.sh, you MUST manually use: docker compose up --scale ollama=0"
-        COMPOSE_OLLAMA_SCALE=("--scale" "ollama=0")
+        log_info "   Local ollama container will NOT start (compose 'local-ollama' profile inactive)"
+        unset COMPOSE_PROFILES
     else
         log_info "🏠 Local Ollama mode (default, zero-config)"
         log_info "   OLLAMA_BASE_URL: (empty, using local minder-ollama container)"
-        COMPOSE_OLLAMA_SCALE=()
+        export COMPOSE_PROFILES="local-ollama"
     fi
 
     log_info "① Security layer…"
@@ -23,7 +27,7 @@ start_services() {
     sleep 5
 
     log_info "② Infrastructure (DB, cache, vector store, AI runtime)…"
-    compose up -d "${CORE_SERVICES[@]}" "${COMPOSE_OLLAMA_SCALE[@]}"
+    compose up -d "${CORE_SERVICES[@]}"
     sleep 8
 
     log_info "③ Message broker (RabbitMQ)…"
