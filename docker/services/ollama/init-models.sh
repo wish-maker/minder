@@ -27,11 +27,15 @@ done
 
 echo "Ollama is ready. Checking required models..."
 
-# Get models from environment or use defaults
-OLLAMA_MODELS="${OLLAMA_MODELS:-llama3.2,nomic-embed-text}"
+# Get models from environment or use defaults.
+# NOTE: read OLLAMA_PULL_MODELS, NOT OLLAMA_MODELS — the ollama server treats
+# OLLAMA_MODELS as its model STORAGE DIRECTORY, so passing a model list in it
+# made ollama store models outside the volume (see #29). The compose maps the
+# host's model list into the container under this non-colliding name.
+OLLAMA_PULL_MODELS="${OLLAMA_PULL_MODELS:-llama3.2,nomic-embed-text}"
 OLLAMA_AUTOMATIC_PULL="${OLLAMA_AUTOMATIC_PULL:-true}"
 
-echo "Required models: $OLLAMA_MODELS"
+echo "Required models: $OLLAMA_PULL_MODELS"
 echo "Auto-pull enabled: $OLLAMA_AUTOMATIC_PULL"
 
 if [ "$OLLAMA_AUTOMATIC_PULL" = "true" ]; then
@@ -41,7 +45,7 @@ if [ "$OLLAMA_AUTOMATIC_PULL" = "true" ]; then
     # Save original IFS
     OLD_IFS="$IFS"
     IFS=','
-    for MODEL in $OLLAMA_MODELS; do
+    for MODEL in $OLLAMA_PULL_MODELS; do
         # Trim whitespace from model name
         MODEL=$(echo "$MODEL" | xargs)
 

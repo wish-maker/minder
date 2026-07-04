@@ -264,7 +264,10 @@ services:
     - ollama_data:/root/.ollama
     - ../services/ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
     environment:
-    - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
+    # OLLAMA_PULL_MODELS (not OLLAMA_MODELS): the ollama server reads OLLAMA_MODELS as its
+    # model STORAGE DIR, so a model list there made it store models outside the volume (#29).
+    # init-models.sh reads OLLAMA_PULL_MODELS; ollama defaults storage to /root/.ollama/models.
+    - OLLAMA_PULL_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
     - OLLAMA_AUTOMATIC_PULL=${OLLAMA_AUTOMATIC_PULL:-true}
     - OLLAMA_HOST=0.0.0.0
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
