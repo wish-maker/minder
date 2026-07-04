@@ -781,7 +781,6 @@ services:
     - RAG_ENABLED=true
     - MINDER_API_GATEWAY_URL=http://minder-api-gateway:8000
     - MINDER_AI_TOOLS_ENABLED=true
-    - MINDER_FUNCTIONS_CONFIG=/app/config/functions.json
     - DATABASE_URL=postgresql://minder:${POSTGRES_PASSWORD}@postgres:5432/minder
     - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-this-to-a-random-secret-key}
     - WEBUI_AUTH=${WEBUI_AUTH:-true}
@@ -795,7 +794,10 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
     - openwebui_data:/app/backend/data
-    - ./openwebui/functions.json:/app/config/functions.json:ro
+    # functions.json mount + MINDER_FUNCTIONS_CONFIG env removed (#24): invented
+    # mechanism nothing read — stock Open WebUI stores functions in its DB, not a
+    # JSON file, and no minder code consumed MINDER_FUNCTIONS_CONFIG. The mount source
+    # was an empty-dir artifact anyway.
     # PILLAR 1: NO exposed ports - Traefik routing only
     depends_on:
       postgres:

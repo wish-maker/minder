@@ -37,7 +37,6 @@ their tracking issues — they migrate to `../services/` as each resolves (see #
 
 | Path | Issue |
 |------|-------|
-| `openwebui/functions.json` | #24 (invalid JSON + dead config mechanism) |
 | `rabbitmq/definitions.json` | #27 (stale export, unsafe to load as-is) |
 | `traefik/dynamic/` | #25 (dynamic/access-mode feature is half-built) |
 
