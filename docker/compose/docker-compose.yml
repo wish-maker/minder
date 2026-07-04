@@ -166,7 +166,11 @@ services:
     - RABBITMQ_LOG_LEVEL=info
     volumes:
     - rabbitmq_data:/var/lib/rabbitmq
-    - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    - ../services/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    # definitions.json mount deliberately NOT activated: the file is a stale v3.13
+    # export with no password_hash, and rabbitmq.conf has no load_definitions directive
+    # — wiring it would clobber the RABBITMQ_DEFAULT_USER credential. Left as an inert
+    # (unread) empty-dir mount until reconciled. See #27.
     - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     # PILLAR 1: NO exposed ports - Traefik routing for management UI
     healthcheck:
