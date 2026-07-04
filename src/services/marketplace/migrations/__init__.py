@@ -20,12 +20,9 @@ async def run_migrations(pool):
         pool: asyncpg.Pool connection pool
     """
     try:
-        # Read schema.sql from migrations directory
-        schema_path = pathlib.Path(__file__).parent / "schema.sql"
-
-        if not schema_path.exists():
-            # Fallback to main schema.sql
-            schema_path = pathlib.Path(__file__).parent.parent / "schema.sql"
+        # Canonical, git-tracked schema (single source of truth; see #10).
+        # Lives at src/services/marketplace/schema.sql — one level up from this package.
+        schema_path = pathlib.Path(__file__).parent.parent / "schema.sql"
 
         schema_sql = schema_path.read_text()
 

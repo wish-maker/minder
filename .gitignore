@@ -217,9 +217,9 @@ backups/**/*
 #   - rag-pipeline migrations/001_initial_schema.sql: initialize_schema() is called with no
 #     file arg → inline default schema is used; file never read → DELETED.
 #   - marketplace plugin_tables.sql / schema_complete.sql: zero references → DELETED.
-#   - marketplace migrations/schema.sql: code's primary path but BYTE-IDENTICAL to the
-#     already-tracked fallback ../schema.sql, which covers a fresh clone → left ignored.
-#     (Deduping the two copies is a separate code cleanup.)
+#   - marketplace migrations/schema.sql: was a BYTE-IDENTICAL dup of the tracked
+#     ../schema.sql → DELETED (#10, 2026-07-04). run_migrations() now reads only the
+#     tracked src/services/marketplace/schema.sql (single source of truth).
 # So no further !-exceptions are needed; the blanket *.sql rule correctly ignores dumps.
 !docker/services/postgres/init.sql
 
