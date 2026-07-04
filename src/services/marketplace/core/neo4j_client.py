@@ -136,7 +136,7 @@ class Neo4jClient:
 
         async with self.driver.session() as session:
             result = await session.run(query, plugin_id=plugin_id)
-            return [record.data() for record in await result.list()]
+            return await result.data()
 
     async def find_conflicting_plugins(self, plugin_id: str) -> List[Dict[str, Any]]:
         """
@@ -155,7 +155,7 @@ class Neo4jClient:
 
         async with self.driver.session() as session:
             result = await session.run(query, plugin_id=plugin_id)
-            return [record.data() for record in await result.list()]
+            return await result.data()
 
     async def recommend_plugins(
         self, installed_plugin_ids: List[str], limit: int = 5
@@ -186,7 +186,7 @@ class Neo4jClient:
             result = await session.run(
                 query, installed_ids=installed_plugin_ids, limit=limit
             )
-            return [record.data() for record in await result.list()]
+            return await result.data()
 
     async def get_dependency_chain(self, plugin_id: str) -> List[Dict[str, Any]]:
         """
@@ -208,7 +208,7 @@ class Neo4jClient:
 
         async with self.driver.session() as session:
             result = await session.run(query, plugin_id=plugin_id)
-            return [record.data() for record in await result.list()]
+            return await result.data()
 
 
 # Singleton instance
