@@ -6,7 +6,10 @@ set -e  # Exit on error
 
 CONFIG_DIR="/backup/config"
 DATE=$(date +%Y%m%d_%H%M%S)
+# Orchestration (compose file + .env) lives in docker/compose/; per-service config
+# lives in docker/services/ (see #23). Back up each from its real location.
 SOURCE_DIR="/root/minder/docker/compose"
+SERVICES_DIR="/root/minder/docker/services"
 LOG_FILE="/var/log/backup.log"
 
 # Function to log messages
@@ -47,9 +50,9 @@ fi
 # Backup configuration directories
 log "Backing up configuration directories..."
 for config_dir in traefik authelia prometheus telegraf; do
-  if [ -d "$SOURCE_DIR/$config_dir" ]; then
+  if [ -d "$SERVICES_DIR/$config_dir" ]; then
     log "Backing up $config_dir configuration..."
-    cp -r "$SOURCE_DIR/$config_dir" "$BACKUP_PATH/" 2>/dev/null || {
+    cp -r "$SERVICES_DIR/$config_dir" "$BACKUP_PATH/" 2>/dev/null || {
       log "WARNING: Failed to backup $config_dir"
     }
   fi
@@ -57,8 +60,8 @@ done
 
 # Backup scripts
 log "Backing up scripts directory..."
-if [ -d "$SOURCE_DIR/../scripts" ]; then
-  cp -r "$SOURCE_DIR/../scripts" "$BACKUP_PATH/" 2>/dev/null || {
+if [ -d "$SERVICES_DIR/scripts" ]; then
+  cp -r "$SERVICES_DIR/scripts" "$BACKUP_PATH/" 2>/dev/null || {
     log "WARNING: Failed to backup scripts"
   }
 fi

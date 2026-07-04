@@ -29,6 +29,26 @@ OLLAMA_LLM_MODEL=llama3.2
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 ```
 
+### Ollama location: internal vs external
+
+By default Minder runs its own Ollama container. To point at an Ollama running
+elsewhere (the same host, or a remote GPU box) instead, use the `ollama-mode` verb:
+
+```bash
+# Platform-managed Ollama container (default)
+./setup.sh ollama-mode internal
+
+# External Ollama — defaults to the host at http://host.docker.internal:11434
+./setup.sh ollama-mode external
+
+# External Ollama at a specific URL
+./setup.sh ollama-mode external http://192.168.1.50:11434
+```
+
+This edits only `OLLAMA_BASE_URL` in `./.env`; it does **not** restart — run
+`./setup.sh restart` to apply. In external mode the local Ollama container is not
+started (it's gated behind a compose profile), saving RAM/CPU.
+
 ## Available Models
 
 ### LLM Models

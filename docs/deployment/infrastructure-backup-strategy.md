@@ -156,7 +156,7 @@ tar -czf "$BACKUP_DIR/minder-config-$DATE.tar.gz" \
   -C /root/minder \
   .env \
   docker/services/traefik \
-  docker/compose/authelia \
+  docker/services/authelia \
   docker/compose/docker-compose.yml
 
 # Cleanup old backups (keep 4 weeks)
