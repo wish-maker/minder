@@ -327,7 +327,10 @@ services:
       NEO4J_dbms_security_procedures_allowlist: apoc.*
     volumes:
     - neo4j_data:/data
-    - ./neo4j/init-cypher.sh:/docker-entrypoint-initdb.d/init-cypher.sh:ro
+    # (init-cypher mount removed: the neo4j image doesn't run /docker-entrypoint-initdb.d
+    #  scripts—that's a postgres/mysql convention—and the script was an echo-only stub.
+    #  Real neo4j seeding, if ever needed, requires a proper mechanism: cypher-shell in a
+    #  custom entrypoint or an init container. See #23.)
     # PILLAR 1: NO exposed ports - Traefik routing for UI
     healthcheck:
       test:
@@ -737,8 +740,8 @@ services:
     - GF_SERVER_ROOT_URL=https://grafana.minder.local
     volumes:
     - docker_grafana_data:/var/lib/grafana
-    - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-    - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    - ../services/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    - ../services/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     # PILLAR 4: Expose for LAN access (via Traefik with Authelia in production)
     ports:
     - 3000:3000
