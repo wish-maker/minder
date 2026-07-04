@@ -262,7 +262,7 @@ services:
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
     volumes:
     - ollama_data:/root/.ollama
-    - ./ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
+    - ../services/ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
     environment:
     - OLLAMA_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
     - OLLAMA_AUTOMATIC_PULL=${OLLAMA_AUTOMATIC_PULL:-true}

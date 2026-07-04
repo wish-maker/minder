@@ -1,86 +1,79 @@
 #!/bin/bash
 ###############################################################################
-# Ollama Automatic Model Download Script
-# Purpose: Download default models on first startup
+# Ollama Model Auto-Download Script for Minder Platform
+# This script is automatically executed on container startup if OLLAMA_AUTOMATIC_PULL=true
+# NOTE: Uses bash TCP checks and ollama CLI (curl not available in ollama image)
 ###############################################################################
 
 set -e
 
-# Default models to download
-DEFAULT_MODELS=("llama3.2" "nomic-embed-text")
-
-# Get models from environment or use defaults
-if [ -n "$OLLAMA_MODELS" ]; then
-    IFS=',' read -ra MODELS <<< "$OLLAMA_MODELS"
-else
-    MODELS=("${DEFAULT_MODELS[@]}")
-fi
-
-echo "═══════════════════════════════════════════════════════════════"
-echo "     Ollama Automatic Model Download Script"
-echo "═══════════════════════════════════════════════════════════════"
-echo ""
-
-# Check if automatic pull is enabled
-if [ "$OLLAMA_AUTOMATIC_PULL" != "true" ]; then
-    echo "ℹ️  OLLAMA_AUTOMATIC_PULL is not set to 'true'"
-    echo "   Skipping automatic model download"
-    echo "   To enable: Set OLLAMA_AUTOMATIC_PULL=true in environment"
+# Check for remote Ollama mode
+# If OLLAMA_BASE_URL is set, we're using a remote host - skip auto-pull
+if [ -n "$OLLAMA_BASE_URL" ]; then
+    echo "========================================"
+    echo "REMOTE OLLAMA MODE DETECTED"
+    echo "OLLAMA_BASE_URL is set to: $OLLAMA_BASE_URL"
+    echo "Skipping model auto-pull (cannot pull to remote host)"
+    echo "========================================"
     exit 0
 fi
 
-echo "🔍 Checking for existing models..."
-EXISTING_MODELS=$(ollama list 2>/dev/null | grep -c "NAME" || echo "0")
-
-if [ "$EXISTING_MODELS" -gt 0 ]; then
-    echo "✓ Found $EXISTING_MODELS existing model(s)"
-    echo "  Skipping automatic download"
-    ollama list
-    exit 0
-fi
-
-echo ""
-echo "🚀 Starting automatic model download..."
-echo ""
-
-SUCCESS_COUNT=0
-FAILED_MODELS=()
-
-for model in "${MODELS[@]}"; do
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "📥 Downloading: $model"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-    if ollama pull "$model"; then
-        echo "✅ Successfully downloaded: $model"
-        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-    else
-        echo "❌ Failed to download: $model"
-        FAILED_MODELS+=("$model")
-    fi
-
-    echo ""
+# Wait for Ollama service to be ready (using TCP check)
+echo "Waiting for Ollama service to be ready..."
+while ! timeout 5 bash -c '</dev/tcp/127.0.0.1/11434' 2>/dev/null; do
+    echo "Ollama not ready yet, waiting..."
+    sleep 3
 done
 
-echo "═══════════════════════════════════════════════════════════════"
-echo "                    Download Summary"
-echo "═══════════════════════════════════════════════════════════════"
-echo ""
-echo "✅ Successfully downloaded: $SUCCESS_COUNT model(s)"
+echo "Ollama is ready. Checking required models..."
 
-if [ ${#FAILED_MODELS[@]} -gt 0 ]; then
-    echo "❌ Failed to download:"
-    for model in "${FAILED_MODELS[@]}"; do
-        echo "   • $model"
+# Get models from environment or use defaults
+OLLAMA_MODELS="${OLLAMA_MODELS:-llama3.2,nomic-embed-text}"
+OLLAMA_AUTOMATIC_PULL="${OLLAMA_AUTOMATIC_PULL:-true}"
+
+echo "Required models: $OLLAMA_MODELS"
+echo "Auto-pull enabled: $OLLAMA_AUTOMATIC_PULL"
+
+if [ "$OLLAMA_AUTOMATIC_PULL" = "true" ]; then
+    echo "Auto-pulling required models..."
+
+    # Parse comma-separated models using a loop (more portable than read -ra)
+    # Save original IFS
+    OLD_IFS="$IFS"
+    IFS=','
+    for MODEL in $OLLAMA_MODELS; do
+        # Trim whitespace from model name
+        MODEL=$(echo "$MODEL" | xargs)
+
+        echo "Checking model: $MODEL"
+
+        # Check if model already exists using ollama CLI
+        # Ollama auto-adds :latest if not specified, so we check with :latest
+        if ollama list 2>/dev/null | grep -q "${MODEL}:latest"; then
+            echo "✅ Model ${MODEL}:latest already exists, skipping download"
+        else
+            echo "❌ Model ${MODEL}:latest not found, pulling..."
+            echo "Pulling ${MODEL}:latest (this may take a while for large models)..."
+
+            # Pull the model (Ollama auto-adds :latest tag)
+            ollama pull "$MODEL"
+
+            if [ $? -eq 0 ]; then
+                echo "✅ Successfully pulled $MODEL"
+            else
+                echo "❌ Failed to pull $MODEL"
+                exit 1
+            fi
+        fi
     done
+    # Restore original IFS
+    IFS="$OLD_IFS"
+
+    echo "✅ All required models are available"
+else
+    echo "Auto-pull disabled, skipping model downloads"
 fi
 
-echo ""
-echo "📋 Current model inventory:"
+echo "Ollama model initialization complete!"
+echo "Available models:"
 ollama list
-
-echo ""
-echo "═══════════════════════════════════════════════════════════════"
-echo "              Ollama initialization complete!"
-echo "═══════════════════════════════════════════════════════════════"
-echo ""
