@@ -30,10 +30,12 @@ SHIM="${GATE_DIR}/shim"
 SED_STATIC="${GATE_DIR}/normalize.sed"
 BASELINE="${GATE_DIR}/.baseline.trace"
 
-VERBS=( "--help" "regenerate-compose" "stop" "start" "restart" )
-# tracked files that regenerate-compose rewrites OUTSIDE run() (not dry-run-gated);
-# snapshotted + restored so a gate run never dirties the working tree.
-SNAP_FILES=( "docker/compose/docker-compose.yml" ".setup/compose.hash" )
+VERBS=( "--help" "stop" "start" "restart" )
+# No tracked files are rewritten outside run() anymore: regenerate-compose was removed
+# and docker-compose.yml is now a hand-maintained source (not regenerated) — nothing
+# mutates a tracked file during a capture, so there is nothing to snapshot/self-heal.
+# (Empty array is safe under `set -u` in bash 4.4+; the snapshot loops become no-ops.)
+SNAP_FILES=()
 
 # gitignored env files prepare_env() rewrites OUTSIDE run() (start/restart now call it).
 # Unlike SNAP_FILES these are UNTRACKED — git checkout can't restore them — so we record

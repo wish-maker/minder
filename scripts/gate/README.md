@@ -31,7 +31,7 @@ scripts/gate/run-gate.sh capture <file>  # raw normalized capture to <file>
 
 Typical Stage-2 loop: `baseline` on the bash version → port a module → `compare`.
 A run takes ~90s (it captures `start`/`restart` twice). Verbs covered:
-`--help`, `regenerate-compose`, `stop`, `start`, `restart`.
+`--help`, `stop`, `start`, `restart`.
 
 ## What it guarantees — and does NOT
 
@@ -58,12 +58,13 @@ preserved*, not *behavior correct*.
   busy-port scan is the same class — its advisory line is dropped.) These were found
   via repeated `selfdiff`; an intermittently-empty gate is the dangerous kind, so
   selfdiff is run many times before trusting it.
-- **Generated tracked files** (`docker/compose/docker-compose.yml`,
-  `.setup/compose.hash`) are rewritten by `regenerate-compose` outside `run()`. The
-  runner snapshots + restores them, with a `trap` covering EXIT/INT/TERM, and
-  **self-heals** any leftover by resetting them to HEAD at capture start (a SIGKILL —
-  e.g. a CI hard timeout — is uncatchable, so don't keep uncommitted edits to these
-  generated files while running the gate). A normal run leaves the tree clean.
+- **No tracked files are rewritten during a run** (`SNAP_FILES` is empty). This used
+  to snapshot/restore `docker/compose/docker-compose.yml` + `.setup/compose.hash`,
+  which `regenerate-compose` rewrote outside `run()`. That verb and its machinery were
+  removed (#31) — `docker-compose.yml` is now a hand-maintained source, not regenerated,
+  so nothing mutates a tracked file during a capture. The `ENV_PATHS` snapshot/seed for
+  `.env` (untracked, rewritten by `prepare_env`) is unchanged. A normal run leaves the
+  tree clean.
 
 `*.trace` / `.baseline.trace` are gitignored — the **harness** is the durable
 artifact; a committed golden trace would go stale and is machine/time-sensitive.
