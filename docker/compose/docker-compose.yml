@@ -48,7 +48,9 @@ services:
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
     - ../services/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-    - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    # #25 Option B: single-file mount — only authelia-forwardauth loads; sibling
+    # dynamic files (services/ssl/access-mode) stay unmounted + dormant by design.
+    - ../services/traefik/dynamic/authelia-forwardauth.yml:/etc/traefik/dynamic/authelia-forwardauth.yml:ro
     - docker_traefik_letsencrypt:/letsencrypt
     - docker_traefik_logs:/var/log/traefik
     healthcheck:

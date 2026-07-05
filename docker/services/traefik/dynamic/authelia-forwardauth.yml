@@ -1,0 +1,22 @@
+# Traefik dynamic config — Authelia forwardAuth middleware ONLY.
+#
+# Minimal-blast file for #25 Option B: defines just the one middleware the
+# 4 docker routers (api-gateway, grafana, jaeger, openwebui) reference as
+# authelia-forwardauth@file. NO file-routers, NO services, NO tls — those
+# live in the (unmounted) sibling files (services.yml, ssl-configuration.yml,
+# access-mode-*.yml) and stay DORMANT by design: only THIS file is bind-mounted
+# into /etc/traefik/dynamic/, so the file provider loads only this middleware.
+#
+# Extracted verbatim from middleware.yml (the full, unmounted config) so the
+# definition stays consistent with the intended design.
+http:
+  middlewares:
+    authelia-forwardauth:
+      forwardAuth:
+        address: "http://authelia:9091/api/verify?rd=https://auth.minder.local"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - "Remote-User"
+          - "Remote-Groups"
+          - "Remote-Name"
+          - "Remote-Email"
