@@ -1,5 +1,15 @@
 # Default Plugins Configuration
-# This file defines which plugins should be bootstrapped into the system
+# This file defines which plugins should be bootstrapped into the system.
+#
+# CANONICAL + INTENTIONALLY EMPTY. This is the ONE file the plugin-state-manager
+# loader reads (core/default_plugins.py -> DEFAULT_PLUGINS_CONFIG default
+# /app/src/core/config/default_plugins.yml; mounted here in docker-compose.yml).
+# It is empty ON PURPOSE: no plugin implementations exist yet, so bootstrap
+# correctly registers zero plugins. Populate this (name/priority/auto_enable/...)
+# only when real plugin impls ship. A previously-duplicated, populated-but-dead
+# twin under src/services/plugin-state-manager/core/config/ (listing
+# crypto/weather/network/news/tefas — none implemented) was never loaded and
+# has been removed to avoid confusion.
 
 default_plugins: []
 dependencies: []
