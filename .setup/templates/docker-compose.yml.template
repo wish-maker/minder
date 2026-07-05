@@ -207,7 +207,7 @@ services:
     - traefik.http.routers.minio.rule=Host(`minio.minder.local`)
     - traefik.http.routers.minio.service=minio
     - traefik.http.routers.minio.entrypoints=websecure
-    - traefik.http.routers.minio.middlewares=authelia
+    - traefik.http.routers.minio.middlewares=authelia-forwardauth@file
     - traefik.http.services.minio.loadbalancer.server.port=9001
     healthcheck:
       test:
@@ -419,7 +419,7 @@ services:
     - traefik.http.routers.api-gateway.rule=Host(`api.minder.local`) || PathPrefix(`/api`)
     - traefik.http.routers.api-gateway.service=api-gateway
     - traefik.http.routers.api-gateway.entrypoints=websecure
-    - traefik.http.routers.api-gateway.middlewares=authelia,strip-api-prefix
+    - traefik.http.routers.api-gateway.middlewares=authelia-forwardauth@file,strip-api-prefix
     - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
     - traefik.http.middlewares.api-gateway-ratelimit.ratelimit.average=${RATE_LIMIT_PER_MINUTE:-60}
     - traefik.http.services.api-gateway.loadbalancer.server.port=8000
@@ -769,7 +769,7 @@ services:
     - traefik.http.routers.grafana.rule=Host(`grafana.minder.local`)
     - traefik.http.routers.grafana.service=grafana
     - traefik.http.routers.grafana.entrypoints=websecure
-    - traefik.http.routers.grafana.middlewares=authelia
+    - traefik.http.routers.grafana.middlewares=authelia-forwardauth@file
     - traefik.http.services.grafana.loadbalancer.server.port=3000
   openwebui:
     image: ghcr.io/open-webui/open-webui:latest
@@ -824,7 +824,7 @@ services:
     - traefik.http.routers.openwebui.rule=Host(`chat.minder.local`)
     - traefik.http.routers.openwebui.service=openwebui
     - traefik.http.routers.openwebui.entrypoints=websecure
-    - traefik.http.routers.openwebui.middlewares=authelia
+    - traefik.http.routers.openwebui.middlewares=authelia-forwardauth@file
     - traefik.http.services.openwebui.loadbalancer.server.port=8080
   marketplace:
     build:
@@ -1130,7 +1130,7 @@ services:
     - traefik.http.routers.jaeger.rule=Host(`jaeger.minder.local`)
     - traefik.http.routers.jaeger.service=jaeger
     - traefik.http.routers.jaeger.entrypoints=websecure
-    - traefik.http.routers.jaeger.middlewares=authelia
+    - traefik.http.routers.jaeger.middlewares=authelia-forwardauth@file
     - traefik.http.services.jaeger.loadbalancer.server.port=16686
 
   otel-collector:
