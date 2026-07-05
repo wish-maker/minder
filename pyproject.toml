@@ -5,6 +5,7 @@ target-version = ['py311']
 [tool.isort]
 profile = "black"
 line_length = 88
+skip = [".git", "__pycache__", "venv", "env"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
