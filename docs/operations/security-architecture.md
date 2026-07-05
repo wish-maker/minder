@@ -6,6 +6,14 @@
 
 ---
 
+> ⚠️ **STATUS (2026-07-05): this document describes the TARGET architecture, not current reality.**
+> Live inspection contradicts the Overview below. Do not treat this as the running posture:
+> - **Authelia is DISABLED** and its forwardAuth middleware is **unmounted** — no service is actually protected by SSO. Traefik's entire dynamic config (`middleware.yml` etc.) is not mounted; the `./traefik/dynamic` volume points at an empty dir (see #25).
+> - **~24 host ports are published on `0.0.0.0`** (not "no exposed ports except Traefik") — prometheus/jaeger/alertmanager/traefik-dashboard are wide open; the api-gateway proxy serves unauthenticated.
+> - This doc will be corrected to reflect the real enabled architecture as the Authelia rollout lands (#15 decision = keep+wire; #22 router refs; #25 mount fix; port lockdown).
+
+---
+
 ## 📋 Overview
 
 Minder platform implements a **zero-trust security architecture** where every service, user, and network flow must be authenticated and authorized. This is achieved through:
