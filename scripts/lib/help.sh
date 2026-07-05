@@ -102,8 +102,8 @@ ${BOLD}VERSION RESOLUTION${NC}
     VERBOSE=1              Show per-image resolution details
 
 ${BOLD}CONFIGURATION MANAGEMENT${NC}
-    regenerate-compose       Regenerate docker-compose.yml from template using version specs
-                             All version changes MUST be done via THIRD_PARTY_IMAGE_SPECS
+    (image versions)         Edit docker/compose/docker-compose.yml directly to change
+                             image tags — it is the source of truth for what runs.
     ollama-mode internal|external [url]
                              Switch the Ollama backend in .env: internal = platform-managed
                              container; external [url] = reach a URL (same-host daemon or a

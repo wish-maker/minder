@@ -535,12 +535,6 @@ cmd_start() {
     validate_ai_compute_mode
     validate_compute_resource_profile
 
-    # Auto-regenerate docker-compose.yml if needed
-    if should_regenerate_compose; then
-        log_info "Auto-regenerating docker-compose.yml from version specs..."
-        cmd_regenerate_compose
-    fi
-
     create_networks
     start_services
     wait_for_services

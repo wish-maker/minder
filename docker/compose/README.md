@@ -8,23 +8,20 @@ into a container.
 
 | File | Role |
 |------|------|
-| `docker-compose.yml` | The stack definition. **Generated** — do not edit by hand. |
+| `docker-compose.yml` | The stack definition. **The source of truth — hand-maintained; edit it directly.** |
 | `docker-compose.override.yml` | Dev-only convenience (exposes some service ports directly for local testing). |
 | `.env` | Runtime env for `docker compose`. **Mirrored** from the repo-root `.env` (the source of truth) on every `setup.sh` run — do not edit here. |
 | `README.md` | This file. |
 
-## Generating docker-compose.yml
+## Editing docker-compose.yml
 
-`docker-compose.yml` is regenerated from
-[`../../.setup/templates/docker-compose.yml.template`](../../.setup/templates/docker-compose.yml.template)
-(image versions come from `THIRD_PARTY_IMAGE_SPECS` in `setup.sh`):
+`docker-compose.yml` is the **hand-maintained source of truth** — edit it directly,
+including image tags. Config-file *mounts* should point at `../services/<name>/…`.
 
-```bash
-./setup.sh regenerate-compose
-```
-
-Make compose changes in the **template**, not in the generated file (the generated file is
-overwritten). Config-file *mounts* should point at `../services/<name>/…`.
+> **Note:** `THIRD_PARTY_IMAGE_SPECS` in `setup.sh` is still used by `versions.sh` for
+> image pulling and the version-drift report (`doctor` / `update --check`). It is **not**
+> auto-synced to this file — keep the two aligned when bumping a version. Unifying them
+> (deriving versions from this file) is tracked in #12.
 
 ## The compose/ vs services/ split
 

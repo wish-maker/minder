@@ -50,7 +50,6 @@ source "${LIB_DIR}/env.sh"         # root .env self-healing fill + compose .env 
 source "${LIB_DIR}/infra.sh"       # networks, database init, minio init
 source "${LIB_DIR}/lifecycle.sh"   # start/stop services (compose), waits
 source "${LIB_DIR}/health.sh"      # health checks, ollama model download
-source "${LIB_DIR}/compose_gen.sh" # compose regeneration + version-spec hashing
 source "${LIB_DIR}/commands.sh"    # cmd_* implementations
 source "${LIB_DIR}/help.sh"        # success banner, help text
 # ─────────────────────────────────────────────────────────────
@@ -92,7 +91,6 @@ main() {
         restore)    cmd_restore "$arg1" ;;
         doctor)     cmd_doctor ;;
         update)     cmd_update "${arg1:-}" ;;
-        regenerate-compose) cmd_regenerate_compose ;;
         ollama-mode) cmd_ollama_mode "$arg1" "$arg2" ;;
         sync-postgres-password) sync_postgres_password ;;
         uninstall)  cmd_uninstall "$arg1" ;;
