@@ -6,6 +6,10 @@ target-version = ['py311']
 profile = "black"
 line_length = 88
 skip = [".git", "__pycache__", "venv", "env"]
+# 'config' is a first-party, service-local module (e.g. api-gateway/config.py).
+# Declared explicitly so its import placement no longer depends on an incidental
+# top-level src/config/ directory (removed in the src/config→src/requirements rename).
+known_first_party = ["config"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
