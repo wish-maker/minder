@@ -451,7 +451,7 @@ minder/
 
 ### 🎯 **Key Standards**
 
-- **Centralized Config**: All services use `src/config/`
+- **Centralized Config**: Shared dependencies in `src/config/requirements/`; Python tooling config in root `pyproject.toml`
 - **Modular Services**: Isolated dependencies per service
 - **Docker-First**: All infrastructure in `docker/`
 - **Security First**: No hardcoded secrets
