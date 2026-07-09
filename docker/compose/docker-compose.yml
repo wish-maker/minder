@@ -19,7 +19,7 @@ services:
   # ==========================================================================
 
   traefik:
-    image: traefik:v3.7.5
+    image: traefik:v3.7.6
     container_name: minder-traefik
     restart: on-failure
     command:
@@ -250,7 +250,7 @@ services:
     networks:
     - minder-network
   ollama:
-    image: ollama/ollama:0.30.11
+    image: ollama/ollama:0.31.1
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
@@ -614,7 +614,7 @@ services:
   # ==========================================================================
 
   influxdb:
-    image: influxdb:3.10.0-core
+    image: influxdb:3.10.1-core
     container_name: minder-influxdb
     restart: on-failure
     command:
@@ -640,7 +640,7 @@ services:
     networks:
     - minder-network
   telegraf:
-    image: telegraf:1.39.0
+    image: telegraf:1.39.1
     container_name: minder-telegraf
     restart: on-failure
     volumes:
@@ -681,7 +681,7 @@ services:
     pid: host
     user: root
   prometheus:
-    image: prom/prometheus:v3.12.0
+    image: prom/prometheus:v3.13.0
     container_name: minder-prometheus
     restart: on-failure
     volumes:
@@ -713,7 +713,7 @@ services:
     - --web.enable-lifecycle
     - --web.enable-admin-api
   alertmanager:
-    image: prom/alertmanager:v0.33.0
+    image: prom/alertmanager:v0.33.1
     container_name: minder-alertmanager
     restart: on-failure
     volumes:
@@ -953,7 +953,7 @@ services:
   # ==========================================================================
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.19.1
+    image: prometheuscommunity/postgres-exporter:v0.20.0
     container_name: minder-postgres-exporter
     restart: on-failure
     environment:
