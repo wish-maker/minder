@@ -166,6 +166,11 @@ jobs:
               versions = []
               for tag in same_track:
                   ver, _ = parse_tag(tag)
+                  # Skip CI build-id tags: a bare integer of 5+ digits is not a real
+                  # version (e.g. jaeger's '89133199' parses as 89133199.0.0 and would
+                  # otherwise sort above 1.76.0). Calver years are 4 digits, so kept.
+                  if re.match(r'^\d{5,}$', ver):
+                      continue
                   parsed = parse_version_safe(ver)
                   if parsed is not None:
                       versions.append((parsed, tag))
