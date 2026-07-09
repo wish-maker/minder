@@ -19,7 +19,7 @@ services:
   # ==========================================================================
 
   traefik:
-    image: traefik:v3.7.6
+    image: traefik:v3.7.7
     container_name: minder-traefik
     restart: on-failure
     command:
@@ -250,7 +250,7 @@ services:
     networks:
     - minder-network
   ollama:
-    image: ollama/ollama:0.31.1
+    image: ollama/ollama:0.31.2
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
@@ -774,7 +774,7 @@ services:
     - traefik.http.routers.grafana.middlewares=authelia-forwardauth@file
     - traefik.http.services.grafana.loadbalancer.server.port=3000
   openwebui:
-    image: ghcr.io/open-webui/open-webui:latest
+    image: ghcr.io/open-webui/open-webui:v0.10.2
     container_name: minder-openwebui
     restart: on-failure
     environment:
@@ -953,7 +953,7 @@ services:
   # ==========================================================================
 
   postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.20.0
+    image: prometheuscommunity/postgres-exporter:v0.20.1
     container_name: minder-postgres-exporter
     restart: on-failure
     environment:
@@ -1045,7 +1045,7 @@ services:
 
   # cAdvisor (for Docker container metrics)
   cadvisor:
-    image: gcr.io/cadvisor/cadvisor:v0.51.0
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
     container_name: minder-cadvisor
     restart: on-failure
     command:
@@ -1099,7 +1099,7 @@ services:
   # ============================================================================
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/all-in-one:1.76.0
     container_name: minder-jaeger
     restart: on-failure
     environment:
@@ -1136,7 +1136,7 @@ services:
     - traefik.http.services.jaeger.loadbalancer.server.port=16686
 
   otel-collector:
-    image: otel/opentelemetry-collector:0.155.0
+    image: otel/opentelemetry-collector:0.156.0
     container_name: minder-otel-collector
     restart: on-failure
     command:
