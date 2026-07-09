@@ -6,30 +6,39 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 
 ## Workflows
 
-### 1. Test Suite — `test.yml`
-**Triggers:** push & PR to `main`/`develop`, manual dispatch.
-**Jobs:** Python lint (Black, isort, Flake8, MyPy on `src/`) → security scan
-(Bandit, Safety) → unit tests → integration tests → e2e tests (pytest, with
-Postgres + Redis service containers) → notify. Later test stages depend on the
-earlier ones passing.
+> Layout consolidated in #16: linters + light scans collapsed into one fast
+> `quality.yml` gate, tests in `ci.yml`, deep scans in `security.yml`. bandit +
+> safety previously ran in two workflows — now a single home in `quality.yml`.
 
-### 2. Security Scan — `security.yml`
+### 1. Quality Gate — `quality.yml`
+**Triggers:** push & PR to `main`/`develop`, manual dispatch.
+**Jobs (all parallel — the fast gate):**
+- Python lint: Black, isort, Flake8, MyPy (on `src/`).
+- Shell lint: `bash -n` + `shellcheck --shell=bash --severity=error` (**blocking**)
+  on `setup.sh` + all `scripts/lib/*.sh`; full-severity shellcheck is informational
+  (`continue-on-error`). The file list is a glob, so new modules are covered
+  automatically.
+- Hadolint on `src/services/*/Dockerfile`.
+- Light security scans: Bandit (`-r src/ src/services/ src/plugins/ tests/ -ll`),
+  Safety, TruffleHog (secret scan), pip-licenses.
+
+### 2. CI — `ci.yml`
+**Triggers:** push & PR to `main`/`develop`, manual dispatch.
+**Jobs:** unit tests → integration tests → e2e tests (pytest, with Postgres + Redis
+service containers) → notify. Each stage `needs` the previous. Lint/scan gates live
+in `quality.yml` (separate workflow, run in parallel).
+
+### 3. Security Scan — `security.yml`
 **Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual
 dispatch.
-**Jobs:** CodeQL (Python), Bandit, Safety, Trivy (builds `api-gateway` from the
-compose file and scans the image), TruffleHog (secret scan), Hadolint
-(`src/services/*/Dockerfile`), pip-licenses, and a summary.
-
-### 3. Shell Lint — `shell-lint.yml`
-**Triggers:** push & PR to `main`/`develop`, manual dispatch.
-**Jobs:** lints `setup.sh` + all `scripts/lib/*.sh` modules.
-- `bash -n` (syntax) — **blocking**.
-- `shellcheck --shell=bash --severity=error` — **blocking** (`--shell=bash` is
-  required because the modules are sourced and carry no shebang).
-- `shellcheck` at full severity — **informational** (`continue-on-error`),
-  surfaces style/warning nits without failing the build.
-
-The file list is a glob, so newly added modules are covered automatically.
+**Jobs:** the **deep** scans — CodeQL (Python SAST) + Trivy (builds `api-gateway`
+from the compose file and scans the image for CVEs), plus a summary.
+**Kept push-triggered (not scheduled-only):** on this repo CodeQL is ~1 min and
+Trivy ~45 s, the repo is public (free CI minutes), and both run in parallel with
+`ci.yml` off the critical path — so gating every push costs ~0 wall-clock while
+closing the exposure window on an internet-exposed target. The weekly cron stays as
+defense-in-depth. (#16 Option 2; the issue's written "scheduled-only" assumed heavy
+scans, which the runtime data disproved.)
 
 ### 4. Docker Image Auto-Update — `docker-image-update.yml`
 **Triggers:** weekly cron (Mon 09:00 UTC), manual dispatch.
@@ -45,11 +54,11 @@ tracking **issue** — it does not open PRs or modify files.
 ## Local checks
 
 ```bash
-# Shell (matches the Shell Lint workflow)
+# Shell (matches the Quality Gate workflow)
 bash -n setup.sh scripts/lib/*.sh
 shellcheck --shell=bash --severity=error setup.sh scripts/lib/*.sh
 
-# Python (matches the Test Suite workflow)
+# Python (matches the Quality Gate + CI workflows)
 black --check src/services/ src/core/
 flake8 src/services/ src/core/ --max-line-length=120
 pytest tests/ -v --cov=src

@@ -1,0 +1,264 @@
+name: Quality Gate
+
+# Fast PR/push gate: all linters + light security scans. The deep scans (CodeQL
+# SAST, Trivy CVE) live in security.yml. bandit + safety live HERE only — they used
+# to run in both test.yml and security.yml (twice per push); consolidated here as the
+# single home (the stronger `-r src/ src/services/ src/plugins/ tests/ -ll` variant).
+# See #16.
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  python-lint:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/requirements/requirements-dev.txt
+
+      - name: Run Black
+        run: black --check src/services/ src/core/
+
+      - name: Run isort
+        run: isort --check-only src/services/ src/core/
+
+      - name: Run Flake8
+        run: flake8 src/services/ src/core/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+
+      - name: Run MyPy
+        run: mypy src/services/ --ignore-missing-imports || true
+
+  shell-lint:
+    name: Shell Lint (setup.sh + scripts/lib)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Ensure shellcheck is available
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version
+
+      # Glob is recomputed in every step (setup.sh + scripts/lib/*.sh) so a newly
+      # added module under scripts/lib/ is covered automatically — important for
+      # Stage 2 when modules change. nullglob guards against an empty match.
+
+      - name: Syntax check — bash -n (blocking)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(setup.sh scripts/lib/*.sh)
+          echo "Linting ${#files[@]} file(s): ${files[*]}"
+          fail=0
+          for f in "${files[@]}"; do
+            if bash -n "$f"; then echo "  PASS  $f"; else echo "  FAIL  $f"; fail=1; fi
+          done
+          [ "$fail" -eq 0 ] || { echo "::error::bash -n syntax check failed"; exit 1; }
+
+      - name: ShellCheck — error severity (blocking)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(setup.sh scripts/lib/*.sh)
+          # --shell=bash is REQUIRED: the lib modules are sourced and carry no
+          # shebang, so without it shellcheck cannot infer the dialect and emits
+          # SC2148 (error) for every module, reddening the gate. With it, the
+          # error-severity set is clean on current main.
+          shellcheck --shell=bash --severity=error "${files[@]}"
+          echo "shellcheck --severity=error: clean ✓"
+
+      - name: ShellCheck — full severity (informational, non-blocking)
+        continue-on-error: true
+        run: |
+          shopt -s nullglob
+          files=(setup.sh scripts/lib/*.sh)
+          echo "Informational only — warnings/notes below do NOT fail the build."
+          echo "(Dominated by SC2034 'unused', a false positive of the modular"
+          echo " split: globals defined in config.sh are used by other modules.)"
+          # || true: shellcheck exits non-zero when nits exist; this step is
+          # informational, so swallow it to avoid a misleading "exit code 1"
+          # annotation on green runs. continue-on-error below is the backstop.
+          shellcheck --shell=bash "${files[@]}" || true
+
+  dockerfile-lint:
+    name: Dockerfile Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Run Hadolint on all Dockerfiles
+        run: |
+          # Install hadolint
+          curl -Lo /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x /usr/local/bin/hadolint
+
+          # Track failures
+          failures=0
+
+          # Lint each Dockerfile
+          for dockerfile in src/services/*/Dockerfile; do
+            echo "=== Linting $dockerfile ==="
+            if hadolint --ignore DL3008 --ignore DL3013 --failure-threshold warning "$dockerfile"; then
+              echo "✓ $dockerfile passed"
+            else
+              echo "✗ $dockerfile has issues"
+              failures=$((failures + 1))
+            fi
+          done
+
+          # Exit with error if any failures
+          if [ $failures -gt 0 ]; then
+            echo "::error::$failures Dockerfile(s) failed linting"
+            exit 1
+          fi
+
+  bandit:
+    name: Bandit Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Bandit
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit[toml]
+
+      - name: Run Bandit
+        run: |
+          bandit -r src/ src/services/ src/plugins/ tests/ \
+            -f json \
+            -o bandit-report.json \
+            -ll || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v6
+        with:
+          name: bandit-report
+          path: bandit-report.json
+          retention-days: 30
+
+  safety:
+    name: Safety Dependency Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install Safety
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety
+
+      - name: Run Safety
+        run: |
+          safety check \
+            --json \
+            > safety-report.json || true
+
+      - name: Upload Safety report
+        uses: actions/upload-artifact@v6
+        with:
+          name: safety-report
+          path: safety-report.json
+          retention-days: 30
+
+  secrets-scan:
+    name: Secrets Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.before }}
+          head: ${{ github.sha }}
+          extra_args: --only-verified
+
+  license-compliance:
+    name: License Compliance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install pip-licenses
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-licenses
+
+      - name: Check licenses
+        run: |
+          pip-licenses \
+            --from=mixed \
+            --format=plain \
+            --with-system \
+            --ignore-packages pip-licenses \
+            --fail-on="GPL;LGPL;AGPL" || true
+
+      - name: Generate license report
+        run: |
+          pip-licenses \
+            --from=mixed \
+            --format=markdown \
+            --output-file=LICENSE_REPORT.md
+
+      - name: Upload license report
+        uses: actions/upload-artifact@v6
+        with:
+          name: license-report
+          path: LICENSE_REPORT.md
+          retention-days: 30

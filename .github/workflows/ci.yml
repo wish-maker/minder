@@ -1,4 +1,8 @@
-name: Test Suite
+name: CI
+
+# Build + test pipeline (unit → integration → e2e). Linting and all security
+# scanning were moved out: fast linters + light scans live in quality.yml, deep
+# scans (CodeQL, Trivy) in security.yml. See #16.
 
 on:
   push:
@@ -11,70 +15,6 @@ env:
   PYTHON_VERSION: '3.12'
 
 jobs:
-  lint:
-    name: Code Quality & Linting
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r src/requirements/requirements-dev.txt
-
-      - name: Run Black
-        run: black --check src/services/ src/core/
-
-      - name: Run isort
-        run: isort --check-only src/services/ src/core/
-
-      - name: Run Flake8
-        run: flake8 src/services/ src/core/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
-
-      - name: Run MyPy
-        run: mypy src/services/ --ignore-missing-imports || true
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install bandit[toml] safety
-
-      - name: Run Bandit
-        run: bandit -r src/ -f json -o bandit-report.json || true
-
-      - name: Run Safety
-        run: safety check --json > safety-report.json || true
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@v6
-        with:
-          name: security-reports
-          path: |
-            bandit-report.json
-            safety-report.json
-
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
@@ -156,7 +96,10 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [lint, security-scan, unit-tests]
+    # lint + security-scan moved to quality.yml (separate workflow) — cross-workflow
+    # `needs` isn't possible, so we gate only on unit-tests. Those checks still run
+    # and report on every push; only the fail-fast skip is gone (#16).
+    needs: [unit-tests]
 
     services:
       postgres:
@@ -276,7 +219,7 @@ jobs:
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [lint, security-scan, unit-tests, integration-tests, e2e-tests]
+    needs: [unit-tests, integration-tests, e2e-tests]
     if: always()
 
     steps:
