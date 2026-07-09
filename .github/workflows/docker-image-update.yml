@@ -34,6 +34,10 @@ jobs:
 
       - name: Check for updates
         id: check
+        env:
+          # For the GHCR->GitHub-releases lookup (raises the api.github.com rate limit
+          # from 60/hr anonymous to 1000/hr); the call still works without it.
+          GH_API_TOKEN: ${{ github.token }}
         run: |
           pip install pyyaml requests
 
@@ -211,6 +215,54 @@ jobs:
                   return latest_tag, f"update available (base: {latest_base})"
 
           # ============================================================================
+          # GCR / GHCR RESOLUTION
+          # ============================================================================
+
+          def fetch_gcr_tags(name: str) -> List[str]:
+              """Fetch tags from GCR (public images allow anonymous v2 API access)."""
+              try:
+                  r = requests.get(f"https://gcr.io/v2/{name}/tags/list", timeout=10)
+                  r.raise_for_status()
+                  return [t for t in r.json().get('tags', []) if not should_skip_tag(t)]
+              except Exception as e:
+                  print(f"    [!] GCR API error: {e}")
+                  return []
+
+          def latest_ghcr_release(repo: str) -> Optional[str]:
+              """Latest stable release tag for a GHCR image via its backing GitHub repo.
+              GHCR's own tag listing is unreliable for busy images (thousands of git-*
+              tags bury the releases and the API is not recency-ordered), so the GitHub
+              Releases API is the source of truth. Assumes ghcr.io/<owner>/<name> maps to
+              the github.com/<owner>/<name> repo."""
+              headers = {'Accept': 'application/vnd.github+json'}
+              token = os.environ.get('GH_API_TOKEN')
+              if token:
+                  headers['Authorization'] = f'Bearer {token}'
+              try:
+                  r = requests.get(f"https://api.github.com/repos/{repo}/releases/latest",
+                                   headers=headers, timeout=10)
+                  r.raise_for_status()
+                  return r.json().get('tag_name')
+              except Exception as e:
+                  print(f"    [!] GitHub releases API error for {repo}: {e}")
+                  return None
+
+          def latest_semver_tag(tags: List[str]) -> Optional[str]:
+              """Highest strict X.Y.Z tag. Rejects CI-junk single-int tags (e.g. a bare
+              '89133199' that would otherwise parse as version 89133199.0.0 and beat every
+              real release). Used to resolve a concrete version for :latest-pinned images."""
+              candidates = []
+              for tag in tags:
+                  if re.match(r'^v?\d+\.\d+\.\d+$', tag):
+                      parsed = parse_version_safe(tag.lstrip('v'))
+                      if parsed is not None:
+                          candidates.append((parsed, tag))
+              if not candidates:
+                  return None
+              candidates.sort(key=lambda x: x[0], reverse=True)
+              return candidates[0][1]
+
+          # ============================================================================
           # REGISTRY DETECTION
           # ============================================================================
 
@@ -262,24 +314,11 @@ jobs:
 
                   registry = get_registry(image)
 
-                  # Handle latest-tagged images
-                  if ':' not in image or image.endswith(':latest'):
-                      if ':' not in image:
-                          current_tag = 'latest'
-                          image_name = image
-                      else:
-                          image_name, current_tag = image.rsplit(':', 1)
-
-                      manual_check[service_name] = {
-                          'image': image_name,
-                          'current': current_tag,
-                          'latest': 'latest',
-                          'registry': registry,
-                          'note': 'Uses :latest tag — manual verification required'
-                      }
-                      continue
-
-                  image_name, current_tag = image.rsplit(':', 1)
+                  # Split image into name + current tag (':' absent => implicit :latest)
+                  if ':' not in image:
+                      image_name, current_tag = image, 'latest'
+                  else:
+                      image_name, current_tag = image.rsplit(':', 1)
 
                   # Special handling for minio RELEASE.* tags
                   if image_name == 'minio/minio' and current_tag.startswith('RELEASE.'):
@@ -307,59 +346,83 @@ jobs:
                           print(f"    [X] {service_name}: Error - {e}")
                       continue
 
-                  # Skip non-Docker Hub registries (GHCR, GCR)
-                  if registry != 'DOCKER_HUB':
+                  # ----------------------------------------------------------------
+                  # Resolve the newest version, per registry:
+                  #   DOCKER_HUB / GCR -> list tags, take highest in-track
+                  #   GHCR             -> tag listing unreliable, use GitHub releases
+                  # ----------------------------------------------------------------
+                  is_latest = (current_tag == 'latest')
+                  try:
+                      if registry == 'GHCR':
+                          latest_tag = latest_ghcr_release(image_name[len('ghcr.io/'):])
+                      elif registry == 'GCR':
+                          gcr_tags = fetch_gcr_tags(image_name[len('gcr.io/'):])
+                          latest_tag = (latest_semver_tag(gcr_tags) if is_latest
+                                        else get_latest_in_track(current_tag, gcr_tags)[0])
+                      elif registry == 'DOCKER_HUB':
+                          dh_tags = fetch_all_tags(normalize_repo(image_name))
+                          latest_tag = (latest_semver_tag(dh_tags) if is_latest
+                                        else get_latest_in_track(current_tag, dh_tags)[0])
+                      else:
+                          latest_tag = None
+                  except Exception as e:
+                      print(f"    [X] {service_name}: Error - {e}")
+                      latest_tag = None
+
+                  # :latest floats — can't classify a diff, but surface the newest
+                  # concrete release and recommend pinning to it.
+                  if is_latest:
+                      if latest_tag:
+                          note = (f'Floating on :latest — newest tagged release is '
+                                  f'`{latest_tag}`. Pin to `{image_name}:{latest_tag}` for '
+                                  f'reproducible deploys and automatic update tracking.')
+                      else:
+                          note = ('Uses :latest and the newest release could not be '
+                                  'resolved automatically — verify manually.')
                       manual_check[service_name] = {
                           'image': image_name,
                           'current': current_tag,
+                          'latest': latest_tag,
                           'registry': registry,
-                          'note': f'{registry} registry — manual verification required'
+                          'note': note
                       }
                       continue
 
-                  # Standard semver check
-                  try:
-                      repo = normalize_repo(image_name)
-                      all_tags = fetch_all_tags(repo)
-                      latest_tag, reason = get_latest_in_track(current_tag, all_tags)
-
-                      if latest_tag is None:
-                          manual_check[service_name] = {
-                              'image': image_name,
-                              'current': current_tag,
-                              'registry': registry,
-                              'note': f'Could not determine latest: {reason}'
-                          }
-                          continue
-
-                      if latest_tag != current_tag:
-                          classification = classify_update(current_tag, latest_tag)
-
-                          update_info = {
-                              'image': image_name,
-                              'current': current_tag,
-                              'latest': latest_tag,
-                              'registry': registry,
-                              'classification': classification
-                          }
-
-                          updates[service_name] = update_info
-
-                          # Split into safe (patch/minor) and risky (major/scheme-change)
-                          if classification in ['patch', 'minor']:
-                              safe_updates[service_name] = update_info
-                          elif classification in ['major', 'scheme-change']:
-                              risky_updates[service_name] = update_info
-                      else:
-                          up_to_date[service_name] = {
-                              'image': image_name,
-                              'current': current_tag,
-                              'registry': registry
-                          }
-
-                  except Exception as e:
-                      print(f"    [X] {service_name}: Error - {e}")
+                  # Pinned version — classify the update
+                  if latest_tag is None:
+                      manual_check[service_name] = {
+                          'image': image_name,
+                          'current': current_tag,
+                          'latest': None,
+                          'registry': registry,
+                          'note': 'Could not determine latest version — verify manually.'
+                      }
                       continue
+
+                  if latest_tag != current_tag:
+                      classification = classify_update(current_tag, latest_tag)
+
+                      update_info = {
+                          'image': image_name,
+                          'current': current_tag,
+                          'latest': latest_tag,
+                          'registry': registry,
+                          'classification': classification
+                      }
+
+                      updates[service_name] = update_info
+
+                      # Split into safe (patch/minor) and risky (major/scheme-change)
+                      if classification in ['patch', 'minor']:
+                          safe_updates[service_name] = update_info
+                      elif classification in ['major', 'scheme-change']:
+                          risky_updates[service_name] = update_info
+                  else:
+                      up_to_date[service_name] = {
+                          'image': image_name,
+                          'current': current_tag,
+                          'registry': registry
+                      }
 
               return updates, safe_updates, risky_updates, up_to_date, manual_check, excluded_local
 
@@ -479,6 +542,9 @@ jobs:
                 body += `### ${service}\n\n`;
                 body += `- **Image**: \`${info.image}:${info.current}\`\n`;
                 body += `- **Registry**: ${info.registry}\n`;
+                if (info.latest) {
+                  body += `- **Latest available**: \`${info.latest}\`\n`;
+                }
                 body += `- **Reason**: ${info.note}\n`;
 
                 // Add specific guidance based on image type
