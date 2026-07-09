@@ -89,34 +89,76 @@ declare -A SERVICE_PORTS=(
 # falls back to the exact pinned tag automatically.
 # ─────────────────────────────────────────────────────────────
 
-readonly -a THIRD_PARTY_IMAGE_SPECS=(
-    # image_ref                                              | stable_tag | constraint
-    "postgres:18.4-trixie|18|none"
-    "redis:8.8.0-alpine|8|none"
-    "rabbitmq:4.3.2-management|4|none"
-    "qdrant/qdrant:v1.18.2|v1|none"
-    "neo4j:2026.05.0-community|2026|none"
-    "ollama/ollama:0.31.2|0|none"
-    "prom/prometheus:v3.13.0|v3|none"
-    "grafana/grafana:13.1|13|none"
-    "prom/alertmanager:v0.33.1|v0|none"
-    # authelia disabled pending proper configuration
-    # "authelia/authelia:4.38.7|4|none"
-    "traefik:v3.7.7|v3|none"
-    "influxdb:3.10.1-core|3|none"
-    "telegraf:1.39.1|1|none"
-    "apicurio/apicurio-registry-sql:2.6.13.Final|2|none"
-    "minio/minio:RELEASE.2025-09-07T16-13-09Z|RELEASE|none"
-    "jaegertracing/all-in-one:1.76.0|1|none"
-    "otel/opentelemetry-collector:0.156.0|0|none"
-    "ghcr.io/open-webui/open-webui:v0.10.2|v0|none"
-    "prometheuscommunity/postgres-exporter:v0.20.1|v0|none"
-    "oliver006/redis_exporter:v1.86.0|v1|none"
-    "kbudde/rabbitmq-exporter:v1.0.0-RC9|v1|none"
-    "prom/node-exporter:v1.11.1|v1|none"
-    "gcr.io/cadvisor/cadvisor:v0.55.1|v0|none"
-    "prom/blackbox-exporter:v0.28.0|v0|none"
+# Per-image version-resolution METADATA — the knobs compose has no place for.
+# The pinned VERSION itself lives ONLY in docker-compose.yml (single source of
+# truth); THIRD_PARTY_IMAGE_SPECS is assembled below by pairing each 3rd-party
+# compose image with this metadata. This is why a version bump is now a ONE-file
+# edit (compose) instead of two — the specs↔compose drift that bit #37 twice is
+# structurally impossible now. See #12.
+#
+#   key   = image ref WITHOUT tag, exactly as written in compose `image:`
+#   value = "stable_prefix|constraint"   constraint ∈ {major,minor,patch,none}
+declare -A THIRD_PARTY_IMAGE_META=(
+    ["postgres"]="18|none"
+    ["redis"]="8|none"
+    ["rabbitmq"]="4|none"
+    ["qdrant/qdrant"]="v1|none"
+    ["neo4j"]="2026|none"
+    ["ollama/ollama"]="0|none"
+    ["prom/prometheus"]="v3|none"
+    ["grafana/grafana"]="13|none"
+    ["prom/alertmanager"]="v0|none"
+    # authelia disabled pending proper configuration (restore when it returns)
+    # ["authelia/authelia"]="4|none"
+    ["traefik"]="v3|none"
+    ["influxdb"]="3|none"
+    ["telegraf"]="1|none"
+    ["apicurio/apicurio-registry-sql"]="2|none"
+    ["minio/minio"]="RELEASE|none"
+    ["jaegertracing/all-in-one"]="1|none"
+    ["otel/opentelemetry-collector"]="0|none"
+    ["ghcr.io/open-webui/open-webui"]="v0|none"
+    ["prometheuscommunity/postgres-exporter"]="v0|none"
+    ["oliver006/redis_exporter"]="v1|none"
+    ["kbudde/rabbitmq-exporter"]="v1|none"
+    ["prom/node-exporter"]="v1|none"
+    ["gcr.io/cadvisor/cadvisor"]="v0|none"
+    ["prom/blackbox-exporter"]="v0|none"
 )
+
+# Pull every pinned "image:tag" out of the compose file. Commented lines don't
+# match (image: must follow leading whitespace directly), and locally-built
+# services (minder/*) are dropped later since they have no metadata entry.
+_compose_image_refs() {
+    grep -E '^[[:space:]]+image:[[:space:]]+' "$COMPOSE_FILE" \
+        | sed -E 's/^[[:space:]]+image:[[:space:]]+//; s/[[:space:]]*(#.*)?$//'
+}
+
+# Assemble the version-bearing specs ("image:tag|stable_prefix|constraint" — the
+# format the rest of versions.sh consumes) by joining compose images with their
+# metadata. Fail-loud on metadata that names an image compose no longer has, so
+# an image rename can't silently drop something from update checks.
+_derive_third_party_specs() {
+    local ref name
+    local -A seen=()
+    while IFS= read -r ref; do
+        [[ -z "$ref" ]] && continue
+        name="${ref%:*}"
+        if [[ -n "${THIRD_PARTY_IMAGE_META[$name]:-}" ]]; then
+            echo "${ref}|${THIRD_PARTY_IMAGE_META[$name]}"
+            seen["$name"]=1
+        fi
+    done < <(_compose_image_refs)
+
+    local key
+    for key in "${!THIRD_PARTY_IMAGE_META[@]}"; do
+        [[ -z "${seen[$key]:-}" ]] \
+            && echo "WARN: THIRD_PARTY_IMAGE_META has '${key}' but no matching image in compose" >&2
+    done
+    return 0
+}
+
+readonly -a THIRD_PARTY_IMAGE_SPECS=($(_derive_third_party_specs))
 
 # Build a plain array of pinned image refs (for backward compat / fallback)
 readonly -a THIRD_PARTY_IMAGES=($(

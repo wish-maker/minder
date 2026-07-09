@@ -18,10 +18,12 @@ into a container.
 `docker-compose.yml` is the **hand-maintained source of truth** — edit it directly,
 including image tags. Config-file *mounts* should point at `../services/<name>/…`.
 
-> **Note:** `THIRD_PARTY_IMAGE_SPECS` in `setup.sh` is still used by `versions.sh` for
-> image pulling and the version-drift report (`doctor` / `update --check`). It is **not**
-> auto-synced to this file — keep the two aligned when bumping a version. Unifying them
-> (deriving versions from this file) is tracked in #12.
+> **Note:** image **versions** here are the single source of truth. `versions.sh`
+> (image pulling + the `doctor` / `update --check` drift report) reads them straight from
+> this file's `image:` lines — `THIRD_PARTY_IMAGE_META` in `scripts/lib/config.sh` now
+> holds only per-image resolution *metadata* (stable-track prefix + update constraint),
+> not versions. So a version bump is a **one-file edit here**, with no second place to
+> keep in sync (#12).
 
 ## The compose/ vs services/ split
 
