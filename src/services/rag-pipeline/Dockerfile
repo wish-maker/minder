@@ -23,7 +23,13 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 COPY src/services/rag-pipeline/main.py .
 COPY src/services/rag-pipeline/pg_client.py .
 COPY src/services/rag-pipeline/config.yaml .
+COPY src/services/rag-pipeline/quality_evaluator.py .
 COPY src/services/rag-pipeline/repositories /app/repositories
+
+# Advanced RAG method modules (HyDE, Self-RAG, decision engine) — wired into the
+# query endpoint via the `method` field (see #45).
+COPY src/services/rag-pipeline/domain /app/domain
+COPY src/services/rag-pipeline/agent /app/agent
 
 # Copy core modules
 COPY src/core /app/src/core

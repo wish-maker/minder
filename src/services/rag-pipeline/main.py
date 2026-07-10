@@ -153,6 +153,7 @@ class QueryRequest(BaseModel):
     conversation_id: Optional[
         str
     ] = None  # For conversational RAG - enables conversation history
+    method: str = "standard"  # standard | hyde | self_rag | auto (decision engine)
 
 
 class QueryResponse(BaseModel):
@@ -163,6 +164,8 @@ class QueryResponse(BaseModel):
     confidence: float
     model_used: str
     tokens_used: Optional[int] = None
+    method: str = "standard"  # which RAG method actually ran
+    method_details: Optional[Dict[str, Any]] = None  # e.g. HyDE/Self-RAG/decision metadata
 
 
 class DocumentUploadResponse(BaseModel):
@@ -389,6 +392,41 @@ Answer:"""
 
 # Global Ollama manager
 ollama_manager = OllamaManager()
+
+
+# ============================================================================
+# Advanced RAG methods (HyDE, Self-RAG, decision engine) — see #45
+# Imported defensively: if a module is missing the service still runs Standard
+# and Conversational RAG. `ollama_manager` is used directly as the llm_manager
+# (its generate_response / generate_embeddings signatures match what they expect).
+# ============================================================================
+hyde_expander = None
+self_rag_pipeline = None
+decision_engine = None
+try:
+    from domain.expansion.hyde import HyDEQueryExpander
+
+    hyde_expander = HyDEQueryExpander()
+except Exception as e:  # pragma: no cover
+    logger.warning(f"⚠️ HyDE unavailable: {e}")
+try:
+    from domain.pipelines.self_rag import SelfRAGPipeline
+
+    self_rag_pipeline = SelfRAGPipeline()
+except Exception as e:  # pragma: no cover
+    logger.warning(f"⚠️ Self-RAG unavailable: {e}")
+try:
+    from agent.decision_engine import AgentDecisionEngine
+
+    _ollama_host = (
+        OLLAMA_HOST.replace("http://", "").replace("https://", "").rstrip("/")
+        or "minder-ollama:11434"
+    )
+    decision_engine = AgentDecisionEngine(ollama_host=_ollama_host)
+except Exception as e:  # pragma: no cover
+    logger.warning(f"⚠️ Decision engine unavailable: {e}")
+
+VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto"}
 
 
 # ============================================================================
@@ -675,11 +713,52 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
     pipeline = rag_pipelines[pipeline_id]
+    llm_model = pipeline.get("llm_model") or DEFAULT_LLM_MODEL
+
+    # --- Method selection (Standard / HyDE / Self-RAG / auto) — see #45 ---
+    method = (request.method or "standard").lower()
+    if method not in VALID_RAG_METHODS:
+        method = "standard"
+    use_hyde = method == "hyde"
+    use_self_rag = method == "self_rag"
+    method_details: Dict[str, Any] = {}
+
+    # `auto`: let the decision engine choose the strategy for this query.
+    if method == "auto" and decision_engine is not None:
+        try:
+            analysis = await decision_engine.analyze_query(request.question)
+            decision = await decision_engine.decide_pipeline(analysis)
+            use_hyde = bool(getattr(decision, "use_hyde", False))
+            use_self_rag = bool(getattr(decision, "use_self_rag", False))
+            method_details["decision"] = {
+                "complexity": getattr(analysis.complexity, "value", str(analysis.complexity)),
+                "intent": analysis.intent,
+                "use_hyde": use_hyde,
+                "use_self_rag": use_self_rag,
+            }
+        except Exception as e:
+            logger.warning(f"⚠️ Decision engine failed, falling back to standard: {e}")
+
+    # HyDE: retrieve using a hypothetical answer instead of the raw question.
+    retrieval_query = request.question
+    if use_hyde and hyde_expander is not None:
+        try:
+            hypothetical = await hyde_expander.generate_hypothetical_answer(
+                request.question, ollama_manager, model=llm_model
+            )
+            if hypothetical:
+                retrieval_query = hypothetical
+                method_details["hyde"] = {"hypothetical_chars": len(hypothetical)}
+            else:
+                use_hyde = False
+        except Exception as e:
+            logger.warning(f"⚠️ HyDE failed, using raw query: {e}")
+            use_hyde = False
 
     # Retrieve relevant documents
     context_result = await retrieve_relevant_documents(
         pipeline,
-        request.question,
+        retrieval_query,
         request.top_k,
     )
 
@@ -707,15 +786,44 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     if context_result["context"]:
         combined_context += f"Relevant documents:\n{context_result['context']}"
 
-    # Generate answer
-    with llm_generation_duration.labels(
-        model=pipeline.get("llm_model", DEFAULT_LLM_MODEL)
-    ).time():
-        answer_result = await ollama_manager.generate_response(
-            prompt=request.question,
-            context=combined_context,
-            **pipeline.get("generation_config", {}),
-        )
+    # Generate answer (Self-RAG iterative refinement, or a single standard pass)
+    answer_text = ""
+    model_used = llm_model
+    tokens_used = None
+    with llm_generation_duration.labels(model=llm_model).time():
+        if use_self_rag and self_rag_pipeline is not None:
+            try:
+                sr = await self_rag_pipeline.generate_with_self_refinement(
+                    question=request.question,
+                    context=combined_context or context_result["context"] or "(no context)",
+                    sources=context_result.get("sources", []),
+                    llm_manager=ollama_manager,
+                    model=llm_model,
+                )
+                answer_text = sr.get("answer") or ""
+                method_details["self_rag"] = sr.get("quality", {})
+            except Exception as e:
+                logger.warning(f"⚠️ Self-RAG failed, falling back to standard: {e}")
+                use_self_rag = False
+
+        if not answer_text:  # standard path (default, or any fallback above)
+            answer_result = await ollama_manager.generate_response(
+                prompt=request.question,
+                context=combined_context,
+                **pipeline.get("generation_config", {}),
+            )
+            answer_text = answer_result["text"]
+            model_used = answer_result.get("model", llm_model)
+            tokens_used = answer_result.get("tokens_used")
+
+    # Resolve the effective method label for the response
+    effective_method = "standard"
+    if use_self_rag:
+        effective_method = "self_rag"
+    elif use_hyde:
+        effective_method = "hyde"
+    if method == "auto":
+        method_details["requested"] = "auto"
 
     # Store conversation turn if conversation_id provided (Conversational RAG)
     if request.conversation_id and conversation_repository:
@@ -724,11 +832,12 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
                 user_id="default",  # TODO: Single-user limitation
                 conversation_id=request.conversation_id,
                 question=request.question,
-                answer=answer_result["text"],
+                answer=answer_text,
                 metadata={
                     "pipeline_id": pipeline_id,
-                    "model_used": answer_result.get("model", "unknown"),
+                    "model_used": model_used,
                     "sources_count": len(context_result.get("sources", [])),
+                    "method": effective_method,
                     "timestamp": None,  # Will be set by DB default
                 },
             )
@@ -738,11 +847,13 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             # Don't fail the request if storage fails
 
     return QueryResponse(
-        answer=answer_result["text"],
+        answer=answer_text,
         sources=context_result["sources"],
         confidence=0.85,  # TODO: Calculate actual confidence from scores
-        model_used=answer_result.get("model", "unknown"),
-        tokens_used=answer_result.get("tokens_used"),
+        model_used=model_used,
+        tokens_used=tokens_used,
+        method=effective_method,
+        method_details=method_details or None,
     )
 
 
