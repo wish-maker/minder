@@ -246,11 +246,6 @@ design — they show as "no-healthcheck", not "unhealthy".
   start ([#42](https://github.com/wish-maker/minder/issues/42)).
 - MinIO is initialized only by `install`; `bash setup.sh start` alone omits it
   ([#43](https://github.com/wish-maker/minder/issues/43)).
-- On Docker Desktop, `telegraf` crash-loops (docker.sock permission) and stays unhealthy,
-  adding a 120s wait to install/start ([#40](https://github.com/wish-maker/minder/issues/40)).
-- The `Running migrations` step warns for all services — the images have no alembic and
-  services self-init their schema; the warnings are harmless
-  ([#41](https://github.com/wish-maker/minder/issues/41)).
 
 ## Troubleshooting
 

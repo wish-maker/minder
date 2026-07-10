@@ -8,10 +8,9 @@
 `bash setup.sh install` actually runs **30** — `schema-registry` is defined but not wired
 into `setup.sh` and never starts ([#42](https://github.com/wish-maker/minder/issues/42)).
 `bash setup.sh start` alone runs **29** (MinIO is initialized only by `install`,
-[#43](https://github.com/wish-maker/minder/issues/43)). On Docker Desktop, `telegraf`
-crash-loops (docker.sock permission, [#40](https://github.com/wish-maker/minder/issues/40)),
-so it stays unhealthy. 3 services carry no healthcheck by design (otel-collector,
-redis-exporter, rabbitmq-exporter).
+[#43](https://github.com/wish-maker/minder/issues/43)). Everything else runs healthy;
+only 3 services carry no healthcheck by design (otel-collector, redis-exporter,
+rabbitmq-exporter).
 **Core API Services:** 8 (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, tts-stt, graph-rag)
 **Data Stores:** 7 (PostgreSQL, Redis, Qdrant, Neo4j, RabbitMQ, MinIO, schema-registry)
 **AI Runtime:** Ollama with local LLM support (profile-gated; disabled when using an external/native Ollama host)
