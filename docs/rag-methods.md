@@ -17,12 +17,19 @@ modules** — a "RAG research lab" — that are **NOT wired into the live query 
 **mostly untested**: **HyDE**, **Self-RAG**, a **decision-engine**, Corrective RAG,
 Cross-Encoder re-ranking, Contextual Compression, Hybrid/BM25, Parent-Child, RAPTOR.
 
-> **⚠️ Correction (verified 2026-07-10):** "Wired" means integrated into the live query
-> path of the running service. Only **Standard** and **Conversational** RAG are wired into
-> `minder-rag-pipeline`. HyDE / Self-RAG / decision-engine **exist as modules but are NOT
-> reachable via the API** — the live `main.py` never imports or mounts them; they are only
-> referenced by unmounted/dead code (`api_v2.py`, `api/agent_query.py`, `main_refactored.py`).
-> Tracked in [#45](https://github.com/wish-maker/minder/issues/45).
+> **⚠️ Correction (empirically verified 2026-07-10):** Only **Standard** and **Conversational**
+> RAG are reachable in the running service. Proof:
+> - The live `/openapi.json` lists exactly 9 paths (`/`, `/health`, `/initialize`,
+>   `/knowledge-base`, `/knowledge-base/{id}/upload`, `/knowledge-bases`, `/metrics`,
+>   `/pipeline`, `/pipeline/{id}/query`) — no HyDE/Self-RAG/agent routes. All such paths 404.
+> - The rag-pipeline **Dockerfile only COPYs** `main.py`, `pg_client.py`, `config.yaml`,
+>   `repositories/`, and `src/core`. It does **not** ship `domain/` or `agent/`, so
+>   HyDE / Self-RAG / decision-engine (and the Bucket-2 modules) **are not even present in the
+>   image** — `find` for `hyde.py`/`self_rag.py`/`decision_engine.py` in the container returns
+>   nothing. They exist only in the source tree.
+>
+> So these are source-tree "research lab" code, not runtime features. Tracked in
+> [#45](https://github.com/wish-maker/minder/issues/45).
 
 ---
 
