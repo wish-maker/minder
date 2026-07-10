@@ -50,7 +50,7 @@ check_prerequisites() {
     fi
 
     local busy_ports=()
-    for port in 5432 6379 8000 8001 8002 8003 8004 8005 8006 8007 8080 8081 8086 9090 9091 3000; do
+    for port in 5432 6379 8000 8001 8002 8003 8004 8005 8006 8008 8080 8081 8086 9090 9091 3000; do
         if 2>/dev/null >/dev/tcp/127.0.0.1/"$port"; then
             if ! docker ps --format '{{.Ports}}' 2>/dev/null | grep -q ":${port}->"; then
                 busy_ports+=("$port")

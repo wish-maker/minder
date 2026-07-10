@@ -11,23 +11,21 @@ print_success_banner() {
 
     echo -e "${BOLD}${MAGENTA}🔐 Security${NC}"
     echo -e "   Traefik Dashboard  →  ${CYAN}http://localhost:8081${NC}"
-    echo -e "   Authelia Portal    →  ${CYAN}http://localhost:9091${NC}"
-    echo -e "   ${YELLOW}Default users: admin/admin123, developer/admin123, user/admin123${NC}"
-    echo -e "   ${RED}⚠️  Change default passwords immediately!${NC}"
+    echo -e "   ${YELLOW}Auth: register via POST /v1/auth/register on the API Gateway (JWT).${NC}"
+    echo -e "   ${YELLOW}Authelia SSO is currently disabled (see issue #15).${NC}"
 
     echo ""
     echo -e "${BOLD}${MAGENTA}📍 Core APIs${NC}"
-    local api_names=("API Gateway" "Plugin Registry" "Marketplace" "State Manager" "RAG Pipeline" "Model Mgmt")
-    local api_ports=(8000       8001              8002          8003             8004           8005)
+    local api_names=("API Gateway" "Plugin Registry" "Marketplace" "State Manager" "RAG Pipeline" "Model Mgmt" "Graph-RAG")
+    local api_ports=(8000       8001              8002          8003             8004           8005         8008)
     for i in "${!api_names[@]}"; do
         printf "   %-20s →  ${CYAN}http://localhost:%s${NC}\n" "${api_names[$i]}" "${api_ports[$i]}"
     done
 
     echo ""
     echo -e "${BOLD}${MAGENTA}🤖 AI Services${NC}"
-    echo -e "   OpenWebUI           →  ${CYAN}http://localhost:8080${NC}"
+    echo -e "   OpenWebUI           →  ${CYAN}via Traefik (chat.minder.local)${NC}"
     echo -e "   TTS / STT           →  ${CYAN}http://localhost:8006${NC}"
-    echo -e "   Model Fine-tuning   →  ${CYAN}http://localhost:8007${NC}"
 
     echo ""
     echo -e "${BOLD}${MAGENTA}📊 Monitoring${NC}"
