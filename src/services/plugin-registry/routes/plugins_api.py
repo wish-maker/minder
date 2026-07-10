@@ -13,9 +13,9 @@ from datetime import datetime
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-
 from models import PluginInfo
 from schemas.validator import validate_manifest
+
 from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
 
 
@@ -60,12 +60,16 @@ def build_plugins_router(
         try:
             return yaml.safe_load(body) if is_yaml else json.loads(body.decode())
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to parse manifest: {e}")
+            raise HTTPException(
+                status_code=400, detail=f"Failed to parse manifest: {e}"
+            )
 
     @router.post("/v1/plugins/install")
     async def install_plugin(request: Request, background_tasks: BackgroundTasks):
         """Install a plugin from a manifest (manifest-based, no code execution)."""
-        manifest = _parse_manifest(await request.body(), request.headers.get("content-type", ""))
+        manifest = _parse_manifest(
+            await request.body(), request.headers.get("content-type", "")
+        )
 
         is_valid, errors = validate_manifest(manifest)
         if not is_valid:
@@ -73,7 +77,9 @@ def build_plugins_router(
 
         plugin_name = manifest.get("metadata", {}).get("name")
         if not plugin_name:
-            raise HTTPException(status_code=400, detail="Plugin name required in metadata")
+            raise HTTPException(
+                status_code=400, detail="Plugin name required in metadata"
+            )
         if plugin_name in plugins_db:
             raise HTTPException(
                 status_code=409, detail=f"Plugin {plugin_name} already installed"
@@ -93,7 +99,9 @@ def build_plugins_router(
             logger.info(f"Stored manifest for plugin: {plugin_name}")
         except Exception as e:
             logger.error(f"Failed to store manifest in database: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to store manifest: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to store manifest: {e}"
+            )
 
         try:
             await register_plugin_webhook(plugin_name, manifest)
@@ -174,7 +182,9 @@ def build_plugins_router(
     @router.post("/v1/plugins/reload-webhook")
     async def reload_plugin_webhook(request: Request):
         """Re-register a plugin's webhook route from an uploaded manifest."""
-        manifest = _parse_manifest(await request.body(), request.headers.get("content-type", ""))
+        manifest = _parse_manifest(
+            await request.body(), request.headers.get("content-type", "")
+        )
 
         is_valid, errors = validate_manifest(manifest)
         if not is_valid:
@@ -182,7 +192,9 @@ def build_plugins_router(
 
         plugin_name = manifest.get("metadata", {}).get("name")
         if not plugin_name:
-            raise HTTPException(status_code=400, detail="Plugin name required in metadata")
+            raise HTTPException(
+                status_code=400, detail="Plugin name required in metadata"
+            )
         if plugin_name not in plugins_db:
             raise HTTPException(
                 status_code=404,
@@ -196,7 +208,9 @@ def build_plugins_router(
             logger.info(f"Re-registered webhook route for plugin: {plugin_name}")
         except Exception as e:
             logger.error(f"Failed to re-register webhook: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to register webhook: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to register webhook: {e}"
+            )
 
         return {
             "message": f"Webhook re-registered for {plugin_name}",
@@ -230,7 +244,9 @@ def build_plugins_router(
         """Manually trigger a plugin's background data collection."""
         plugin = plugins_db.get(plugin_name)
         if not plugin:
-            raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' not found"
+            )
         if plugin.status != "enabled":
             raise HTTPException(
                 status_code=400,

@@ -10,12 +10,11 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict
 
 import redis
 import yaml
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -23,7 +22,6 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
-from pydantic import BaseModel
 
 from config import settings
 
@@ -33,13 +31,6 @@ sys.path.insert(0, "/app/plugins")  # Add plugins directory to path for direct i
 # Import proxy router for microservices
 from routes.plugins import ProxyRouter  # noqa: E402
 from routes.plugins_api import build_plugins_router  # noqa: E402
-
-# Import AI tool validator
-from shared.ai.tool_validator import validate_ai_tools  # noqa: E402
-from shared.auth.jwt_middleware import (  # noqa: E402
-    enforce_rate_limit,
-    get_current_user,
-)
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -79,12 +70,7 @@ health_check_failures_total = Counter(
 # ============================================================================
 
 
-from models import (  # noqa: E402
-    PluginInfo,
-    PluginInstallationRequest,
-    ServiceRegistration,
-)
-
+from models import PluginInfo, ServiceRegistration  # noqa: E402
 
 # ============================================================================
 # Infrastructure Clients
@@ -1195,7 +1181,6 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
     except Exception as e:
         logger.error(f"Error getting/creating marketplace plugin: {e}")
         return None
-
 
 
 # Plugin CRUD/lifecycle endpoints (routes/plugins_api.py). Included at module end so

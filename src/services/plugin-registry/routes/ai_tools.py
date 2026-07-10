@@ -97,7 +97,9 @@ def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
     ):
         """Generic analysis endpoint: call a plugin's analyze() and shape the result."""
         if plugin_name not in plugins_db:
-            raise HTTPException(status_code=404, detail=f"Plugin '{plugin_name}' not found")
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' not found"
+            )
         if not plugins_db[plugin_name].enabled:
             raise HTTPException(
                 status_code=403, detail=f"Plugin '{plugin_name}' is not enabled"
@@ -110,7 +112,10 @@ def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
             analysis_result = await plugin_instances[plugin_name].analyze()
 
             if plugin_name == "crypto" and symbol:
-                if "metrics" in analysis_result and symbol in analysis_result["metrics"]:
+                if (
+                    "metrics" in analysis_result
+                    and symbol in analysis_result["metrics"]
+                ):
                     return {
                         "symbol": symbol,
                         **analysis_result["metrics"][symbol],
@@ -134,7 +139,9 @@ def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
                     weather_data = analysis_result["metrics"].get(
                         location,
                         {
-                            "temperature": analysis_result["metrics"].get("avg_temp_c", 0),
+                            "temperature": analysis_result["metrics"].get(
+                                "avg_temp_c", 0
+                            ),
                             "humidity": analysis_result["metrics"].get(
                                 "avg_humidity_pct", 0
                             ),

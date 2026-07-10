@@ -172,7 +172,9 @@ class QueryResponse(BaseModel):
     model_used: str
     tokens_used: Optional[int] = None
     method: str = "standard"  # which RAG method actually ran
-    method_details: Optional[Dict[str, Any]] = None  # e.g. HyDE/Self-RAG/decision metadata
+    method_details: Optional[
+        Dict[str, Any]
+    ] = None  # e.g. HyDE/Self-RAG/decision metadata
 
 
 class DocumentUploadResponse(BaseModel):
@@ -435,7 +437,6 @@ except Exception as e:  # pragma: no cover
 
 # Query orchestration lives in the rag/ package (per-method strategy modules + runner).
 from rag.runner import RagComponents, run_query  # noqa: E402
-
 
 # ============================================================================
 # Qdrant Client Management

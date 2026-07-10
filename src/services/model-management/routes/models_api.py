@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import List
 
 from fastapi import APIRouter, HTTPException
-
 from models import FineTuneRequest, ModelConstraints, ModelInfo
 
 
@@ -46,7 +45,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to list models: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to list models: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to list models: {str(e)}"
+            )
 
     @router.post("/models")
     async def register_model(model_id: str, model_info: ModelInfo):
@@ -72,7 +73,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to register model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to register model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to register model: {str(e)}"
+            )
 
     @router.get("/models/{model_id}")
     async def get_model(model_id: str):
@@ -84,7 +87,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to get model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to get model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to get model: {str(e)}"
+            )
 
     @router.delete("/models/{model_id}")
     async def delete_model(model_id: str):
@@ -94,7 +99,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
                 m.get("name") == model_id for m in await ollama_manager.list_models()
             )
             if not exists:
-                raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")
+                raise HTTPException(
+                    status_code=404, detail=f"Model '{model_id}' not found"
+                )
             result = await ollama_manager.delete_model(model_id)
             logger.warning(f"⚠️  Model deleted: {model_id}")
             return {
@@ -107,7 +114,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to delete model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to delete model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to delete model: {str(e)}"
+            )
 
     @router.post("/models/{model_id}/test")
     async def test_model(model_id: str, prompt: str = "Hello, test."):
@@ -120,7 +129,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to test model {model_id}: {e}")
-            raise HTTPException(status_code=503, detail=f"Failed to test model: {str(e)}")
+            raise HTTPException(
+                status_code=503, detail=f"Failed to test model: {str(e)}"
+            )
 
     @router.post("/models/{model_id}/constraints")
     async def set_model_constraints(model_id: str, constraints: ModelConstraints):
@@ -154,7 +165,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
                 f"{request.base_model}_fine_tuned_"
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
-            logger.info(f"Fine-tune request (placeholder): {request.base_model} -> {fine_tuned_id}")
+            logger.info(
+                f"Fine-tune request (placeholder): {request.base_model} -> {fine_tuned_id}"
+            )
             return {
                 "message": "Fine-tuning is not implemented in this service",
                 "fine_tuned_model_id": fine_tuned_id,

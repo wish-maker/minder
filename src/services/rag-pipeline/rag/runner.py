@@ -28,7 +28,9 @@ class RagComponents:
     """Everything the runner needs, injected by the caller (no globals imported)."""
 
     ollama_manager: Any
-    retrieve: Callable[..., Awaitable[Dict[str, Any]]]  # (pipeline, query, top_k) -> dict
+    retrieve: Callable[
+        ..., Awaitable[Dict[str, Any]]
+    ]  # (pipeline, query, top_k) -> dict
     hyde_expander: Any = None
     self_rag_pipeline: Any = None
     decision_engine: Any = None
@@ -51,8 +53,16 @@ async def _load_conversation_context(repo, conversation_id) -> str:
         return ""
 
 
-async def _store_conversation_turn(repo, conversation_id, pipeline_id, question, answer,
-                                   model_used, sources_count, method) -> None:
+async def _store_conversation_turn(
+    repo,
+    conversation_id,
+    pipeline_id,
+    question,
+    answer,
+    model_used,
+    sources_count,
+    method,
+) -> None:
     if not (conversation_id and repo):
         return
     try:
@@ -74,9 +84,15 @@ async def _store_conversation_turn(repo, conversation_id, pipeline_id, question,
         logger.warning(f"⚠️  Failed to store conversation turn: {e}")
 
 
-async def run_query(*, pipeline: Dict[str, Any], pipeline_id: str, request: Any,
-                    llm_model: str, generation_config: Optional[Dict[str, Any]],
-                    components: RagComponents) -> Dict[str, Any]:
+async def run_query(
+    *,
+    pipeline: Dict[str, Any],
+    pipeline_id: str,
+    request: Any,
+    llm_model: str,
+    generation_config: Optional[Dict[str, Any]],
+    components: RagComponents,
+) -> Dict[str, Any]:
     """Execute one RAG query. Returns a dict of QueryResponse fields."""
     question = request.question
     method = (getattr(request, "method", None) or "standard").lower()

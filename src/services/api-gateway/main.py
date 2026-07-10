@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # Import auth functions
-from modules.auth import (close_pg_pool, create_jwt_token, init_users_table, verify_jwt_token)  # noqa: E501
+from modules.auth import close_pg_pool, init_users_table, verify_jwt_token
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -93,6 +93,7 @@ app = FastAPI(
 # Include AI integration router
 app.include_router(ai_router)
 from routes.auth import router as auth_router  # noqa: E402
+
 app.include_router(auth_router)
 
 # ============================================================================

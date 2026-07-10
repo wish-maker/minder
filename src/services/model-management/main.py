@@ -17,7 +17,6 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
-from pydantic import BaseModel
 
 # Ollama client for real model management
 try:
@@ -63,7 +62,6 @@ models_registered_total = Gauge(
 
 # Pydantic models
 from models import FineTuneRequest, ModelConstraints, ModelInfo  # noqa: E402,F401
-
 
 # ============================================================================
 # Ollama Client Management

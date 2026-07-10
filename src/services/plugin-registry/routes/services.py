@@ -9,11 +9,12 @@ import json
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-
 from models import ServiceRegistration
 
 
-def build_services_router(*, services_db, redis_client, proxy_router, logger) -> APIRouter:
+def build_services_router(
+    *, services_db, redis_client, proxy_router, logger
+) -> APIRouter:
     router = APIRouter(tags=["Service Discovery"])
 
     @router.post("/v1/services/register")

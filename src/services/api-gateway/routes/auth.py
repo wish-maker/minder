@@ -9,14 +9,14 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, Request
-
-from config import settings
 from modules.auth import (
     create_jwt_token,
     create_user,
     verify_jwt_token,
     verify_user_credentials,
 )
+
+from config import settings
 
 logger = logging.getLogger("minder.api-gateway")
 
@@ -71,7 +71,9 @@ async def login(request: Request):
         password = body.get("password")
 
         if not username or not password:
-            raise HTTPException(status_code=400, detail="Username and password required")
+            raise HTTPException(
+                status_code=400, detail="Username and password required"
+            )
 
         user = await verify_user_credentials(username, password)
         if user is None:
