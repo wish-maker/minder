@@ -14,16 +14,25 @@ cmd_migrate() {
     local -a migration_services=(api-gateway marketplace plugin-registry rag-pipeline model-management)
 
     for svc in "${migration_services[@]}"; do
-        if container_running "$svc"; then
+        if ! container_running "$svc"; then
+            log_detail "${svc} — not running, skipping"
+            continue
+        fi
+        local cname
+        cname="$(container_name "$svc")"
+        # These services create their own schema on startup and ship no Alembic
+        # setup. Only attempt `alembic upgrade` if Alembic is actually installed —
+        # otherwise skip cleanly instead of emitting a spurious "migration failed".
+        if docker exec "$cname" sh -c 'command -v alembic >/dev/null 2>&1'; then
             log_info "Running migrations in ${svc}…"
-            if run docker exec "$(container_name "$svc")" \
+            if run docker exec "$cname" \
                    alembic upgrade "$target" 2>&1 | tee -a "$LOG_FILE"; then
                 log_success "${svc} — migrations applied"
             else
                 log_warn "${svc} — migration failed (check logs)"
             fi
         else
-            log_detail "${svc} — not running, skipping"
+            log_detail "${svc} — schema self-initialized on startup (no Alembic), skipping"
         fi
     done
 
