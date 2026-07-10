@@ -140,7 +140,7 @@ All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
 - `GET /v1/documents/search` — semantic search
 
 **Pipeline**: query → embed (Ollama) → search (Qdrant) → retrieve context → generate (Ollama LLM).
-Includes HyDE, Self-RAG, a decision engine, and conversational RAG.
+Live query endpoint does Standard + Conversational RAG. HyDE, Self-RAG, and a decision engine exist as modules but are not wired into the live endpoint (#45).
 
 #### Model Management (Port 8005)
 **Purpose**: Model registry and lifecycle over Ollama

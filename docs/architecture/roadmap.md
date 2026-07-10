@@ -28,7 +28,7 @@ authoritative service breakdown.
 - Plugin Registry (8001) — manifest-based plugin lifecycle (no code execution)
 - Marketplace (8002) — discovery/licensing, dependency graph in Neo4j
 - Plugin State Manager (8003) — plugin state + AI-tool execution
-- RAG Pipeline (8004) — ingestion, embeddings, retrieval; HyDE + Self-RAG + conversational RAG
+- RAG Pipeline (8004) — ingestion, embeddings, retrieval; Standard + Conversational RAG live (HyDE/Self-RAG modules unwired — #45)
 - Model Management (8005) — Ollama model lifecycle (constraints/metrics are placeholders)
 - TTS/STT (8006) — gTTS + speech_recognition, ~12 languages
 - Graph RAG (8008) — spaCy NER + Neo4j knowledge graph
@@ -61,8 +61,9 @@ ARM deployment hardening: image/version pinning, Traefik router completion, reso
 per-service config landmines, and clean-install reliability on the Pi.
 
 ### 2. RAG Enhancements
-Continued work on the retrieval pipeline. HyDE and Self-RAG are already implemented; further
-retrieval-quality work is tracked on the backlog.
+Continued work on the retrieval pipeline. HyDE and Self-RAG are implemented as modules but are
+**not yet wired into the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45));
+wiring them in (plus further retrieval-quality work) is tracked on the backlog.
 
 ### 3. Authelia Decision
 Authelia is currently disabled. Whether to finish wiring it (DB auto-init + NTP) or drop it is an

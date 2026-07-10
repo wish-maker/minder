@@ -158,8 +158,10 @@ GET /health
 
 Retrieval-augmented generation. Manages knowledge bases, ingests documents
 (PDF/TXT/MD via `pypdf` + a LangChain splitter), stores vectors in Qdrant, and
-uses Ollama for embeddings and generation. Includes HyDE, Self-RAG, a decision
-engine, and conversational RAG.
+uses Ollama for embeddings and generation. The live query endpoint does Standard and
+Conversational RAG (`conversation_id`). HyDE, Self-RAG, and a decision engine exist as
+modules but are **not wired into the live endpoint**
+([#45](https://github.com/wish-maker/minder/issues/45)).
 
 #### Health
 ```http

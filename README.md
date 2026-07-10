@@ -187,7 +187,7 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 - `plugin-registry` (:8001) — Plugin lifecycle, webhooks, service discovery
 - `marketplace` (:8002) — Plugin/tool catalog, license tiers, dependency graph
 - `plugin-state-manager` (:8003) — Plugin state + AI-tool execution
-- `rag-pipeline` (:8004) — Chunking, embedding, retrieval (HyDE + Self-RAG)
+- `rag-pipeline` (:8004) — Chunking, embedding, retrieval (Standard + Conversational RAG live; HyDE/Self-RAG modules present but not wired — [#45](https://github.com/wish-maker/minder/issues/45))
 - `model-management` (:8005) — Ollama model lifecycle (partial)
 - `tts-stt` (:8006) — Text-to-speech / speech-to-text
 - `graph-rag` (:8008) — spaCy NER + Neo4j knowledge-graph construction

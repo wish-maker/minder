@@ -6,20 +6,23 @@
 
 Minder splits retrieval-augmented generation across two services:
 
-- **`minder-rag-pipeline` (`:8004`)** — text RAG. Implements Standard (dense) RAG,
-  Conversational RAG, plus **HyDE**, **Self-RAG**, and a **decision-engine** that
-  chooses which strategy to apply per query.
+- **`minder-rag-pipeline` (`:8004`)** — text RAG. The **live** query endpoint
+  (`POST /pipeline/{id}/query` in `main:app`) implements **Standard (dense) RAG** and
+  **Conversational RAG** (via `conversation_id`). Nothing else is reachable through it.
 - **`minder-graph-rag` (`:8008`)** — graph RAG. spaCy NER entity extraction +
   Neo4j knowledge-graph construction and retrieval.
 
 The codebase also contains several **additional RAG techniques as standalone
-modules** — a "RAG research lab" — that are usable as a foundation but **NOT wired
-into the active query flow** and **mostly untested** (RAPTOR, Hybrid/BM25,
-Cross-Encoder re-ranking, Contextual Compression, Parent-Child, Corrective RAG).
+modules** — a "RAG research lab" — that are **NOT wired into the live query flow** and
+**mostly untested**: **HyDE**, **Self-RAG**, a **decision-engine**, Corrective RAG,
+Cross-Encoder re-ranking, Contextual Compression, Hybrid/BM25, Parent-Child, RAPTOR.
 
-> **⚠️ Note:** "Wired" here means integrated into the live query path of the running
-> service. HyDE and Self-RAG ARE wired into `minder-rag-pipeline` (via the
-> decision-engine); the Bucket 2 modules below are not.
+> **⚠️ Correction (verified 2026-07-10):** "Wired" means integrated into the live query
+> path of the running service. Only **Standard** and **Conversational** RAG are wired into
+> `minder-rag-pipeline`. HyDE / Self-RAG / decision-engine **exist as modules but are NOT
+> reachable via the API** — the live `main.py` never imports or mounts them; they are only
+> referenced by unmounted/dead code (`api_v2.py`, `api/agent_query.py`, `main_refactored.py`).
+> Tracked in [#45](https://github.com/wish-maker/minder/issues/45).
 
 ---
 
@@ -62,29 +65,10 @@ These methods are **implemented and wired into a running service**.
 | **Database Schema** | `conversation_turns` table: `id, user_id, conversation_id, question, answer, timestamp, metadata` with index on `(user_id, conversation_id, timestamp DESC)` |
 | **Known Limitations** | • `user_id="default"` hardcode — single-user only; future multi-user would need real user_id<br>• Token budget — `max_turns=3` helps but long conversations could overflow Llama3.2 context window |
 
-### HyDE (Hypothetical Document Embeddings)
-
-| Attribute | Value |
-|-----------|-------|
-| **Status** | ✅ **ACTIVE** — wired into `minder-rag-pipeline:8004` |
-| **What it does** | Generates a hypothetical answer to the query (via Ollama LLM) → embeds the hypothetical text → uses that embedding for retrieval, improving precision over embedding the raw query |
-| **How it's used** | Selected by the decision-engine when the query looks like it would benefit from query expansion |
-
-### Self-RAG (Quality-Based Iterative Refinement)
-
-| Attribute | Value |
-|-----------|-------|
-| **Status** | ✅ **ACTIVE** — wired into `minder-rag-pipeline:8004` |
-| **What it does** | Generate → evaluate answer quality → refine and retry if below threshold → repeat up to a bound |
-| **How it's used** | Applied by the decision-engine for queries where answer quality matters more than latency |
-
-### Decision Engine
-
-| Attribute | Value |
-|-----------|-------|
-| **Status** | ✅ **ACTIVE** — wired into `minder-rag-pipeline:8004` |
-| **What it does** | Inspects each incoming query and decides which retrieval/generation strategy to apply (e.g. standard dense retrieval, HyDE expansion, Self-RAG refinement, or conversational context) rather than running a single fixed pipeline |
-| **Why** | Different query shapes benefit from different strategies; the decision-engine routes per query instead of forcing one path |
+> **HyDE, Self-RAG, and the Decision Engine were previously listed here as "ACTIVE".**
+> A 2026-07-10 live test proved they are **not reachable via the API** — see Bucket 2 below
+> and [#45](https://github.com/wish-maker/minder/issues/45). They remain implemented as
+> modules but are not wired into the live query endpoint.
 
 ---
 
@@ -214,15 +198,15 @@ These would require **fundamentally different architecture** or are outside proj
 
 | Bucket | Count | Methods |
 |--------|-------|---------|
-| **Supported (Production)** | 6 | Standard RAG, Graph RAG, Conversational RAG, HyDE, Self-RAG, Decision Engine |
-| **Partial (Unwired Modules)** | 6 | RAPTOR (tested), Hybrid, Cross-Encoder, Contextual Compression, Parent-Child, CRAG |
+| **Supported (Production)** | 3 | Standard RAG, Graph RAG, Conversational RAG |
+| **Partial (Unwired Modules)** | 9 | HyDE, Self-RAG, Decision Engine, RAPTOR (tested), Hybrid, Cross-Encoder, Contextual Compression, Parent-Child, CRAG |
 | **Buildable** | 4 | Multi-Query, Decomposition, Metadata Filtering, Modular |
 | **Out of Scope** | 4 | Agentic, Streaming, Federated, Long-Context |
 
 **Total methods covered**: 20
 
-> **Takeaway**: Minder has a solid production RAG foundation in `minder-rag-pipeline`
-> (Standard + Conversational + HyDE + Self-RAG, routed by a decision-engine) and
+> **Takeaway**: Minder has a working production RAG foundation in `minder-rag-pipeline`
+> (Standard + Conversational RAG, live-tested) and
 > `minder-graph-rag` (spaCy NER + Neo4j knowledge graph), plus an extensive
 > "research lab" of additional methods that serve as a code foundation but are not
 > yet wired into the live query flow. Activating those requires dependency
