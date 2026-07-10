@@ -20,7 +20,6 @@ COPY src/services/api-gateway/main.py .
 COPY src/services/api-gateway/config.py .
 COPY src/services/api-gateway/modules /app/modules
 COPY src/services/api-gateway/routes /app/routes
-COPY src/services/api-gateway/rate_limiting /app/rate_limiting
 
 # Copy shared libraries
 COPY src/core /app/src/core

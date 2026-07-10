@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 # Import auth functions
-from modules.auth import create_jwt_token, verify_jwt_token
+from modules.auth import (close_pg_pool, create_jwt_token, init_users_table, verify_jwt_token)  # noqa: E501
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -92,6 +92,8 @@ app = FastAPI(
 
 # Include AI integration router
 app.include_router(ai_router)
+from routes.auth import router as auth_router  # noqa: E402
+app.include_router(auth_router)
 
 # ============================================================================
 # Prometheus Metrics
@@ -395,159 +397,6 @@ async def get_current_user(request: Request):
     token = auth_header.split(" ")[1]
     payload = verify_jwt_token(token)
     return payload
-
-
-# ============================================================================
-# Authentication Endpoints
-# ============================================================================
-
-
-from modules.auth import (  # noqa: E402
-    close_pg_pool,
-    create_user,
-    init_users_table,
-    verify_user_credentials,
-)
-
-# NOTE: auth-table init and pool teardown are handled in `lifespan` above.
-# @app.on_event("startup"/"shutdown") handlers are intentionally NOT used here —
-# FastAPI ignores them whenever a lifespan handler is set.
-
-
-@app.post("/v1/auth/register")
-async def register(request: Request):
-    """
-    Register a new user
-
-    Request body:
-        username: str (required, unique)
-        email: str (required, unique)
-        password: str (required, min 8 chars)
-        role: str (optional, default: 'user')
-
-    Returns:
-        Created user data without password
-    """
-    try:
-        body = await request.json()
-        username = body.get("username")
-        email = body.get("email")
-        password = body.get("password")
-        role = body.get("role", "user")
-
-        # Validate input
-        if not username or not email or not password:
-            raise HTTPException(
-                status_code=400, detail="Username, email and password required"
-            )
-
-        if len(password) < 8:
-            raise HTTPException(
-                status_code=400, detail="Password must be at least 8 characters"
-            )
-
-        # Create user
-        user = await create_user(username, email, password, role)
-
-        return {
-            "message": "User created successfully",
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"],
-                "role": user["role"],
-                "created_at": (
-                    user["created_at"].isoformat() if user["created_at"] else None
-                ),
-            },
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Registration error: {e}")
-        raise HTTPException(status_code=500, detail="Registration failed")
-
-
-@app.post("/v1/auth/login")
-async def login(request: Request):
-    """
-    Login endpoint - accepts username/password, returns JWT token
-    Real authentication against PostgreSQL with bcrypt
-    """
-    try:
-        body = await request.json()
-        username = body.get("username")
-        password = body.get("password")
-
-        # Validate input
-        if not username or not password:
-            raise HTTPException(
-                status_code=400, detail="Username and password required"
-            )
-
-        # Verify credentials
-        user = await verify_user_credentials(username, password)
-
-        if user is None:
-            raise HTTPException(status_code=401, detail="Invalid username or password")
-
-        # Create JWT token
-        token_data = {
-            "sub": str(user["id"]),
-            "username": user["username"],
-            "email": user["email"],
-            "role": user["role"],
-            "iat": datetime.utcnow(),
-        }
-        access_token = create_jwt_token(token_data)
-
-        logger.info(f"User logged in: {username}")
-
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "expires_in": settings.JWT_EXPIRATION_MINUTES * 60,
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "email": user["email"],
-                "role": user["role"],
-            },
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Login error: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
-
-
-@app.post("/v1/auth/refresh")
-async def refresh_token(request: Request):
-    """
-    Refresh JWT token
-    """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Token required")
-
-    token = auth_header.split(" ")[1]
-    payload = verify_jwt_token(token)
-
-    # Create new token
-    token_data = {
-        "sub": payload.get("sub"),
-        "username": payload.get("username"),
-        "iat": datetime.utcnow(),
-    }
-    access_token = create_jwt_token(token_data)
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "expires_in": settings.JWT_EXPIRATION_MINUTES * 60,
-    }
 
 
 # ============================================================================
