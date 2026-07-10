@@ -242,10 +242,8 @@ services, 3 (otel-collector, redis-exporter, rabbitmq-exporter) have no healthch
 design — they show as "no-healthcheck", not "unhealthy".
 
 **Known caveats (verified on a 2026-07-10 clean install):**
-- `schema-registry` is defined in compose but not wired into `setup.sh` → it does **not**
-  start ([#42](https://github.com/wish-maker/minder/issues/42)).
-- MinIO is initialized only by `install`; `bash setup.sh start` alone omits it
-  ([#43](https://github.com/wish-maker/minder/issues/43)).
+- All 31 containers start on both `install` and `start` (MinIO + schema-registry are wired
+  into the core startup group). `install` additionally creates the MinIO buckets.
 
 ## Troubleshooting
 

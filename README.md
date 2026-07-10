@@ -204,7 +204,7 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 - Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry Collector, InfluxDB, Telegraf
 - Exporters: postgres, redis, rabbitmq, node, cAdvisor, blackbox
 
-**Total:** 31 services defined in compose (8 core APIs + 8 data stores + 2 inference/UI + 7 observability + 6 exporters + Traefik; Authelia excluded/disabled). A full `setup.sh install` runs 30 of them (`schema-registry` is defined but not yet wired into setup — [#42](https://github.com/wish-maker/minder/issues/42)). Deploys on a Raspberry Pi 4 (ARM).
+**Total:** 31 containers (8 core APIs + 8 data stores + 2 inference/UI + 7 observability + 6 exporters + Traefik; Authelia excluded/disabled). `bash setup.sh install` (and `start`) bring up all 31. Deploys on a Raspberry Pi 4 (ARM).
 
 ---
 

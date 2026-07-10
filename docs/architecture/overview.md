@@ -4,13 +4,10 @@
 
 **Platform Version:** 1.0.0
 **Last Updated:** 2026-07-10
-**Containers:** 31 services are defined in compose (Authelia excluded — disabled). A full
-`bash setup.sh install` actually runs **30** — `schema-registry` is defined but not wired
-into `setup.sh` and never starts ([#42](https://github.com/wish-maker/minder/issues/42)).
-`bash setup.sh start` alone runs **29** (MinIO is initialized only by `install`,
-[#43](https://github.com/wish-maker/minder/issues/43)). Everything else runs healthy;
-only 3 services carry no healthcheck by design (otel-collector, redis-exporter,
-rabbitmq-exporter).
+**Containers:** 31 (Authelia excluded — disabled). `bash setup.sh install` and
+`bash setup.sh start` both bring up all 31 (MinIO and schema-registry are wired into the
+core startup group). All run healthy; only 3 carry no healthcheck by design
+(otel-collector, redis-exporter, rabbitmq-exporter).
 **Core API Services:** 8 (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, tts-stt, graph-rag)
 **Data Stores:** 7 (PostgreSQL, Redis, Qdrant, Neo4j, RabbitMQ, MinIO, schema-registry)
 **AI Runtime:** Ollama with local LLM support (profile-gated; disabled when using an external/native Ollama host)

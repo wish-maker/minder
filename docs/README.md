@@ -71,7 +71,7 @@ This directory contains all documentation for the Minder platform.
 ## 📊 Current System Status
 
 **Platform Version:** 1.0.0
-**Services:** 31 defined in compose; 30 run via `setup.sh install` (schema-registry not yet wired in — [#42](https://github.com/wish-maker/minder/issues/42)); 3 have no healthcheck by design
+**Services:** 31 containers (all start via `setup.sh install`/`start`); 3 have no healthcheck by design
 **Environment:** Development (production hardening not yet applied)
 **Host:** Raspberry Pi 4 (ARM)
 

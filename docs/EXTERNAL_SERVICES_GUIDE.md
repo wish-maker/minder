@@ -10,11 +10,10 @@ It also explains how to point selected data services (Redis, PostgreSQL, Qdrant)
 cloud providers instead of the local Docker containers, using environment variables and
 without modifying code.
 
-Minder defines **31 services** in compose (Authelia excluded/disabled). A full
-`bash setup.sh install` runs **30** — `schema-registry` is defined but not yet wired into
-`setup.sh` and does not start ([#42](https://github.com/wish-maker/minder/issues/42)); `start`
-alone runs 29 (MinIO is `install`-only, [#43](https://github.com/wish-maker/minder/issues/43)).
-The single source of truth is the hand-maintained `docker/compose/docker-compose.yml`.
+Minder runs **31 containers** (Authelia excluded/disabled). `bash setup.sh install` and
+`bash setup.sh start` both bring up all 31 — MinIO and schema-registry are wired into the
+core startup group. The single source of truth is the hand-maintained
+`docker/compose/docker-compose.yml`.
 
 ---
 
