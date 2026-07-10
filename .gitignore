@@ -263,9 +263,9 @@ test_auth_e2e_simple.py
 test_jwt_validation.sh
 test_model_management.sh
 
-# Self-test scratch files
-test_*.py
-test_*.json
+# Self-test scratch files (repo root only — must NOT hide real tests under tests/)
+/test_*.py
+/test_*.json
 
 # AI Agent Working Directories (if needed in future)
 # docs/superpowers/
