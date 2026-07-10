@@ -13,3 +13,9 @@ known_first_party = ["config"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = [
+    "integration: tests that exercise a running service or backend",
+    "e2e: end-to-end tests across multiple services",
+    "slow: tests that take a long time to run",
+    "security: security-focused tests",
+]

@@ -99,7 +99,7 @@ try:
 
     try:
         tts_app = load_service_module(
-            services_base / "tts-stt-service", "tts_stt_service.main"
+            services_base / "tts-stt", "tts_stt.main"
         )
         print("✅ Loaded TTS-STT Service")
     except Exception as e:
