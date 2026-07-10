@@ -30,6 +30,8 @@ COPY src/services/rag-pipeline/repositories /app/repositories
 # query endpoint via the `method` field (see #45).
 COPY src/services/rag-pipeline/domain /app/domain
 COPY src/services/rag-pipeline/agent /app/agent
+# Query orchestration (per-method strategies + runner)
+COPY src/services/rag-pipeline/rag /app/rag
 
 # Copy core modules
 COPY src/core /app/src/core

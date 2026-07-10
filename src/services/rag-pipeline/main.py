@@ -43,6 +43,13 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
+    # Surface INFO logs from the RAG method packages (rag/, domain/, agent/) with
+    # the same handler, so the extracted modules log consistently with main.
+    for _pkg in ("rag", "domain", "agent"):
+        _pkg_logger = logging.getLogger(_pkg)
+        if not _pkg_logger.handlers:
+            _pkg_logger.addHandler(handler)
+            _pkg_logger.setLevel(logging.INFO)
 
 # ============================================================================
 # Configuration
@@ -426,7 +433,8 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning(f"⚠️ Decision engine unavailable: {e}")
 
-VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto"}
+# Query orchestration lives in the rag/ package (per-method strategy modules + runner).
+from rag.runner import RagComponents, run_query  # noqa: E402
 
 
 # ============================================================================
@@ -713,148 +721,24 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
     pipeline = rag_pipelines[pipeline_id]
-    llm_model = pipeline.get("llm_model") or DEFAULT_LLM_MODEL
-
-    # --- Method selection (Standard / HyDE / Self-RAG / auto) — see #45 ---
-    method = (request.method or "standard").lower()
-    if method not in VALID_RAG_METHODS:
-        method = "standard"
-    use_hyde = method == "hyde"
-    use_self_rag = method == "self_rag"
-    method_details: Dict[str, Any] = {}
-
-    # `auto`: let the decision engine choose the strategy for this query.
-    if method == "auto" and decision_engine is not None:
-        try:
-            analysis = await decision_engine.analyze_query(request.question)
-            decision = await decision_engine.decide_pipeline(analysis)
-            use_hyde = bool(getattr(decision, "use_hyde", False))
-            use_self_rag = bool(getattr(decision, "use_self_rag", False))
-            method_details["decision"] = {
-                "complexity": getattr(analysis.complexity, "value", str(analysis.complexity)),
-                "intent": analysis.intent,
-                "use_hyde": use_hyde,
-                "use_self_rag": use_self_rag,
-            }
-        except Exception as e:
-            logger.warning(f"⚠️ Decision engine failed, falling back to standard: {e}")
-
-    # HyDE: retrieve using a hypothetical answer instead of the raw question.
-    retrieval_query = request.question
-    if use_hyde and hyde_expander is not None:
-        try:
-            hypothetical = await hyde_expander.generate_hypothetical_answer(
-                request.question, ollama_manager, model=llm_model
-            )
-            if hypothetical:
-                retrieval_query = hypothetical
-                method_details["hyde"] = {"hypothetical_chars": len(hypothetical)}
-            else:
-                use_hyde = False
-        except Exception as e:
-            logger.warning(f"⚠️ HyDE failed, using raw query: {e}")
-            use_hyde = False
-
-    # Retrieve relevant documents
-    context_result = await retrieve_relevant_documents(
-        pipeline,
-        retrieval_query,
-        request.top_k,
+    components = RagComponents(
+        ollama_manager=ollama_manager,
+        retrieve=retrieve_relevant_documents,
+        hyde_expander=hyde_expander,
+        self_rag_pipeline=self_rag_pipeline,
+        decision_engine=decision_engine,
+        conversation_repository=conversation_repository,
+        gen_timer=llm_generation_duration,
     )
-
-    # Fetch conversation context if conversation_id provided (Conversational RAG)
-    conversation_context = ""
-    if request.conversation_id and conversation_repository:
-        try:
-            conversation_context = await conversation_repository.build_context(
-                user_id="default",  # TODO: Single-user limitation - add real user_id when multi-user support needed
-                conversation_id=request.conversation_id,
-                max_turns=3,
-            )
-            if conversation_context:
-                logger.info(
-                    f"🔄 Loaded conversation context for {request.conversation_id}"
-                )
-        except Exception as e:
-            logger.warning(f"⚠️  Failed to load conversation context: {e}")
-            conversation_context = ""
-
-    # Combine conversation context with RAG context
-    combined_context = ""
-    if conversation_context:
-        combined_context = f"Previous conversation:\n{conversation_context}\n\n"
-    if context_result["context"]:
-        combined_context += f"Relevant documents:\n{context_result['context']}"
-
-    # Generate answer (Self-RAG iterative refinement, or a single standard pass)
-    answer_text = ""
-    model_used = llm_model
-    tokens_used = None
-    with llm_generation_duration.labels(model=llm_model).time():
-        if use_self_rag and self_rag_pipeline is not None:
-            try:
-                sr = await self_rag_pipeline.generate_with_self_refinement(
-                    question=request.question,
-                    context=combined_context or context_result["context"] or "(no context)",
-                    sources=context_result.get("sources", []),
-                    llm_manager=ollama_manager,
-                    model=llm_model,
-                )
-                answer_text = sr.get("answer") or ""
-                method_details["self_rag"] = sr.get("quality", {})
-            except Exception as e:
-                logger.warning(f"⚠️ Self-RAG failed, falling back to standard: {e}")
-                use_self_rag = False
-
-        if not answer_text:  # standard path (default, or any fallback above)
-            answer_result = await ollama_manager.generate_response(
-                prompt=request.question,
-                context=combined_context,
-                **pipeline.get("generation_config", {}),
-            )
-            answer_text = answer_result["text"]
-            model_used = answer_result.get("model", llm_model)
-            tokens_used = answer_result.get("tokens_used")
-
-    # Resolve the effective method label for the response
-    effective_method = "standard"
-    if use_self_rag:
-        effective_method = "self_rag"
-    elif use_hyde:
-        effective_method = "hyde"
-    if method == "auto":
-        method_details["requested"] = "auto"
-
-    # Store conversation turn if conversation_id provided (Conversational RAG)
-    if request.conversation_id and conversation_repository:
-        try:
-            await conversation_repository.store_turn(
-                user_id="default",  # TODO: Single-user limitation
-                conversation_id=request.conversation_id,
-                question=request.question,
-                answer=answer_text,
-                metadata={
-                    "pipeline_id": pipeline_id,
-                    "model_used": model_used,
-                    "sources_count": len(context_result.get("sources", [])),
-                    "method": effective_method,
-                    "timestamp": None,  # Will be set by DB default
-                },
-            )
-            logger.info(f"💾 Stored conversation turn for {request.conversation_id}")
-        except Exception as e:
-            logger.warning(f"⚠️  Failed to store conversation turn: {e}")
-            # Don't fail the request if storage fails
-
-    return QueryResponse(
-        answer=answer_text,
-        sources=context_result["sources"],
-        confidence=0.85,  # TODO: Calculate actual confidence from scores
-        model_used=model_used,
-        tokens_used=tokens_used,
-        method=effective_method,
-        method_details=method_details or None,
+    result = await run_query(
+        pipeline=pipeline,
+        pipeline_id=pipeline_id,
+        request=request,
+        llm_model=pipeline.get("llm_model") or DEFAULT_LLM_MODEL,
+        generation_config=pipeline.get("generation_config", {}),
+        components=components,
     )
+    return QueryResponse(**result)
 
 
 async def retrieve_relevant_documents(
