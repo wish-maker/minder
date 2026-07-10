@@ -45,10 +45,25 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Service Registry: {SERVICE_REGISTRY}")
 
+    # Ensure the auth schema exists. This MUST run here, not in an
+    # @app.on_event("startup") handler — FastAPI ignores on_event handlers when a
+    # lifespan is provided, which previously left the `users` table uncreated and
+    # broke register/login on a clean install.
+    try:
+        await init_users_table()
+        logger.info("Auth system initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize auth system: {e}")
+
     yield
 
     # Shutdown
     logger.info("API Gateway shutting down...")
+    try:
+        await close_pg_pool()
+        logger.info("Auth database connections closed")
+    except Exception as e:
+        logger.error(f"Failed to close auth connections: {e}")
     await http_client.aclose()
     redis_client.close()
 
@@ -394,25 +409,9 @@ from modules.auth import (  # noqa: E402
     verify_user_credentials,
 )
 
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup"""
-    try:
-        await init_users_table()
-        logger.info("Auth system initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize auth system: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Close database connections on shutdown"""
-    try:
-        await close_pg_pool()
-        logger.info("Auth database connections closed")
-    except Exception as e:
-        logger.error(f"Failed to close auth connections: {e}")
+# NOTE: auth-table init and pool teardown are handled in `lifespan` above.
+# @app.on_event("startup"/"shutdown") handlers are intentionally NOT used here —
+# FastAPI ignores them whenever a lifespan handler is set.
 
 
 @app.post("/v1/auth/register")
