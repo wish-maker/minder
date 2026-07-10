@@ -183,7 +183,7 @@ async def get_entity_context_handler(
     """Handle entity context retrieval requests"""
     try:
         context_result = await graph_retriever.get_entity_context(
-            entity_text=request.entity_text, include_neighbors=request.include_neighbors
+            entity_name=request.entity_text, context_window=request.context_window
         )
 
         if "error" in context_result:
