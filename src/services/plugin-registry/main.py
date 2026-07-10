@@ -78,41 +78,11 @@ health_check_failures_total = Counter(
 # ============================================================================
 
 
-class PluginInfo(BaseModel):
-    """Plugin information"""
-
-    name: str
-    version: str
-    description: str
-    author: str
-    status: str = "registered"  # registered, enabled, disabled, error
-    enabled: bool = False  # Track if plugin is enabled
-    dependencies: List[str] = []
-    capabilities: List[str] = []
-    data_sources: List[str] = []
-    databases: List[str] = []
-    registered_at: str
-    health_status: str = "unknown"
-    last_health_check: Optional[str] = None
-
-
-class ServiceRegistration(BaseModel):
-    """Service registration for service discovery"""
-
-    service_name: str
-    service_type: str
-    host: str
-    port: int
-    health_check_url: str = "/health"
-    metadata: Dict = {}
-
-
-class PluginInstallationRequest(BaseModel):
-    """Request to install 3rd party plugin"""
-
-    repository: str
-    branch: str = "main"
-    version: Optional[str] = None
+from models import (  # noqa: E402
+    PluginInfo,
+    PluginInstallationRequest,
+    ServiceRegistration,
+)
 
 
 # ============================================================================
@@ -178,6 +148,18 @@ services_db: Dict[str, ServiceRegistration] = {}
 
 # Initialize proxy router for microservices
 proxy_router = ProxyRouter(services_db)
+
+# Service-discovery + dynamic-proxy endpoints live in routes/services.py (deps injected).
+from routes.services import build_services_router  # noqa: E402
+
+app.include_router(
+    build_services_router(
+        services_db=services_db,
+        redis_client=redis_client,
+        proxy_router=proxy_router,
+        logger=logger,
+    )
+)
 
 # ============================================================================
 # Plugin Loading
@@ -1071,170 +1053,6 @@ async def trigger_plugin_collection(
         "triggered_by": username,
         "timestamp": datetime.utcnow().isoformat(),
         "note": "Collection runs in background. Check /health endpoint for results.",
-    }
-
-
-# ============================================================================
-# API Endpoints - Service Discovery
-# ============================================================================
-
-
-@app.post("/v1/services/register")
-async def register_service(service: ServiceRegistration):
-    """Register a service for service discovery"""
-    services_db[service.service_name] = service
-
-    # Store in Redis for other services to discover
-    redis_client.hset(
-        f"service:{service.service_name}",
-        mapping={
-            "service_type": service.service_type,
-            "host": service.host,
-            "port": service.port,
-            "health_check_url": service.health_check_url,
-            "registered_at": datetime.now().isoformat(),
-            "metadata": json.dumps(service.metadata),
-        },
-    )
-
-    logger.info(f"Service registered: {service.service_name}")
-
-    return {
-        "message": f"Service {service.service_name} registered",
-        "service": service.dict(),
-    }
-
-
-@app.get("/v1/services")
-async def list_services():
-    """List all registered services"""
-    return {"services": list(services_db.values()), "count": len(services_db)}
-
-
-@app.get("/v1/services/{service_name}")
-async def get_service(service_name: str):
-    """Get service details"""
-    service = services_db.get(service_name)
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
-    return service
-
-
-@app.delete("/v1/services/{service_name}")
-async def unregister_service(service_name: str):
-    """Unregister a service"""
-    if service_name not in services_db:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-    del services_db[service_name]
-    redis_client.delete(f"service:{service_name}")
-
-    return {"message": f"Service {service_name} unregistered"}
-
-
-@app.get("/v1/services/{service_name}/health")
-async def check_service_health(service_name: str):
-    """
-    Check health of a registered microservice
-
-    Performs health check on the registered service by calling its /health endpoint.
-    Updates service health status in Redis.
-    """
-    try:
-        health_data = await proxy_router.health_check_proxy(service_name)
-
-        # Update health status in Redis
-        redis_client.hset(
-            f"service:{service_name}",
-            mapping={
-                "health_status": "healthy",
-                "last_health_check": datetime.now().isoformat(),
-            },
-        )
-
-        return {
-            "service": service_name,
-            "status": "healthy",
-            "health_data": health_data,
-            "checked_at": datetime.now().isoformat(),
-        }
-
-    except HTTPException:
-        # Update unhealthy status in Redis
-        redis_client.hset(
-            f"service:{service_name}",
-            mapping={
-                "health_status": "unhealthy",
-                "last_health_check": datetime.now().isoformat(),
-            },
-        )
-        raise
-
-
-# ============================================================================
-# Dynamic Proxy Endpoints for Microservices
-# ============================================================================
-
-
-@app.api_route(
-    "/v1/proxy/{service_name}/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-)
-async def proxy_to_service(service_name: str, path: str, request: Request):
-    """
-    Dynamic proxy endpoint for plugin microservices
-
-    Forwards HTTP requests to registered plugin microservices.
-    This enables the API Gateway to route AI tool calls to appropriate services
-    without hardcoding endpoints.
-
-    Examples:
-        GET  /v1/proxy/crypto/analysis?symbol=BTC
-        POST /v1/proxy/news/collect
-        GET  /v1/proxy/weather/analysis?location=Istanbul
-    """
-    # Build the full path for proxying
-    proxy_path = f"/{path}"
-
-    # Add query string if present
-    if request.url.query:
-        proxy_path = f"{proxy_path}?{request.url.query}"
-
-    # Forward request to service
-    return await proxy_router.forward_request(service_name, proxy_path, request)
-
-
-@app.get("/v1/proxy")
-async def list_proxyable_services():
-    """
-    List all services that can be proxied
-
-    Returns information about registered microservices that are available
-    for dynamic proxy routing.
-    """
-    proxyable_services = []
-
-    for service_name, service in services_db.items():
-        # Check if service is healthy
-        health_status = (
-            redis_client.hget(f"service:{service_name}", "health_status") or "unknown"
-        )
-
-        proxyable_services.append(
-            {
-                "service_name": service_name,
-                "service_type": service.service_type,
-                "health_status": health_status,
-                "endpoint": f"http://{service.host}:{service.port}",
-                "proxy_url": f"/v1/proxy/{service_name}",
-                "metadata": service.metadata,
-            }
-        )
-
-    return {
-        "services": proxyable_services,
-        "count": len(proxyable_services),
-        "timestamp": datetime.now().isoformat(),
     }
 
 

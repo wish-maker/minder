@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir \
 # Copy application code
 COPY src/services/plugin-registry/main.py .
 COPY src/services/plugin-registry/config.py .
+COPY src/services/plugin-registry/models.py .
 COPY src/services/plugin-registry/routes /app/routes
 COPY src/services/plugin-registry/core /app/core
 COPY src/services/plugin-registry/schemas /app/schemas
