@@ -1,22 +1,31 @@
 # RAG Methods in Minder
 
-**Status as of 2026-06-22**
+**Status as of 2026-07-10**
 
 ## Executive Summary
 
-This project has **2 production RAG methods proven working**:
-- **Standard RAG** — chunking, embedding (Ollama nomic-embed-text), Qdrant dense retrieval, Llama3.2 generation
-- **Graph RAG** — spaCy entity extraction, Neo4j graph storage, graph-based retrieval
+Minder splits retrieval-augmented generation across two services:
 
-Additionally, this codebase contains **8 advanced RAG methods implemented as standalone modules** — a "RAG research lab" — usable as a foundation but **NOT currently wired into the active pipeline** and **mostly untested**.
+- **`minder-rag-pipeline` (`:8004`)** — text RAG. Implements Standard (dense) RAG,
+  Conversational RAG, plus **HyDE**, **Self-RAG**, and a **decision-engine** that
+  chooses which strategy to apply per query.
+- **`minder-graph-rag` (`:8008`)** — graph RAG. spaCy NER entity extraction +
+  Neo4j knowledge-graph construction and retrieval.
 
-> **⚠️ Important:** The active `minder-rag-pipeline` service (`:8004`, `src/services/rag-pipeline/main.py`) only implements Standard RAG. All other methods are separate modules that would need integration work to become functional in a production query flow.
+The codebase also contains several **additional RAG techniques as standalone
+modules** — a "RAG research lab" — that are usable as a foundation but **NOT wired
+into the active query flow** and **mostly untested** (RAPTOR, Hybrid/BM25,
+Cross-Encoder re-ranking, Contextual Compression, Parent-Child, Corrective RAG).
+
+> **⚠️ Note:** "Wired" here means integrated into the live query path of the running
+> service. HyDE and Self-RAG ARE wired into `minder-rag-pipeline` (via the
+> decision-engine); the Bucket 2 modules below are not.
 
 ---
 
 ## Bucket 1: Supported (Production-Ready)
 
-These methods are **implemented, wired, and proven via manual end-to-end test** in the active service.
+These methods are **implemented and wired into a running service**.
 
 ### Standard RAG (Dense Vector Retrieval)
 
@@ -53,6 +62,30 @@ These methods are **implemented, wired, and proven via manual end-to-end test** 
 | **Database Schema** | `conversation_turns` table: `id, user_id, conversation_id, question, answer, timestamp, metadata` with index on `(user_id, conversation_id, timestamp DESC)` |
 | **Known Limitations** | • `user_id="default"` hardcode — single-user only; future multi-user would need real user_id<br>• Token budget — `max_turns=3` helps but long conversations could overflow Llama3.2 context window |
 
+### HyDE (Hypothetical Document Embeddings)
+
+| Attribute | Value |
+|-----------|-------|
+| **Status** | ✅ **ACTIVE** — wired into `minder-rag-pipeline:8004` |
+| **What it does** | Generates a hypothetical answer to the query (via Ollama LLM) → embeds the hypothetical text → uses that embedding for retrieval, improving precision over embedding the raw query |
+| **How it's used** | Selected by the decision-engine when the query looks like it would benefit from query expansion |
+
+### Self-RAG (Quality-Based Iterative Refinement)
+
+| Attribute | Value |
+|-----------|-------|
+| **Status** | ✅ **ACTIVE** — wired into `minder-rag-pipeline:8004` |
+| **What it does** | Generate → evaluate answer quality → refine and retry if below threshold → repeat up to a bound |
+| **How it's used** | Applied by the decision-engine for queries where answer quality matters more than latency |
+
+### Decision Engine
+
+| Attribute | Value |
+|-----------|-------|
+| **Status** | ✅ **ACTIVE** — wired into `minder-rag-pipeline:8004` |
+| **What it does** | Inspects each incoming query and decides which retrieval/generation strategy to apply (e.g. standard dense retrieval, HyDE expansion, Self-RAG refinement, or conversational context) rather than running a single fixed pipeline |
+| **Why** | Different query shapes benefit from different strategies; the decision-engine routes per query instead of forcing one path |
+
 ---
 
 ## Bucket 2: Partial / Infrastructure Available
@@ -71,18 +104,6 @@ These methods are **implemented as standalone modules** but **NOT wired into the
 | **What's missing** | Wiring into main pipeline (no API endpoint, no integration with Qdrant/Ollama) |
 | **To activate** | 1. Add RAPTOR option to KB creation<br>2. Call `RAPTORChunker.create_tree_structure()` on upload<br>3. Use `RAPTORRetriever.retrieve_from_tree()` in query flow<br>4. Store tree structure in PostgreSQL |
 | **Line count** | 1092 (largest single module in codebase) |
-
-### HyDE (Hypothetical Document Embeddings)
-
-| Attribute | Value |
-|-----------|-------|
-| **Status** | 🔶 **UNWIRED MODULE** |
-| **Implementation** | `src/services/rag-pipeline/domain/expansion/hyde.py` (183 lines) |
-| **Test Status** | ⚠️ **IMPORT TEST ONLY** — `test_architecture.py` line 29 checks import succeeds, no functional test |
-| **Dependencies** | Ollama LLM (for hypothetical answer generation) |
-| **What it does** | Generates hypothetical answer to query → embeds hypothetical text → uses hypothetical embedding for search (improves precision over raw query) |
-| **What's missing** | 1. Wiring into query flow<br>2. Test coverage (never verified correct hypothetical generation) |
-| **To activate** | Add HyDE step before retrieval in `RetrievalService.retrieve()` |
 
 ### Hybrid Search (Dense + Sparse BM25)
 
@@ -108,18 +129,6 @@ These methods are **implemented as standalone modules** but **NOT wired into the
 | **What's missing** | 1. Wiring into query flow (post-retrieval step)<br>2. Model download/storage strategy<br>3. Test with actual model |
 | **To activate** | Add re-ranking step after dense retrieval, before context building |
 | **Note** | Uses `cross-encoder/ms-marco-MiniLM-L-6-v2`, CPU-only for RPi 4 |
-
-### Self-RAG (Quality-Based Iterative Refinement)
-
-| Attribute | Value |
-|-----------|-------|
-| **Status** | 🔶 **UNWIRED MODULE** |
-| **Implementation** | `src/services/rag-pipeline/domain/pipelines/self_rag.py` (206 lines) |
-| **Test Status** | ⚠️ **IMPORT TEST ONLY** — `test_architecture.py` line 28, no functional test |
-| **Dependencies** | `quality_evaluator.py` (requires `sentence_transformers`) |
-| **What it does** | Generate → Evaluate quality → Refine if below threshold → Repeat |
-| **What's missing** | 1. Quality evaluator wiring<br>2. Test of refinement loop<br>3. Integration with main pipeline |
-| **To activate** | Wrap generation step with Self-RAG loop in query flow |
 
 ### Contextual Compression
 
@@ -194,10 +203,10 @@ These would require **fundamentally different architecture** or are outside proj
 - **Enables**: Conversational RAG multi-turn conversations with context continuity
 
 ### Clean Architecture (V2)
-- **File**: `src/services/rag-pipeline/api_v2.py` (238 lines)
+- **File**: `src/services/rag-pipeline/api_v2.py`
 - **Status**: Thin API layer with service separation
-- **Extension Points**: `RetrievalService` init has optional slots for `hyde_expander`, `hybrid_searcher`, `reranker`, `crag_retriever`, `parent_child_retriever`, `context_compressor` — **all set to `None`**
-- **Could Enable**: Easy integration of unwired modules
+- **Extension Points**: `RetrievalService` exposes optional slots (`hybrid_searcher`, `reranker`, `crag_retriever`, `parent_child_retriever`, `context_compressor`) for the still-unwired Bucket 2 modules
+- **Could Enable**: Easy integration of the remaining unwired modules
 
 ---
 
@@ -205,11 +214,20 @@ These would require **fundamentally different architecture** or are outside proj
 
 | Bucket | Count | Methods |
 |--------|-------|---------|
-| **Supported (Production)** | 3 | Standard RAG, Graph RAG, Conversational RAG |
-| **Partial (Unwired Modules)** | 8 | RAPTOR (tested), HyDE, Hybrid, Cross-Encoder, Self-RAG, Contextual Compression, Parent-Child, CRAG |
+| **Supported (Production)** | 6 | Standard RAG, Graph RAG, Conversational RAG, HyDE, Self-RAG, Decision Engine |
+| **Partial (Unwired Modules)** | 6 | RAPTOR (tested), Hybrid, Cross-Encoder, Contextual Compression, Parent-Child, CRAG |
 | **Buildable** | 4 | Multi-Query, Decomposition, Metadata Filtering, Modular |
 | **Out of Scope** | 4 | Agentic, Streaming, Federated, Long-Context |
 
-**Total methods covered**: 19
+**Total methods covered**: 20
 
-> **Takeaway**: Minder has a solid production RAG foundation (Standard + Graph) plus an extensive "research lab" of advanced methods that serve as a code foundation — but most are unverified (import-only checks) and may have runtime bugs when actually run (like graph-rag did). Activating them requires dependency installation, integration wiring, and testing — not straightforward.
+> **Takeaway**: Minder has a solid production RAG foundation in `minder-rag-pipeline`
+> (Standard + Conversational + HyDE + Self-RAG, routed by a decision-engine) and
+> `minder-graph-rag` (spaCy NER + Neo4j knowledge graph), plus an extensive
+> "research lab" of additional methods that serve as a code foundation but are not
+> yet wired into the live query flow. Activating those requires dependency
+> installation, integration wiring, and testing — not straightforward.
+
+---
+
+**Last Updated:** 2026-07-10

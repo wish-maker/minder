@@ -1,12 +1,88 @@
-# External Services Configuration Guide
+# External / Infrastructure Services Guide
+
+**Last Updated:** 2026-07-10
 
 ## Overview
 
-Minder platform supports both local Docker services (development) and external cloud services (production). You can switch between them using environment variables without modifying code.
+This guide covers the **third-party and infrastructure services** that back the Minder
+platform: storage engines, the LLM runtime, observability, exporters, and the reverse proxy.
+It also explains how to point selected data services (Redis, PostgreSQL, Qdrant) at external
+cloud providers instead of the local Docker containers, using environment variables and
+without modifying code.
+
+Minder defines **31 services** in compose (Authelia excluded/disabled). A full
+`bash setup.sh install` runs **30** — `schema-registry` is defined but not yet wired into
+`setup.sh` and does not start ([#42](https://github.com/wish-maker/minder/issues/42)); `start`
+alone runs 29 (MinIO is `install`-only, [#43](https://github.com/wish-maker/minder/issues/43)).
+The single source of truth is the hand-maintained `docker/compose/docker-compose.yml`.
 
 ---
 
-## Supported External Services
+## Service Inventory (as deployed)
+
+All containers attach to the internal `minder-network`. "Host port" means the service
+publishes that port on the host; blank means internal-only (reachable via container name, and
+in some cases via a Traefik route).
+
+### Inference
+
+| Service | Container | Image | Ports | Notes |
+|---------|-----------|-------|-------|-------|
+| Ollama | `minder-ollama` | `ollama/ollama:0.31.2` | 11434 (internal) | Profile-gated `internal-ollama`; runs only when `OLLAMA_BASE_URL` is empty (local mode). Models auto-pulled via `OLLAMA_PULL_MODELS`, stored in the `/root/.ollama/models` volume |
+| OpenWebUI | `minder-openwebui` | `ghcr.io/open-webui/open-webui:v0.10.2` | 8080 (internal) | LLM chat UI; reached via Traefik (`chat.minder.local`) |
+
+### Storage
+
+| Service | Container | Image | Ports | Notes |
+|---------|-----------|-------|-------|-------|
+| PostgreSQL | `minder-postgres` | `postgres:18.4-trixie` | 5432 (internal) | Main DB + aux: `minder_marketplace`, `tefas_db`, `weather_db`, `news_db`, `crypto_db`, `minder_schemaregistry` |
+| Redis | `minder-redis` | `redis:8.8.0-alpine` | 6379 (internal) | Cache, rate-limit, sessions |
+| Qdrant | `minder-qdrant` | `qdrant/qdrant:v1.18.2` | 6333 (internal) | Vector DB for RAG |
+| Neo4j | `minder-neo4j` | `neo4j:2026.05.0-community` | 7687 / 7474 (internal) | Graph DB (marketplace + graph-rag); 7474 Traefik-routed (IP-whitelisted) |
+| MinIO | `minder-minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | 9000 / 9001 (internal) | **Real running container.** Buckets: rag-documents, tts-artifacts, fine-tuning-datasets, model-checkpoints, plugin-packages, backup-archives. Console (9001) Traefik-routed |
+| RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.2-management` | 5672 / 15672 (internal) | Queue + mgmt UI; 15672 Traefik-routed (IP-whitelisted) |
+| Schema Registry | `minder-schema-registry` | `apicurio/apicurio-registry-sql:2.6.13.Final` | 8080 (internal) | Backed by the isolated `minder_schemaregistry` PostgreSQL DB |
+
+### Observability
+
+| Service | Container | Image | Ports | Notes |
+|---------|-----------|-------|-------|-------|
+| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.0` | 9090 (host) | Metrics collection |
+| Grafana | `minder-grafana` | `grafana/grafana:13.1` | 3000 (host) | Dashboards; Traefik-routed |
+| Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 (host) | Alert routing |
+| InfluxDB | `minder-influxdb` | `influxdb:3.10.1-core` | 8086 (host) | Time-series |
+| Telegraf | `minder-telegraf` | `telegraf:1.39.1` | — | Metrics agent |
+| Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | 16686 (host, UI) + OTLP/thrift/zipkin | Distributed tracing |
+| OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.156.0` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) | No healthcheck by design |
+
+### Exporters (internal, scraped by Prometheus)
+
+| Service | Image | Port | Notes |
+|---------|-------|------|-------|
+| postgres-exporter | `v0.20.1` | 9187 | |
+| redis-exporter | `v1.86.0` | 9121 | No healthcheck (by design) |
+| rabbitmq-exporter | `v1.0.0-RC9` | 9090 | Healthcheck disabled |
+| node-exporter | `v1.11.1` | 9100 | |
+| cadvisor | `gcr.io/cadvisor/cadvisor:v0.55.1` | 8080 | Container metrics |
+| blackbox-exporter | `v0.28.0` | 9115 | Endpoint probing |
+
+### Security & Networking
+
+| Service | Container | Image | Ports | Notes |
+|---------|-----------|-------|-------|-------|
+| Traefik | `minder-traefik` | `traefik:v3.7.7` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
+| Authelia | `minder-authelia` | — | — | **DISABLED** — commented out in compose (crash loop / decision deferred). Traefik forward-auth is wired on a few routers but not enforced. Not counted in the 31 containers |
+
+> **Healthchecks:** 28 of 31 containers have healthchecks. `otel-collector`, `redis-exporter`,
+> and `rabbitmq-exporter` intentionally have none (image tooling limits) and appear as
+> "no-healthcheck", not "unhealthy".
+
+---
+
+## Swappable Data Services (external providers)
+
+The three stateful data services below can be pointed at external cloud endpoints via
+environment variables. Everything else in the inventory above is expected to run locally.
 
 ### 1. Redis (Caching, Rate Limiting, Sessions)
 
@@ -96,14 +172,14 @@ QDRANT_API_KEY=xyz-your-api-key
 All services run in local Docker containers.
 
 ```bash
-cd docker/compose
-docker compose up -d
+bash setup.sh start
+# (setup.sh invokes: docker compose --file docker/compose/docker-compose.yml up -d)
 ```
 
-**Services:**
-- PostgreSQL: localhost:5432
-- Redis: localhost:6379
-- Qdrant: localhost:6333
+**Services (internal-only — reachable by container name on `minder-network`, not published on the host):**
+- PostgreSQL: `minder-postgres:5432`
+- Redis: `minder-redis:6379`
+- Qdrant: `minder-qdrant:6333`
 
 ### Scenario 2: Hybrid (Local + External)
 
@@ -120,8 +196,7 @@ REDIS_PORT=6379
 ```
 
 ```bash
-cd docker/compose
-docker compose up -d postgres redis  # Only start local Redis, use external PostgreSQL
+docker compose --file docker/compose/docker-compose.yml up -d redis  # local Redis; PostgreSQL is external
 ```
 
 ### Scenario 3: Full External (Production)
@@ -136,8 +211,7 @@ QDRANT_HOST=qdrant-cloud.io
 ```
 
 ```bash
-cd docker/compose
-docker compose up -d api-gateway plugin-registry  # Only start microservices
+docker compose --file docker/compose/docker-compose.yml up -d api-gateway plugin-registry  # microservices only
 ```
 
 ### Scenario 4: Per-Machine Configuration
@@ -197,7 +271,7 @@ class Settings:
 ### RAG Pipeline Configuration
 
 ```python
-# src/services/rag-pipeline/main.py (Phase 2)
+# src/services/rag-pipeline/ config
 class Settings:
     QDRANT_HOST: str = "minder-qdrant"         # Default: local container
     QDRANT_PORT: int = 6333
@@ -251,9 +325,9 @@ class Settings:
    QDRANT_HOST=your-cluster.qdrant.io
    QDRANT_API_KEY=your-api-key
    ```
-4. **Restart RAG Pipeline (Phase 2):**
+4. **Restart RAG Pipeline:**
    ```bash
-   docker compose restart rag-pipeline
+   docker compose --file docker/compose/docker-compose.yml restart rag-pipeline
    ```
 
 ---
@@ -345,3 +419,7 @@ For issues or questions:
 2. Test connectivity: `telnet <host> <port>`
 3. Review this guide's troubleshooting section
 4. Check service provider documentation
+
+---
+
+*Last Updated: 2026-07-10 · 31 containers · Development environment*

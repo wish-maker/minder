@@ -180,26 +180,31 @@ curl -X POST http://localhost:11434/api/generate \
 
 ## 🏗️ **Architecture Overview**
 
-Minder provides a **local AI orchestration platform** with 7 core services:
+Minder provides a **local AI orchestration platform** with 8 core services (all FastAPI):
 
 **Core API Services:**
-- `api-gateway` (:8000) — Authentication, routing, rate limiting
-- `plugin-registry` (:8001) — Plugin lifecycle management
-- `marketplace` (:8002) — Plugin/package marketplace
-- `plugin-state-manager` (:8003) — State machine and hook dispatch
-- `rag-pipeline` (:8004) — Chunking, embedding, vector retrieval
-- `model-management` (:8005) — Model versioning and deployment
-- `graph-rag` (:8008) — Knowledge graph construction (Neo4j)
+- `api-gateway` (:8000) — JWT auth, routing, Redis rate limiting
+- `plugin-registry` (:8001) — Plugin lifecycle, webhooks, service discovery
+- `marketplace` (:8002) — Plugin/tool catalog, license tiers, dependency graph
+- `plugin-state-manager` (:8003) — Plugin state + AI-tool execution
+- `rag-pipeline` (:8004) — Chunking, embedding, retrieval (HyDE + Self-RAG)
+- `model-management` (:8005) — Ollama model lifecycle (partial)
+- `tts-stt` (:8006) — Text-to-speech / speech-to-text
+- `graph-rag` (:8008) — spaCy NER + Neo4j knowledge-graph construction
 
-**Data Stores:**
+**Data Stores** (internal-only, reached via Traefik or the docker network):
 - PostgreSQL (relational), Redis (cache), Qdrant (vector), Neo4j (graph)
-- RabbitMQ (messaging), MinIO (object storage), InfluxDB (time-series)
+- RabbitMQ (messaging), MinIO (object storage), Apicurio (schema registry), InfluxDB (time-series)
 
-**Infrastructure:**
-- Ollama (local LLM runtime), Traefik (reverse proxy)
-- Monitoring: Prometheus, Grafana, Jaeger, Alertmanager, OpenTelemetry
+**Inference & Edge:**
+- Ollama (local LLM runtime, internal-only), OpenWebUI (chat UI, via Traefik)
+- Traefik v3 (reverse proxy / TLS). Authelia SSO is present but **currently disabled**.
 
-**Total:** 31 containers (7 core APIs + 6 data stores + 1 AI runtime + 17 monitoring/infra)
+**Observability:**
+- Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry Collector, InfluxDB, Telegraf
+- Exporters: postgres, redis, rabbitmq, node, cAdvisor, blackbox
+
+**Total:** 31 services defined in compose (8 core APIs + 8 data stores + 2 inference/UI + 7 observability + 6 exporters + Traefik; Authelia excluded/disabled). A full `setup.sh install` runs 30 of them (`schema-registry` is defined but not yet wired into setup — [#42](https://github.com/wish-maker/minder/issues/42)). Deploys on a Raspberry Pi 4 (ARM).
 
 ---
 
@@ -219,10 +224,10 @@ Minder provides a **local AI orchestration platform** with 7 core services:
 - **Knowledge Graphs**: Neo4j entity relationships and discovery
 - **Smart Retrieval**: Intelligent document ranking and context
 
-#### **Model Customization**
-- **Fine-Tuning**: Customize models for your specific use cases
-- **Version Management**: A/B testing and rollback capabilities
-- **Plugin Integration**: Extend with custom AI capabilities
+#### **Model Management**
+- **Ollama Lifecycle**: List, pull, delete, and test-prompt local models via `model-management` (:8005)
+- **Plugin Integration**: Extend with custom AI capabilities and function-calling tools
+- _Roadmap_: fine-tuning and model versioning/A-B testing are planned, not yet shipped
 
 ### 🔌 **Plugin System**
 
@@ -240,38 +245,40 @@ Minder provides a **local AI orchestration platform** with 7 core services:
 - **MinIO**: S3-compatible object storage
 - **InfluxDB**: Time-series metrics and analytics
 
-### 🔐 **Enterprise Security**
+### 🔐 **Security**
 
-#### **Zero-Trust Architecture**
-- **Traefik Reverse Proxy**: SSL/TLS termination
-- **Authelia SSO**: Two-factor authentication (2FA)
-- **JWT Authentication**: Configurable token expiration
-- **Rate Limiting**: Configurable request limits per service
-- **Network Isolation**: Internal service protection
-- **Audit Logging**: Complete activity tracking
+> This is a **development environment** — production hardening is not yet applied.
+
+- **Traefik v3 Reverse Proxy**: SSL/TLS termination and routing
+- **JWT Authentication**: bcrypt-hashed credentials, configurable token expiration (implemented)
+- **Rate Limiting**: Redis-backed, per-window limits at the API gateway
+- **Network Isolation**: Storage backends are internal-only on `minder-network`
+- **IP Whitelisting**: Traefik middleware on the dashboard / RabbitMQ / Neo4j routes
+- **Authelia SSO / 2FA**: wired into Traefik but **currently disabled** (see issue #15)
+- _Not yet implemented_: role-based access control (RBAC), app-level audit logging
 
 ### 📊 **Observability Stack**
 
 #### **Comprehensive Monitoring**
-- **Prometheus**: 45+ alert rules, 15s scrape interval
-- **Grafana**: Pre-configured dashboards (10+ panels)
-- **Jaeger**: Distributed tracing for all requests
-- **Alertmanager**: Automated alert routing
-- **Performance Metrics**: Real-time system health
+- **Prometheus**: metrics collection with alerting rules and 6 exporters
+- **Grafana**: pre-provisioned dashboards and datasources
+- **Jaeger**: distributed tracing (OpenTelemetry Collector → Jaeger)
+- **Alertmanager**: alert routing
+- **InfluxDB + Telegraf**: time-series metrics collection
 
 ---
 
 ## 📈 **Performance & Scale**
 
-### ⚡ **Typical Performance Metrics**
+Minder targets a **Raspberry Pi 4 (ARM)** as its reference host, so real-world
+latency depends heavily on the Ollama model size and available RAM/GPU. There are
+no synthetic benchmark numbers here — measure your own with the built-in
+Prometheus/Grafana/Jaeger stack. Key tuning levers:
 
-| Metric | Minder Performance | Industry Average |
-|--------|-------------------|------------------|
-| **API Response** | ~150ms | 300-500ms |
-| **LLM Inference** | 50-200ms | 500-2000ms |
-| **Vector Search** | <50ms | 100-300ms |
-| **Database Queries** | <20ms | 50-100ms |
-| **Plugin Loading** | <2s hot reload | 10-30s |
+- **Model choice** — smaller Ollama models (e.g. `llama3.2:1b`) respond far faster on ARM
+- **Ollama mode** — run Ollama on a beefier native host via `OLLAMA_BASE_URL` (external mode)
+- **Resource limits** — set per-service `deploy.resources` in the compose file
+- **Vector/graph tuning** — Qdrant collection params and Neo4j heap sizing
 
 ### 🎯 **Current Status**
 

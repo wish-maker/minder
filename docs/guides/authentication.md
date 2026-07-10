@@ -2,381 +2,164 @@
 
 ## Overview
 
-Minder Platform uses enterprise-grade security with Authelia for SSO and 2FA, protected by Traefik reverse proxy.
+Authentication on the Minder platform is handled by the **API Gateway**
+(`minder-api-gateway`, port 8000) using **JWT** tokens with **bcrypt** password
+hashing. This is the mechanism that is actually in effect today.
 
-## Security Architecture
+A single sign-on / 2FA layer (Authelia) is defined in the stack but is
+**currently disabled** — see [Authelia (deferred)](#authelia-deferred) below.
+There is **no role-based access control (RBAC)** implemented; access is
+gated by holding a valid JWT.
+
+> This is a development environment on a Raspberry Pi 4. Production hardening
+> (enforced SSO/2FA, RBAC, TLS everywhere) has not yet been applied.
+
+## How authentication works
 
 ```
 ┌─────────────┐
-│   Browser   │
+│   Client    │
 └──────┬──────┘
-       │ HTTPS (Port 443)
+       │ HTTPS
 ┌──────▼──────────────────┐
-│      Traefik            │
-│  - SSL Termination      │
-│  - Request Routing      │
-│  - Security Headers     │
+│      Traefik (v3)       │  reverse proxy, TLS, routing
 └──────┬──────────────────┘
-       │ Forward Auth
+       │
 ┌──────▼──────────────────┐
-│     Authelia            │
-│  - SSO & 2FA            │
-│  - Access Control       │
-│  - Session Management   │
+│     API Gateway         │  issues + validates JWT (bcrypt password hashing)
+│  /v1/auth/register      │
+│  /v1/auth/login         │
+│  /v1/auth/refresh       │
 └──────┬──────────────────┘
-       │ Authenticated
+       │ proxies (with bearer token)
 ┌──────▼──────────────────┐
-│   Microservices         │
-│  - API Gateway          │
-│  - Plugin Registry      │
-│  - AI Services          │
+│   Backend services      │
+│  registry / rag / models│
 └─────────────────────────┘
 ```
 
-## Components
+### 1. Register / obtain a token
 
-### Traefik (Reverse Proxy)
+```http
+POST /v1/auth/register
+Content-Type: application/json
 
-**Purpose**: Single entry point, SSL termination, request routing
-
-**Features**:
-- Automatic HTTPS with Let's Encrypt
-- Load balancing
-- Security headers
-- Rate limiting
-- Forward auth integration
-
-**Access**:
-- Dashboard: `http://localhost:8081` (admin only)
-- Public: `https://minder.local` (or `http://localhost`)
-
-**Configuration**: `docker/services/traefik/`
-
-### Authelia (SSO & 2FA)
-
-**Purpose**: Centralized authentication and authorization
-
-**Features**:
-- Single Sign-On (SSO)
-- Two-Factor Authentication (2FA)
-  - TOTP (Google Authenticator, Authy, etc.)
-  - WebAuthn (hardware keys, biometrics)
-- Brute force protection
-- Session management
-- Access control rules
-
-**Access**: `https://auth.minder.local` (or `http://localhost:9091`)
-
-**Configuration**: `docker/services/authelia/`
-
-## Default Users
-
-⚠️ **SECURITY WARNING**: Change these passwords immediately after first login!
-
-| Username | Password | Role | Description |
-|----------|----------|------|-------------|
-| `admin` | `admin123` | Admin | Full system access |
-| `developer` | `admin123` | Developer | API and development access |
-| `user` | `admin123` | User | Basic application access |
-
-## Changing Passwords
-
-### Option 1: Via Authelia Configuration
-
-1. Generate Argon2 hashed password:
-```bash
-docker exec -it minder-authelia authelia hashes password generate \
-  --password "your_new_secure_password"
+{ "username": "alice", "password": "your-password" }
 ```
 
-2. Update `docker/services/authelia/users_database.yml`:
-```yaml
-users:
-  admin:
-    disabled: false
-    displayname: Admin User
-    password: "$argon2id$v=19$m=65536,t=4,p=4$..."  # Paste hash here
-    email: admin@minder.local
-    groups:
-      - admins
+```http
+POST /v1/auth/login
+Content-Type: application/json
+
+{ "username": "alice", "password": "your-password" }
 ```
 
-3. Restart Authelia:
-```bash
-docker compose -f docker/compose/docker-compose.yml restart authelia
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "token_type": "bearer"
+}
 ```
 
-### Option 2: Via Authelia Portal
+### 2. Use the token
 
-1. Access `https://auth.minder.local`
-2. Login with current credentials
-3. Navigate to Profile → Reset Password
-4. Enter new password (minimum 8 characters, uppercase, lowercase, number, special)
-
-## Access Control Rules
-
-### Public URLs (No Authentication)
-- `public.minder.local` - Public landing page
-- `*/health` - Health check endpoints
-
-### One-Factor Authentication (Password Only)
-- `app.minder.local` - Main application
-- `registry.minder.local` - Plugin Registry
-- `marketplace.minder.local` - Marketplace
-
-### Two-Factor Authentication (Password + 2FA)
-- `admin.minder.local` - Admin dashboard
-- `api.minder.local` - API Gateway
-- All internal microservices
-
-### Admin Only (Admin Group + 2FA)
-- `grafana.minder.local` - Grafana monitoring
-- `prometheus.minder.local` - Prometheus metrics
-- `traefik.minder.local` - Traefik dashboard
-
-## Setting Up 2FA
-
-### TOTP (Time-based One-Time Password)
-
-1. Login to Authelia
-2. Navigate to: One-Time Password → Register
-3. Scan QR code with your authenticator app:
-   - Google Authenticator
-   - Authy
-   - Microsoft Authenticator
-   - 1Password
-   - Bitwarden
-
-### WebAuthn (Hardware Keys)
-
-1. Login to Authelia
-2. Navigate to: WebAuthn → Register
-3. Connect your hardware key:
-   - YubiKey
-   - Titan Security Key
-   - Windows Hello
-   - Touch ID
-
-## Domain Configuration
-
-### Local Development
-
-Add to `/etc/hosts` (Linux/Mac) or `C:\Windows\System32\drivers\etc\hosts` (Windows):
-
-```
-127.0.0.1  minder.local
-127.0.0.1  auth.minder.local
-127.0.0.1  api.minder.local
-127.0.0.1  admin.minder.local
-127.0.0.1  app.minder.local
-127.0.0.1  registry.minder.local
-127.0.0.1  marketplace.minder.local
-127.0.0.1  grafana.minder.local
-127.0.0.1  prometheus.minder.local
-127.0.0.1  traefik.minder.local
+```http
+GET /v1/plugins
+Authorization: Bearer <access_token>
 ```
 
-### Production DNS
+### 3. Refresh
 
-For production, configure DNS records:
+```http
+POST /v1/auth/refresh
+Content-Type: application/json
 
-```
-minder.local           A   <your-server-ip>
-auth.minder.local      A   <your-server-ip>
-api.minder.local       A   <your-server-ip>
-*.minder.local         CNAME minder.local
+{ "refresh_token": "..." }
 ```
 
-## SMTP Configuration (for Email Notifications)
+### JWT secret
 
-Authelia can send email notifications for:
-- Password reset
-- 2FA registration
-- Login alerts
-- Account changes
+Tokens are signed with `JWT_SECRET`, which lives in the root `./.env` file (see
+the [security setup guide](./security-setup.md)). `setup.sh` auto-generates a
+strong value if you leave the placeholder in place. The same secret must be
+consistent across services that validate tokens.
 
-### Setup
+---
 
-Edit root `./.env` (then re-run `setup.sh start`):
+## Traefik (reverse proxy)
 
-```bash
-# Gmail Example (use App Passwords)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=your-app-password  # Generate at Google Account Settings
-```
+**Purpose:** single entry point, TLS termination, request routing.
 
-Restart Authelia:
-```bash
-docker compose -f docker/compose/docker-compose.yml restart authelia
-```
+- Dashboard: `http://localhost:8081` (restricted by an IP-whitelist middleware)
+- Routing is driven by Docker labels (`exposedByDefault: false`)
+- Configuration: `docker/services/traefik/`
 
-## OIDC / OAuth2 Integration
+Traefik has an `authelia-forwardauth` middleware wired onto five routers
+(minio, api-gateway, grafana, openwebui, jaeger). The other three routers
+(traefik-dashboard, rabbitmq, neo4j) use an IP-whitelist middleware instead.
+Because the Authelia container is disabled, that forward-auth check is **not
+enforced** — those five routes are not currently protected by SSO.
 
-Authelia provides OpenID Connect for applications:
+---
 
-### Configuration
+## Authelia (deferred)
 
-Clients are pre-configured in `docker/services/authelia/configuration.yml`:
+Authelia is intended to provide centralised SSO and 2FA in front of the stack,
+but it is **commented out in the compose file and does not run**. The stated
+reason in the compose file:
 
-```yaml
-identity_providers:
-  oidc:
-    clients:
-      - id: minder-web
-        secret: ${OIDC_CLIENT_SECRET_MINDER_WEB}
-        redirect_uris:
-          - https://public.minder.local/oauth2/callback
-```
+> "TEMPORARILY DISABLED: Crash loop due to missing database and NTP sync issues.
+> Decision deferred."
 
-### Environment Variables
+Whether to keep or drop Authelia is an open decision. Until it is re-enabled and
+proven working, treat everything below as **planned/optional**, not active:
 
-Set in root `./.env`:
+- Single Sign-On across services
+- Two-Factor Authentication (TOTP / WebAuthn)
+- Brute-force protection and session regulation
+- Access-control rules per domain
 
-```bash
-# Generate with: openssl rand -base64 32
-OIDC_CLIENT_SECRET_MINDER_WEB=your-secret-here
-OIDC_CLIENT_SECRET_MINDER_API=your-secret-here
-```
+If/when Authelia is brought online, its configuration would live under
+`docker/services/authelia/` and it would be enabled by uncommenting its service
+block in `docker/compose/docker-compose.yml`. None of that is in effect today,
+so this guide does not document its per-domain rules as if they were live.
 
-## Session Management
-
-### Session Duration
-
-- **Default**: 1 hour
-- **Inactivity Timeout**: 5 minutes
-- **Remember Me**: 1 month
-
-### Configuration
-
-Edit `docker/services/authelia/configuration.yml`:
-
-```yaml
-session:
-  expiration: 1h
-  inactivity: 5m
-  remember_me: 1M
-```
-
-### Session Storage
-
-Sessions are stored in Redis for scalability and persistence.
-
-## Brute Force Protection
-
-Authelia automatically bans IPs after:
-- **Max Retries**: 5 attempts
-- **Find Time**: 2 minutes
-- **Ban Time**: 5 minutes
-
-### Configuration
-
-Edit `docker/services/authelia/configuration.yml`:
-
-```yaml
-regulation:
-  max_retries: 5
-  find_time: 2m
-  ban_time: 5m
-```
+---
 
 ## Troubleshooting
 
-### Cannot Access Services
+### API requests return 401
 
-1. Check Traefik status:
+- Confirm you sent `Authorization: Bearer <token>` and the token has not expired.
+- Confirm `JWT_SECRET` is set consistently (see [security-setup.md](./security-setup.md)).
+- Check the gateway logs:
+  ```bash
+  docker logs minder-api-gateway --tail 100
+  ```
+
+### Rate limited (429)
+
+The gateway applies Redis-backed rate limiting on a 60-second window (fail-open).
+Confirm Redis is healthy:
 ```bash
-docker logs minder-traefik
+docker exec -it minder-redis redis-cli -a "$REDIS_PASSWORD" ping
 ```
 
-2. Check Authelia health:
-```bash
-curl http://localhost:9091/api/health
-```
-
-3. Verify DNS resolution:
-```bash
-ping minder.local
-```
-
-### 2FA Not Working
-
-1. Check system time is synchronized
-2. Verify TOTP secret is correct
-3. Try backup codes (if configured)
-
-### Session Issues
-
-1. Clear browser cookies for `*.minder.local`
-2. Check Redis is healthy:
-```bash
-docker exec -it minder-redis redis-cli -a ${REDIS_PASSWORD} ping
-```
-
-3. Check session storage in Authelia logs:
-```bash
-docker logs minder-authelia
-```
-
-### SSL/TLS Certificate Issues
-
-1. For development, Traefik uses self-signed certs
-2. Accept browser warning for `*.minder.local`
-3. For production, configure Let's Encrypt:
-
-Edit `docker/services/traefik/traefik.yml`:
-```yaml
-certificatesResolvers:
-  default:
-    acme:
-      email: your-email@example.com
-      storage: /letsencrypt/acme.json
-      httpChallenge:
-        entryPoint: web
-```
-
-## Security Best Practices
-
-1. **Change default passwords immediately**
-2. **Enable 2FA for all users**
-3. **Use strong password policy** (8+ chars, mixed case, numbers, symbols)
-4. **Configure SMTP for email notifications**
-5. **Regularly update Authelia** (`docker compose pull authelia`)
-6. **Monitor access logs**: `docker logs minder-authelia`
-7. **Use HTTPS only in production**
-8. **Implement IP whitelisting for admin access**
-9. **Rotate secrets quarterly**
-10. **Backup Redis session data regularly**
-
-## Monitoring
-
-### View Authelia Logs
+### Cannot reach a service through Traefik
 
 ```bash
-# Real-time logs
-docker logs -f minder-authelia
-
-# Last 100 lines
-docker logs --tail 100 minder-authelia
+docker logs minder-traefik --tail 100
 ```
 
-### View Traefik Access Logs
-
-```bash
-# Real-time access logs
-docker logs -f minder-traefik
-```
-
-### Prometheus Metrics
-
-Authelia exposes metrics at:
-- `http://authelia:9091/metrics`
-
-Access via Prometheus: `http://localhost:9090`
+---
 
 ## Additional Resources
 
-- [Authelia Documentation](https://www.authelia.com/)
 - [Traefik Documentation](https://doc.traefik.io/traefik/)
-- [Security Best Practices](https://www.authelia.com/guides/security/)
+- [Authelia Documentation](https://www.authelia.com/) (for the deferred SSO layer)
+- [JWT Best Practices (RFC 8725)](https://datatracker.ietf.org/doc/html/rfc8725)
+
+---
+
+**Last Updated:** 2026-07-10

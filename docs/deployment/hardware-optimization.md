@@ -1,607 +1,195 @@
-# Hardware Resource Optimization Guide
+# Hardware Resource Optimization (Raspberry Pi 4 / ARM)
 
-**Version:** 1.0
-**Last Updated:** 2026-04-29
-
----
-
-## 📋 Table of Contents
-
-1. [Overview](#overview)
-2. [Resource Monitoring](#resource-monitoring)
-3. [Optimization Strategies](#optimization-strategies)
-4. [Configuration](#configuration)
-5. [Best Practices](#best-practices)
-6. [Monitoring and Alerts](#monitoring-and-alerts)
+**Version:** 2.0
+**Last Updated:** 2026-07-10
 
 ---
 
-## 🎯 Overview
+## Overview
 
-The Minder project includes comprehensive hardware resource optimization capabilities to ensure efficient CPU, memory, disk I/O, and network resource usage across all microservices.
+Minder's deployment target is a single **Raspberry Pi 4 (RPi-4-01, ARM)**. This is a
+**development environment**; production hardening is not yet applied. Everything runs in
+Docker via `docker/compose/docker-compose.yml` (the hand-maintained source of truth) and
+is provisioned with `bash setup.sh`.
 
-### Key Features
+On a single Pi, the two scarce resources are **RAM** and **CPU**. LLM inference (Ollama)
+dominates both. This guide covers the resource controls that actually exist in the compose
+file today, plus practical tuning for the Pi.
 
-- **Real-time Resource Monitoring:** CPU, memory, disk, and network usage tracking
-- **Adaptive Resource Allocation:** Automatic adjustments based on system load
-- **Connection Pool Optimization:** Database and API connection management
-- **Intelligent Caching:** Memory-efficient caching strategies
-- **Circuit Breakers:** Failure prevention and graceful degradation
-
----
-
-## 📊 Resource Monitoring
-
-### ResourceMonitor Class
-
-Monitor system resources and trigger alerts.
-
-```python
-from src.shared.resource_optimizer import ResourceMonitor, ResourceThresholds
-
-# Create monitor with default thresholds
-monitor = ResourceMonitor()
-
-# Check current usage
-usage = monitor.get_current_usage()
-print(f"CPU: {usage.cpu_percent}%")
-print(f"Memory: {usage.memory_percent}%")
-print(f"Disk: {usage.disk_percent}%")
-```
-
-### Custom Thresholds
-
-```python
-thresholds = ResourceThresholds(
-    cpu_warning=70.0,
-    cpu_critical=90.0,
-    memory_warning=75.0,
-    memory_critical=90.0,
-    disk_warning=80.0,
-    disk_critical=90.0,
-)
-
-monitor = ResourceMonitor(thresholds=thresholds)
-```
-
-### Check Thresholds
-
-```python
-alerts = monitor.check_thresholds()
-
-if alerts:
-    for resource, message in alerts.items():
-        print(f"{resource}: {message}")
-```
+> No synthetic benchmark numbers are quoted here. Measure on your own hardware — see
+> `monitoring.md` for how (cAdvisor + node-exporter + Grafana).
 
 ---
 
-## ⚡ Optimization Strategies
+## Resource Limits in Compose
 
-### Connection Pool Optimization
+Docker Compose `deploy.resources` limits are used to keep any one service from starving
+the Pi. Today the only service with an **active** limit is the API gateway:
 
-**ConnectionPoolOptimizer** manages database and API connection pools efficiently.
-
-```python
-from src.shared.resource_optimizer import ConnectionPoolOptimizer
-
-optimizer = ConnectionPoolOptimizer(
-    min_connections=5,
-    max_connections=20,
-    target_utilization=0.7
-)
-
-# Calculate optimal pool size
-pool_size = optimizer.calculate_optimal_pool_size(
-    concurrent_requests=50,
-    avg_request_time_ms=100.0
-)
-
-print(f"Optimal pool size: {pool_size}")
+```yaml
+# docker/compose/docker-compose.yml — api-gateway
+services:
+  api-gateway:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
 ```
 
-#### Algorithm
+Other heavyweight services (e.g. Ollama) have `deploy.resources` blocks present but
+**commented out** — they were sized for a GPU host (`cpus: '4.0'`, `memory: 8G`) and are
+not appropriate for the Pi. If you enable them, scale the numbers down to fit 8 GB total
+RAM.
 
-The optimal pool size is calculated using Little's Law:
+To add a limit to another service, edit the compose file directly:
 
-```
-pool_size = concurrent_requests × (1 + (wait_time / service_time))
-```
-
-Where:
-- `wait_time` is typically 20% of `service_time`
-- `service_time` is the average request processing time
-
-### Memory Optimization
-
-**MemoryOptimizer** optimizes cache sizes based on available memory.
-
-```python
-from src.shared.resource_optimizer import MemoryOptimizer
-
-# Get memory usage by type
-memory_info = MemoryOptimizer.get_memory_usage_by_type()
-print(f"Used: {memory_info['used_gb']} GB")
-print(f"Available: {memory_info['available_gb']} GB")
-
-# Optimize cache sizes
-cache_sizes = {
-    "api_cache": 512 * 1024 * 1024,  # 512 MB
-    "database_cache": 256 * 1024 * 1024,  # 256 MB
-    "temporary_cache": 128 * 1024 * 1024,  # 128 MB
-}
-
-optimized = MemoryOptimizer.optimize_caches(cache_sizes)
-print(f"Optimized caches: {optimized}")
+```yaml
+services:
+  <service>:
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
 ```
 
-### CPU Optimization
-
-**CPUOptimizer** calculates optimal thread pool sizes.
-
-```python
-from src.shared.resource_optimizer import CPUOptimizer
-
-# Get CPU information
-cpu_info = CPUOptimizer.get_cpu_info()
-print(f"Physical cores: {cpu_info['physical_cores']}")
-print(f"Logical cores: {cpu_info['logical_cores']}")
-print(f"Current usage: {cpu_info['current_usage_percent']}%")
-
-# Calculate optimal pool size for I/O-bound tasks
-io_bound_pool_size = CPUOptimizer.optimize_thread_pool_size(
-    io_bound=True
-)
-
-# Calculate optimal pool size for CPU-bound tasks
-cpu_bound_pool_size = CPUOptimizer.optimize_thread_pool_size(
-    io_bound=False
-)
-```
-
-#### Thread Pool Sizes
-
-- **I/O-bound tasks:** `cores × 2` (more threads, but most wait for I/O)
-- **CPU-bound tasks:** `cores + 1` (fewer threads to avoid context switching)
-
-### Disk Optimization
-
-**DiskOptimizer** monitors disk usage and I/O performance.
-
-```python
-from src.shared.resource_optimizer import DiskOptimizer
-
-# Get disk usage
-disk_info = DiskOptimizer.get_disk_usage("/")
-
-print(f"Total: {disk_info['total_gb']} GB")
-print(f"Used: {disk_info['used_gb']} GB")
-print(f"Free: {disk_info['free_gb']} GB")
-print(f"Usage: {disk_info['percent']}%")
-
-# Check disk space status
-status = DiskOptimizer.check_disk_space("/")
-
-print(f"Disk status: {status}")
-# Status: normal | warning | moderate | critical
-```
-
-### Network Optimization
-
-**NetworkOptimizer** monitors network usage and connection counts.
-
-```python
-from src.shared.resource_optimizer import NetworkOptimizer
-
-# Get network statistics
-net_stats = NetworkOptimizer.get_network_stats()
-print(f"Bytes sent: {net_stats['bytes_sent']}")
-print(f"Bytes received: {net_stats['bytes_recv']}")
-
-# Get network connections by status
-connections = NetworkOptimizer.get_network_connections()
-print(f"Active connections: {connections}")
-```
+> Note: `deploy.resources.reservations` for CPU/memory are honored by `docker compose`;
+> `deploy.replicas` is a Swarm-only field and is **not** how Minder scales (there is no
+> Swarm here).
 
 ---
 
-## ⚙️ Adaptive Execution
+## Ollama Model Sizing (the biggest lever)
 
-### AdaptiveExecutor
+Ollama is the single largest consumer of RAM. Model choice is the most important tuning
+decision on a Pi.
 
-The `AdaptiveExecutor` automatically adjusts worker threads based on system load.
+### How models are configured
 
-```python
-from src.shared.resource_optimizer import AdaptiveExecutor
-import asyncio
-
-async def heavy_task():
-    # Simulate heavy computation
-    await asyncio.sleep(1)
-    return "Done"
-
-async def main():
-    executor = AdaptiveExecutor(
-        max_workers=8,
-        min_workers=2,
-    )
-
-    # Tasks are executed with adaptive worker count
-    result = await executor.execute(heavy_task)
-
-    print(f"Result: {result}")
-
-    await executor.shutdown()
-
-asyncio.run(main())
+```yaml
+# docker/compose/docker-compose.yml — ollama
+environment:
+  - OLLAMA_PULL_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
+  - OLLAMA_AUTOMATIC_PULL=${OLLAMA_AUTOMATIC_PULL:-true}
+  - OLLAMA_HOST=0.0.0.0
+  - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+  - OLLAMA_ORIGINS=*
 ```
 
-### Worker Count Adjustment
+- **`OLLAMA_PULL_MODELS`** (driven by `OLLAMA_MODELS` in `./.env`) is the list of models
+  to auto-pull. Default: `llama3.2` (chat/generation) + `nomic-embed-text` (RAG
+  embeddings). This is **not** the storage directory — the server stores models under
+  `/root/.ollama/models`, which is the `ollama_data` volume.
+- **`OLLAMA_BASE_URL`** controls local vs. remote inference:
+  - **empty** → the internal `minder-ollama` container runs (profile
+    `internal-ollama`); models run *on the Pi*.
+  - **set** (e.g. to a beefier host) → the container is inactive and inference is
+    offloaded. Use `bash setup.sh ollama-mode` to switch. Offloading is the recommended
+    way to run large models without stressing the Pi.
 
-The executor automatically adjusts worker count based on CPU usage:
+### Model-size tradeoffs on a Pi 4 (8 GB)
 
-- **High CPU (>80%):** Reduce workers to minimum
-- **Low CPU (<50%):** Increase workers (up to max)
-- **Normal CPU:** Maintain current workers
+- Prefer **small, quantized** models. `llama3.2` (3B) and `nomic-embed-text` are sensible
+  defaults for a Pi.
+- Larger models (7B+) will run but are slow and memory-hungry on ARM CPU-only inference;
+  they may swap or OOM alongside the rest of the stack.
+- If you need larger models, set `OLLAMA_BASE_URL` to an external/native host rather than
+  running them in the Pi container.
+
+### GPU variables
+
+The compose file carries GPU-oriented env vars for hosts that have an accelerator:
+
+```yaml
+environment:
+  - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
+  - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
+```
+
+The Raspberry Pi 4 has **no CUDA GPU**, so these have no effect on the Pi. The NVIDIA
+`runtime:` line and the GPU `reservations` block are commented out for the same reason;
+they only matter if you redeploy to a GPU host.
 
 ---
 
-## 🛡️ Resource Limit Checks
+## Other Service Tuning Knobs
 
-### Decorator Pattern
+### Neo4j heap
 
-Use the `resource_limit_check` decorator to prevent resource exhaustion.
+Neo4j is memory-sensitive. It is pinned to a small heap so it coexists with the rest of
+the stack on the Pi:
 
-```python
-from src.shared.resource_optimizer import resource_limit_check
-
-@resource_limit_check(cpu_limit=80.0, memory_limit=75.0)
-async def critical_function():
-    """Function that needs resource limits"""
-    # Do heavy work
-    await do_heavy_computation()
-
-# Automatically checks CPU and memory before execution
+```yaml
+# docker/compose/docker-compose.yml — neo4j
+environment:
+  NEO4J_dbms_memory_heap_initial__size: 512m
+  NEO4J_dbms_memory_heap_max__size: 1G
 ```
 
-### Callback System
+### Redis
 
-Implement custom alert callbacks.
+Redis is `redis:8.8.0-alpine`. If memory pressure appears, cap it with `--maxmemory` and
+an eviction policy in the service's `command:` (e.g. `--maxmemory 256mb
+--maxmemory-policy allkeys-lru`). Keep the cap well under the Pi's free RAM.
 
-```python
-async def send_alert(alerts: Dict[str, str]):
-    """Alert callback"""
-    for resource, message in alerts.items():
-        print(f"ALERT: {message}")
-        # Send to monitoring system
-        await send_to_monitoring_system(alerts)
+### PostgreSQL
 
-async def main():
-    monitor = ResourceMonitor()
-    await optimize_resources_continuously(
-        check_interval=60,
-        alert_callback=send_alert
-    )
-```
+`postgres:18.4-trixie`. On a Pi, leave the defaults modest — do not set large
+`shared_buffers`/`work_mem` values sized for a server; they will contend with Ollama and
+the JVM (Neo4j).
 
 ---
 
-## 🎨 Best Practices
+## Monitoring Resource Usage
 
-### 1. Monitor Before Optimizing
+Use the built-in observability stack rather than a bespoke Python monitor:
 
-Always check current resource usage before making optimizations.
+- **node-exporter** — host CPU / memory / disk / network of the Pi
+- **cadvisor** — per-container CPU / memory
+- **Grafana** (`:3000`) — visualize both
 
-```python
-# Before optimization
-usage = monitor.get_current_usage()
-print(f"Current usage: CPU={usage.cpu_percent}%, Memory={usage.memory_percent}%")
+```bash
+# Quick live snapshot
+docker stats --no-stream | grep minder
+
+# Host memory
+free -h
+
+# Disk
+df -h
 ```
 
-### 2. Set Appropriate Thresholds
-
-Choose thresholds that match your system capabilities.
-
-```python
-# For Raspberry Pi 4 (8GB RAM)
-pi4_thresholds = ResourceThresholds(
-    cpu_warning=70.0,  # Moderate load
-    cpu_critical=85.0,  # Heavy load
-    memory_warning=70.0,
-    memory_critical=85.0,
-)
-```
-
-### 3. Use Connection Pooling
-
-Always use connection pools for database and API calls.
-
-```python
-# Database connection pooling
-# In your database configuration
-db_config = {
-    "min_connections": 5,
-    "max_connections": 20,
-    "pool_size": 10,  # Target utilization 70%
-}
-```
-
-### 4. Optimize Cache Sizes
-
-Balance cache size with available memory.
-
-```python
-# Don't cache too much
-cache_sizes = {
-    "api_cache": 256 * 1024 * 1024,  # 256 MB (conservative)
-}
-
-# Optimize based on memory
-optimized = MemoryOptimizer.optimize_caches(cache_sizes)
-```
-
-### 5. Use Adaptive Execution for I/O-Bound Tasks
-
-Use `AdaptiveExecutor` for I/O-bound tasks.
-
-```python
-executor = AdaptiveExecutor()
-
-# Good for I/O-bound
-await executor.execute(download_file)
-await executor.execute(make_api_request)
-```
-
-### 6. Implement Circuit Breakers
-
-Prevent cascading failures.
-
-```python
-from src.shared.retry_logic import CircuitBreaker
-
-breaker = CircuitBreaker(threshold=5, timeout=60)
-
-try:
-    async with breaker:
-        result = await external_api_call()
-except Exception as e:
-    # Circuit is open
-    result = fallback_method()
-```
-
-### 7. Monitor Continuously
-
-Run continuous resource monitoring.
-
-```python
-async def main():
-    monitor = ResourceMonitor()
-
-    while True:
-        usage = monitor.get_current_usage()
-        alerts = monitor.check_thresholds()
-
-        if alerts:
-            logger.warning(f"Resource alerts: {alerts}")
-
-        await asyncio.sleep(60)
-
-asyncio.run(main())
-```
+See `monitoring.md` for the full stack and how to wire alerts through Alertmanager.
 
 ---
 
-## 📈 Monitoring and Alerts
+## Practical Guidance for the Pi 4
 
-### Alert Levels
-
-| Level | CPU | Memory | Disk |
-|-------|-----|--------|------|
-| **Normal** | < 70% | < 70% | < 50% |
-| **Moderate** | 70-80% | 70-80% | 50-70% |
-| **Warning** | 80-90% | 80-90% | 70-80% |
-| **Critical** | > 90% | > 90% | > 80% |
-
-### Common Alerts
-
-```python
-# High CPU usage
-"WARNING: CPU usage at 85.5%"
-
-# High memory usage
-"WARNING: Memory usage at 82.3%"
-
-# High disk usage
-"WARNING: Disk usage at 85.0%"
-
-# CRITICAL: All resources exhausted
-"CRITICAL: CPU usage at 95.2%"
-"CRITICAL: Memory usage at 92.1%"
-"CRITICAL: Disk usage at 88.5%"
-```
+1. **Watch total RAM first.** 8 GB is shared across ~31 containers plus Ollama. The API
+   gateway is capped at 2 G; Ollama and Neo4j are the next biggest consumers.
+2. **Offload big models.** Point `OLLAMA_BASE_URL` at an external host for anything larger
+   than a small quantized model.
+3. **Use a good SD card or (better) USB-SSD boot.** Vector (Qdrant) and graph (Neo4j)
+   workloads are I/O sensitive; slow storage shows up as latency.
+4. **Don't over-provision limits.** Reservations that exceed available RAM will prevent
+   containers from scheduling.
+5. **Keep an eye on swap.** Heavy swapping on a Pi tanks performance far more than on a
+   server.
 
 ---
 
-## 🔧 Configuration Examples
+## Not Implemented (was previously documented)
 
-### Raspberry Pi 4 (8GB RAM)
-
-```python
-pi4_config = {
-    "min_connections": 5,
-    "max_connections": 15,  # Limited by 8GB RAM
-    "cache_sizes": {
-        "api_cache": 256 * 1024 * 1024,  # 256 MB
-        "database_cache": 128 * 1024 * 1024,  # 128 MB
-    },
-    "thresholds": ResourceThresholds(
-        cpu_warning=70.0,
-        cpu_critical=85.0,
-        memory_warning=70.0,
-        memory_critical=85.0,
-        disk_warning=75.0,
-        disk_critical=85.0,
-    ),
-}
-```
-
-### Production Server (16GB RAM)
-
-```python
-production_config = {
-    "min_connections": 10,
-    "max_connections": 50,
-    "cache_sizes": {
-        "api_cache": 1024 * 1024 * 1024,  # 1 GB
-        "database_cache": 512 * 1024 * 1024,  # 512 MB
-    },
-    "thresholds": ResourceThresholds(
-        cpu_warning=75.0,
-        cpu_critical=90.0,
-        memory_warning=75.0,
-        memory_critical=90.0,
-        disk_warning=75.0,
-        disk_critical=90.0,
-    ),
-}
-```
+Earlier revisions of this guide described a `src.shared.resource_optimizer` Python module
+(ResourceMonitor, ConnectionPoolOptimizer, AdaptiveExecutor, etc.) and quoted
+percentage-based performance gains. **That module does not exist in the codebase** and the
+numbers were not measured — both have been removed. Resource observability today is
+provided by the Prometheus/Grafana/exporters stack described above.
 
 ---
 
-## 📚 Integration Examples
-
-### In FastAPI Application
-
-```python
-from fastapi import FastAPI
-from src.shared.resource_optimizer import ResourceMonitor
-
-app = FastAPI()
-
-monitor = ResourceMonitor()
-
-@app.middleware("http")
-async def resource_monitoring(request: Request, call_next):
-    # Monitor request
-    response = await call_next(request)
-
-    # Check after request
-    alerts = monitor.check_thresholds()
-
-    if alerts:
-        logger.warning(f"Resource alerts after request: {alerts}")
-
-    return response
-
-@app.get("/metrics")
-async def get_metrics():
-    usage = monitor.get_current_usage()
-    return {
-        "cpu": usage.cpu_percent,
-        "memory": usage.memory_percent,
-        "disk": usage.disk_percent,
-    }
-```
-
-### In Asyncio Application
-
-```python
-import asyncio
-from src.shared.resource_optimizer import (
-    AdaptiveExecutor,
-    ResourceMonitor,
-)
-
-async def main():
-    monitor = ResourceMonitor()
-    executor = AdaptiveExecutor(max_workers=4)
-
-    # Continuous monitoring
-    async def monitor_loop():
-        while True:
-            usage = monitor.get_current_usage()
-            logger.info(f"CPU: {usage.cpu_percent}%, Memory: {usage.memory_percent}%")
-            await asyncio.sleep(60)
-
-    # Execute tasks
-    tasks = [executor.execute(some_task) for _ in range(20)]
-    await asyncio.gather(*tasks)
-
-    await executor.shutdown()
-
-asyncio.run(main())
-```
-
----
-
-## 📊 Performance Benchmarks
-
-### Resource Usage Reduction
-
-Using resource optimization can reduce:
-- **CPU usage:** 20-40%
-- **Memory usage:** 30-50%
-- **Response time:** 15-30% (under load)
-
-### Capacity Increase
-
-With optimal configuration:
-- **Requests per second:** +25%
-- **Concurrent users:** +50%
-- **Response time (p95):** -20%
-
----
-
-## 🐛 Troubleshooting
-
-### High CPU Usage
-
-**Symptoms:**
-- CPU at 90%+
-- System slow
-- Fan spinning
-
-**Solutions:**
-1. Check `CPUOptimizer.get_cpu_times()` for CPU-intensive tasks
-2. Reduce thread pool size
-3. Implement more caching
-4. Use async I/O where possible
-
-### High Memory Usage
-
-**Symptoms:**
-- Memory at 90%+
-- System swapping
-- Slow performance
-
-**Solutions:**
-1. Reduce cache sizes
-2. Increase connection pool limit
-3. Check for memory leaks
-4. Use memory optimization utilities
-
-### High Disk I/O
-
-**Symptoms:**
-- Disk usage 90%+
-- Slow read/write operations
-
-**Solutions:**
-1. Optimize database queries
-2. Implement caching
-3. Increase disk size
-4. Move cache to SSD
-
----
-
-## 📚 References
-
-- [psutil Documentation](https://psutil.readthedocs.io/)
-- [Asyncio Best Practices](https://docs.python.org/3/library/asyncio.html)
-- [Connection Pooling Best Practices](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PARAMETERS)
-- [Little's Law](https://en.wikipedia.org/wiki/Little%27s_law)
-
----
-
-**Last Updated:** 2026-04-28
-**Maintained By:** OpenClaw
+**Last Updated:** 2026-07-10

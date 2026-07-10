@@ -1,632 +1,285 @@
 # Minder Platform - API Documentation
 
-Comprehensive API documentation for all Minder platform services.
+API documentation for the Minder platform's core services.
 
-## 📚 Service APIs
+All core services are FastAPI applications. Each one serves interactive,
+auto-generated API docs at `/docs` (Swagger UI) and `/redoc` (ReDoc), plus a
+machine-readable schema at `/openapi.json`. When in doubt, that live schema is
+the authoritative reference — this page summarises the most useful endpoints.
 
-### Core Services
+> **Note on access.** In a normal deployment the only host-exposed HTTP surface is
+> Traefik (ports 80/443). The `localhost:<port>` URLs below are the *internal*
+> container ports; they are directly reachable when you run the stack locally on
+> the same host (or after publishing a port for debugging), but are not exposed
+> to the outside world by default.
 
-#### 1. API Gateway (`http://localhost:8000`)
+## Core Services (8)
 
-Central entry point for all API requests.
+| Service | Container | Port | Notes |
+|---|---|---|---|
+| API Gateway | `minder-api-gateway` | 8000 | JWT auth, rate limiting, reverse proxy to other services |
+| Plugin Registry | `minder-plugin-registry` | 8001 | Plugin registration, discovery, lifecycle |
+| Marketplace | `minder-marketplace` | 8002 | Plugin discovery/search, licensing, AI-tool catalog |
+| Plugin State Manager | `minder-plugin-state-manager` | 8003 | Plugin state, AI-tool discovery/execution |
+| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, document ingestion, RAG query |
+| Model Management | `minder-model-management` | 8005 | Ollama model list/pull/delete/test |
+| TTS/STT | `minder-tts-stt` | 8006 | Text-to-speech / speech-to-text |
+| Graph-RAG | `minder-graph-rag` | 8008 | Entity extraction, Neo4j knowledge graph |
 
-**Base URL:** `http://localhost:8000`
+Every service exposes `GET /health` (and most expose `GET /metrics` for
+Prometheus). The examples below are representative; consult each service's
+`/docs` for the complete, current contract.
 
-**Endpoints:**
+---
 
-##### Health Check
+### 1. API Gateway (`http://localhost:8000`)
+
+Central entry point. Handles JWT authentication (bcrypt password hashing),
+Redis-backed rate limiting, and proxies requests to the plugin registry, RAG
+pipeline, and model-management services via `httpx`.
+
+#### Health
 ```http
 GET /health
 ```
 
-**Response:**
-```json
-{
-  "service": "api-gateway",
-  "status": "healthy",
-  "version": "2.0.0",
-  "timestamp": "2025-01-11T10:00:00Z",
-  "dependencies": [
-    {
-      "name": "redis",
-      "status": "healthy",
-      "url": "redis://redis:6379",
-      "response_time_ms": 2.5
-    },
-    {
-      "name": "plugin_registry",
-      "status": "healthy",
-      "url": "http://minder-plugin-registry:8001",
-      "response_time_ms": 15.3
-    }
-  ]
-}
+#### Authentication
+
+```http
+POST /v1/auth/register
+Content-Type: application/json
+
+{ "username": "alice", "password": "..." }
 ```
 
-##### Authentication
 ```http
 POST /v1/auth/login
 Content-Type: application/json
 
-{
-  "username": "admin",
-  "password": "admin"
-}
+{ "username": "alice", "password": "..." }
 ```
 
 **Response:**
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "expires_in": 3600
+  "token_type": "bearer"
 }
 ```
 
----
-
-#### 2. Plugin Marketplace (`http://localhost:8002`)
-
-Plugin marketplace and licensing system.
-
-**Base URL:** `http://localhost:8002`
-
-##### Health Check
 ```http
-GET /health
-```
-
-**Response:**
-```json
-{
-  "service": "marketplace",
-  "status": "healthy",
-  "version": "1.0.0",
-  "environment": "development"
-}
-```
-
-##### List Plugins
-```http
-GET /plugins?page=1&page_size=10&sort_by=name&sort_order=asc
-```
-
-**Query Parameters:**
-- `page` (optional): Page number (default: 1)
-- `page_size` (optional): Items per page (default: 10, max: 100)
-- `sort_by` (optional): Field to sort by
-- `sort_order` (optional): Sort order (asc, desc)
-
-**Response:**
-```json
-{
-  "items": [
-    {
-      "id": "plugin-123",
-      "name": "My Plugin",
-      "version": "1.0.0",
-      "description": "A sample plugin",
-      "author": "Developer",
-      "status": "active"
-    }
-  ],
-  "total": 100,
-  "page": 1,
-  "page_size": 10,
-  "total_pages": 10,
-  "success": true
-}
-```
-
-##### Install Plugin
-```http
-POST /plugins/install
+POST /v1/auth/refresh
 Content-Type: application/json
-Authorization: Bearer <token>
 
-{
-  "source": "git",
-  "url": "https://github.com/user/plugin.git",
-  "manifest": {
-    "name": "my-plugin",
-    "version": "1.0.0"
-  }
-}
+{ "refresh_token": "..." }
 ```
 
-**Response:**
-```json
-{
-  "id": "plugin-123",
-  "created_at": "2025-01-11T10:00:00Z",
-  "success": true,
-  "message": "Plugin installed successfully"
-}
+#### Proxied routes
+
+The gateway forwards these prefixes to the corresponding backend service:
+
+- `/v1/plugins/*`  → plugin registry
+- `/v1/rag/*`      → RAG pipeline
+- `/v1/models/*`   → model management
+
+#### AI / OpenWebUI integration (`/v1/ai`)
+```http
+GET  /v1/ai/functions/definitions        # aggregated plugin AI-tool (function) defs
+POST /v1/ai/functions/{function_name}     # execute a named tool (OpenAI function-result format)
+POST /v1/ai/chat/completions              # OpenAI-compatible chat; currently proxies to Ollama /api/chat
+```
+
+#### Observability
+```http
+GET /metrics
 ```
 
 ---
 
-#### 3. Plugin Registry (`http://localhost:8001`)
+### 2. Plugin Registry (`http://localhost:8001`)
 
-Plugin discovery and lifecycle management.
+Plugin registration, discovery, and lifecycle management. Plugins are
+**manifest-based** — there is no arbitrary code execution by design.
 
-**Base URL:** `http://localhost:8001`
-
-##### Health Check
+#### Health
 ```http
 GET /health
 ```
 
-**Response:**
-```json
-{
-  "service": "plugin-registry",
-  "status": "healthy",
-  "version": "2.0.0",
-  "checks": {
-    "plugins_loaded": 5
-  }
-}
-```
-
-##### List Plugins
+#### List plugins
 ```http
 GET /v1/plugins
 ```
 
-**Response:**
-```json
-[
-  {
-    "name": "my-plugin",
-    "version": "1.0.0",
-    "description": "A plugin",
-    "author": "Developer",
-    "enabled": true,
-    "health_status": "healthy"
-  }
-]
-```
-
-##### Enable Plugin
+#### Enable / disable a plugin
 ```http
 POST /v1/plugins/{plugin_name}/enable
 Authorization: Bearer <token>
 ```
 
-**Response:**
-```json
-{
-  "message": "Plugin enabled",
-  "plugin_name": "my-plugin"
-}
-```
+> No default plugins ship with the platform today. The registry manages whatever
+> plugins are installed; the shipped configuration is an intentional empty stub.
 
 ---
 
-#### 4. Plugin State Manager (`http://localhost:8003`)
+### 3. Marketplace (`http://localhost:8002`)
 
-Central plugin management and AI tools execution.
+Plugin discovery, search, and licensing (community / pro / enterprise tiers).
+Maintains an AI-tool catalog and a plugin dependency graph in Neo4j.
 
-**Base URL:** `http://localhost:8003`
-
-##### Health Check
+#### Health
 ```http
 GET /health
 ```
 
-**Response:**
-```json
-{
-  "service": "Plugin State Manager",
-  "version": "2.1.0",
-  "status": "healthy",
-  "checks": {
-    "database": "connected"
-  }
-}
-```
-
-##### List Active Plugins
+#### List / search plugins
 ```http
-GET /v1/plugins?status=active
+GET /plugins?page=1&page_size=10
 ```
 
-**Response:**
-```json
-[
-  {
-    "name": "plugin-1",
-    "state": "ACTIVE",
-    "last_execution": "2025-01-11T09:30:00Z",
-    "execution_count": 150
-  }
-]
-```
+See `/docs` for the full set of discovery, search, featured, and dependency
+endpoints.
 
 ---
 
-### AI Services
+### 4. Plugin State Manager (`http://localhost:8003`)
 
-#### 5. RAG Pipeline (`http://localhost:8004`)
+Tracks plugin state and handles AI-tool discovery and execution (with license
+validation).
 
-Production RAG Pipeline with Clean Architecture.
-
-**Base URL:** `http://localhost:8004`
-
-##### Health Check
+#### Health
 ```http
 GET /health
 ```
 
-**Response:**
-```json
-{
-  "service": "rag-pipeline",
-  "status": "healthy",
-  "version": "2.0.0",
-  "checks": {
-    "ollama": "available",
-    "qdrant": "connected",
-    "knowledge_base_service": "initialized",
-    "retrieval_service": "initialized"
-  }
-}
-```
+---
 
-##### Query Knowledge Base
+### 5. RAG Pipeline (`http://localhost:8004`)
+
+Retrieval-augmented generation. Manages knowledge bases, ingests documents
+(PDF/TXT/MD via `pypdf` + a LangChain splitter), stores vectors in Qdrant, and
+uses Ollama for embeddings and generation. Includes HyDE, Self-RAG, a decision
+engine, and conversational RAG.
+
+#### Health
 ```http
-POST /query
-Content-Type: application/json
-
-{
-  "query": "What is machine learning?",
-  "knowledge_base_id": "kb-123",
-  "max_results": 5,
-  "filters": {
-    "category": "AI"
-  }
-}
+GET /health
 ```
 
-**Response:**
-```json
-{
-  "query": "What is machine learning?",
-  "results": [
-    {
-      "content": "Machine learning is...",
-      "score": 0.95,
-      "metadata": {
-        "source": "document-1",
-        "page": 15
-      }
-    }
-  ],
-  "execution_time_ms": 150.5
-}
-```
-
-##### Ingest Document
+#### Knowledge bases
 ```http
-POST /ingest
+GET  /knowledge-bases
+POST /knowledge-base
+```
+
+#### Upload a document into a knowledge base
+```http
+POST /knowledge-base/{id}/upload
 Content-Type: multipart/form-data
 
 file: <document_file>
-knowledge_base_id: kb-123
 ```
 
-**Response:**
-```json
-{
-  "success": true,
-  "document_id": "doc-456",
-  "chunks_created": 15,
-  "message": "Document ingested successfully"
-}
+#### Pipelines and query
+```http
+POST /pipeline
+POST /pipeline/{id}/query
+Content-Type: application/json
+
+{ "query": "What is machine learning?" }
 ```
+
+> The exact request/response shapes are defined by the service's Pydantic models —
+> see `http://localhost:8004/docs`.
 
 ---
 
-#### 6. Model Management (`http://localhost:8005`)
+### 6. Model Management (`http://localhost:8005`)
 
-Model management and fine-tuning service.
+Manages Ollama models. Real operations: list, pull, delete, and test models.
+(`/models/{id}/constraints` and `/models/{id}/metrics` are currently
+placeholders.)
 
-**Base URL:** `http://localhost:8005`
-
-##### Health Check
+#### Health
 ```http
 GET /health
 ```
 
-##### List Models
+#### List models
 ```http
 GET /models
 ```
 
-**Response:**
-```json
-[
-  {
-    "id": "model-123",
-    "name": "llama3.2",
-    "type": "local",
-    "provider": "ollama",
-    "size": "4.7GB",
-    "status": "loaded"
-  }
-]
-```
-
 ---
 
-#### 7. Model Fine-Tuning (`http://localhost:8007`)
+### 7. TTS/STT (`http://localhost:8006`)
 
-Production ML model fine-tuning with Ollama.
+Text-to-speech via gTTS (returns MP3) and speech-to-text via
+`speech_recognition` (Google backend). Around 12 languages supported; Turkish is
+the default.
 
-**Base URL:** `http://localhost:8007`
-
-##### Health Check
-```http
-GET /health
-```
-
-##### Start Fine-Tuning Job
-```http
-POST /jobs
-Content-Type: application/json
-
-{
-  "base_model": "llama3.2",
-  "training_data": ["kb-123", "kb-456"],
-  "output_name": "my-finetuned-model",
-  "hyperparameters": {
-    "epochs": 3,
-    "learning_rate": 0.001
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "job_id": "job-789",
-  "status": "queued",
-  "message": "Fine-tuning job created"
-}
-```
-
----
-
-### Supporting Services
-
-#### 8. TTS/STT Service (`http://localhost:8006`)
-
-Text-to-Speech and Speech-to-Text service.
-
-**Base URL:** `http://localhost:8006`
-
-##### Health Check
-```http
-GET /health
-```
-
-**Response:**
-```json
-{
-  "service": "tts-stt",
-  "status": "healthy",
-  "version": "1.0.0",
-  "checks": {
-    "tts": "available",
-    "stt": "available",
-    "supported_languages": "10"
-  }
-}
-```
-
-##### Text-to-Speech
+#### Text-to-Speech
 ```http
 POST /tts
 Content-Type: application/json
 
-{
-  "text": "Hello, world!",
-  "language": "en",
-  "slow": false
-}
+{ "text": "Merhaba dünya", "language": "tr" }
 ```
+**Response:** audio (`audio/mpeg`)
 
-**Response:** Audio file (audio/mpeg)
-
-##### Speech-to-Text
+#### Speech-to-Text
 ```http
 POST /stt
 Content-Type: multipart/form-data
 
 audio: <audio_file>
-language: en-US
-```
-
-**Response:**
-```json
-{
-  "text": "Hello, world!",
-  "language": "en-US",
-  "confidence": 0.95
-}
+language: tr-TR
 ```
 
 ---
 
-#### 9. Graph-RAG Service (`http://localhost:8009`)
+### 8. Graph-RAG (`http://localhost:8008`)
 
-Entity extraction and knowledge graph construction.
+Entity extraction (spaCy NER), Neo4j knowledge-graph construction, and
+graph-based retrieval.
 
-**Base URL:** `http://localhost:8009`
-
-##### Health Check
+#### Health
 ```http
 GET /health
 ```
 
-**Response:**
-```json
-{
-  "service": "graph-rag",
-  "status": "healthy",
-  "version": "1.0.0",
-  "checks": {
-    "entity_extractor": "initialized",
-    "graph_constructor": "initialized",
-    "graph_retriever": "initialized",
-    "neo4j": "bolt://neo4j:7687",
-    "spacy_model": "en_core_web_sm"
-  }
-}
-```
-
-##### Extract Entities
+#### Endpoints
 ```http
-POST /entities/extract
-Content-Type: application/json
-
-{
-  "text": "Apple Inc. was founded by Steve Jobs in Cupertino, California.",
-  "model": "en_core_web_sm"
-}
-```
-
-**Response:**
-```json
-{
-  "entities": [
-    {
-      "text": "Apple Inc.",
-      "label": "ORG",
-      "confidence": 0.98
-    },
-    {
-      "text": "Steve Jobs",
-      "label": "PERSON",
-      "confidence": 0.95
-    }
-  ]
-}
+POST /extract           # extract entities from text
+POST /construct-graph   # build/update the knowledge graph
+POST /retrieve          # graph-based retrieval
+POST /entity-context    # context for a given entity
 ```
 
 ---
 
-## 🔒 Authentication
+## Authentication
 
-Most services require JWT authentication for write operations.
+Authentication is handled by the API Gateway using JWT (HS256) with bcrypt
+password hashing. Obtain a token, then pass it as a bearer token.
 
-### Get Token
 ```http
 POST /v1/auth/login
 Content-Type: application/json
 
-{
-  "username": "admin",
-  "password": "admin"
-}
+{ "username": "alice", "password": "..." }
 ```
 
-### Use Token
 ```http
-GET /protected-endpoint
-Authorization: Bearer <your_token>
+GET /v1/plugins
+Authorization: Bearer <access_token>
 ```
+
+See [authentication.md](./authentication.md) for details.
 
 ---
 
-## 📝 Common Response Formats
-
-### Success Response
-```json
-{
-  "success": true,
-  "message": "Operation completed",
-  "data": { ... },
-  "timestamp": "2025-01-11T10:00:00Z"
-}
-```
-
-### Error Response
-```json
-{
-  "success": false,
-  "error": "Error type",
-  "detail": { ... },
-  "timestamp": "2025-01-11T10:00:00Z"
-}
-```
-
-### Paginated Response
-```json
-{
-  "items": [ ... ],
-  "total": 100,
-  "page": 1,
-  "page_size": 10,
-  "total_pages": 10,
-  "success": true
-}
-```
-
----
-
-## 🧪 Testing APIs
-
-### Using cURL
-
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# Login
-curl -X POST http://localhost:8000/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin"}'
-
-# List plugins (with token)
-curl http://localhost:8002/plugins \
-  -H "Authorization: Bearer <token>"
-
-# Query RAG
-curl -X POST http://localhost:8004/query \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is AI?", "knowledge_base_id": "kb-123"}'
-```
-
-### Using Python
-
-```python
-import httpx
-
-# Health check
-response = httpx.get("http://localhost:8000/health")
-print(response.json())
-
-# Login
-response = httpx.post(
-    "http://localhost:8000/v1/auth/login",
-    json={"username": "admin", "password": "admin"}
-)
-token = response.json()["access_token"]
-
-# Use token
-headers = {"Authorization": f"Bearer {token}"}
-response = httpx.get(
-    "http://localhost:8002/plugins",
-    headers=headers
-)
-print(response.json())
-```
-
----
-
-## 📊 Status Codes
+## Status Codes
 
 | Code | Meaning |
 |------|---------|
@@ -634,7 +287,6 @@ print(response.json())
 | 201 | Created |
 | 400 | Bad Request |
 | 401 | Unauthorized |
-| 403 | Forbidden |
 | 404 | Not Found |
 | 429 | Rate Limited |
 | 500 | Internal Server Error |
@@ -642,25 +294,57 @@ print(response.json())
 
 ---
 
-## 🔄 Rate Limiting
+## Rate Limiting
 
-Most services implement rate limiting:
-
-- **Default:** 100 requests per minute
-- **Burst:** 10 requests per second
-- **Headers:**
-  - `X-RateLimit-Limit`: 100
-  - `X-RateLimit-Remaining`: 95
-  - `X-RateLimit-Reset`: 1234567890
+The API Gateway applies Redis-backed rate limiting on a rolling 60-second window.
+The limiter is **fail-open** — if Redis is unavailable, requests are allowed
+through rather than blocked.
 
 ---
 
-## 📖 More Information
+## Testing APIs
 
-- [Shared Components README](../../src/shared/README.md)
-- [Architecture Documentation](../architecture/)
+### cURL
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# Register / login
+curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "alice", "password": "..."}'
+
+# Authenticated call
+curl http://localhost:8000/v1/plugins \
+  -H "Authorization: Bearer <token>"
+```
+
+### Python
+```python
+import httpx
+
+r = httpx.post(
+    "http://localhost:8000/v1/auth/login",
+    json={"username": "alice", "password": "..."},
+)
+token = r.json()["access_token"]
+
+r = httpx.get(
+    "http://localhost:8000/v1/plugins",
+    headers={"Authorization": f"Bearer {token}"},
+)
+print(r.json())
+```
 
 ---
 
-**Last Updated:** 2025-01-11  
-**API Version:** 1.0.0
+## More Information
+
+- **[Complete API Reference](../api/reference.md)** — every route, per service (code-verified)
+- Interactive docs per service: `http://localhost:<port>/docs`
+- [Authentication guide](./authentication.md)
+- [Architecture documentation](../architecture/)
+
+---
+
+**Last Updated:** 2026-07-10

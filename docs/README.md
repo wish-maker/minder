@@ -5,9 +5,11 @@ This directory contains all documentation for the Minder platform.
 ## 📚 Documentation Structure
 
 ### 🚀 Getting Started (`getting-started/`)
-- [Installation](getting-started/installation.md) - System installation
-- [Quick Start](QUICKSTART.md) - Get started in 5 minutes
-- [AI Setup](getting-started/ai-setup.md) - AI services configuration
+- [Installation](getting-started/installation.md) - System installation via `setup.sh`
+- [Quick Start](QUICKSTART.md) - Get started fast
+- [AI Setup](getting-started/ai-setup.md) - Ollama model configuration (internal/external)
+- [RAG Methods](rag-methods.md) - Retrieval-augmented generation methods
+- [External Services Guide](EXTERNAL_SERVICES_GUIDE.md) - Pointing at external backends
 
 ### 🏗️ Architecture (`architecture/`)
 - [Overview](architecture/overview.md) - Platform architecture
@@ -69,11 +71,11 @@ This directory contains all documentation for the Minder platform.
 ## 📊 Current System Status
 
 **Platform Version:** 1.0.0
-**Services Running:** 31 (29 healthy, 3 no-healthcheck)
-**Production Readiness:** 99%
-**Documentation Status:** ✅ 100% English, 100% Current
+**Services:** 31 defined in compose; 30 run via `setup.sh install` (schema-registry not yet wired in — [#42](https://github.com/wish-maker/minder/issues/42)); 3 have no healthcheck by design
+**Environment:** Development (production hardening not yet applied)
+**Host:** Raspberry Pi 4 (ARM)
 
 ---
 
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-07-10
 **Language:** English

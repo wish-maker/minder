@@ -16,21 +16,22 @@ docker ps
 
 #### Option 1: Automated (Recommended)
 
-The enhanced `setup.sh` script provides complete lifecycle management:
+The `setup.sh` script provides complete lifecycle management:
 
 ```bash
 # Clone and setup
 git clone git@github.com:wish-maker/minder.git
 cd minder
-./setup.sh
+bash setup.sh install     # first time
+# bash setup.sh start     # subsequent starts
 ```
 
-**That's it!** The platform will be fully operational in ~9 minutes with:
-- ✅ Automatic AI model downloads (llama3.2 + nomic-embed-text)
-- ✅ Secure password generation
-- ✅ Database initialization
-- ✅ Network configuration
-- ✅ Health monitoring
+**That's it!** The platform provisions itself with:
+- ✅ Automatic Ollama model pulls (llama3.2 + nomic-embed-text, internal mode)
+- ✅ Secret generation (fills CHANGEME values in `./.env`)
+- ✅ Database initialization + Alembic migrations
+- ✅ Docker network configuration
+- ✅ Env mirror: root `./.env` → `docker/compose/.env`
 
 #### Option 2: Manual
 ```bash
@@ -41,13 +42,14 @@ cp .env.example .env
 cp .env docker/compose/.env
 
 # 2. Start services
-docker compose -f docker/compose/docker-compose.yml up -d
+docker compose --file docker/compose/docker-compose.yml up -d
 
-# 3. Wait for services to be healthy (~9 minutes)
-./setup.sh status  # Check if all services are healthy
+# 3. Wait for services to come up
+bash setup.sh status
 ```
 
-**Note:** Manual setup requires downloading AI models separately:
+**Note:** In internal-Ollama mode, models are auto-pulled from `OLLAMA_PULL_MODELS`.
+For a manual start you can pull them yourself (Ollama is internal-only):
 ```bash
 docker exec minder-ollama ollama pull llama3.2
 docker exec minder-ollama ollama pull nomic-embed-text
@@ -55,9 +57,12 @@ docker exec minder-ollama ollama pull nomic-embed-text
 
 ### Verification
 
+Core API services are host-exposed on 8000-8006 and 8008. Storage backends and
+Ollama are internal-only.
+
 ```bash
-# Test all APIs
-for port in 8000 8001 8002 8003 8004 8005 8006 8007; do
+# Test all core APIs
+for port in 8000 8001 8002 8003 8004 8005 8006 8008; do
     echo "Testing port $port..."
     curl -s http://localhost:$port/health | jq -r '.status' 2>/dev/null || echo "Not responding"
 done
@@ -65,14 +70,11 @@ done
 # Check monitoring
 echo "Prometheus: $(curl -s http://localhost:9090/-/healthy > /dev/null && echo 'OK' || echo 'FAIL')"
 echo "Grafana: $(curl -s http://localhost:3000/api/health > /dev/null && echo 'OK' || echo 'FAIL')"
-
-# Check security
-echo "Authelia: $(curl -s http://localhost:9091/api/health | jq -r '.status' 2>/dev/null || echo 'FAIL')"
 ```
 
-Or use the built-in health check:
+Or use the built-in status overview:
 ```bash
-./setup.sh health
+bash setup.sh status
 ```
 
 ### Lifecycle Management
@@ -80,59 +82,51 @@ Or use the built-in health check:
 The `setup.sh` script provides comprehensive enterprise-grade management:
 
 ```bash
-# Installation & Lifecycle
-./setup.sh                          # Full install (prereqs → env → network → DB → services)
-./setup.sh start                    # Start all services
-./setup.sh stop                     # Stop all services
-./setup.sh stop --clean             # Stop + prune dangling images
-./setup.sh restart                  # Restart all services
+# Installation & lifecycle
+bash setup.sh install               # Install and start
+bash setup.sh start                 # Start all services
+bash setup.sh stop                  # Stop all services
+bash setup.sh restart               # Restart all services
 
-# Status & Monitoring
-./setup.sh status                   # Live health overview + resource usage
-./setup.sh status --json            # Machine-readable JSON output
-./setup.sh health                   # Run health checks
-./setup.sh logs [service]           # Tail logs (all or specific service)
+# Status & logs
+bash setup.sh status                # Service status overview
+bash setup.sh logs [service]        # Tail logs (all or specific service)
 
 # Operations
-./setup.sh shell [service]          # Interactive shell in container
-./setup.sh migrate [target]         # Run Alembic DB migrations
-./setup.sh doctor                   # Deep diagnostics (disk, ports, secrets, images)
+bash setup.sh shell <service>       # Interactive shell in container
+bash setup.sh migrate               # Run Alembic DB migrations
+bash setup.sh doctor                # Deep diagnostics (disk, ports, secrets, images)
+bash setup.sh ollama-mode <mode>    # Switch Ollama internal / external
+bash setup.sh sync-postgres-password # Re-sync the Postgres password
 
-# Data Management
-./setup.sh backup                   # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
-./setup.sh restore [archive]        # Restore from backup (interactive if no path)
+# Data management
+bash setup.sh backup                # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
+bash setup.sh restore [archive]     # Restore from backup
 
-# Updates
-./setup.sh update                   # Pull latest compatible images + rebuild + restart
-./setup.sh update --check           # Show available updates without applying
-
-# Uninstallation
-./setup.sh uninstall --keep-data    # Remove services, keep data volumes
-./setup.sh uninstall --purge        # Stop and DELETE all data (irreversible)
-
-# Help
-./setup.sh --help                   # Show all commands with examples
+# Updates & uninstall
+bash setup.sh update                # Update images + rebuild + restart
+bash setup.sh uninstall             # Remove the platform
 ```
 
 ### First Steps
 
-1. **Change Default Passwords** ⚠️ **IMPORTANT!**
-   ```bash
-   # Access Authelia at http://localhost:9091
-   # Default credentials: admin / admin123
-   # Change immediately after first login!
-   ```
+1. **Secure your secrets** ⚠️ **IMPORTANT!**
+   - All secrets live in the root `./.env` file. `setup.sh` auto-fills any `CHANGEME`
+     values with generated ones on install. Authentication is JWT-based at the API
+     Gateway (Authelia SSO is defined in compose but currently disabled).
 
-2. **Access Services**:
+2. **Access services** (host-exposed ports):
    - **API Gateway**: http://localhost:8000
    - **Plugin Registry**: http://localhost:8001
    - **Marketplace**: http://localhost:8002
-   - **AI Services**: http://localhost:8004
-   - **OpenWebUI**: http://localhost:8080
+   - **RAG Pipeline**: http://localhost:8004
+   - **Graph-RAG**: http://localhost:8008
+   - **OpenWebUI**: reached via Traefik (the container's 8080 is not host-exposed)
 
-3. **View Monitoring**:
+3. **View monitoring**:
    - **Prometheus**: http://localhost:9090
-   - **Grafana**: http://localhost:3000 (admin/admin)
+   - **Grafana**: http://localhost:3000
+   - **Jaeger**: http://localhost:16686
 
 ### Common Issues
 
@@ -145,13 +139,13 @@ The `setup.sh` script provides comprehensive enterprise-grade management:
 **Services not starting?**
 ```bash
 # Check logs
-./setup.sh logs
+bash setup.sh logs
 
 # Check status
-./setup.sh status
+bash setup.sh status
 
 # Restart services
-./setup.sh restart
+bash setup.sh restart
 ```
 
 **Memory issues?**
@@ -165,17 +159,18 @@ docker system prune -a
 
 **Need to update?**
 ```bash
-# Check for updates
-./setup.sh check-updates
-
 # Update images
-./setup.sh update
+bash setup.sh update
 ```
 
 ### Next Steps
 
 - 📖 Read [Architecture Overview](architecture/overview.md)
-- 🔐 Configure [Authentication & Security](guides/authentication.md)
+- 🤖 Configure [AI Setup](getting-started/ai-setup.md)
+- 📚 See [RAG Methods](rag-methods.md)
 - 🔧 See [Development Guide](development/development.md)
 - 🐛 Check [Troubleshooting Guide](troubleshooting/common-issues.md)
-- 📚 See all commands: `./setup.sh --help`
+
+---
+
+**Last Updated:** 2026-07-10

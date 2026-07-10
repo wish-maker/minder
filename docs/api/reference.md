@@ -1,727 +1,421 @@
-# Minder Platform - API Documentation
+# Minder Platform — API Reference
 
 **Version:** 1.0.0
-**Last Updated:** 2026-05-02
-**Base URL:** `http://localhost:8000`
-**Services:** 24 microservices (24 healthy, 100% operational)
+**Last Updated:** 2026-07-10
+**Base URL (via API Gateway):** `http://localhost:8000`
 
 ---
 
 ## Overview
 
-The Minder Platform provides RESTful APIs through a central API Gateway. All external requests go through Traefik reverse proxy, then Authelia for SSO/2FA, then to the API Gateway which handles authentication, rate limiting, routing, and logging.
+The Minder Platform exposes RESTful APIs from **8 core FastAPI microservices**. In front of
+them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Docker labels).
 
-**API Architecture:**
-```
-Client → Traefik (80/443) → Authelia (9091 SSO/2FA) → API Gateway (8000)
-                                                          → Plugin Registry (8001)
-                                                          → Marketplace (8002)
-                                                          → State Manager (8003)
-                                                          → AI Services (8004)
-                                                          → Model Management (8005)
-                                                          → TTS/STT Service (8006)
-                                                          → Model Fine-tuning (8007)
-```
+> **Development environment.** This is a development deployment on a Raspberry Pi 4.
+> Production hardening is not yet fully applied. Authelia SSO is **defined but currently
+> disabled** (its container is commented out in compose), so the Traefik forward-auth
+> middleware is wired on five routers but **not enforced**. The API Gateway itself
+> implements real JWT + bcrypt authentication and Redis-backed rate limiting.
 
-**Current Status:**
-- ✅ All core APIs (8000-8007) healthy and responding
-- ✅ Authelia authentication operational
-- ✅ Traefik reverse proxy fully functional
-- ✅ Redis master authentication fixed
-- ✅ Automatic AI model downloads enabled
-- 🧪 115 API tests passing (98% coverage, 2 skipped)
+### Core API services
 
----
+| Service | Container | Port | Summary |
+|---------|-----------|------|---------|
+| API Gateway | `minder-api-gateway` | 8000 | JWT+bcrypt auth, Redis rate-limit, httpx proxy to registry/rag/models, OpenWebUI function bridge |
+| Plugin Registry | `minder-plugin-registry` | 8001 | Manifest install, health loop, service discovery, AI-tool aggregation |
+| Marketplace | `minder-marketplace` | 8002 | Discovery/search/featured, license tiers, dependency graph (Neo4j) |
+| Plugin State Manager | `minder-plugin-state-manager` | 8003 | Plugin state, tool discovery, tool execution, licensing |
+| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors, HyDE + Self-RAG |
+| Model Management | `minder-model-management` | 8005 | Ollama list/pull/delete/test (some endpoints are placeholders) |
+| TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (gTTS), speech-to-text (`speech_recognition`) |
+| Graph-RAG | `minder-graph-rag` | 8008 | spaCy NER, Neo4j knowledge-graph construction and retrieval |
 
-## Quick Start
-
-### Interactive Documentation
-
-**Swagger UI (Recommended):**
-```
-http://localhost:8000/docs
-```
-
-**ReDoc:**
-```
-http://localhost:8000/redoc
-```
-
-**OpenAPI Spec:**
-```
-http://localhost:8000/openapi.json
-```
-
-### Testing APIs
-
-**Using curl:**
-```bash
-# Health check
-curl http://localhost:8000/health
-
-# List plugins
-curl http://localhost:8000/v1/plugins
-
-# Get specific plugin info
-curl http://localhost:8000/v1/plugins/crypto
-```
-
-**Using Python:**
-```python
-import httpx
-
-async def get_plugins():
-    async with httpx.AsyncClient() as client:
-        response = await client.get("http://localhost:8000/v1/plugins")
-        return response.json()
-```
+**Conventions used below**
+- `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
+- `{path:path}` = a catch-all path segment (everything after the prefix is forwarded verbatim).
+- Ports are the host-published ports; internally each service also sits behind Traefik.
 
 ---
 
-## Core Endpoints
+## Interactive Documentation
 
-### 1. Health Check
+Every FastAPI service serves Swagger UI, ReDoc, and the raw OpenAPI spec on its own port:
 
-Check API Gateway health and dependency status.
-
-**Endpoint:** `GET /health`
-
-**Authentication:** Not required
-
-**Response:**
-```json
-{
-  "service": "api-gateway",
-  "status": "degraded",
-  "timestamp": "2026-04-23T13:00:00.000000",
-  "version": "1.0.0",
-  "environment": "development",
-  "phase": 1,
-  "checks": {
-    "redis": "healthy",
-    "plugin_registry": "healthy",
-    "rag_pipeline": "unreachable: connection refused",
-    "model_management": "unreachable: connection refused"
-  },
-  "message": "Phase 1 active - Phase 2 services not started"
-}
+```
+http://localhost:<port>/docs          # Swagger UI (interactive)
+http://localhost:<port>/redoc         # ReDoc
+http://localhost:<port>/openapi.json  # OpenAPI schema
 ```
 
-**Status Values:**
-- `healthy`: All services operational
-- `degraded`: Some services unavailable (partial functionality)
-- `unhealthy`: Critical services unavailable
+Ports: `8000` (gateway), `8001` (plugin-registry), `8002` (marketplace),
+`8003` (plugin-state-manager), `8004` (rag-pipeline), `8005` (model-management),
+`8006` (tts-stt), `8008` (graph-rag).
 
-**Example:**
+> The interactive `/docs` page for each service is the **authoritative, always-current**
+> source for request/response schemas. The tables below enumerate every route as wired in
+> code, but for exact field-level payloads use `/docs`.
+
+---
+
+## API Gateway — `http://localhost:8000`
+
+Central entry point: authentication, rate limiting, request proxying, and the OpenWebUI
+function-calling bridge.
+
+### Authentication
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/auth/register` | Create a user (bcrypt-hashed credentials) |
+| POST | `/v1/auth/login` | Obtain a JWT access token (username/password → bearer token) |
+| POST | `/v1/auth/refresh` | Refresh an access token |
+
+### Proxy routes
+
+Forwarded over the internal Docker network via httpx to the backing service.
+
+| Method | Path | Target |
+|--------|------|--------|
+| GET | `/v1/plugins` | plugin-registry (list) |
+| ANY | `/v1/plugins/{path:path}` | plugin-registry |
+| ANY | `/v1/rag/{path:path}` | rag-pipeline |
+| ANY | `/v1/models/{path:path}` | model-management |
+
+### AI / OpenWebUI integration (`/v1/ai`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/ai/functions/definitions` | Aggregated AI-tool (function) definitions from all plugins, in OpenAI function schema |
+| POST | `/v1/ai/functions/{function_name}` | Execute a named AI tool; proxied to the plugin's endpoint, returned in OpenAI function-result format |
+| POST | `/v1/ai/chat/completions` | OpenAI-compatible chat completions. **Note:** currently routes straight to Ollama `/api/chat`; a native tool-calling flow is a documented TODO |
+
+### Ops
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Gateway health + downstream dependency status (no auth) |
+| GET | `/metrics` | Prometheus metrics |
+
+**Authentication:** real JWT (HS256) with bcrypt-hashed credentials. Send
+`Authorization: Bearer <token>` on protected routes.
+**Rate limiting:** Redis-backed, 60-second window, **fail-open** (requests are allowed if
+Redis is unreachable).
+
 ```bash
+# Health
 curl -s http://localhost:8000/health | jq '.status'
-# Output: "degraded"
-```
 
----
-
-### 2. List All Plugins
-
-Retrieve list of all loaded plugins with their status.
-
-**Endpoint:** `GET /v1/plugins`
-
-**Authentication:** Not required (development)
-
-**Response:**
-```json
-{
-  "count": 5,
-  "plugins": [
-    {
-      "name": "crypto",
-      "version": "1.0.0",
-      "status": "registered",
-      "health_status": "healthy",
-      "description": "Cryptocurrency data collection and analysis",
-      "author": "Minder",
-      "capabilities": [
-        "crypto_data_collection",
-        "price_analysis",
-        "market_correlation"
-      ]
-    },
-    {
-      "name": "network",
-      "version": "1.0.0",
-      "status": "registered",
-      "health_status": "healthy",
-      "description": "Network performance monitoring and security analysis",
-      "author": "Minder",
-      "capabilities": [
-        "network_monitoring",
-        "performance_tracking",
-        "security_analysis"
-      ]
-    }
-  ]
-}
-```
-
-**Plugin Status Values:**
-- `registered`: Plugin loaded and available
-- `initialized`: Plugin initialized and ready
-- `running`: Plugin actively processing
-- `error`: Plugin encountered error
-
-**Example:**
-```bash
-# Get all plugins
-curl -s http://localhost:8000/v1/plugins | jq '.plugins[].name'
-
-# Get only healthy plugins
-curl -s http://localhost:8000/v1/plugins | jq '.plugins[] | select(.health_status == "healthy") | .name'
-
-# Count plugins by status
-curl -s http://localhost:8000/v1/plugins | jq '.plugins | group_by(.status) | map({status: .[0].status, count: length})'
-```
-
----
-
-### 3. Get Plugin Details
-
-Retrieve detailed information about a specific plugin.
-
-**Endpoint:** `GET /v1/plugins/{plugin_name}`
-
-**Authentication:** Not required (development)
-
-**Path Parameters:**
-- `plugin_name` (string, required): Name of the plugin (crypto, network, news, tefas, weather)
-
-**Response:**
-```json
-{
-  "name": "crypto",
-  "version": "1.0.0",
-  "status": "registered",
-  "health_status": "healthy",
-  "description": "Cryptocurrency data collection and analysis",
-  "author": "Minder",
-  "capabilities": [
-    "crypto_data_collection",
-    "price_analysis",
-    "market_correlation"
-  ],
-  "data_sources": ["CoinGecko API"],
-  "databases": ["postgresql", "influxdb"],
-  "metadata": {
-    "last_collection": "2026-04-23T12:30:00Z",
-    "total_records": 1500,
-    "collection_frequency": "hourly"
-  }
-}
-```
-
-**Error Response:**
-```json
-{
-  "detail": "Plugin 'invalid_name' not found"
-}
-```
-
-**Example:**
-```bash
-# Get crypto plugin details
-curl -s http://localhost:8000/v1/plugins/crypto | jq '.'
-
-# Check plugin health
-curl -s http://localhost:8000/v1/plugins/crypto | jq '.health_status'
-
-# Get plugin capabilities
-curl -s http://localhost:8000/v1/plugins/crypto | jq '.capabilities[]'
-```
-
----
-
-### 4. Trigger Plugin Data Collection
-
-Manually trigger data collection for a specific plugin.
-
-**Endpoint:** `POST /v1/plugins/{plugin_name}/collect`
-
-**Authentication:** Not required (development)
-
-**Path Parameters:**
-- `plugin_name` (string, required): Name of the plugin
-
-**Request Body:**
-```json
-{
-  "since": "2026-04-23T10:00:00Z"
-}
-```
-
-**Parameters:**
-- `since` (ISO 8601 datetime, optional): Start date for data collection
-
-**Response:**
-```json
-{
-  "success": true,
-  "plugin": "crypto",
-  "records_collected": 10,
-  "records_updated": 5,
-  "errors": 0,
-  "duration_seconds": 2.5,
-  "timestamp": "2026-04-23T13:00:00Z"
-}
-```
-
-**Error Response:**
-```json
-{
-  "success": false,
-  "error": "Plugin 'invalid_name' not found",
-  "timestamp": "2026-04-23T13:00:00Z"
-}
-```
-
-**Example:**
-```bash
-# Trigger collection for all data
-curl -X POST http://localhost:8000/v1/plugins/crypto/collect | jq '.'
-
-# Trigger collection for last 24 hours
-curl -X POST http://localhost:8000/v1/plugins/weather/collect \
+# Register + login
+curl -X POST http://localhost:8000/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"since": "2026-04-22T13:00:00Z"}' | jq '.'
+  -d '{"username": "admin", "password": "..."}'
 
-# Trigger collection for all plugins
-for plugin in crypto network news tefas weather; do
-  echo "Collecting $plugin..."
-  curl -X POST http://localhost:8000/v1/plugins/$plugin/collect | jq '.records_collected'
-done
+TOKEN=$(curl -s -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "..."}' | jq -r '.access_token')
+
+# Proxied call
+curl -s http://localhost:8000/v1/plugins -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
 ---
 
-### 5. Get Plugin Analysis Results
+## Plugin Registry — `http://localhost:8001`
 
-Retrieve analysis results from a plugin.
+Plugin registration, discovery, and lifecycle management. Plugins are **manifest-based** —
+there is **no arbitrary code execution** (security by design). The registry runs a 60-second
+health loop, stores service-discovery data in Redis, and auto-syncs with the marketplace.
 
-**Endpoint:** `GET /v1/plugins/{plugin_name}/analyze`
+### Plugins
 
-**Authentication:** Not required (development)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/plugins` | List registered plugins (`GET /plugins` is a legacy alias) |
+| GET | `/v1/plugins/{plugin_name}` | Plugin details |
+| POST | `/v1/plugins/install` | Install a plugin from its manifest (fixed handlers only) |
+| DELETE | `/v1/plugins/{plugin_name}` | Uninstall a plugin |
+| POST | `/v1/plugins/{plugin_name}/enable` | Enable a plugin |
+| POST | `/v1/plugins/{plugin_name}/disable` | Disable a plugin |
+| POST | `/v1/plugins/{plugin_name}/collect` | Trigger a data-collection run |
+| GET | `/v1/plugins/{plugin_name}/health` | Plugin health status |
+| GET | `/v1/plugins/{plugin_name}/analysis` | Plugin analysis output |
+| GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
-**Path Parameters:**
-- `plugin_name` (string, required): Name of the plugin
+### Webhooks
 
-**Query Parameters:**
-- `since` (ISO 8601 datetime, optional): Start date for analysis
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/plugins/reload-webhook` | Re-register a plugin's webhook routes |
+| POST | `/force-webhooks` | Force re-registration of all webhook routes |
+| POST | `/webhook/{path:path}` | Generic inbound webhook / event trigger |
 
-**Response:**
-```json
-{
-  "plugin": "weather",
-  "timestamp": "2026-04-23T13:00:00Z",
-  "metrics": {
-    "avg_temp_c": 18.5,
-    "avg_humidity_pct": 65.2,
-    "avg_pressure_hpa": 1013.5,
-    "avg_wind_speed_kmh": 12.3
-  },
-  "patterns": [
-    {
-      "type": "seasonal",
-      "description": "Temperature follows seasonal pattern",
-      "confidence": 0.85
-    }
-  ],
-  "insights": [
-    "Weather data collected successfully",
-    "Average temperature: 18.5°C",
-    "Humidity levels within normal range"
-  ]
-}
-```
+### Service discovery
 
-**Example:**
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/services/register` | Register a microservice for discovery |
+| GET | `/v1/services` | List registered services |
+| GET | `/v1/services/{service_name}` | Service details |
+| GET | `/v1/services/{service_name}/health` | Check a registered service's health |
+| DELETE | `/v1/services/{service_name}` | Unregister a service |
+| GET | `/v1/proxy` | List services that can be proxied |
+| ANY | `/v1/proxy/{service_name}/{path:path}` | Dynamic proxy to a registered service |
+
+### Ops
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Service health + plugin/service counts |
+| GET | `/metrics` | Prometheus metrics |
+
+> **Note:** No default plugins ship with the platform. The commonly referenced
+> crypto/weather/network/news/tefas plugins are aspirational and **not implemented**.
+
+---
+
+## Marketplace — `http://localhost:8002`
+
+Plugin/tool discovery, licensing, and dependency management. Catalog data lives in
+PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
+
+### Catalog (`/v1/marketplace`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/marketplace/plugins` | List catalog plugins (paginated / filterable) |
+| GET | `/v1/marketplace/plugins/search` | Full-text search |
+| GET | `/v1/marketplace/plugins/featured` | Featured plugins |
+| GET | `/v1/marketplace/plugins/{plugin_id}` | Plugin details |
+| POST | `/v1/marketplace/plugins` | Create a catalog entry (called by plugin-registry) |
+
+### Installation management (`/v1/marketplace/plugins`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/v1/marketplace/plugins/{plugin_id}/install` | Install from the catalog |
+| DELETE | `/v1/marketplace/plugins/{plugin_id}/uninstall` | Uninstall |
+| POST | `/v1/marketplace/plugins/{plugin_id}/enable` | Enable |
+| POST | `/v1/marketplace/plugins/{plugin_id}/disable` | Disable |
+| GET | `/v1/marketplace/plugins/{plugin_id}/installations` | List installations |
+
+### AI-tool catalog (`/v1/marketplace/ai`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/marketplace/ai/tools` | List AI tools (filter by tier / active) |
+| GET | `/v1/marketplace/ai/tools/{tool_name}` | Tool details |
+| GET | `/v1/marketplace/ai/plugins/{plugin_id}/tools` | Tools for one plugin |
+| POST | `/v1/marketplace/ai/sync` | Sync AI tools from a plugin manifest |
+| DELETE | `/v1/marketplace/ai/plugins/{plugin_id}/tools` | Remove a plugin's tools |
+
+### Licensing (`/v1/marketplace/licenses`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/marketplace/licenses` | List / inspect licenses |
+| POST | `/v1/marketplace/licenses/validate` | Validate a license against a tier |
+| POST | `/v1/marketplace/licenses/activate` | Activate a license |
+
+### Dependency graph (`/v1/graph`, Neo4j-backed)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/graph/dependencies/{plugin_id}` | Resolve a plugin's dependencies |
+| POST | `/v1/graph/dependencies` | Register/update dependency edges |
+| GET | `/v1/graph/conflicts/{plugin_id}` | Detect conflicts |
+| POST | `/v1/graph/recommendations` | Recommend related plugins |
+| GET | `/v1/graph/health` | Dependency-graph subsystem health |
+
+### Ops
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Service health |
+
+---
+
+## Plugin State Manager — `http://localhost:8003`
+
+Plugin state control, AI-tool discovery/execution, and per-plugin licensing.
+
+### Plugin state (`/v1/plugins`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/plugins/state` | List all plugin states |
+| GET | `/v1/plugins/state/{plugin_name}` | One plugin's state |
+| POST | `/v1/plugins/state/{plugin_name}/enable` | Enable a plugin |
+| POST | `/v1/plugins/state/{plugin_name}/disable` | Disable a plugin |
+| PATCH | `/v1/plugins/state/{plugin_name}` | Update state fields |
+| GET | `/v1/plugins/{plugin_name}/dependencies` | List a plugin's dependencies |
+| POST | `/v1/plugins/{plugin_name}/dependencies/resolve` | Resolve dependencies |
+
+### Tools (`/v1/tools`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/tools` | Discover all executable tools |
+| GET | `/v1/tools/{tool_name}` | Tool details |
+| POST | `/v1/tools/{tool_name}/execute` | Execute a tool (license-validated) |
+| GET | `/v1/tools/plugins/{plugin_id}/tools` | Tools for one plugin |
+| POST | `/v1/tools/validate` | Validate a license tier for a tool |
+
+### Licensing (`/v1/licensing`)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/licensing/plugins/{plugin_name}/license/tier` | Get a plugin's license tier |
+| POST | `/v1/licensing/plugins/{plugin_name}/license/validate` | Validate license access |
+| PATCH | `/v1/licensing/plugins/{plugin_name}/license` | Update license assignment |
+
+### Ops
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Service health |
+
+---
+
+## RAG Pipeline — `http://localhost:8004`
+
+Chunking, embedding, retrieval, and generation. Documents are embedded into **Qdrant**;
+embeddings and generation run through **Ollama**. Retrieval supports **HyDE**, **Self-RAG**,
+a decision engine, and conversational RAG.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/initialize` | Initialize the Ollama client / warm the pipeline |
+| POST | `/knowledge-base` | Create a knowledge base (pick embedding + LLM model) |
+| GET | `/knowledge-bases` | List knowledge bases |
+| POST | `/knowledge-base/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB |
+| POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
+| POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
+| GET | `/health` | Service health |
+| GET | `/metrics` | Prometheus metrics |
+
 ```bash
-# Get analysis results
-curl -s http://localhost:8000/v1/plugins/weather/analyze | jq '.'
+# Create a knowledge base, then upload a document into it
+KB=$(curl -s -X POST http://localhost:8004/knowledge-base \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"My Docs"}' | jq -r '.id')
 
-# Get specific metric
-curl -s http://localhost:8000/v1/plugins/weather/analyze | jq '.metrics.avg_temp_c'
-
-# Get insights only
-curl -s http://localhost:8000/v1/plugins/weather/analyze | jq '.insights[]'
+curl -X POST "http://localhost:8004/knowledge-base/$KB/upload" -F "file=@doc.pdf"
 ```
 
 ---
 
-## Plugin Registry API
+## Model Management — `http://localhost:8005`
 
-### Base URL
-```
-http://localhost:8001
-```
+Model lifecycle over the Ollama runtime.
 
-### Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/models` | List local models (live from Ollama) |
+| POST | `/models` | Register / pull a model from the Ollama library |
+| GET | `/models/{model_id}` | Model details |
+| DELETE | `/models/{model_id}` | Delete a local model |
+| POST | `/models/{model_id}/test` | Quick test-prompt inference |
+| POST | `/models/{model_id}/constraints` | Set rate limits — **placeholder, not implemented** |
+| GET | `/models/{model_id}/metrics` | Usage metrics — **placeholder, returns zeros** |
+| POST | `/models/fine-tune` | Fine-tune request — **delegated out; not performed here** |
+| GET | `/health` | Service health |
+| GET | `/metrics` | Prometheus metrics |
 
-#### 1. Registry Health Check
+---
 
-**Endpoint:** `GET /health`
+## TTS / STT — `http://localhost:8006`
 
-**Response:**
-```json
-{
-  "service": "plugin-registry",
-  "status": "healthy",
-  "timestamp": "2026-04-23T13:00:00.000000",
-  "version": "1.0.0",
-  "environment": "development",
-  "plugins_loaded": 5,
-  "services_registered": 0
-}
-```
+Speech synthesis and recognition. ~12 languages supported; **Turkish is the default**.
 
-#### 2. Get All Plugins (Direct)
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/tts` | Text-to-speech via gTTS (returns MP3) |
+| GET | `/tts/languages` | Supported TTS languages |
+| POST | `/stt` | Speech-to-text via `speech_recognition` (Google backend) |
+| GET | `/stt/languages` | Supported STT languages |
+| GET | `/health` | Service health |
+| GET | `/metrics` | Prometheus metrics |
 
-**Endpoint:** `GET /v1/plugins`
+---
 
-**Response:** Same as API Gateway endpoint
+## Graph-RAG — `http://localhost:8008`
+
+Entity extraction and knowledge-graph construction/retrieval, backed by **Neo4j**.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/extract` | spaCy NER entity extraction from text |
+| POST | `/construct-graph` | Build a Neo4j knowledge graph from documents/entities |
+| POST | `/retrieve` | Graph-based retrieval over entity relationships |
+| POST | `/entity-context` | Retrieve context / neighbors around an entity |
+| GET | `/health` | Service health |
 
 ---
 
 ## Error Handling
 
-### Standard Error Response Format
+Errors follow the standard FastAPI shape:
 
 ```json
-{
-  "detail": "Error message describing what went wrong",
-  "error_code": "SPECIFIC_ERROR_CODE",
-  "timestamp": "2026-04-23T13:00:00Z",
-  "request_id": "uuid-of-request"
-}
+{ "detail": "Human-readable error message" }
 ```
 
-### Common HTTP Status Codes
+| Status | Meaning |
+|--------|---------|
+| 200 | Success |
+| 400 | Bad request (invalid input) |
+| 401 | Unauthorized (missing/invalid JWT) |
+| 404 | Not found |
+| 422 | Validation error (FastAPI request-body validation) |
+| 429 | Rate limited |
+| 500 | Internal server error |
 
-| Status | Meaning | Example |
-|--------|---------|---------|
-| 200 | Success | Plugin retrieved successfully |
-| 400 | Bad Request | Invalid plugin name in path |
-| 404 | Not Found | Plugin does not exist |
-| 500 | Internal Server Error | Plugin collection failed |
+---
 
-### Error Examples
+## Plugin System
 
-**Plugin Not Found (404):**
+Plugins are **manifest-based** and support no arbitrary code execution by design. New actions
+must be implemented as fixed handlers in the codebase.
+
+Lifecycle (as implemented in code):
+
+```
+register() → initialize() (READY) → health_check() (60s loop)
+           → collect_data() (hourly or manual) → shutdown()
+           + analyze()
+```
+
+Plugins may register as **AI tools** for Ollama function calling using the schema:
+
 ```json
-{
-  "detail": "Plugin 'nonexistent' not found. Available plugins: crypto, network, news, tefas, weather"
-}
+{ "name": "...", "description": "...", "input_schema": { }, "endpoint": "..." }
 ```
 
-**Invalid Request (400):**
-```json
-{
-  "detail": "Invalid date format. Use ISO 8601 format (e.g., 2026-04-23T10:00:00Z)"
-}
-```
+Plugins can write to any storage backend (postgres, qdrant, neo4j, minio, influxdb) and
+publish async events through rabbitmq.
 
-**Internal Error (500):**
-```json
-{
-  "detail": "Failed to collect data from external API. Connection timeout after 30 seconds",
-  "error_code": "COLLECTION_FAILED"
-}
-```
+See the [Plugin Development Guide](../development/plugin-development.md) for details.
 
 ---
 
-## Authentication & Authorization
+## Monitoring
 
-### Current Status (Development)
-
-**Authentication:** Disabled
-**Authorization:** Disabled
-**Rate Limiting:** Disabled
-
-### Production Implementation (Planned)
-
-**JWT Authentication:**
-```bash
-# Login request
-curl -X POST http://localhost:8000/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "secret"}'
-
-# Response
-{
-  "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer",
-  "expires_in": 3600
-}
-
-# Use token
-curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
-  http://localhost:8000/v1/plugins
-```
-
----
-
-## Rate Limiting
-
-### Current Status (Development)
-
-**Rate Limiting:** Disabled
-
-### Production Configuration
-
-**Planned Limits:**
-- 60 requests per minute per IP
-- 100 burst requests
-- Configurable per endpoint
-
-**Rate Limit Headers:**
-```http
-X-RateLimit-Limit: 60
-X-RateLimit-Remaining: 45
-X-RateLimit-Reset: 1713873600
-```
-
----
-
-## Data Models
-
-### Plugin Object
-
-```typescript
-interface Plugin {
-  name: string;              // Unique plugin identifier
-  version: string;           // Semantic version
-  status: string;            // registered | initialized | running | error
-  health_status: string;     // healthy | unhealthy | degraded
-  description: string;       // Plugin description
-  author: string;            // Plugin author
-  capabilities: string[];    // List of capabilities
-  data_sources: string[];    // Data source names
-  databases: string[];       // Database names
-  metadata?: {
-    last_collection?: string;   // ISO 8601 timestamp
-    total_records?: number;     // Total records collected
-    collection_frequency?: string; // "hourly" | "daily"
-  };
-}
-```
-
-### Collection Result
-
-```typescript
-interface CollectionResult {
-  success: boolean;
-  plugin: string;
-  records_collected: number;
-  records_updated: number;
-  errors: number;
-  duration_seconds: number;
-  timestamp: string;          // ISO 8601 timestamp
-}
-```
-
-### Analysis Result
-
-```typescript
-interface AnalysisResult {
-  plugin: string;
-  timestamp: string;          // ISO 8601 timestamp
-  metrics: Record<string, number>;
-  patterns: Array<{
-    type: string;
-    description: string;
-    confidence?: number;
-  }>;
-  insights: string[];
-}
-```
-
----
-
-## WebSocket API (Planned)
-
-### Real-time Data Streaming
-
-**Endpoint:** `WS /v1/stream/{plugin_name}`
-
-**Example:**
-```javascript
-const ws = new WebSocket('ws://localhost:8000/v1/stream/crypto');
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Price update:', data);
-};
-
-// Response format
-{
-  "plugin": "crypto",
-  "data": {
-    "btc_price": 45230.50,
-    "eth_price": 2845.30
-  },
-  "timestamp": "2026-04-23T13:00:00Z"
-}
-```
-
----
-
-## Plugin Development
-
-### Creating a New Plugin
-
-**1. Create plugin structure:**
-```
-src/plugins/myplugin/
-├── __init__.py
-├── plugin.py          # Main plugin class
-├── manifest.yml       # Plugin metadata
-└── utils/             # Helper modules
-    └── __init__.py
-```
-
-**2. Implement plugin interface:**
-```python
-from src.core.interface import BaseModule, ModuleMetadata
-
-class MyPlugin(BaseModule):
-    async def register(self) -> ModuleMetadata:
-        return ModuleMetadata(
-            name="myplugin",
-            version="1.0.0",
-            description="My custom plugin",
-            author="Your Name",
-            capabilities=["custom_capability"],
-        )
-
-    async def collect_data(self) -> Dict[str, int]:
-        # Implementation
-        pass
-```
-
-**3. Add to Plugin Registry:**
-The plugin will be automatically discovered and loaded.
-
-### Plugin API Reference
-
-See [Plugin Development Guide](../development/plugin-development.md) for detailed plugin development guide.
-
----
-
-## Monitoring & Metrics
-
-### Prometheus Metrics
-
-**Metrics Endpoint:** `GET /metrics`
-
-**Available Metrics:**
-- `http_requests_total` - Total HTTP requests
-- `http_request_duration_seconds` - Request latency
-- `http_requests_in_progress` - Current requests
-
-**Example:**
-```bash
-# Get metrics
-curl -s http://localhost:8000/metrics | grep http_requests_total
-
-# Output
-http_requests_total{method="GET",endpoint="/v1/plugins",status="200"} 156
-```
-
----
-
-## SDK Examples
-
-### Python SDK
-
-```python
-from minder_client import MinderClient
-
-# Initialize client
-client = MinderClient(base_url="http://localhost:8000")
-
-# List plugins
-plugins = await client.list_plugins()
-print(f"Loaded {plugins.count} plugins")
-
-# Collect data
-result = await client.collect_data("crypto")
-print(f"Collected {result.records_collected} records")
-
-# Get analysis
-analysis = await client.get_analysis("weather")
-print(f"Average temp: {analysis.metrics.avg_temp_c}°C")
-```
-
-### JavaScript SDK
-
-```javascript
-import { MinderClient } from '@minder/sdk';
-
-const client = new MinderClient('http://localhost:8000');
-
-// List plugins
-const plugins = await client.plugins.list();
-console.log(`Loaded ${plugins.count} plugins`);
-
-// Collect data
-const result = await client.plugins.collect('crypto');
-console.log(`Collected ${result.records_collected} records`);
-```
+FastAPI services expose Prometheus metrics on `/metrics`; Prometheus scrapes them and Grafana
+visualizes the results. See the [Service Access Guide](../operations/service-access.md) for
+the full observability port map.
 
 ---
 
 ## Changelog
 
-
-### Version 1.0.0 (2026-05-02)
-- Initial release
-- Basic CRUD operations for plugins
-- Health check endpoints
-- Added security layer (Traefik + Authelia SSO/2FA)
-- Expanded to 31 services (24 healthy, 100% success rate)
-- RabbitMQ 3.13-management integrated for async messaging
-- Plugin task distribution via RabbitMQ (API Gateway → Plugin Registry)
-- Event broadcasting with pub/sub pattern
-- Dead Letter Queue (DLQ) for error handling
-- RabbitMQ Management UI at http://localhost:15672
-- Improved test coverage to 98% (115 tests passing, 2 skipped)
-- Added automatic AI model downloads (llama3.2 + nomic-embed-text)
-- Added realistic startup timeline (~9 minutes)
-- Updated all documentation to match real project status
-- Added Redis master authentication fix
-- Improved health check responses
-- Added comprehensive API documentation
-- Standardized error response format
-- Professional project cleanup (765MB, zero cache files)
-- Setup.sh v1.0.0 enterprise rewrite (14 commands, 66 functions, 1894 lines)
-- Doctor command for deep diagnostics
-- Advanced backup system (multi-database support)
-- Shell access for container debugging
-- Migration support for database schemas
-- JSON output for CI/CD integration
-- Smart version management with registry queries
-
----
-
-## Support
-
-**Documentation:**
-- [Plugin Development Guide](../development/plugin-development.md)
-- [Architecture Documentation](../architecture/overview.md)
-- [Code Style Guide](../development/code-style.md)
-
-**Issues:**
-- Report bugs: [GitHub Issues](https://github.com/yourusername/minder/issues)
-- Feature requests: [GitHub Discussions](https://github.com/yourusername/minder/discussions)
-
-**Contact:**
-- Email: support@minder.ai
-- Discord: [Minder Community](https://discord.gg/minder)
+### 2026-07-10
+- Corrected the service inventory to the 8 real core services (added graph-rag :8008; removed
+  the non-existent model-fine-tuning :8007 and ai-service).
+- Expanded every service section into a **complete, code-verified route table** with correct
+  prefixes and HTTP methods (marketplace, plugin-state-manager, plugin-registry service
+  discovery, and the gateway `/v1/ai` bridge were previously undocumented).
+- Fixed the API Gateway auth paths (`/v1/auth/*`, not `/auth/*`) and removed the fictional
+  `POST /8004/ingest` example (the real flow is `/knowledge-base` → `/knowledge-base/{id}/upload`).
+- Documented interactive OpenAPI docs at `http://localhost:<port>/docs` for every service.
+- Clarified that Authelia SSO is currently disabled and the API Gateway's own JWT auth is the
+  real authentication mechanism; forward-auth is wired on five Traefik routers but not enforced.

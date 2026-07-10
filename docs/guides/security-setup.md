@@ -1,13 +1,39 @@
 # Minder Platform - Security Setup Guide
 
-**Last Updated:** 2026-04-23
+**Last Updated:** 2026-07-10
 **Priority:** P1 - CRITICAL (Must complete before production deployment)
 
 ---
 
 ## Overview
 
-This guide explains how to properly configure security credentials for the Minder platform. **Default credentials must be replaced before production deployment.**
+This guide explains how to configure security credentials and understand the
+security posture of the Minder platform.
+
+> **This is a development environment** running on a Raspberry Pi 4. Production
+> hardening is **not yet applied**. The measures below describe what exists today
+> (secret management, network isolation, reverse-proxy IP whitelisting) plus what
+> you must do before any production exposure. **Default credentials must be
+> replaced before production deployment.**
+
+### What is actually in place
+
+- **JWT authentication** at the API Gateway (bcrypt password hashing).
+- **Traefik v3** reverse proxy (TLS termination, routing). *Not Nginx.*
+- **Secrets via a single root `./.env`** file (auto-filled by `setup.sh`,
+  mirrored to `docker/compose/.env`, kept at permission `600`).
+- **Network isolation**: all storage backends (Postgres, Redis, Qdrant, Neo4j,
+  MinIO, RabbitMQ) are internal-only on the `minder-network` Docker network and
+  are **not** published to the host.
+- **Traefik IP-whitelist middleware** on the dashboard, RabbitMQ management, and
+  Neo4j browser routes.
+
+### What is NOT in place (do not assume)
+
+- **No RBAC** — access is gated by holding a valid JWT only.
+- **No active SSO / 2FA** — Authelia is defined but disabled (see
+  [authentication.md](./authentication.md)).
+- **No application-level audit logging** beyond ordinary service/access logs.
 
 ---
 
@@ -91,49 +117,52 @@ your own, any non-placeholder value you write is preserved.
 
 ## Environment File Structure
 
-Create `.env` file in `docker/compose/`:
+**The single source of truth is the root `./.env`.** Edit that file. `setup.sh`
+mirrors it to `docker/compose/.env` (auto-generated — do **not** edit the copy).
 
 ```bash
-# Minder Platform - Environment Configuration
-# Generated: 2026-04-23
+# Minder Platform - Environment Configuration (root ./.env)
 # WARNING: Never commit this file to git!
 
 POSTGRES_PASSWORD=your_secure_32_char_password_here
 REDIS_PASSWORD=your_secure_32_char_password_here
 JWT_SECRET=your_secure_64_char_secret_here
 INFLUXDB_TOKEN=your_secure_32_char_token_here
-ENVIRONMENT=production
 LOG_LEVEL=INFO
 ```
+
+You normally leave the `CHANGEME` placeholders in place and let `setup.sh`
+generate strong values on first `start`. Any non-placeholder value you set
+yourself is preserved.
 
 ---
 
 ## File Permissions
 
-**CRITICAL:** Set restrictive permissions on `.env`:
+`setup.sh` sets restrictive permissions (`600`) on both `./.env` and its
+`docker/compose/.env` copy automatically. To verify or set manually:
 
 ```bash
 chmod 600 .env
-```
-
-This ensures:
-- Owner (you): read + write
-- Group: no permissions
-- Others: no permissions
-
-Verify permissions:
-```bash
 ls -la .env
 # Should show: -rw------- (600)
 ```
+
+This ensures owner read+write only; no group or other access.
 
 ---
 
 ## Docker Compose Configuration
 
-After creating `.env`, the `docker-compose.yml` file will automatically use these values.
+Compose reads the mirrored `docker/compose/.env`. Services reference these
+variables and will fail to start if required secrets are missing. Because the
+root `./.env` is the source of truth, always change values there and re-run
+`setup.sh start` so the mirror is regenerated.
 
-**Note:** The docker-compose.yml file has been updated to **require** environment variables. Services will fail to start if `.env` is missing.
+The stack is invoked as:
+```bash
+docker compose --file docker/compose/docker-compose.yml <command>
+```
 
 ---
 
@@ -336,28 +365,28 @@ docker logs minder-api-gateway --tail 100
 
 ## Additional Security Measures
 
-Beyond credential management, implement these security measures:
+### Already in place
 
-### 1. Network Isolation
-- Use separate networks for different service tiers
-- Implement firewall rules
-- Restrict database port exposure (5432, 6379) to internal only
+- **Network isolation** — storage backends (Postgres, Redis, Qdrant, Neo4j,
+  MinIO, RabbitMQ) run internal-only on `minder-network` and are not published
+  to the host. Only Traefik (80/443) and a small set of observability UIs expose
+  host ports.
+- **Reverse proxy** — Traefik v3 terminates TLS and routes by Docker labels
+  (`exposedByDefault: false`, so nothing is exposed unless explicitly labeled).
+- **IP-whitelist middleware** on the Traefik dashboard, RabbitMQ management UI,
+  and Neo4j browser routes.
+- **JWT authentication** at the API Gateway with Redis-backed rate limiting.
+- **Dependency scanning** in CI (see the security workflow: CodeQL + Trivy).
 
-### 2. API Authentication
-- Implement JWT-based API authentication
-- Add rate limiting per API key
-- Use HTTPS/TLS for all API communication
+### Recommended before production (not yet applied)
 
-### 3. Monitoring and Alerting
-- Set up alerts for failed authentication attempts
-- Monitor access logs for suspicious patterns
-- Implement intrusion detection systems
-
-### 4. Regular Security Audits
-- Scan dependencies for vulnerabilities (dependabot, Snyk)
-- Review access logs monthly
-- Conduct penetration testing annually
-- Keep all services updated with security patches
+- Enable and enforce SSO/2FA (the deferred Authelia layer) or another auth
+  proxy for the management UIs.
+- Front all services with HTTPS/TLS certificates (Let's Encrypt via Traefik).
+- Add alerting on failed authentication attempts and anomalous access.
+- Establish a credential-rotation cadence and review access logs periodically.
+- Consider RBAC if multi-tenant / least-privilege access becomes a requirement
+  (not implemented today).
 
 ---
 

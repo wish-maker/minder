@@ -1,267 +1,222 @@
-# PostgreSQL 16 → 17 Migration Guide
+# PostgreSQL Migration Guide
 
-## ⚠️ CRITICAL WARNING
+**Last Updated:** 2026-07-10
 
-**This migration involves potential data loss. Do not proceed without:**
-1. Complete backup of all databases
-2. Testing in non-production environment
-3. Scheduled maintenance window
-4. Rollback plan prepared
+This guide covers two related topics:
+1. Running Minder's own **schema migrations** (day-to-day).
+2. Performing a **major PostgreSQL version upgrade** (occasional, higher risk).
 
 ---
 
-## 📋 Pre-Migration Checklist
+## Current State
 
-- [ ] Full database backup created
-- [ ] Application stopped
-- [ ] Backup verified (can restore)
-- [ ] Maintenance window scheduled (30 min)
-- [ ] Team notified of downtime
-- [ ] Rollback procedure tested
-
----
-
-## 🔍 Pre-Migration Analysis
-
-### Current State
-- **PostgreSQL Version:** 16.x
-- **Databases:** minder, tefas_db, weather_db, news_db, crypto_db
-- **Data Size:** ~2GB (estimated)
+- **PostgreSQL image:** `postgres:18.4-trixie`
+- **Container:** `minder-postgres` (internal port 5432, not host-exposed)
+- **Databases:**
+  - `minder` — main application database
+  - `minder_marketplace` — marketplace data
+  - `tefas_db`, `weather_db`, `news_db`, `crypto_db` — per-domain databases
+  - `minder_schemaregistry` — isolated database backing the Apicurio schema registry
 - **Extensions:** None custom
 
-### Target State
-- **PostgreSQL Version:** 17.2
-- **Breaking Changes:** Catalog format changes
-- **Migration Risk:** HIGH
-- **Downtime:** 15-30 minutes
+---
+
+## Part 1: Schema Migrations (routine)
+
+Minder ships its schema migrations through `setup.sh`. This is the normal way to apply schema
+changes and does **not** touch the PostgreSQL server version.
+
+```bash
+# Apply pending migrations
+bash setup.sh migrate
+```
+
+Compose is always invoked with the explicit file path, e.g.:
+
+```bash
+docker compose --file docker/compose/docker-compose.yml <command>
+```
+
+Migrations run against the databases listed above. Initialization SQL lives under
+`docker/services/postgres/` (the tracked `init.sql` is the canonical clean-install
+initializer).
 
 ---
 
-## 💾 Step 1: Create Comprehensive Backup
+## Part 2: Major Version Upgrade (occasional)
+
+> **CRITICAL:** A major PostgreSQL upgrade can cause data loss. PostgreSQL data directories
+> are **not** compatible across major versions — you must dump and restore. Do not proceed
+> without a verified backup and a rollback plan.
+
+### Pre-Upgrade Checklist
+
+- [ ] Full logical backup of all databases created and verified
+- [ ] Application stopped
+- [ ] Maintenance window scheduled
+- [ ] Team notified of downtime
+- [ ] Rollback procedure understood
+
+### Step 1: Create a Comprehensive Backup
 
 ```bash
 #!/bin/bash
-# Backup PostgreSQL 16 before migration
+set -euo pipefail
 
-echo "=== PostgreSQL 16 Backup ==="
-echo "Starting backup process..."
+echo "=== PostgreSQL backup ==="
 
 # Stop all services
-./setup.sh stop
+bash setup.sh stop
 
-# Create backup directory
+# Or use the built-in backup command (multi-database aware)
+# bash setup.sh backup
+
 BACKUP_DIR="/tmp/postgres-migration-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 
-# Dump all databases
-echo "Dumping all databases..."
+# Logical dump of ALL databases (roles + data)
 docker exec minder-postgres pg_dumpall -U minder > "$BACKUP_DIR/full_backup.sql"
 
-# Backup data directory
-echo "Backing up data directory..."
+# Also snapshot the raw data volume as a fallback
 docker run --rm \
   -v docker_postgres_data:/data \
   -v "$BACKUP_DIR:/backup" \
   alpine tar czf /backup/postgres_data.tar.gz -C /data .
 
-# Verify backup
-echo "Verifying backup..."
 if [ -s "$BACKUP_DIR/full_backup.sql" ] && [ -s "$BACKUP_DIR/postgres_data.tar.gz" ]; then
-    echo "✅ Backup successful!"
-    echo "Backup location: $BACKUP_DIR"
+    echo "Backup OK: $BACKUP_DIR"
     ls -lh "$BACKUP_DIR"
 else
-    echo "❌ Backup failed!"
-    exit 1
+    echo "Backup FAILED"; exit 1
 fi
 ```
 
----
+### Step 2: Upgrade Procedure
 
-## 🔄 Step 2: Migration Procedure
+`docker/compose/docker-compose.yml` is the hand-maintained single source of truth — edit the
+`postgres:` image tag directly in that file (there is no template/regenerate step).
 
 ```bash
 #!/bin/bash
-# Migrate PostgreSQL 16 → 17
+set -euo pipefail
 
-BACKUP_DIR="$1"  # Pass backup directory as argument
+BACKUP_DIR="${1:?Usage: $0 <backup_directory>}"
+[ -f "$BACKUP_DIR/full_backup.sql" ] || { echo "Backup not found"; exit 1; }
 
-if [ -z "$BACKUP_DIR" ]; then
-    echo "❌ Error: Backup directory required"
-    echo "Usage: $0 <backup_directory>"
-    exit 1
-fi
+# 1. Update the postgres image tag in the compose file (edit by hand or with sed)
+#    e.g. postgres:18.4-trixie -> postgres:<new-major>-<variant>
+#    Edit: docker/compose/docker-compose.yml
 
-echo "=== PostgreSQL Migration 16 → 17 ==="
-echo "Backup directory: $BACKUP_DIR"
-echo ""
-
-# Verify backup exists
-if [ ! -f "$BACKUP_DIR/full_backup.sql" ]; then
-    echo "❌ Error: Backup file not found!"
-    exit 1
-fi
-
-# Update docker-compose.yml to use PostgreSQL 17
-echo "Updating docker-compose.yml..."
-sed -i 's/postgres:16/postgres:17.2/g' docker/compose/docker-compose.yml
-
-# Remove old volume (WARNING: Irreversible!)
-echo "Removing old PostgreSQL 16 volume..."
+# 2. Remove the old data volume (IRREVERSIBLE — you are relying on the dump)
 docker volume rm docker_postgres_data
 
-# Start PostgreSQL 17
-echo "Starting PostgreSQL 17..."
-docker compose -f docker/compose/docker-compose.yml up -d postgres
+# 3. Start the new PostgreSQL
+docker compose --file docker/compose/docker-compose.yml up -d postgres
 
-# Wait for PostgreSQL to be ready
-echo "Waiting for PostgreSQL 17 to start..."
+# 4. Wait for readiness
 sleep 30
-
-# Verify PostgreSQL 17 is running
 docker exec minder-postgres psql -U minder -c "SELECT version();"
 
-# Restore databases
-echo "Restoring databases from backup..."
+# 5. Restore from the logical dump
 cat "$BACKUP_DIR/full_backup.sql" | docker exec -i minder-postgres psql -U minder
 
-# Verify data integrity
-echo "Verifying data integrity..."
+# 6. Sanity check
 docker exec minder-postgres psql -U minder -l
 docker exec minder-postgres psql -U minder -d minder -c "\dt"
 
-echo "✅ Migration complete!"
+echo "Upgrade complete."
 ```
 
----
-
-## ✅ Step 3: Post-Migration Validation
+### Step 3: Post-Upgrade Validation
 
 ```bash
 #!/bin/bash
-# Validate PostgreSQL 17 migration
+set -euo pipefail
 
-echo "=== Post-Migration Validation ==="
-
-# Check PostgreSQL version
-echo "1. PostgreSQL Version:"
+echo "1. Version:"
 docker exec minder-postgres psql -U minder -c "SELECT version();"
 
-# List all databases
-echo ""
-echo "2. Database List:"
+echo "2. Databases (expect minder, minder_marketplace, tefas_db, weather_db, news_db, crypto_db, minder_schemaregistry):"
 docker exec minder-postgres psql -U minder -l
 
-# Check tables in main database
-echo ""
-echo "3. Tables in minder database:"
+echo "3. Tables in main DB:"
 docker exec minder-postgres psql -U minder -d minder -c "\dt"
 
-# Test connectivity
-echo ""
-echo "4. Testing application connectivity..."
-./setup.sh start
-
+echo "4. Re-apply schema migrations and start the platform:"
+bash setup.sh migrate
+bash setup.sh start
 sleep 10
-
-./setup.sh health
-
-echo ""
-echo "✅ Validation complete!"
+bash setup.sh status
 ```
 
 ---
 
-## 🔄 Rollback Procedure
+## Rollback Procedure
 
-If migration fails:
+If the upgrade fails:
 
 ```bash
 #!/bin/bash
-# Rollback to PostgreSQL 16
+set -euo pipefail
 
-echo "=== Rolling Back to PostgreSQL 16 ==="
+BACKUP_DIR="${1:?Usage: $0 <backup_directory>}"
 
-# Stop services
-./setup.sh stop
+bash setup.sh stop
 
-# Restore docker-compose.yml
+# Restore the compose file to the previous image tag
 git checkout docker/compose/docker-compose.yml
 
-# Remove PostgreSQL 17 volume
+# Remove the failed volume and restore the raw data snapshot
 docker volume rm docker_postgres_data
-
-# Restore PostgreSQL 16 data
-BACKUP_DIR="$1"  # Pass backup directory
 docker run --rm \
   -v docker_postgres_data:/data \
   -v "$BACKUP_DIR:/backup" \
   alpine tar xzf /backup/postgres_data.tar.gz -C /data
 
-# Start services
-./setup.sh start
-
-echo "✅ Rollback complete!"
+bash setup.sh start
+echo "Rollback complete."
 ```
 
 ---
 
-## 📊 Success Criteria
+## Success Criteria
 
-Migration is successful if:
-- ✅ PostgreSQL 17 is running
-- ✅ All 5 databases exist
-- ✅ All tables are present
-- ✅ Application can connect
-- ✅ Health checks pass
-- ✅ No data corruption
+- PostgreSQL starts on the target version
+- All 7 databases exist (`minder`, `minder_marketplace`, `tefas_db`, `weather_db`,
+  `news_db`, `crypto_db`, `minder_schemaregistry`)
+- Tables present in each database
+- `bash setup.sh migrate` completes cleanly
+- Application connects and `bash setup.sh status` is healthy
 
 ---
 
-## 🆘 Troubleshooting
+## Troubleshooting
 
-### Issue 1: Container won't start
+### Container won't start after an upgrade
+
 ```bash
 docker logs minder-postgres
-# Check for catalog version mismatch
+# A "database files are incompatible with server" / catalog-version error means the data
+# directory is from a different major version — you must restore from the logical dump.
 ```
 
-### Issue 2: Data corruption
+### Connection errors
+
 ```bash
-# Stop immediately
-./setup.sh stop
-
-# Verify backup integrity
-grep "CREATE DATABASE" $BACKUP_DIR/full_backup.sql
-
-# Perform rollback
-./rollback_to_pg16.sh $BACKUP_DIR
-```
-
-### Issue 3: Connection errors
-```bash
-# Check network
 docker network ls | grep minder
-
-# Check port binding
-docker ps | grep postgres
-
-# Verify environment variables
+docker ps -a --filter name=minder-postgres
 docker exec minder-postgres env | grep POSTGRES
 ```
 
 ---
 
-## 📞 Support
+## Support
 
-For issues or questions:
 - GitHub Issues: https://github.com/wish-maker/minder/issues
-- Documentation: See docs/operations/
-- Backup Location: /tmp/postgres-migration-*
+- Backups: `/tmp/postgres-migration-*` (or the location produced by `setup.sh backup`)
 
 ---
 
-**Last Updated:** 2026-05-01  
-**Migration Risk:** HIGH  
-**Estimated Downtime:** 15-30 minutes  
-**Rollback Capability:** FULL
+**Last Updated:** 2026-07-10
+**Current version:** postgres:18.4-trixie
+**Routine migrations:** `bash setup.sh migrate`

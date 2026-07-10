@@ -1,376 +1,184 @@
-# Minder Platform Backup Strategy
+# Minder Platform Backup & Restore
 
-**Version:** 1.0.0
-**Last Updated:** 2026-05-13
-**Status:** 🟡 TO BE IMPLEMENTED
+**Version:** 2.0.0
+**Last Updated:** 2026-07-10
+**Status:** 🟢 Built into `setup.sh`
 
----
-
-## 📊 Current Status
-
-### Missing Backups
-
-Currently, the Minder platform lacks an automated backup system. The following critical data needs backup strategy:
-
-**Databases:**
-- PostgreSQL: User data, sessions, metadata
-- Redis: Cache, rate limiting, session state
-- Neo4j: Graph relationships, entity links
-- Qdrant: Vector embeddings, semantic search index
-- InfluxDB: Time-series metrics, monitoring data
-- RabbitMQ: Message queues, pipeline triggers
-
-**Configuration:**
-- Docker Compose files
-- Environment variables (.env)
-- Traefik configuration
-- Authelia user database
-- Plugin configurations
+> Deployment target is a Raspberry Pi 4 (RPi-4-01, ARM). This is a **development
+> environment**; production hardening is not yet applied. State lives in Docker named
+> volumes and MinIO buckets; there is no separate database host.
 
 ---
 
-## 🎯 Backup Strategy
+## 📦 Backup & Restore via `setup.sh`
 
-### Level 1: Database Backups (Daily)
-
-#### 1.1 PostgreSQL Backup
-
-**Frequency:** Daily at 02:00
-**Retention:** 7 days
-**Method:** pg_dump
-
-Create this script as `backup-postgres.sh` in the project `scripts/` directory:
+Minder ships backup and restore as first-class `setup.sh` verbs. Prefer these over
+hand-rolled scripts — they know the exact volume names, container names, and MinIO
+buckets.
 
 ```bash
-#!/bin/bash
-# backup-postgres.sh
+# Create a backup
+bash setup.sh backup
 
-BACKUP_DIR="/root/minder/backups/postgres"
-DATE=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$BACKUP_DIR"
-
-docker exec minder-postgres pg_dump -U postgres -d minder \
-  > "$BACKUP_DIR/minder-postgres-$DATE.sql"
-
-# Compress
-gzip "$BACKUP_DIR/minder-postgres-$DATE.sql"
-
-# Cleanup old backups (keep 7 days)
-find "$BACKUP_DIR" -name "minder-postgres-*.sql.gz" -mtime +7 -delete
+# Restore from a backup
+bash setup.sh restore
 ```
 
-**Estimated Size:** ~1-5 MB per backup
-**Retention Size:** ~35 MB (7 days)
+The full `setup.sh` command set:
 
-#### 1.2 Redis Backup
-
-**Frequency:** Daily at 02:10
-**Retention:** 7 days
-**Method:** Redis SAVE command + file copy
-
-Create this script as `backup-redis.sh` in the project `scripts/` directory:
-
-```bash
-#!/bin/bash
-# backup-redis.sh
-
-BACKUP_DIR="/root/minder/backups/redis"
-DATE=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$BACKUP_DIR"
-
-# Trigger Redis SAVE
-docker exec minder-redis redis-cli BGSAVE
-
-# Wait for save to complete
-sleep 5
-
-# Copy dump file
-docker cp minder-redis:/data/dump.rdb "$BACKUP_DIR/redis-$DATE.rdb"
-
-# Compress
-gzip "$BACKUP_DIR/redis-$DATE.rdb"
-
-# Cleanup old backups
-find "$BACKUP_DIR" -name "redis-*.rdb.gz" -mtime +7 -delete
+```
+install | start | stop | restart | status | logs | shell | migrate |
+backup | restore | doctor | update | ollama-mode |
+sync-postgres-password | uninstall
 ```
 
-**Estimated Size:** ~1-2 MB per backup
-**Retention Size:** ~14 MB (7 days)
-
-#### 1.3 Neo4j Backup
-
-**Frequency:** Daily at 02:20
-**Retention:** 7 days
-**Method:** neo4j-admin backup
-
-Create this script as `backup-neo4j.sh` in the project `scripts/` directory:
-
-```bash
-#!/bin/bash
-# backup-neo4j.sh
-
-BACKUP_DIR="/root/minder/backups/neo4j"
-DATE=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$BACKUP_DIR"
-
-docker exec -u neo4j minder-neo4j neo4j-admin backup \
-  --from Graph.db --to-path "/backups/neo4j-$DATE"
-
-# Copy backup from container
-docker cp minder-neo4j:/backups/neo4j-$DATE "$BACKUP_DIR/"
-
-# Compress
-tar -czf "$BACKUP_DIR/neo4j-$DATE.tar.gz" -C "$BACKUP_DIR" "neo4j-$DATE"
-rm -rf "$BACKUP_DIR/neo4j-$DATE"
-
-# Cleanup old backups
-find "$BACKUP_DIR" -name "neo4j-*.tar.gz" -mtime +7 -delete
-```
-
-**Estimated Size:** ~10-20 MB per backup
-**Retention Size:** ~140 MB (7 days)
+Compose is always invoked as
+`docker compose --file docker/compose/docker-compose.yml ...`.
 
 ---
 
-### Level 2: Configuration Backups (Weekly)
+## 🗄️ What Needs Backing Up
 
-#### 2.1 Config Files Backup
+### Docker named volumes (persistent state)
 
-**Frequency:** Weekly on Sunday at 03:00
-**Retention:** 4 weeks
-**Method:** tar + gzip
+All persistent data lives in Docker **named volumes** (not host bind-mounts). The volumes
+that hold real state include:
 
-Create this script as `backup-config.sh` in the project `scripts/` directory:
+| Volume | Backs | Notes |
+|---|---|---|
+| `postgres_data` | PostgreSQL (`postgres:18.4-trixie`) | Users, sessions, metadata + aux DBs (marketplace, tefas/weather/news/crypto, schema-registry) |
+| `redis_data` | Redis (`redis:8.8.0-alpine`) | Cache, rate-limit state, sessions |
+| `neo4j_data` | Neo4j (`neo4j:2026.05.0-community`) | Graph relationships (marketplace + graph-rag) |
+| `qdrant_data` | Qdrant (`qdrant/qdrant:v1.18.2`) | Vector embeddings for RAG |
+| `minio_data` | MinIO object store | See buckets below |
+| `rabbitmq_data` | RabbitMQ (`rabbitmq:4.3.2-management`) | Queues, pipeline triggers |
+| `influxdb_data` | InfluxDB (`influxdb:3.10.1-core`) | Time-series metrics |
+| `ollama_data` | Ollama model storage | Pulled models under `/root/.ollama/models` |
+
+> Volume names are prefixed by the Compose project at runtime (e.g.
+> `<project>_postgres_data`). Confirm exact names with `docker volume ls`.
+
+### MinIO buckets
+
+MinIO (`minder-minio`) is a real running container. Its buckets:
+
+- `rag-documents`
+- `tts-artifacts`
+- `fine-tuning-datasets`
+- `model-checkpoints`
+- `plugin-packages`
+- `backup-archives` ← backup artifacts land here
+
+### Configuration
+
+- `./.env` — the **single source of truth** for configuration/secrets. `setup.sh`
+  auto-heals it and mirrors it to `docker/compose/.env` (auto-generated — do **not** back
+  up or edit the mirror; back up the root file).
+- `docker/compose/docker-compose.yml` — hand-maintained source of truth for the stack.
+- `docker/services/traefik/` — reverse-proxy dynamic config.
+
+---
+
+## 🔁 Restore
 
 ```bash
-#!/bin/bash
-# backup-config.sh
+bash setup.sh restore
+```
 
-BACKUP_DIR="/root/minder/backups/config"
-DATE=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$BACKUP_DIR"
+For a full recovery:
 
-# Create config backup (./.env is the source of truth; docker/compose/.env is
-# regenerated from it by setup.sh, so back up the root file)
-tar -czf "$BACKUP_DIR/minder-config-$DATE.tar.gz" \
-  -C /root/minder \
+1. Stop services: `bash setup.sh stop`
+2. Restore the relevant Docker volumes / MinIO buckets from the backup archive.
+3. Ensure `./.env` is present and correct.
+4. Start services: `bash setup.sh start`
+5. Verify: `bash setup.sh status` and `bash setup.sh doctor`
+
+> If the PostgreSQL password in `./.env` was rotated relative to the volume's stored
+> password, use `bash setup.sh sync-postgres-password` to reconcile them.
+
+---
+
+## 🧰 Manual Backups (fallback / reference)
+
+If you need to script backups outside `setup.sh` (e.g. an external cron on the Pi), the
+building blocks are below. These are illustrative fallbacks — the built-in
+`setup.sh backup` is the supported path.
+
+### PostgreSQL
+
+```bash
+docker exec minder-postgres pg_dump -U "$POSTGRES_USER" -d minder | gzip > minder-postgres-$(date +%Y%m%d).sql.gz
+```
+
+### Neo4j
+
+```bash
+docker exec minder-neo4j neo4j-admin database dump neo4j --to-path=/backups
+docker cp minder-neo4j:/backups ./neo4j-backup-$(date +%Y%m%d)
+```
+
+### Docker volume snapshot
+
+```bash
+# Discover exact names first
+docker volume ls | grep -E 'postgres_data|neo4j_data|qdrant_data|redis_data|rabbitmq_data|minio_data|ollama_data|influxdb_data'
+
+# Snapshot one volume (replace <project> with the compose project prefix)
+docker run --rm \
+  -v <project>_postgres_data:/data \
+  -v "$(pwd)":/backup \
+  alpine tar -czf /backup/postgres_data-$(date +%Y%m%d).tar.gz -C /data .
+```
+
+### Configuration
+
+```bash
+tar -czf minder-config-$(date +%Y%m%d).tar.gz \
   .env \
-  docker/services/traefik \
-  docker/services/authelia \
-  docker/compose/docker-compose.yml
-
-# Cleanup old backups (keep 4 weeks)
-find "$BACKUP_DIR" -name "minder-config-*.tar.gz" -mtime +28 -delete
+  docker/compose/docker-compose.yml \
+  docker/services/traefik
 ```
-
-**Estimated Size:** ~1-2 MB per backup
-**Retention Size:** ~8 MB (4 weeks)
 
 ---
 
-### Level 3: System Snapshots (Monthly)
+## 📅 Suggested Schedule
 
-#### 3.1 Full System Snapshot
+| Cadence | Scope |
+|---|---|
+| Daily | `bash setup.sh backup` (databases + volumes) |
+| Weekly | Configuration (`./.env`, compose, Traefik config) |
+| Before any change | Ad-hoc `bash setup.sh backup` |
 
-**Frequency:** Monthly on 1st at 04:00
-**Retention:** 3 months
-**Method:** Docker volume snapshots
+Retention and off-Pi copies (e.g. `rsync` to another host) are left to the operator —
+the Pi's local storage is limited, so pruning old archives and shipping them off-device is
+recommended.
 
-Create this script as `backup-snapshot.sh` in the project `scripts/` directory:
+---
+
+## 🔍 Verification
 
 ```bash
-#!/bin/bash
-# backup-snapshot.sh
-
-BACKUP_DIR="/root/minder/backups/snapshots"
-DATE=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$BACKUP_DIR"
-
-# Stop services
-cd /root/minder/docker/compose
-docker compose stop
-
-# Create volume snapshots
-for volume in postgres_data redis_data neo4j_data qdrant_storage influxdb_data rabbitmq_data; do
-  docker run --rm -v minder_$volume:/data -v "$BACKUP_DIR":/backup \
-    alpine tar -czf "/backup/$volume-$DATE.tar.gz" -C /data .
-done
-
-# Start services
-docker compose start
-
-# Cleanup old snapshots (keep 3 months)
-find "$BACKUP_DIR" -name "*-*.tar.gz" -mtime +90 -delete
+# List backup artifacts (MinIO backup-archives bucket, or local dir)
+# Restore into a throwaway/staging environment and diff, then:
+bash setup.sh status
+bash setup.sh doctor
 ```
 
-**Estimated Size:** ~100-200 MB per snapshot
-**Retention Size:** ~600 MB (3 months)
+Test a real restore periodically — an untested backup is not a backup.
 
 ---
 
-## 📋 Implementation Plan
+## 🚧 Not Yet Built (future work)
 
-### Phase 1: Script Creation (Week 1)
-- [ ] Create backup scripts directory
-- [ ] Write PostgreSQL backup script
-- [ ] Write Redis backup script
-- [ ] Write Neo4j backup script
-- [ ] Write configuration backup script
-- [ ] Write system snapshot script
-- [ ] Test all scripts manually
+The following were once aspirational and are **not implemented** today; treat as forward
+work, not current behavior:
 
-### Phase 2: Automation Setup (Week 2)
-- [ ] Create cron jobs for daily backups
-- [ ] Create cron jobs for weekly backups
-- [ ] Create cron jobs for monthly snapshots
-- [ ] Setup backup monitoring
-- [ ] Configure failure notifications
-
-### Phase 3: Testing & Validation (Week 3)
-- [ ] Test backup restoration (PostgreSQL)
-- [ ] Test backup restoration (Redis)
-- [ ] Test backup restoration (Neo4j)
-- [ ] Test configuration restoration
-- [ ] Verify backup retention policies
-- [ ] Document restore procedures
-
-### Phase 4: Monitoring Setup (Week 4)
-- [ ] Setup backup success metrics (Prometheus)
-- [ ] Configure backup size alerts
-- [ ] Setup backup failure notifications
-- [ ] Create Grafana backup dashboard
-- [ ] Document backup runbook
+- Prometheus `backup_success_total` / `backup_size_bytes` metrics and Alertmanager rules
+  for backup health.
+- A dedicated Grafana backup dashboard.
+- Automated retry/notification on backup failure.
 
 ---
 
-## 🔍 Backup Verification
-
-### Weekly Verification Tasks
-
-```bash
-# 1. Check backup files exist
-ls -lh /root/minder/backups/*/minder-*
-
-# 2. Verify backup sizes
-du -sh /root/minder/backups/*
-
-# 3. Test restore (staging)
-# Restore latest backup to test environment
-./setup.sh restore --test postgres
-./setup.sh restore --test redis
-./setup.sh restore --test neo4j
-
-# 4. Check backup logs
-grep -i "backup\|error" /var/log/syslog | tail -50
-```
-
----
-
-## 📊 Storage Requirements
-
-### Estimated Total Storage
-
-**Daily Backups:** ~50 MB/day
-**Weekly Config:** ~2 MB/week
-**Monthly Snapshots:** ~200 MB/month
-
-**Total Growth:** ~2-3 GB/month
-**Recommended Storage:** 50 GB dedicated backup partition
-
----
-
-## 🚨 Failure Handling
-
-### Backup Failure Procedures
-
-1. **Immediate Action:**
-   - Check disk space: `df -h`
-   - Check service status: `docker ps`
-   - Check backup logs: `tail -f /var/log/backup.log`
-
-2. **Retry Logic:**
-   - Automatic retry after 1 hour
-   - Max 3 retry attempts
-   - Alert after 3rd failure
-
-3. **Manual Intervention:**
-   - Manual backup trigger: `./setup.sh backup --manual`
-   - Specific service backup: `./setup.sh backup postgres`
-
----
-
-## 📝 Monitoring & Alerts
-
-### Prometheus Metrics
-
-```yaml
-# Backup success rate
-backup_success_total{service="postgres"} 1
-backup_success_total{service="redis"} 1
-backup_success_total{service="neo4j"} 1
-
-# Backup sizes (bytes)
-backup_size_bytes{service="postgres"} 5242880
-backup_size_bytes{service="redis"} 1048576
-backup_size_bytes{service="neo4j"} 15728640
-
-# Backup duration (seconds)
-backup_duration_seconds{service="postgres"} 45
-backup_duration_seconds{service="redis"} 10
-backup_duration_seconds{service="neo4j"} 120
-```
-
-### Alert Rules
-
-```yaml
-# Alert: Backup failure
-- alert: BackupFailure
-  expr: backup_success_total == 0
-  for: 10m
-  labels:
-    severity: critical
-  annotations:
-    summary: "Backup failed for {{ $labels.service }}"
-
-# Alert: Backup too large
-- alert: BackupSizeTooLarge
-  expr: backup_size_bytes > 1073741824  # 1GB
-  for: 5m
-  labels:
-    severity: warning
-  annotations:
-    summary: "Backup size exceeds 1GB for {{ $labels.service }}"
-
-# Alert: Backup taking too long
-- alert: BackupDurationTooLong
-  expr: backup_duration_seconds > 600  # 10 minutes
-  for: 5m
-  labels:
-    severity: warning
-  annotations:
-    summary: "Backup taking too long for {{ $labels.service }}"
-```
-
----
-
-## ✅ Success Criteria
-
-- [ ] All 6 databases have automated daily backups
-- [ ] Configuration files backed up weekly
-- [ ] System snapshots created monthly
-- [ ] Backup retention policies enforced
-- [ ] Backup success rate > 99%
-- [ ] Backup restoration tested monthly
-- [ ] Backup monitoring dashboard active
-- [ ] Backup failure notifications configured
-
----
-
-**Status:** 🟡 **TO BE IMPLEMENTED** - Planning phase complete, implementation pending
-
-**Next Steps:**
-1. Review and approve this strategy
-2. Create backup scripts (Phase 1)
-3. Setup automation (Phase 2)
-4. Test restoration procedures (Phase 3)
-5. Configure monitoring (Phase 4)
+**Status:** 🟢 `setup.sh backup` / `restore` available. Metrics, alerting, and off-site
+retention are future enhancements.

@@ -1,443 +1,174 @@
-# 🔑 Service Access Guide - Minder Platform
+# Service Access Guide - Minder Platform
 
-**Last Updated:** 2026-05-10
+**Last Updated:** 2026-07-10
 **Platform Version:** 1.0.0
-**Access Method:** Zero-Trust Authentication
+**Environment:** Development (Raspberry Pi 4)
 
 ---
 
-## 📋 Overview
+## Overview
 
-All services in the Minder platform are protected by **Authelia authentication** (zero-trust architecture). This guide explains how to access services correctly.
+Minder runs 31 containers behind **Traefik v3** (reverse proxy, TLS, routing via Docker
+labels). This guide describes how services are exposed and how to reach them.
 
-**Key Points:**
-- ❌ Direct port access (8000-8007) is **blocked by design** (security feature)
-- ✅ All services must be accessed through **Traefik reverse proxy** (ports 80/443)
-- ✅ **Authentication is required** for all web services
-- ✅ HTTP redirects to HTTPS automatically
+> **Reality check.** This is a development environment.
+> - **Authelia SSO is DISABLED** (its container is commented out in compose). The Traefik
+>   forward-auth middleware is wired on a few routers but **not enforced** — there is no
+>   working SSO gate right now.
+> - A number of application and observability services **publish host ports directly on the
+>   host** (see the map below). They are not all locked behind the proxy.
+> - The API Gateway implements its own JWT auth; the other core services do not gate access.
+
+Access falls into three categories:
+1. **Host-exposed** — reachable directly at `http://localhost:<port>`.
+2. **Traefik-routed** — reachable via `*.minder.local` virtual hosts through ports 80/443.
+3. **Internal-only** — reachable only from inside the Docker network (or via a Traefik route
+   where one exists).
 
 ---
 
-## 🚀 Quick Access Methods
+## Host-Exposed Services
 
-### Method 1: Web Browser (Production)
+These publish a host port and can be reached directly at `http://localhost:<port>`.
 
-**Step 1: Access Authelia**
-```
-URL: https://auth.minder.local
-```
+### Core API (FastAPI, all with `/docs`)
 
-**Step 2: Login**
-- Username: See `docker/services/authelia/users_database.yml`
-- Password: See `docker/services/authelia/users_database.yml`
-- 2FA: If enabled, enter TOTP code
+| Service | Container | Host Port |
+|---------|-----------|-----------|
+| API Gateway | `minder-api-gateway` | 8000 |
+| Plugin Registry | `minder-plugin-registry` | 8001 |
+| Marketplace | `minder-marketplace` | 8002 |
+| Plugin State Manager | `minder-plugin-state-manager` | 8003 |
+| RAG Pipeline | `minder-rag-pipeline` | 8004 |
+| Model Management | `minder-model-management` | 8005 |
+| TTS / STT | `minder-tts-stt` | 8006 |
+| Graph-RAG | `minder-graph-rag` | 8008 |
 
-**Step 3: Access Services**
-```
-API Gateway:     https://api.minder.local
-Plugin Registry: https://plugins.minder.local
-Marketplace:     https://marketplace.minder.local
-Grafana:         https://grafana.minder.local
-Prometheus:      https://prometheus.minder.local
-OpenWebUI:       https://openwebui.minder.local
-```
+### Observability & proxy
 
-### Method 2: Command Line with Authentication
+| Service | Container | Host Port(s) |
+|---------|-----------|--------------|
+| Grafana | `minder-grafana` | 3000 |
+| Prometheus | `minder-prometheus` | 9090 |
+| Alertmanager | `minder-alertmanager` | 9093 |
+| InfluxDB | `minder-influxdb` | 8086 |
+| Jaeger | `minder-jaeger` | 16686 (UI) |
+| OTel Collector | `minder-otel-collector` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) |
+| Traefik | `minder-traefik` | 80, 443, 8081 (dashboard, IP-whitelisted) |
 
-**Step 1: Get Authelia Session Cookie**
 ```bash
-# Login via browser, then copy session cookie
-# Or use CLI (advanced - requires manual session handling)
-```
-
-**Step 2: Use Cookie in Requests**
-```bash
-# Access API with session cookie
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=YOUR_SESSION_COOKIE"
-
-# Access with full headers
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=YOUR_SESSION_COOKIE" \
-  -H "Content-Type: application/json"
-```
-
-### Method 3: Development/Debugging Access
-
-**Option A: Shell Access**
-```bash
-# Interactive shell to any service
-./setup.sh shell api-gateway
-./setup.sh shell plugin-registry
-./setup.sh shell rag-pipeline
-
-# Inside container, access localhost
-curl http://localhost:8000/health
-```
-
-**Option B: Docker Exec**
-```bash
-# Execute command in container
-docker exec minder-api-gateway curl http://localhost:8000/health
-
-# Interactive shell
-docker exec -it minder-api-gateway /bin/bash
-```
-
-**Option C: Internal Network**
-```bash
-# Access via container IP (from host)
-curl http://172.19.0.14:8000/health  # API Gateway
-curl http://172.19.0.15:8002/health  # Plugin Registry
-curl http://172.19.0.16:8003/health  # RAG Pipeline
+# Direct access examples
+curl http://localhost:8000/health          # API Gateway
+curl http://localhost:8001/plugins         # Plugin Registry
+curl http://localhost:8004/health          # RAG Pipeline
+# Open http://localhost:3000 for Grafana, http://localhost:16686 for Jaeger
 ```
 
 ---
 
-## 🌐 Service URLs
+## Traefik-Routed Services
 
-### Web Services (HTTPS)
+Traefik routes selected services on `*.minder.local` virtual hosts (via ports 80/443,
+`exposedByDefault: false`, so only labeled services are routed):
 
-| Service | URL | Authentication | Purpose |
-|---------|-----|----------------|---------|
-| **Authelia** | https://auth.minder.local | Required | SSO Login |
-| **API Gateway** | https://api.minder.local | Required | Main API |
-| **Plugin Registry** | https://plugins.minder.local | Required | Plugin management |
-| **Marketplace** | https://marketplace.minder.local | Required | Plugin marketplace |
-| **Grafana** | https://grafana.minder.local | Required | Monitoring dashboards |
-| **Prometheus** | https://prometheus.minder.local | Required | Metrics |
-| **OpenWebUI** | https://openwebui.minder.local | Required | LLM Chat UI |
-| **Jaeger** | https://jaeger.minder.local | Required | Distributed tracing |
+| Host | Backend |
+|------|---------|
+| `grafana.minder.local` | Grafana |
+| `jaeger.minder.local` | Jaeger UI |
+| `chat.minder.local` | OpenWebUI (LLM chat UI) |
+| `minio.minder.local` | MinIO console (9001) |
+| `rabbitmq.minder.local` | RabbitMQ management UI (15672), IP-whitelisted |
+| `neo4j.minder.local` | Neo4j browser (7474), IP-whitelisted |
+| `api.minder.local` | API Gateway |
 
-### Internal Services (Docker Network)
+The forward-auth middleware references Authelia on some of these routers, but since Authelia
+is disabled the middleware does **not** currently gate access.
 
-| Service | Internal URL | Container IP | Purpose |
-|---------|-------------|--------------|---------|
-| **API Gateway** | http://minder-api-gateway:8000 | 172.19.0.14 | Main API |
-| **Plugin Registry** | http://minder-plugin-registry:8002 | 172.19.0.15 | Plugin management |
-| **RAG Pipeline** | http://minder-rag-pipeline:8003 | 172.19.0.16 | RAG processing |
-| **Model Management** | http://minder-model-management:8004 | 172.19.0.17 | Model management |
-| **Marketplace** | http://minder-marketplace:8005 | 172.19.0.18 | Plugin marketplace |
-| **PostgreSQL** | postgres://minder-postgres:5432 | 172.19.0.4 | Primary database |
-| **Redis** | redis://minder-redis:6379 | 172.19.0.5 | Cache |
-| **Neo4j** | http://minder-neo4j:7474 | 172.19.0.7 | Graph database |
-| **Qdrant** | http://minder-qdrant:6333 | 172.19.0.6 | Vector database |
-| **RabbitMQ** | http://minder-rabbitmq:15672 | 172.19.0.8 | Message broker |
+To use `.minder.local` hostnames locally, add them to your `/etc/hosts` pointing at the
+Traefik host.
 
 ---
 
-## 🔐 Authentication Flow
+## Internal-Only Services
 
-### Web Browser Flow
+These do **not** publish a host port. They are reachable from inside the Docker network by
+container name, or (where noted above) via a Traefik route.
 
-```
-1. User navigates to https://api.minder.local
-                   ↓
-2. Traefik receives request
-                   ↓
-3. Authelia middleware checks for session cookie
-                   ↓
-4a. Cookie exists and valid → Access granted
-4b. No cookie or invalid → 302 Redirect to Authelia
-                   ↓
-5. User logs in at https://auth.minder.local
-                   ↓
-6. Authelia issues session cookie
-                   ↓
-7. User redirected back to original service
-                   ↓
-8. Access granted with valid session
-```
+| Service | Container | Internal Port(s) | Notes |
+|---------|-----------|------------------|-------|
+| PostgreSQL | `minder-postgres` | 5432 | Primary + aux databases |
+| Redis | `minder-redis` | 6379 | Cache / rate-limit / sessions |
+| Qdrant | `minder-qdrant` | 6333 | Vector DB (RAG) |
+| Neo4j | `minder-neo4j` | 7687 (bolt), 7474 (http) | Graph DB; 7474 Traefik-routed |
+| MinIO | `minder-minio` | 9000 (S3), 9001 (console) | Object store; 9001 Traefik-routed |
+| RabbitMQ | `minder-rabbitmq` | 5672 (AMQP), 15672 (mgmt) | Queue; 15672 Traefik-routed |
+| Schema Registry | `minder-schema-registry` | 8080 | Apicurio, isolated postgres DB |
+| Ollama | `minder-ollama` | 11434 | LLM runtime (profile-gated, local mode only) |
+| Exporters (6) | postgres/redis/rabbitmq/node/cadvisor/blackbox | various | Scraped by Prometheus |
 
-### API Client Flow
-
-**Step 1: Initial Request (No Auth)**
 ```bash
-curl -skI https://api.minder.local/api/health
-```
-
-**Response:**
-```http
-HTTP/2 302
-Location: https://auth.minder.local/?rd=https%3A%2F%2Fapi.minder.local%2Fapi%2Fhealth
-```
-
-**Step 2: Authenticate**
-```bash
-# Open browser to https://auth.minder.local
-# Login with credentials
-# Get session cookie from browser dev tools
-```
-
-**Step 3: Access with Session**
-```bash
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=YOUR_SESSION_COOKIE"
-```
-
-**Response:**
-```json
-{
-  "service": "api-gateway",
-  "status": "healthy",
-  "timestamp": "2026-05-10T18:56:30.975704"
-}
-```
-
----
-
-## 🛠️ Development Access Methods
-
-### Method 1: setup.sh Shell
-
-**Interactive Shell:**
-```bash
-# API Gateway
-./setup.sh shell api-gateway
-
-# Plugin Registry
-./setup.sh shell plugin-registry
-
-# Any service
-./setup.sh shell SERVICE_NAME
-```
-
-**Inside Container:**
-```bash
-# Test health endpoint
-curl http://localhost:8000/health
-
-# View logs
-tail -f /var/log/service.log
-
-# Run diagnostics
-python -m pytest
-```
-
-### Method 2: Docker Exec
-
-**Single Command:**
-```bash
-# API Gateway health
-docker exec minder-api-gateway curl http://localhost:8000/health
-
-# PostgreSQL connection
-docker exec minder-postgres psql -U minder -c "SELECT version();"
-
-# Redis ping
-docker exec minder-redis redis-cli -a PASSWORD ping
-```
-
-**Interactive Shell:**
-```bash
-# Bash shell
-docker exec -it minder-api-gateway /bin/bash
-
-# Python shell
-docker exec -it minder-api-gateway python
-
-# Database shell
-docker exec -it minder-postgres psql -U minder
-```
-
-### Method 3: Internal Network Access
-
-**From Host Machine:**
-```bash
-# Get container IP
-docker inspect minder-api-gateway | grep IPAddress
-
-# Access via container IP
-curl http://172.19.0.14:8000/health
-curl http://172.19.0.15:8002/health
-curl http://172.19.0.16:8003/health
-```
-
-**From Another Container:**
-```bash
-# Execute from API Gateway container
+# From inside the Docker network (service name resolves via Docker DNS)
+docker exec minder-api-gateway curl http://minder-qdrant:6333/
 docker exec minder-api-gateway curl http://minder-postgres:5432
-docker exec minder-api-gateway curl http://minder-redis:6379
-docker exec minder-api-gateway curl http://minder-qdrant:6333
 ```
 
 ---
 
-## 🧪 Testing Access
+## Development / Debugging Access
 
-### Test 1: Verify HTTPS Redirect
+### setup.sh shell
 
 ```bash
-curl -I http://api.minder.local/api/health
+bash setup.sh shell api-gateway
+bash setup.sh shell rag-pipeline
 ```
 
-**Expected:** `HTTP/1.1 308 Permanent Redirect`
-
-### Test 2: Verify Authentication Required
+### docker exec
 
 ```bash
-curl -skI https://api.minder.local/api/health
-```
-
-**Expected:** `HTTP/2 302` with redirect to Authelia
-
-### Test 3: Verify Internal Access
-
-```bash
+# Health of a service from inside its own container
 docker exec minder-api-gateway curl http://localhost:8000/health
-```
 
-**Expected:** `HTTP/1.1 200` with JSON response
-
-### Test 4: Verify Service Communication
-
-```bash
-docker exec minder-plugin-registry curl http://minder-api-gateway:8000/health
-```
-
-**Expected:** `HTTP/1.1 200` with JSON response
-
----
-
-## ⚠️ Common Mistakes
-
-### Mistake 1: Direct Port Access
-
-**❌ WRONG:**
-```bash
-curl http://localhost:8000/health
-```
-
-**Why it fails:** Ports 8000-8007 are not exposed on host (security design)
-
-**✅ CORRECT:**
-```bash
-# Through Traefik (requires auth)
-curl -sk https://api.minder.local/api/health
-
-# Or internal network (no auth required)
-docker exec minder-api-gateway curl http://localhost:8000/health
-```
-
-### Mistake 2: HTTP Instead of HTTPS
-
-**❌ WRONG:**
-```bash
-curl http://api.minder.local/api/health
-```
-
-**What happens:** Redirected to HTTPS, then to Authelia
-
-**✅ CORRECT:**
-```bash
-curl -sk https://api.minder.local/api/health
-```
-
-### Mistake 3: Missing Authentication
-
-**❌ WRONG:**
-```bash
-curl https://api.minder.local/api/health
-```
-
-**What happens:** 302 redirect to Authelia
-
-**✅ CORRECT:**
-```bash
-# With authentication cookie
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=YOUR_SESSION_COOKIE"
-
-# Or use development access
-docker exec minder-api-gateway curl http://localhost:8000/health
+# Database shells
+docker exec -it minder-postgres psql -U minder
+docker exec -it minder-redis redis-cli -a "$REDIS_PASSWORD" ping
 ```
 
 ---
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
-### Issue 1: "302 Found" Responses
+### 404 from Traefik
 
-**Cause:** This is **correct behavior** - authentication is working
-
-**Solution:** Authenticate first via browser, then use session cookie
-
-### Issue 2: "Connection Refused" on Port 8000
-
-**Cause:** Port not exposed on host (security design)
-
-**Solution:** Use HTTPS URL through Traefik or internal network access
-
-### Issue 3: "404 Page Not Found"
-
-**Cause:** Traefik routing issue or incorrect URL
-
-**Solution:**
 ```bash
-# Check Traefik logs
 docker logs minder-traefik --tail 50
-
-# Verify URL format
-curl -skI https://api.minder.local/api/health
-
-# Check service is running
-docker ps | grep api-gateway
+docker ps | grep <service>
 ```
 
-### Issue 4: Authentication Loop
+### Cannot reach an internal service from the host
 
-**Cause:** Invalid session cookie or Authelia misconfiguration
+Internal-only services (postgres, redis, qdrant, ollama, etc.) do not publish host ports by
+design. Reach them via `docker exec` into a service container, or via their Traefik route if
+one exists.
 
-**Solution:**
+### Service unreachable
+
 ```bash
-# Clear browser cookies
-# Or get new session cookie
-
-# Check Authelia logs
-docker logs minder-authelia --tail 50
-
-# Restart Authelia
-docker compose restart authelia
+docker ps -a --filter name=minder-<service>
+docker logs minder-<service> --tail 50
+cd ~/minder && docker compose --file docker/compose/docker-compose.yml restart <service>
 ```
+
+Note: `otel-collector`, `redis-exporter`, and `rabbitmq-exporter` ship **without a
+healthcheck** by design, so they show as "no-healthcheck" (not "unhealthy").
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
-- [Security Architecture](./security-architecture.md) - Zero-trust design details
-- [Troubleshooting Guide](../troubleshooting/TROUBLESHOOTING.md) - Common issues
-- [Authelia Documentation](https://www.authelia.com/docs/) - SSO configuration
-- [Traefik Documentation](https://doc.traefik.io/traefik/) - Reverse proxy setup
+- [Security Architecture](./security-architecture.md)
+- [Traefik Documentation](https://doc.traefik.io/traefik/)
 
 ---
 
-## 🎯 Quick Reference
-
-**Web Access:**
-1. Go to https://auth.minder.local
-2. Login with credentials
-3. Access other services with active session
-
-**CLI Access (Development):**
-```bash
-./setup.sh shell SERVICE_NAME
-```
-
-**CLI Access (Production):**
-```bash
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=YOUR_SESSION_COOKIE"
-```
-
-**Internal Network:**
-```bash
-docker exec minder-api-gateway curl http://localhost:8000/health
-curl http://172.19.0.14:8000/health
-```
-
----
-
-*Last Updated: 2026-05-10*
-*Platform Version: 1.0.0*
-*Access Method: Zero-Trust Authentication*
-*Status: Production Ready*
+*Last Updated: 2026-07-10 · Development environment*

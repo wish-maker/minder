@@ -1,53 +1,68 @@
-# Automatic AI Setup Guide
+# AI Setup Guide
 
 ## Overview
 
-Minder Platform features zero-configuration AI setup with automatic model downloads. No manual intervention required - the platform downloads and configures AI models during the initial setup.
+Minder runs LLM inference through Ollama. In the default (internal) mode the
+platform runs its own Ollama container and auto-pulls the configured models during
+setup — no manual intervention required. You can also point Minder at an external
+Ollama instead.
 
-## How It Works
+> Ollama listens on port 11434 **internal to the Docker network only** — it is not
+> exposed on the host. Reach it from another container, from inside the Ollama
+> container (`docker exec`), or via services that proxy to it.
 
-### Automatic Model Downloads
+## Ollama modes: internal vs external
 
-**When:** During `./setup.sh` execution  
-**What:** Downloads llama3.2 (2GB) + nomic-embed-text (274MB)  
-**Time:** ~3 minutes (depends on internet speed)  
-**Detection:** Skips download if models already exist
+Ollama has two modes, selected by the `OLLAMA_BASE_URL` value in root `./.env`:
 
-### Configuration
+- **Internal (default):** `OLLAMA_BASE_URL` is **empty**. The platform-managed
+  `minder-ollama` container runs (it is gated behind the `internal-ollama` compose
+  profile, which activates only when `OLLAMA_BASE_URL` is empty).
+- **External / native host:** `OLLAMA_BASE_URL` is **set** to a URL. The internal
+  container stays inactive, and services talk to your external Ollama instead
+  (same host, native install, or a remote GPU box).
 
-**Environment Variables** (in root `./.env`):
-
-```bash
-# Enable automatic model download (default: true)
-OLLAMA_AUTOMATIC_PULL=true
-
-# Models to download (comma-separated)
-OLLAMA_MODELS=llama3.2,nomic-embed-text
-
-# Specific models for different purposes
-OLLAMA_LLM_MODEL=llama3.2
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-```
-
-### Ollama location: internal vs external
-
-By default Minder runs its own Ollama container. To point at an Ollama running
-elsewhere (the same host, or a remote GPU box) instead, use the `ollama-mode` verb:
+Switch modes with the `ollama-mode` verb:
 
 ```bash
 # Platform-managed Ollama container (default)
-./setup.sh ollama-mode internal
+bash setup.sh ollama-mode internal
 
 # External Ollama — defaults to the host at http://host.docker.internal:11434
-./setup.sh ollama-mode external
+bash setup.sh ollama-mode external
 
 # External Ollama at a specific URL
-./setup.sh ollama-mode external http://192.168.1.50:11434
+bash setup.sh ollama-mode external http://192.168.1.50:11434
 ```
 
 This edits only `OLLAMA_BASE_URL` in `./.env`; it does **not** restart — run
-`./setup.sh restart` to apply. In external mode the local Ollama container is not
-started (it's gated behind a compose profile), saving RAM/CPU.
+`bash setup.sh restart` to apply. In external mode the local Ollama container is
+not started (it's gated behind the compose profile), saving RAM/CPU.
+
+## Automatic model downloads
+
+**When:** On startup, in internal mode
+**What:** Pulls the models listed in `OLLAMA_PULL_MODELS` (default llama3.2 + nomic-embed-text)
+**Detection:** Skips a model if it already exists in the Ollama volume
+
+Model storage lives in `/root/.ollama/models` inside the container, backed by a
+Docker volume so models survive container recreation.
+
+### Configuration
+
+**Environment variables** (in root `./.env`):
+
+```bash
+# Models to auto-pull on startup (comma-separated)
+OLLAMA_PULL_MODELS=llama3.2,nomic-embed-text
+
+# Which models the services use for each purpose
+OLLAMA_LLM_MODEL=llama3.2
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
+# Empty = internal container mode; set to a URL = external mode
+OLLAMA_BASE_URL=
+```
 
 ## Available Models
 
@@ -82,53 +97,49 @@ started (it's gated behind a compose profile), saving RAM/CPU.
 
 ## Usage Examples
 
-### Text Generation
+### Text Generation (Ollama, internal-only)
+
+Ollama is not host-exposed, so call it from inside the container (or from another
+container on `minder-network`):
 
 ```bash
-# Generate text with llama3.2
-curl -X POST http://localhost:11434/api/generate \
+# Generate text with llama3.2 from inside the container
+docker exec minder-ollama curl -s -X POST http://localhost:11434/api/generate \
   -H "Content-Type: application/json" \
   -d '{"model":"llama3.2","prompt":"What is the capital of France?","stream":false}'
 
 # Response: {"model":"llama3.2","response":"The capital of France is Paris.","done":true}
 ```
 
-### Embeddings for RAG
+### RAG queries
 
-```bash
-# Generate embeddings with nomic-embed-text
-curl -X POST http://localhost:8004/api/v1/embeddings \
-  -H "Content-Type: application/json" \
-  -d '{"text":"Hello, this is a test"}'
+The RAG Pipeline service (host-exposed on 8004) uses `OLLAMA_EMBEDDING_MODEL` for
+vector embeddings and `OLLAMA_LLM_MODEL` for generation. See the
+[RAG Methods Guide](../rag-methods.md) for the API.
 
-# Response: {"embedding":[0.1,0.2,...],"dimension":768}
-```
+### OpenWebUI
 
-### OpenWebUI Integration
-
-```bash
-# Access web interface at http://localhost:8080
-# Automatically detects all installed models
-# Select model from dropdown and start chatting
-```
+OpenWebUI is the web chat frontend. Its container port (8080) is not host-exposed;
+it is reached through the Traefik reverse proxy. It auto-detects installed Ollama
+models — pick one from the dropdown and start chatting.
 
 ## Customization
 
 ### Change Auto-Download Models
 
-Edit root `./.env` (then re-run `setup.sh start`):
+Edit root `./.env`:
 
 ```bash
-# Download different models
-OLLAMA_MODELS=mistral,qwen2.5,nomic-embed-text
+# Pull different models on startup
+OLLAMA_PULL_MODELS=mistral,qwen2.5,nomic-embed-text
 
-# Disable automatic downloads
-OLLAMA_AUTOMATIC_PULL=false
+# To disable automatic pulls, leave the list empty
+OLLAMA_PULL_MODELS=
 ```
 
-Then restart:
+Then restart to apply:
 ```bash
-docker compose -f docker/compose/docker-compose.yml restart ollama
+bash setup.sh restart
 ```
 
 ### Manual Model Management
@@ -149,30 +160,20 @@ docker exec minder-ollama ollama show llama3.2
 
 ## Integration with Services
 
-### RAG Pipeline
+### RAG Pipeline (:8004)
 
-Uses `OLLAMA_EMBEDDING_MODEL` for vector embeddings:
+Uses `OLLAMA_EMBEDDING_MODEL` for vector embeddings and `OLLAMA_LLM_MODEL` for
+generation. See the [RAG Methods Guide](../rag-methods.md) for the knowledge-base
+and query endpoints.
 
-```bash
-curl -X POST http://localhost:8004/api/v1/rag/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "What is the capital of France?",
-    "collection": "knowledge-base"
-  }'
-```
+### Model Management (:8005)
 
-### Model Management
-
-Tracks registered models:
-
-```bash
-curl http://localhost:8005/api/v1/models/list
-```
+Lists, pulls, deletes, and tests Ollama models via the Ollama API. Note that
+`/models/{id}/constraints` and `/models/{id}/metrics` are placeholders.
 
 ### OpenWebUI
 
-Web interface at http://localhost:8080 with:
+Web chat frontend (reached via Traefik) with:
 - Model selection dropdown
 - Chat interface
 - RAG integration
@@ -278,3 +279,7 @@ docker stats minder-ollama
 
 - 📖 Read [RAG Methods Guide](../rag-methods.md)
 - 🚀 Deploy to [Production](../deployment/production.md)
+
+---
+
+**Last Updated:** 2026-07-10

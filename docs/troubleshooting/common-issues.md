@@ -1,243 +1,267 @@
-# Troubleshooting Guide
+# Common Issues
 
-## Platform Status (2026-04-30)
+**Last Updated:** 2026-07-10
+**Platform Version:** 1.0.0
 
-**Current Status:** ✅ Fully Operational
-- **Services:** 23 total (21 healthy, 2 starting normally)
-- **Tests:** 115 passing (98% coverage, 2 skipped)
-- **AI Models:** Auto-installed (llama3.2 + nomic-embed-text)
-- **Project Size:** 765MB (optimized)
-- **Startup Time:** ~9 minutes (including AI downloads)
+Common problems and solutions for the Minder platform (development environment, Raspberry
+Pi 4, 31 containers). Services run as Docker containers named `minder-<service>`. Compose is
+at `docker/compose/docker-compose.yml`; the root `./.env` is the single source of truth for
+configuration.
 
-## Common Issues and Solutions
+For the broader guide, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
-### Service Won't Start
+---
 
-#### Problem: Service immediately exits
+## Service Won't Start
+
+### Service immediately exits
+
 ```bash
 # Check logs
-docker compose -f docker/compose/docker-compose.yml logs <service>
-
-# Common causes:
-# 1. Port already in use
-# 2. Missing environment variables
-# 3. Database not ready
-# 4. Insufficient resources
+docker logs minder-<service> --tail 100
+# or
+cd docker/compose && docker compose logs <service>
 ```
 
-#### Solution: Port Conflicts
+Common causes:
+1. Configuration error or missing environment variable (check root `./.env`)
+2. A dependency (postgres/redis/qdrant/neo4j) not ready yet
+3. Port conflict on the host
+4. Insufficient resources (this is a Pi — RAM is tight)
+
+### Recreate a service after fixing config
+
 ```bash
-# Find process using port
+cd docker/compose
+docker compose up -d --force-recreate <service>
+# or
+bash setup.sh restart <service>
+```
+
+### Port conflict on the host
+
+```bash
+# Find what holds the port (host-exposed app services use 8000-8006, 8008)
 lsof -i :8000
 
-# Kill process
-kill -9 <PID>
-
-# Or change port in docker-compose.yml
+# Stop the offending process, or adjust the mapping in docker-compose.yml
 ```
 
-### Database Issues
+---
 
-#### Problem: Can't connect to database
+## A Service Shows "no-healthcheck" — Is It Broken?
+
+Usually **no**. Three containers have **no healthcheck by design** because their base
+images lack the required tooling:
+
+- `minder-otel-collector`
+- `minder-redis-exporter`
+- `minder-rabbitmq-exporter`
+
+`docker ps` will show them with no health status. That is expected — it is not an
+"unhealthy" state. Confirm they work by their logs/metrics, not by health:
+
 ```bash
-# Check database is running
-docker exec -it minder-postgres psql -U minder -c "SELECT 1"
-
-# Reset database
-docker compose -f docker/compose/docker-compose.yml down -v
-docker compose -f docker/compose/docker-compose.yml up -d postgres
+docker logs minder-otel-collector --tail 30
+docker logs minder-redis-exporter --tail 30
+docker logs minder-rabbitmq-exporter --tail 30
 ```
 
-#### Problem: Database migration failed
+(Older docs incorrectly listed `redis-exporter` / `otel-collector` as "unhealthy". They are
+not — they just have no healthcheck.)
+
+---
+
+## Database Issues
+
+### Can't connect to PostgreSQL
+
 ```bash
-# Check migrations
-ls migrations/
+# Is it up and accepting connections?
+docker exec minder-postgres pg_isready -U minder
+docker exec minder-postgres psql -U minder -c "SELECT 1;"
 
-# Run migrations manually
-docker exec -it minder-postgres psql -U minder -d minder -f /path/to/migration.sql
+# Logs
+docker logs minder-postgres --tail 50
 ```
 
-### Memory Issues
+### Migration failed
 
-#### Problem: Out of memory errors
 ```bash
-# Check memory usage
-docker stats
+# Re-run migrations
+bash setup.sh migrate
 
-# Increase Docker memory limit (Docker Desktop)
-# Settings → Resources → Memory → 8GB+
-
-# Clean up unused resources
-docker system prune -a
+# Or apply a SQL file directly
+docker exec -i minder-postgres psql -U minder -d minder < migration.sql
 ```
 
-### Network Issues
+### Fresh reset (WARNING: destroys data)
 
-#### Problem: Services can't communicate
 ```bash
-# Check network
-docker network ls | grep minder
-
-# Recreate network
-docker network rm docker_minder-network
-docker network create docker_minder-network
-
-# Restart services
-docker compose -f docker/compose/docker-compose.yml up -d
+cd docker/compose
+docker compose down -v
+bash setup.sh start
 ```
 
-### Plugin Issues
+---
 
-#### Problem: Plugin not loading
-```bash
-# Check plugin registry
-curl http://localhost:8001/plugins
+## Redis Authentication
 
-# Check plugin logs
-docker logs minder-plugin-registry
+**Symptom:**
 
-# Reload plugin
-curl -X POST http://localhost:8001/plugins/<plugin-id>/reload
-```
-
-### Authentication Issues
-
-#### Problem: Redis AUTH failed (Connection Issues)
-
-**Symptoms:**
 ```
 AUTH failed: WRONGPASS invalid username-password pair or Redis is loading from disk
 ```
 
-**Root Cause:**
-Redis master authentication not configured properly.
+**Cause:** the password used doesn't match the one Redis is running with.
 
-**Solution (Already Fixed):**
-The platform now includes `--masterauth ${REDIS_PASSWORD}` in the Redis command.
+**Fix / verify:**
 
-**Verify the fix:**
 ```bash
-# Check Redis configuration
-docker exec minder-redis redis-cli -a ${REDIS_PASSWORD} ping
-# Should return: PONG
+# Confirm the password in the root .env (source of truth)
+grep REDIS_PASSWORD .env
 
-# Check if master auth is configured
-docker logs minder-redis | grep masterauth
+# Test with it
+docker exec minder-redis redis-cli -a "$REDIS_PASSWORD" ping   # -> PONG
+
+# If needed, restart Redis
+cd docker/compose && docker compose restart redis
+docker logs minder-redis --tail 50
 ```
 
-**If issue persists:**
-```bash
-# Restart Redis service
-docker compose -f docker/compose/docker-compose.yml restart redis
+Remember: edit the **root `./.env`**, not `docker/compose/.env` (the latter is regenerated
+from the root file by `setup.sh` on every start/restart).
 
-# Check logs
-docker logs minder-redis
+---
+
+## Neo4j Not Ready
+
+Neo4j takes time to start. It is used by the marketplace (plugin dependency graph) and by
+graph-rag (knowledge graph).
+
+```bash
+# Wait for it to finish starting
+docker logs minder-neo4j --tail 50 | grep -i "started\|remote interface"
+
+# Test a query
+docker exec minder-neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" "RETURN 1;"
+
+# Check the password
+grep NEO4J .env
 ```
 
-#### Problem: Can't login to Authelia
+---
+
+## Plugin Not Loading
+
+Plugins are managed by the plugin-registry service (`:8001`). Note that **no default
+plugins are shipped** — an empty plugin list is expected on a clean install.
+
 ```bash
-# Check Authelia is running
-docker ps | grep authelia
+# Registry health and plugin list
+curl http://localhost:8001/health
+curl http://localhost:8001/plugins
 
-# Check Authelia health
-curl http://localhost:9091/api/health
-
-# Check Authelia logs
-docker logs minder-authelia
-
-# Reset admin password
-docker exec -it minder-authelia authelia users list
+# Registry logs
+docker logs minder-plugin-registry --tail 50
 ```
 
-#### Problem: 2FA not working
-```bash
-# Verify TOTP is configured
-# Access http://localhost:9091
-# Login → One-Time Password → Check configuration
+See [../development/plugin-development.md](../development/plugin-development.md) for the
+plugin model (manifest-based, no arbitrary code execution).
 
-# Check system time is synchronized
-timedatectl status
+---
+
+## Memory / Resource Pressure
+
+```bash
+# Per-container usage
+docker stats --no-stream
+
+# Reclaim space from unused Docker resources
+docker system prune -a
+
+# Look for OOM kills
+docker logs minder-<service> | grep -i "memory\|oom\|out of"
 ```
 
-### Security Layer Issues
+On the Pi, the AI services (rag-pipeline, model-management) and Ollama inference are the
+heaviest. Stop non-critical services temporarily if the host is starved.
 
-#### Problem: Traefik dashboard not accessible
+---
+
+## Network / Services Can't Communicate
+
 ```bash
-# Check Traefik is running
-docker ps | grep traefik
+# Network exists?
+docker network ls | grep minder
 
-# Check Traefik logs
-docker logs minder-traefik
+# Service-to-service check (by container name)
+docker exec minder-api-gateway curl -s http://minder-rag-pipeline:8004/health
 
-# Verify Traefik health
-docker exec minder-traefik wget --quiet --tries=1 --spider http://localhost:8080/ping
-
-# Dashboard may require admin network access
-# Try: curl -H "Host: traefik.minder.local" http://localhost/
+# Bring the stack back consistently
+bash setup.sh restart
 ```
 
-#### Problem: Services returning 401 Unauthorized
+Services address each other by container name on `minder-network`.
+
+---
+
+## Traefik / Routing Returns 404
+
+Minder uses **Traefik v3** (not Nginx). Only services with the right Docker labels are
+routed (`exposedByDefault: false`).
+
 ```bash
-# Check Authelia is healthy
-curl http://localhost:9091/api/health
-
-# Verify session cookie
-# Check browser developer tools → Application → Cookies
-
-# Test authentication directly
-curl -X POST http://localhost:9091/api/verify \
-  -H "X-Original-URL: http://localhost:8000/api/v1/plugins" \
-  -H "Authorization: Bearer <token>"
+docker logs minder-traefik --tail 50
+cd docker/compose && docker compose restart traefik
 ```
 
-### Performance Issues
+Note: Authelia forward-auth is wired on several routers but **Authelia is disabled**, so
+that auth is not currently enforced — you will not be redirected to a login page.
 
-#### Problem: Slow API responses
+---
+
+## Slow API Responses
+
 ```bash
-# Check resource usage
-docker stats
+# Resource usage
+docker stats --no-stream
 
-# Enable debug logging
-# Set LOG_LEVEL=DEBUG in .env
+# Turn up logging: set LOG_LEVEL=DEBUG in the root ./.env, then
+bash setup.sh restart <service>
 
-# Check database connections
-docker exec minder-postgres psql -U minder -c "SELECT count(*) FROM pg_stat_activity;"
+# Check DB connection count
+docker exec minder-postgres psql -U minder -c \
+  "SELECT count(*) FROM pg_stat_activity;"
 ```
+
+---
 
 ## Getting Help
 
-### Collect Diagnostic Information
 ```bash
-# Save diagnostics
-./scripts/health-check.sh > diagnostics.txt
-
-# Include in issue report
+# Collect diagnostics
+bash setup.sh status > /tmp/status.txt
+bash setup.sh doctor > /tmp/doctor.txt
+docker ps -a > /tmp/containers.txt
+docker stats --no-stream > /tmp/stats.txt
 ```
 
-### Useful Commands
+### Useful commands
 
 ```bash
-# Service status
-docker ps
-
-# Resource usage
-docker stats
-
-# Logs
-docker compose -f docker/compose/docker-compose.yml logs
-
-# Health check
-./scripts/health-check.sh
-
-# Restart service
-docker compose -f docker/compose/docker-compose.yml restart <service>
+docker ps                               # service status
+docker stats --no-stream                # resource usage
+docker logs minder-<service> --tail 50  # service logs
+bash setup.sh restart <service>         # restart a service
+bash setup.sh doctor                    # environment diagnostics
 ```
 
-### Emergency Reset
+### Emergency reset (WARNING: deletes all data)
 
 ```bash
-# Full reset (WARNING: Deletes all data)
-docker compose -f docker/compose/docker-compose.yml down -v
+cd docker/compose
+docker compose down -v
 docker system prune -a
-./setup.sh
+bash setup.sh start
 ```

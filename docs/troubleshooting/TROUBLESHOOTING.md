@@ -1,622 +1,341 @@
-# 🔧 Troubleshooting Guide - Minder Platform
+# Troubleshooting Guide - Minder Platform
 
-**Last Updated:** 2026-06-26
+**Last Updated:** 2026-07-10
 **Platform Version:** 1.0.0
-**Status:** Production Ready (31 containers, 29 healthy)
+**Scale:** 31 containers (development environment on Raspberry Pi 4)
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-1. [Common Issues](#common-issues)
-2. [Authentication & Access](#authentication--access)
-3. [Service Health](#service-health)
-4. [Network Connectivity](#network-connectivity)
-5. [Database Issues](#database-issues)
-6. [Performance Issues](#performance-issues)
-7. [Monitoring & Debugging](#monitoring--debugging)
-
----
-
-## 🚨 Common Issues
-
-### Issue 1: "404 Page Not Found" on All Services
-
-**Symptom:** All HTTPS requests return "404 page not found"
-
-**Root Cause:** Traefik routing configuration issues
-
-**Solution:**
-```bash
-# Check Traefik logs
-docker logs minder-traefik --tail 50
-
-# Verify environment variables (./.env is the source of truth)
-grep TRAEFIK .env
-
-# Restart Traefik
-cd docker/compose
-docker compose restart traefik
-```
-
-**Prevention:** Ensure all middleware references use `@file` suffix in docker-compose.yml
+1. [First Steps](#first-steps)
+2. [Service Health](#service-health)
+3. [Healthchecks: What "no-healthcheck" Means](#healthchecks-what-no-healthcheck-means)
+4. [App Services & Ports](#app-services--ports)
+5. [Reverse Proxy (Traefik)](#reverse-proxy-traefik)
+6. [Network Connectivity](#network-connectivity)
+7. [Storage Backends](#storage-backends)
+8. [Performance Issues](#performance-issues)
+9. [Monitoring & Debugging](#monitoring--debugging)
+10. [Emergency Procedures](#emergency-procedures)
 
 ---
 
-### Issue 2: Services Not Responding on Ports 8000-8007
+## First Steps
 
-**Symptom:** HTTP requests to ports 8000-8007 timeout or return no response
+The standard debugging order is: **logs → inspect → restart → network → resources.**
 
-**Root Cause:** Services are **intentionally not exposed** on host ports (security design)
-
-**Solution:** Access services through Traefik reverse proxy:
 ```bash
-# ❌ WRONG - Direct port access (blocked by design)
-curl http://localhost:8000/health
+# Overview of everything
+docker ps
+bash setup.sh status
 
-# ✅ CORRECT - Through Traefik
-curl -k https://api.minder.local/api/health
+# Diagnostics
+bash setup.sh doctor
 
-# ✅ CORRECT - Internal network access
-curl http://172.19.0.14:8000/health
+# Tail a service's logs
+docker logs minder-<service> --tail 50 -f
 ```
 
-**Explanation:** This is **zero-trust architecture** - Pillar 1 security design
+All services run as Docker containers named `minder-<service>`. Compose is at
+`docker/compose/docker-compose.yml`; the root `./.env` is the single source of truth for
+configuration.
 
 ---
 
-### Issue 3: "302 Found" Redirects to Authelia
+## Service Health
 
-**Symptom:** All requests redirect to `https://auth.minder.local/?rd=...`
-
-**Root Cause:** This is **CORRECT BEHAVIOR** - zero-trust authentication working as designed
-
-**Solution:**
-```bash
-# Step 1: Access Authelia and authenticate
-curl -skL https://auth.minder.local/
-
-# Step 2: Use authentication cookie for subsequent requests
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=YOUR_SESSION_COOKIE"
-```
-
-**Verification:**
-```bash
-# Check authentication is working
-curl -skI https://api.minder.local/api/health
-# Should return: HTTP/2 302 (redirect to Authelia)
-```
-
----
-
-## 🔐 Authentication & Access
-
-### How to Access Services
-
-**Method 1: Through Authelia (Production Mode)**
-
-1. Open browser: `https://auth.minder.local`
-2. Login with credentials from `authelia/users_database.yml`
-3. Access other services with active session
-
-**Method 2: Direct Container Access (Development)**
+### Check status
 
 ```bash
-# Shell access to any service
-./setup.sh shell api-gateway
+# All services
+bash setup.sh status
+docker ps
 
-# Execute commands inside container
-curl http://localhost:8000/health
-
-# Via container IP from host
-curl http://172.19.0.14:8000/health
-```
-
-**Method 3: Docker Exec (Debugging)**
-
-```bash
-# API Gateway
-docker exec minder-api-gateway curl http://localhost:8000/health
-
-# Plugin Registry
-docker exec minder-plugin-registry curl http://localhost:8002/health
-
-# RAG Pipeline
-docker exec minder-rag-pipeline curl http://localhost:8003/health
-```
-
----
-
-## 🏥 Service Health
-
-### Check Service Status
-
-**All Services:**
-```bash
-./setup.sh status
-```
-
-**Specific Service:**
-```bash
+# Specific service
 docker ps | grep api-gateway
 docker logs minder-api-gateway --tail 50
 ```
 
-**Health Endpoints:**
+### Restart a service
+
 ```bash
-# API Gateway (internal network)
-curl http://172.19.0.14:8000/health
+# Via setup.sh
+bash setup.sh restart api-gateway
 
-# Plugin Registry
-curl http://172.19.0.15:8002/health
-
-# RAG Pipeline
-curl http://172.19.0.16:8003/health
+# Or directly
+cd docker/compose && docker compose restart api-gateway
 ```
 
-### Common Health Issues
-
-**Issue: Container in "Restarting" loop**
+### Container in a restart loop
 
 ```bash
-# Check logs
-docker logs minder-service-name --tail 100
+docker logs minder-<service> --tail 100
 
-# Common causes:
-# 1. Configuration errors
-# 2. Missing environment variables
-# 3. Dependency not ready
-# 4. Port conflicts
-
-# Solution: Fix configuration, then recreate
+# Common causes: config error, missing env var, dependency not ready.
+# Recreate after fixing:
 cd docker/compose
-docker compose stop service-name
-docker compose rm -f service-name
-docker compose up -d service-name
-```
-
-**Issue: Service stuck in "Starting" state**
-
-```bash
-# Check if dependencies are ready
-docker ps | grep postgres
-docker ps | grep redis
-
-# Increase health check timeout if needed
-# Edit docker-compose.yml, adjust:
-# healthcheck:
-#   interval: 30s
-#   timeout: 10s
-#   start_period: 60s
+docker compose up -d --force-recreate <service>
 ```
 
 ---
 
-## 🌐 Network Connectivity
+## Healthchecks: What "no-healthcheck" Means
 
-### Verify Network Configuration
+28 of the 31 containers have Docker healthchecks. **Three do not, by design** — their base
+images lack the tooling (e.g. `nc`) to run one:
 
-```bash
-# Check network exists
-docker network ls | grep docker_minder-network
+- `minder-otel-collector`
+- `minder-redis-exporter`
+- `minder-rabbitmq-exporter`
 
-# Inspect network
-docker network inspect docker_minder-network
-
-# Check container IPs
-docker network inspect docker_minder-network | grep -A 3 "IPv4Address"
-```
-
-### Test Service Connectivity
-
-**API Gateway to Dependencies:**
-```bash
-# From API Gateway container
-docker exec minder-api-gateway curl http://minder-postgres:5432
-docker exec minder-api-gateway curl http://minder-redis:6379
-docker exec minder-api-gateway curl http://minder-qdrant:6333
-```
-
-**Service-to-Service:**
-```bash
-# Plugin Registry to API Gateway
-docker exec minder-plugin-registry curl http://minder-api-gateway:8000/health
-
-# RAG Pipeline to Qdrant
-docker exec minder-rag-pipeline curl http://minder-qdrant:6333/collections
-```
-
-### DNS Resolution Issues
+These show as **`no-healthcheck`** (or blank health) in `docker ps`. **This is not a
+failure.** Older docs that called `redis-exporter` or `otel-collector` "unhealthy" were
+stale — they simply have no healthcheck defined. Verify they are actually working by
+checking their logs or the metrics they emit, not by their (absent) health status.
 
 ```bash
-# Check if service names resolve
-docker exec minder-api-gateway nslookup minder-postgres
-docker exec minder-api-gateway nslookup minder-redis
-
-# Test with ping
-docker exec minder-api-gateway ping -c 2 minder-postgres
+# These are fine even with no health status:
+docker logs minder-otel-collector --tail 30
+docker logs minder-redis-exporter --tail 30
+docker logs minder-rabbitmq-exporter --tail 30
 ```
 
 ---
 
-## 💾 Database Issues
+## App Services & Ports
+
+The eight core API services are host-exposed and each serves a `/health` endpoint:
+
+| Service | Container | Health check |
+|---------|-----------|--------------|
+| api-gateway | minder-api-gateway | `curl http://localhost:8000/health` |
+| plugin-registry | minder-plugin-registry | `curl http://localhost:8001/health` |
+| marketplace | minder-marketplace | `curl http://localhost:8002/health` |
+| plugin-state-manager | minder-plugin-state-manager | `curl http://localhost:8003/health` |
+| rag-pipeline | minder-rag-pipeline | `curl http://localhost:8004/health` |
+| model-management | minder-model-management | `curl http://localhost:8005/health` |
+| tts-stt | minder-tts-stt | `curl http://localhost:8006/health` |
+| graph-rag | minder-graph-rag | `curl http://localhost:8008/health` |
+
+Other host-exposed endpoints: Prometheus `:9090`, Grafana `:3000`, Alertmanager `:9093`,
+InfluxDB `:8086`, Jaeger UI `:16686`, Traefik `:80/:443` (dashboard `:8081`, IP-whitelisted).
+
+Ollama (`:11434`) runs internally and is reached via other services, not a host port. The
+web UI is **OpenWebUI**, reached through Traefik.
+
+> Note: there is no `model-fine-tuning` service and no `ai-service` — those were removed.
+> Do not look for a `:8007` service.
+
+---
+
+## Reverse Proxy (Traefik)
+
+Minder uses **Traefik v3** as its reverse proxy (not Nginx). Routing is driven by Docker
+labels; `exposedByDefault` is `false`, so only labeled services are routed.
+
+### Symptom: 404 on a routed hostname
+
+```bash
+# Traefik logs
+docker logs minder-traefik --tail 50
+
+# Traefik-related env
+grep TRAEFIK .env
+
+# Restart Traefik
+cd docker/compose && docker compose restart traefik
+```
+
+Several Traefik routers are wired with an Authelia forward-auth middleware, but **Authelia
+is currently disabled** (commented out in compose). With Authelia down, that forward-auth
+is **not enforced** — its keep/drop is an open decision. If you were expecting an auth
+redirect and don't see one, this is why.
+
+---
+
+## Network Connectivity
+
+Services share the `minder-network` Docker network and address each other by container
+name (`minder-<service>`).
+
+```bash
+# List networks
+docker network ls | grep minder
+
+# Inspect
+docker network inspect minder-network
+
+# Service-to-service reachability (from inside a container)
+docker exec minder-api-gateway curl -s http://minder-rag-pipeline:8004/health
+docker exec minder-rag-pipeline curl -s http://minder-qdrant:6333/collections
+```
+
+### DNS resolution
+
+```bash
+docker exec minder-api-gateway getent hosts minder-postgres
+docker exec minder-api-gateway getent hosts minder-redis
+```
+
+---
+
+## Storage Backends
+
+Storage services are **internal-only** (not exposed on host ports). Reach them by exec'ing
+into their container (or, where routed, via Traefik).
 
 ### PostgreSQL
 
-**Check Connection:**
 ```bash
 docker exec minder-postgres psql -U minder -c "SELECT version();"
-docker exec minder-postgres psql -U minder -c "\l"
+docker exec minder-postgres psql -U minder -c "\l"     # list databases
+docker exec minder-postgres pg_isready -U minder
 ```
-
-**Common Issues:**
-
-1. **Connection Refused:**
-   ```bash
-   # Check if PostgreSQL is ready
-   docker exec minder-postgres pg_isready -U minder
-
-   # Check logs
-   docker logs minder-postgres --tail 50
-   ```
-
-2. **Database Not Found:**
-   ```bash
-   # List databases
-   docker exec minder-postgres psql -U minder -c "\l"
-
-   # Create database if missing
-   docker exec minder-postgres psql -U minder -c "CREATE DATABASE minder;"
-   ```
-
-3. **Performance Issues:**
-   ```bash
-   # Check active connections
-   docker exec minder-postgres psql -U minder -c "SELECT count(*) FROM pg_stat_activity;"
-
-   # Check slow queries
-   docker exec minder-postgres psql -U minder -c "SELECT query, mean_exec_time FROM pg_stat_statements ORDER BY mean_exec_time DESC LIMIT 10;"
-   ```
 
 ### Redis
 
-**Check Connection:**
 ```bash
-docker exec minder-redis redis-cli -a YOUR_REDIS_PASSWORD ping
+docker exec minder-redis redis-cli -a "$REDIS_PASSWORD" ping   # -> PONG
+docker exec minder-redis redis-cli -a "$REDIS_PASSWORD" INFO memory
 ```
 
-**Common Issues:**
+If AUTH fails, verify the password in the root `./.env`:
 
-1. **Authentication Failed:**
-   ```bash
-   # Check password in .env
-   grep REDIS_PASSWORD .env
-
-   # Test with correct password
-   docker exec minder-redis redis-cli -a ACTUAL_PASSWORD ping
-   ```
-
-2. **Memory Issues:**
-   ```bash
-   # Check memory usage
-   docker exec minder-redis redis-cli -a PASSWORD INFO memory
-
-   # Check max memory setting
-   docker exec minder-redis redis-cli -a PASSWORD CONFIG GET maxmemory
-   ```
-
-### Neo4j
-
-**Check Connection:**
 ```bash
-# HTTP endpoint
-curl http://172.19.0.12:7474
-
-# Cypher endpoint
-curl -X POST http://172.19.0.12:7474/db/neo4j/tx/commit \
-  -H "Content-Type: application/json" \
-  -d '{"statements":[{"statement":"RETURN 1"}]}'
+grep REDIS_PASSWORD .env
 ```
 
-**Common Issues:**
+### Neo4j (graph DB — used by marketplace + graph-rag)
 
-1. **Service Not Ready:**
-   ```bash
-   # Wait for Neo4j to fully start
-   docker logs minder-neo4j --tail 50
-
-   # Check if "Remote interface available" in logs
-   docker logs minder-neo4j | grep "Remote interface available"
-   ```
-
-2. **Authentication Issues:**
-   ```bash
-   # Check password
-   grep NEO4J_AUTH .env
-
-   # Test connection
-   curl -u neo4j:PASSWORD http://172.19.0.12:7474
-   ```
-
-### Qdrant
-
-**Check Connection:**
 ```bash
-# Check collections
-curl http://172.19.0.13:6333/collections
-
-# Check cluster info
-curl http://172.19.0.13:6333/cluster
+docker logs minder-neo4j --tail 50 | grep -i "started\|remote interface"
+docker exec minder-neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD" "RETURN 1;"
 ```
 
-**Common Issues:**
+### Qdrant (vector DB — used by rag-pipeline)
 
-1. **No Collections Found:**
-   ```bash
-   # This is normal for fresh install
-   # Collections are created dynamically by services
+```bash
+docker exec minder-qdrant sh -c "wget -qO- http://localhost:6333/collections"
+```
 
-   # Verify Qdrant is responding
-   curl http://172.19.0.13:6333/
-   ```
+### MinIO / RabbitMQ
 
-2. **Storage Issues:**
-   ```bash
-   # Check storage status
-   curl http://172.19.0.13:6333/telemetry
+```bash
+docker logs minder-minio --tail 30
+docker exec minder-rabbitmq rabbitmq-diagnostics status
+```
 
-   # Check disk space
-   df -h | grep qdrant
-   ```
+MinIO (routed to `:9001` via Traefik) and RabbitMQ management (`:15672` via Traefik) are
+reachable through the proxy where configured.
 
 ---
 
-## ⚡ Performance Issues
+## Performance Issues
 
-### High Memory Usage
+### Memory / CPU
 
-**Check Memory:**
 ```bash
-# All containers
 docker stats --no-stream
 
-# Specific service
-docker stats minder-api-gateway --no-stream
+# Restart a heavy service
+bash setup.sh restart rag-pipeline
+
+# Look for OOM signals
+docker logs minder-<service> | grep -i "memory\|oom\|out of"
 ```
 
-**Solutions:**
+This is a Raspberry Pi 4 (ARM) — resources are limited. The AI services (rag-pipeline,
+model-management) and Ollama inference are the usual pressure points.
+
+### Slow responses
+
 ```bash
-# 1. Restart memory-heavy services
-./setup.sh restart api-gateway
+# Time a health endpoint
+time curl -s http://localhost:8000/health
 
-# 2. Check for memory leaks
-docker logs minder-service-name | grep -i "memory\|oom\|out of"
-
-# 3. Adjust memory limits in docker-compose.yml
-# deploy:
-#   resources:
-#     limits:
-#       memory: 512M
-```
-
-### High CPU Usage
-
-**Check CPU:**
-```bash
-docker stats --no-stream | sort -k 3 -h
-```
-
-**Solutions:**
-```bash
-# 1. Check what's consuming CPU
-docker top minder-service-name
-
-# 2. Check process count
-docker exec minder-service-name ps aux
-
-# 3. Scale horizontally if needed
-docker compose up -d --scale api-gateway=3
-```
-
-### Slow Response Times
-
-**Check Response Time:**
-```bash
-# API Gateway
-time curl http://172.19.0.14:8000/health
-
-# Database query time
-docker exec minder-postgres psql -U minder -c "SELECT query, mean_exec_time FROM pg_stat_statements ORDER BY mean_exec_time DESC LIMIT 10;"
-```
-
-**Solutions:**
-```bash
-# 1. Check network latency
-docker exec minder-api-gateway ping -c 10 minder-postgres
-
-# 2. Check database connection pool
-docker logs minder-api-gateway | grep -i "connection\|pool"
-
-# 3. Enable query caching in Redis
-docker exec minder-redis redis-cli -a PASSWORD CONFIG SET maxmemory 256mb
-docker exec minder-redis redis-cli -a PASSWORD CONFIG SET maxmemory-policy allkeys-lru
+# Check DB connection saturation
+docker exec minder-postgres psql -U minder -c \
+  "SELECT count(*) FROM pg_stat_activity;"
 ```
 
 ---
 
-## 📊 Monitoring & Debugging
+## Monitoring & Debugging
 
-### View Logs
+### Logs
 
-**All Services:**
 ```bash
-./setup.sh logs
-```
-
-**Specific Service:**
-```bash
-./setup.sh logs api-gateway
+bash setup.sh logs api-gateway
 docker logs minder-api-gateway --tail 100 -f
 ```
 
-**Last 50 Lines:**
+### Prometheus / Grafana
+
 ```bash
-docker logs minder-api-gateway --tail 50
+# Prometheus targets
+curl -s http://localhost:9090/api/v1/targets \
+  | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
+
+# Grafana datasources
+curl -s -u admin:admin http://localhost:3000/api/datasources \
+  | jq '.[] | {name, type}'
 ```
 
-**Follow Logs:**
+### Jaeger (tracing)
+
 ```bash
-docker logs minder-api-gateway -f
-```
-
-### Check Metrics
-
-**Prometheus:**
-```bash
-# Check targets
-curl http://localhost:9090/api/v1/targets | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'
-
-# Check alerts
-curl http://localhost:9090/api/v1/alerts | jq '.data.alerts[] | {alert: .labels.alertname, state: .state}'
-```
-
-**Grafana:**
-```bash
-# Check datasources
-curl -u admin:admin http://localhost:3000/api/datasources | jq '.[] | {name: .name, type: .type}'
-
-# Check dashboards
-curl -u admin:admin http://localhost:3000/api/search | jq '.[] | {title: .title, uri: .uri}'
-```
-
-### Health Check Scripts
-
-**Run All Health Checks:**
-```bash
-# Comprehensive service test
-/tmp/comprehensive-service-test.sh
-
-# Database connectivity
-/tmp/database-connectivity-test.sh
-
-# API integration
-/tmp/api-integration-test.sh
-
-# Monitoring stack
-/tmp/monitoring-stack-test.sh
-
-# Service dependencies
-/tmp/service-dependencies-test.sh
+# UI at http://localhost:16686
+docker logs minder-jaeger --tail 30
 ```
 
 ---
 
-## 🚨 Emergency Procedures
+## Emergency Procedures
 
-### Full System Restart
-
-```bash
-# Stop all services
-./setup.sh stop
-
-# Wait 10 seconds
-sleep 10
-
-# Start all services
-./setup.sh start
-
-# Monitor startup
-./setup.sh status
-```
-
-### Restore from Backup
+### Full restart
 
 ```bash
-# List available backups
-./setup.sh backup --list
-
-# Restore specific backup
-./setup.sh restore --backup=BACKUP_FILE
-
-# Restore all databases
-./setup.sh restore --all
+bash setup.sh stop
+sleep 5
+bash setup.sh start
+bash setup.sh status
 ```
 
-### Emergency Access
+### Backup / restore
 
-**If Authelia is down:**
 ```bash
-# Access services directly via internal network
-docker exec minder-api-gateway curl http://localhost:8000/health
-
-# Temporarily disable authentication (NOT RECOMMENDED)
-# Edit traefik/dynamic/authelia-middleware.yml
-# Set: forwardAuth: ""
-# Then: docker compose restart traefik
+bash setup.sh backup
+bash setup.sh restore
 ```
 
-**If Traefik is down:**
-```bash
-# Access services via container IPs
-curl http://172.19.0.14:8000/health
-curl http://172.19.0.15:8002/health
-curl http://172.19.0.16:8003/health
-```
+See [emergency-procedures.md](emergency-procedures.md) for detailed incident runbooks.
 
 ---
 
-## 📞 Getting Help
-
-### Collect Diagnostic Information
+## Getting Help
 
 ```bash
-# System status
-./setup.sh status > /tmp/status.txt
-
-# All logs
-./setup.sh logs > /tmp/all-logs.txt 2>&1
-
-# Container stats
+# Collect diagnostics
+bash setup.sh status  > /tmp/status.txt
+bash setup.sh doctor  > /tmp/doctor.txt
 docker stats --no-stream > /tmp/stats.txt
+docker ps -a > /tmp/containers.txt
 
-# Network info
-docker network inspect docker_minder-network > /tmp/network.json
-
-# Service health
-/tmp/comprehensive-service-test.sh > /tmp/health-check.txt 2>&1
-```
-
-### Useful Commands
-
-```bash
-# Find problematic containers
-docker ps -a | grep -v "healthy"
-
-# Check for restart loops
-docker ps -a | grep "Restarting"
-
-# View resource usage
-docker stats --no-stream | sort -k 3 -h
-
-# Check disk space
-df -h
-
-# Check Docker disk usage
-docker system df
+# Quick triage
+docker ps -a | grep -i "restarting\|exited"   # problem containers
+df -h                                          # disk space
+docker system df                               # docker disk usage
 ```
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
-- [Architecture Overview](../architecture/overview.md)
-- [Security Architecture](../operations/security-architecture.md)
-- [Service Access Guide](../operations/service-access.md)
-- [Setup.sh Documentation](../../setup.sh)
+- [Common Issues](common-issues.md)
+- [Emergency Procedures](emergency-procedures.md)
+- [Development Guide](../development/development.md)
 
 ---
 
-*Last Updated: 2026-05-10*
-*Platform Version: 1.0.0*
-*Status: Production Ready*
+*Last Updated: 2026-07-10 · Platform Version: 1.0.0 · Development environment (RPi-4)*

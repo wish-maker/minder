@@ -1,251 +1,105 @@
 # Minder Plugin Architecture
 
+> **Last Updated:** 2026-07-10
+
 ## Overview
-Minder is now a fully **plugin-based** system! Consistent "plugins" terminology everywhere.
 
-## Architecture
+Minder uses a **manifest-based plugin system**. Plugins are declared by a manifest and driven by
+fixed, built-in handlers — Minder does **not** execute arbitrary plugin-supplied code. This is a
+deliberate security constraint: any new plugin action must be implemented as a fixed handler in
+the platform, not as uploaded code.
 
-### Directory Structure
-```
-minder/
-├── plugins/                    # Plugin directory (formerly modules/)
-│   ├── fund/                   # Fund analysis plugin
-│   │   ├── fund_module.py      # Plugin implementation
-│   │   └── __init__.py
-│   ├── tefas/                  # TEFAS plugin
-│   │   ├── tefas_module.py
-│   │   └── __init__.py
-│   ├── crypto/                 # Crypto plugin
-│   ├── news/                   # News plugin
-│   ├── network/                # Network plugin
-│   └── weather/                # Weather plugin
-├── core/
-│   ├── plugin_loader.py        # Plugin discovery & loading
-│   ├── registry.py             # PluginRegistry (formerly ModuleRegistry)
-│   └── kernel.py               # MinderKernel
-├── api/
-│   └── main.py                 # REST API endpoints
-└── config.yaml                 # Plugin configuration
-```
+Plugin lifecycle and discovery are handled by the **Plugin Registry** service (`:8001`), with
+runtime state and AI-tool execution handled by the **Plugin State Manager** (`:8003`).
 
-### Configuration
-```yaml
-# config.yaml
-plugins:
-  fund:
-    enabled: true
-    database:
-      host: postgres
-      port: 5432
+> **No default plugins ship today.** Domain plugins such as crypto, weather, network, news, and
+> tefas are aspirational — they are not implemented and are not registered at runtime. The
+> `default_plugins.yml` config is an intentional empty stub. Do not assume any of these plugins
+> exist until real implementations land.
 
-  tefas:
-    enabled: true
-    database:
-      host: postgres
+## Plugin Lifecycle
 
-  weather:
-    enabled: false
+The lifecycle implemented in code is a set of methods a plugin (and the registry) move through:
+
+| Stage | Method | Notes |
+|-------|--------|-------|
+| Register | `register()` | Returns plugin metadata (the only required method) |
+| Initialize | `initialize()` | Prepares the plugin; transitions it to READY |
+| Health | `health_check()` | Polled on a ~60s loop by the registry |
+| Collect | `collect_data()` | Runs hourly or on manual trigger |
+| Analyze | `analyze()` | Optional analysis step |
+| Shutdown | `shutdown()` | Graceful teardown |
+
+Plugins can additionally be **enabled** / **disabled** at runtime.
+
+> Conceptually this can be framed as a state progression (registered → ready → active → disabled),
+> but the code reality is the method set above. Older docs described named hooks
+> (`on_register`, `on_install`, `on_activate`, etc.) — those are **not** present in the code and
+> should not be relied on.
+
+## Storage Backends Available to Plugins
+
+Plugins may read/write the platform's internal stores (all reached over the internal Docker
+network, not host ports):
+
+- **PostgreSQL** — structured/relational data
+- **Qdrant** — vector embeddings (semantic search)
+- **Neo4j** — graph relationships (entity linking, correlation)
+- **MinIO** — raw files and artifacts
+- **InfluxDB** — time-series data
+- **RabbitMQ** — async events / pipeline triggers
+
+## AI Tools
+
+Plugins may also register as **AI tools** for Ollama function calling. The registry aggregates
+tools, the marketplace catalogs them, and the state manager executes them with license validation.
+
+Tool schema:
+```json
+{ "name": "...", "description": "...", "input_schema": { }, "endpoint": "..." }
 ```
 
 ## API Endpoints
 
-### List All Plugins
-```bash
-GET /plugins
-```
+Plugins are managed through the Plugin Registry (`:8001`), typically reached via the API Gateway
+(`:8000`). Representative endpoints:
 
-**Response:**
-```json
-{
-  "plugins": [
-    {
-      "name": "tefas",
-      "enabled": true,
-      "status": "ready",
-      "metadata": {
-        "version": "1.0.0",
-        "description": "TEFAS Turkey investment fund analysis",
-        "capabilities": ["real_time_data", "historical_analysis"]
-      }
-    }
-  ],
-  "total": 6,
-  "enabled": 6,
-  "disabled": 0
-}
-```
-
-### Enable Plugin
-```bash
-POST /plugins/{plugin_name}/enable
-```
-
-### Disable Plugin
-```bash
-POST /plugins/{plugin_name}/disable
-```
-
-### Run Pipeline
-```bash
-POST /plugins/{plugin_name}/pipeline
-```
-
-## Core Components
-
-### PluginRegistry
-```python
-from core.registry import PluginRegistry
-
-registry = PluginRegistry(config)
-await registry.register_plugin(plugin)
-plugins = await registry.list_plugins()
-```
-
-### PluginLoader
-```python
-from core.plugin_loader import PluginLoader
-
-loader = PluginLoader(config)
-plugins = await loader.load_all_plugins()
-```
-
-### MinderKernel
-```python
-from core.kernel import MinderKernel
-
-kernel = MinderKernel(config)
-await kernel.start()
-
-# Query plugins
-results = await kernel.query_plugins(query)
-
-# Run pipeline
-results = await kernel.run_plugin_pipeline(plugin_name)
-```
-
-## Terminology Mapping
-
-| Old (Inconsistent) | New (Consistent) |
-|-------------------|------------------|
-| `modules/` directory | `plugins/` directory |
-| `modules:` in config | `plugins:` in config |
-| `ModuleRegistry` | `PluginRegistry` |
-| `load_all_modules()` | `load_all_plugins()` |
-| `register_module()` | `register_plugin()` |
-| `list_modules()` | `list_plugins()` |
-| `/modules` endpoint | `/plugins` endpoint |
-| `query_modules()` | `query_plugins()` |
-| `run_module_pipeline()` | `run_plugin_pipeline()` |
-
-## File Naming
-
-Plugin files support two extensions:
-- `{plugin_name}_plugin.py` (preferred)
-- `{plugin_name}_module.py` (backward compatibility)
-
-Example:
-- `plugins/fund/fund_plugin.py` ✅
-- `plugins/fund/fund_module.py` ✅
-- `plugins/tefas/tefas_plugin.py` ✅
-- `plugins/tefas/tefas_module.py` ✅
-
-## Benefits
-
-### 1. **Consistency**
-- Same term everywhere: "plugins"
-- Directory name → Config → API → Code (all consistent)
-- No confusion
-
-### 2. **Clarity**
-- "Plugin" = pluggable, modular component
-- More descriptive and standard
-- Industry standard (WordPress, VS Code, Chrome)
-
-### 3. **Backward Compatibility**
-- Both `_plugin.py` and `_module.py` extensions supported
-- Old plugins continue to work
-- Gradual migration possible
-
-### 4. **Better UX**
-- API endpoints more understandable: `/plugins` vs `/modules`
-- Log messages clearer: "Loading plugin" vs "Loading module"
-- Consistent documentation
-
-## Current Plugins
-
-| Plugin | Status | Description |
-|--------|--------|-------------|
-| **fund** | ✅ Enabled | Turkish mutual fund analysis |
-| **tefas** | ✅ Enabled | TEFAS investment fund tracking |
-| **crypto** | ✅ Enabled | Cryptocurrency market analysis |
-| **news** | ✅ Enabled | News aggregation & sentiment |
-| **network** | ✅ Enabled | Network monitoring & security |
-| **weather** | ✅ Enabled | Weather data & correlation |
-
-## Usage Examples
-
-### CLI
 ```bash
 # List plugins
-curl http://localhost:8000/plugins | jq
+GET /api/v1/plugins
 
-# Disable weather
-curl -X POST http://localhost:8000/plugins/weather/disable
+# Register a plugin manifest
+POST /api/v1/plugins/register
 
-# Enable weather
-curl -X POST http://localhost:8000/plugins/weather/enable
+# Plugin details
+GET /api/v1/plugins/{id}
 
-# Check status
-curl http://localhost:8000/plugins | jq '.plugins[] | select(.name == "tefas")'
+# Enable / disable
+POST /api/v1/plugins/{name}/enable
+POST /api/v1/plugins/{name}/disable
+
+# Plugin health
+GET /api/v1/plugins/{name}/health
 ```
 
-### Python
-```python
-import requests
+### Example
+```bash
+# List plugins via the gateway
+curl http://localhost:8000/api/v1/plugins | jq
 
-# List plugins
-response = requests.get("http://localhost:8000/plugins")
-plugins = response.json()
-
-# Disable plugin
-requests.post("http://localhost:8000/plugins/weather/disable")
-
-# Enable plugin
-requests.post("http://localhost:8000/plugins/weather/enable")
+# With no default plugins implemented, this returns an empty list today.
 ```
 
-## Migration from "modules"
+## Why Manifest-Based (No Code Execution)
 
-### What Changed
-1. **Directory**: `modules/` → `plugins/`
-2. **Config key**: `modules:` → `plugins:`
-3. **API endpoints**: `/modules/*` → `/plugins/*`
-4. **Class names**: `ModuleRegistry` → `PluginRegistry`
-5. **Method names**: `*_module_*()` → `*_plugin_*()`
+- **Security**: the platform is internet-exposed (Raspberry Pi target), so running arbitrary
+  plugin code is out of scope by design.
+- **Predictability**: actions map to reviewed, fixed handlers.
+- **Simplicity**: a plugin is a manifest plus configuration, not a code bundle to sandbox.
 
-### What Stayed the Same
-1. **BaseModule interface**: Same
-2. **Plugin structure**: Same
-3. **Capabilities**: Same
-4. **Functionality**: Same
+## Roadmap
 
-### Migration Checklist
-- [x] Rename `modules/` → `plugins/`
-- [x] Update config: `modules:` → `plugins:`
-- [x] Update core classes: `ModuleRegistry` → `PluginRegistry`
-- [x] Update API endpoints: `/modules` → `/plugins`
-- [x] Update method names throughout codebase
-- [x] Support both `_plugin.py` and `_module.py` extensions
-- [x] Update all documentation
-
-## Conclusion
-
-Minder now has a **fully consistent plugin system**!
-
-✅ Directory: `plugins/`
-✅ Config: `plugins:`
-✅ API: `/plugins`
-✅ Code: `PluginRegistry`, `load_all_plugins()`
-✅ Terminology: "plugins" everywhere
-
-Clearer, more standard, more understandable! 🚀
+Implementing real domain plugins (crypto/weather/network/news/tefas) — or formally dropping the
+aspiration — is tracked as a GitHub issue in `wish-maker/minder`. Until real implementations
+exist, `default_plugins.yml` must remain empty (populating it would try to register
+non-existent plugins). See `roadmap.md`.

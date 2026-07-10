@@ -1,47 +1,50 @@
 # Minder Platform - Project Structure Guide
 
+> **Last Updated:** 2026-07-10
+
 ## Directory Layout
 
 ```
 minder/                              # Project root
 ├── README.md                        # Main project documentation
 ├── CONTRIBUTING.md                  # Contribution guidelines
-├── LICENSE                          # MIT License
-├── setup.sh                         # Automated setup script ⭐
+├── LICENSE                          # License
+├── setup.sh                         # Automated setup / lifecycle script ⭐
 ├── .env.example                     # Environment template (tracked)
 ├── .env                             # Single source of truth (gitignored; you edit this)
-├── pyproject.toml                   # Python project configuration
+├── pyproject.toml                   # Python tooling config (black/isort/mypy/pytest)
 ├── docker-compose.test.yml          # CI / test compose file
 │
 ├── docs/                            # Documentation
-│   ├── QUICKSTART.md                # 5-minute setup guide
-│   ├── EXTERNAL_SERVICES_GUIDE.md   # External (cloud) services guide
 │   ├── getting-started/             # Installation & first steps
 │   ├── architecture/                # System architecture & roadmap
 │   ├── development/                 # Development workflow
 │   ├── deployment/                  # Production deployment
-│   ├── guides/                      # How-to guides (auth, security, ...)
+│   ├── guides/                      # How-to guides
 │   ├── operations/                  # Operational runbooks
 │   ├── troubleshooting/             # Common issues
 │   └── api/                         # API reference
 │
 ├── docker/                          # Docker configuration
 │   ├── compose/                     # Deployment dir (compose runs from here)
-│   │   ├── docker-compose.yml        # Main compose file (31 services)
-│   │   ├── .env                     # Auto-generated copy of root ./.env (gitignored; do not edit)
-│   │   └── authelia/                # Authelia SSO config
-│   ├── services/                    # Per-service configs (source of truth)
-│   │   ├── postgres/                # DB init (init.sql)
-│   │   ├── prometheus/              # Metrics config
-│   │   ├── alertmanager/            # Alert routing
-│   │   ├── grafana/                 # Dashboards & datasources
-│   │   ├── telegraf/                # Metrics agent config
-│   │   └── traefik/                 # Reverse proxy config
-│   ├── templates/                   # Compose templates (rendered by setup.sh)
-│   └── scripts/                     # Docker helper scripts
+│   │   ├── docker-compose.yml       # HAND-MAINTAINED source of truth (31 services)
+│   │   ├── docker-compose.override.yml
+│   │   ├── .env                     # Auto-generated mirror of root ./.env (gitignored; do not edit)
+│   │   ├── rabbitmq/                # rabbitmq config mounted from here
+│   │   └── traefik/                 # traefik dynamic config mounted from here
+│   └── services/                    # Per-service configs (source of truth)
+│       ├── postgres/                # DB init (init.sql)
+│       ├── prometheus/              # Metrics config
+│       ├── alertmanager/            # Alert routing
+│       ├── grafana/                 # Dashboards & datasources
+│       ├── telegraf/                # Metrics agent config
+│       ├── traefik/                 # Reverse proxy config
+│       ├── neo4j/ · ollama/ · influxdb/ · otel-collector/ · rabbitmq/
+│       ├── authelia/                # Authelia config (service disabled)
+│       └── scripts/                 # Docker helper scripts
 │
 ├── src/                             # Application source
-│   ├── services/                    # Microservices
+│   ├── services/                    # Microservices (8 core APIs)
 │   │   ├── api-gateway/             # API Gateway (port 8000)
 │   │   ├── plugin-registry/         # Plugin Registry (port 8001)
 │   │   ├── marketplace/             # Marketplace (port 8002)
@@ -49,11 +52,11 @@ minder/                              # Project root
 │   │   ├── rag-pipeline/            # RAG Pipeline (port 8004)
 │   │   ├── model-management/        # Model Management (port 8005)
 │   │   ├── tts-stt/                 # TTS / STT (port 8006)
-│   │   └── graph-rag/               # Graph RAG / correlation analysis
-│   ├── core/                        # Core framework
-│   ├── plugins/                     # Plugin implementations
-│   ├── config/                      # Configuration modules
-│   └── shared/                      # Shared utilities
+│   │   └── graph-rag/               # Graph RAG / knowledge graph (port 8008)
+│   ├── core/                        # Core framework (incl. config/default_plugins.yml stub)
+│   ├── plugins/                     # Plugin implementations (empty — none shipped yet)
+│   ├── requirements/                # Shared Python dependency sets (see below)
+│   └── shared/                      # Shared utilities (ai, auth, config, models, utils)
 │
 ├── tests/                           # Test suite
 │   ├── unit/                        # Unit tests
@@ -64,11 +67,21 @@ minder/                              # Project root
 │   └── fixtures/                    # Test data
 │
 └── scripts/                         # Setup & utility scripts
+    ├── lib/                         # setup.sh modules (commands, docker, env, versions, ...)
+    ├── gate/                        # behavior gate for setup.sh refactors
     ├── health-check.sh              # Health monitoring ⭐
     ├── rolling-update.sh            # Rolling updates
-    └── validate-installation.sh     # Install validation
+    └── validate-installation.sh    # Install validation
     # (secrets are auto-filled by setup.sh into ./.env — no separate generate-secrets step)
 ```
+
+> **Compose is the source of truth.** `docker/compose/docker-compose.yml` is hand-maintained.
+> There is no template/regenerate machinery — edit the compose file directly. `setup.sh` invokes
+> Compose as `docker compose --file docker/compose/docker-compose.yml ...`.
+
+> **Shared dependencies live in `src/requirements/`** (`requirements.txt`, `requirements-dev.txt`,
+> `requirements-ml.txt`) — not in `src/config/` (that directory was removed). Python tooling
+> config (black/isort/mypy/pytest) lives in the root `pyproject.toml`.
 
 ## Service Structure
 
@@ -115,40 +128,40 @@ services/api-gateway/
 
 ## Infrastructure Components
 
-### Docker Services (24 total)
+31 containers total (Authelia is defined but disabled and not counted).
 
-**Security Layer** (2):
-- Traefik - Reverse proxy, load balancer, SSL termination
-- Authelia - SSO, 2FA (TOTP/WebAuthn), access control
+**Edge / Security**:
+- Traefik (v3) - Reverse proxy, TLS termination, routing
+- Authelia - SSO/2FA — **DISABLED** (commented out in compose)
 
-**Core Infrastructure** (5):
-- PostgreSQL - Primary database
-- Redis - Cache, sessions, rate limiting
-- Qdrant - Vector database for embeddings
-- Ollama - Local LLM inference
-- Neo4j - Graph database for dependencies
+**Data Stores** (internal-only, not host-exposed):
+- PostgreSQL 18.4 - Primary database
+- Redis 8.8 - Cache, sessions, rate limiting
+- Qdrant 1.18 - Vector database for embeddings
+- Neo4j 2026.05 (community) - Graph database
+- MinIO - S3-compatible object store
+- RabbitMQ 4.3 - Async message bus
+- Apicurio schema-registry
 
-**Core APIs** (6):
-- API Gateway - Single entry point
-- Plugin Registry - Plugin discovery
-- Marketplace - Plugin marketplace
-- State Manager - Plugin state tracking
-- AI Services - RAG pipeline
-- Model Management - Model versioning
+**Inference**:
+- Ollama - Local LLM inference (profile-gated)
 
-**AI Enhancement** (3):
-- TTS/STT Service - Text-to-speech/Speech-to-text
-- Model Fine-tuning - LLM fine-tuning
-- OpenWebUI - Web-based chat interface
+**Core APIs** (8):
+- API Gateway (8000) - Single entry point
+- Plugin Registry (8001) - Plugin discovery/lifecycle
+- Marketplace (8002) - Plugin/tool marketplace
+- State Manager (8003) - Plugin state + tool execution
+- RAG Pipeline (8004) - Retrieval-augmented generation
+- Model Management (8005) - Model registry over Ollama
+- TTS/STT (8006) - Text-to-speech / speech-to-text
+- Graph RAG (8008) - Entity extraction + Neo4j knowledge graph
 
-**Monitoring Stack** (7):
-- InfluxDB - Time-series metrics
-- Telegraf - Metrics collection
-- Prometheus - Metrics storage
-- Grafana - Visualization dashboards
-- Alertmanager - Alert management
-- PostgreSQL Exporter - DB metrics
-- Redis Exporter - Cache metrics
+**Web UI**:
+- OpenWebUI - Ollama chat frontend (the only user-facing web app)
+
+**Observability**:
+- Prometheus, Grafana, InfluxDB, Telegraf, Alertmanager, Jaeger, OpenTelemetry collector
+- Exporters: postgres, redis, rabbitmq, node, cAdvisor, blackbox
 
 ## Key Design Principles
 
@@ -185,14 +198,14 @@ Every service has:
 
 ### 5. Security
 
-- **SSO**: Authelia single sign-on
-- **2FA**: TOTP, WebAuthn support
-- **Authentication**: JWT-based auth
-- **Authorization**: Role-based access control
-- **Rate limiting**: Redis-based rate limiter
+- **Authentication**: JWT-based auth (bcrypt password hashing)
+- **Authorization**: JWT validation only — **RBAC is not implemented**
+- **SSO / 2FA**: Authelia is present but **disabled** (commented out in compose)
+- **Rate limiting**: Redis-based rate limiter (fail-open)
 - **Input validation**: Pydantic validators
-- **Secrets management**: Environment variables only
-- **Reverse proxy**: Traefik with SSL/TLS
+- **Secrets management**: environment variables only (root `./.env`)
+- **Reverse proxy**: Traefik v3 with TLS
+- **Network**: storage backends are internal-only; only Traefik and monitoring services expose host ports
 
 ## Development Workflow
 
@@ -287,7 +300,7 @@ JWT_SECRET=your_jwt_secret_minimum_32_characters
 
 Services may have additional variables:
 ```bash
-# AI Services
+# RAG / inference
 OLLAMA_HOST=http://ollama:11434
 QDRANT_HOST=http://qdrant:6333
 
@@ -305,12 +318,12 @@ Each service has a multi-stage Dockerfile:
 
 ```dockerfile
 # Stage 1: Dependencies
-FROM python:3.11-slim as dependencies
+FROM python:3.12-slim as dependencies   # graph-rag uses python:3.11-slim
 COPY requirements.txt .
 RUN pip install --user -r requirements.txt
 
 # Stage 2: Application
-FROM python:3.11-slim
+FROM python:3.12-slim
 COPY --from=dependencies /root/.local /root/.local
 COPY ./app ./app
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -320,13 +333,13 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 Images follow this pattern:
 ```
-minder/<service-name>:latest
+minder/<service-name>:<version>
 ```
 
 Example:
 ```
-minder/api-gateway:latest
-minder/plugin-registry:latest
+minder/api-gateway:1.0.0
+minder/plugin-registry:1.0.0
 ```
 
 ## Data Persistence

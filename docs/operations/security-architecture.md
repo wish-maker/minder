@@ -1,453 +1,152 @@
-# 🔐 Security Architecture - Zero-Trust Design
+# Security Architecture
 
-**Last Updated:** 2026-05-10
+**Last Updated:** 2026-07-10
 **Platform Version:** 1.0.0
-**Security Model:** Zero-Trust Network Segmentation
+**Environment:** Development (Raspberry Pi 4)
 
 ---
 
-> ⚠️ **STATUS (2026-07-05): this document describes the TARGET architecture, not current reality.**
-> Live inspection contradicts the Overview below. Do not treat this as the running posture:
-> - **Authelia is DISABLED** and its forwardAuth middleware is **unmounted** — no service is actually protected by SSO. Traefik's entire dynamic config (`middleware.yml` etc.) is not mounted; the `./traefik/dynamic` volume points at an empty dir (see #25).
-> - **~24 host ports are published on `0.0.0.0`** (not "no exposed ports except Traefik") — prometheus/jaeger/alertmanager/traefik-dashboard are wide open; the api-gateway proxy serves unauthenticated.
-> - This doc will be corrected to reflect the real enabled architecture as the Authelia rollout lands (#15 decision = keep+wire; #22 router refs; #25 mount fix; port lockdown).
+> **This describes the current, real security posture — plus the intended target where
+> features are not yet enabled.** Development-environment caveats are called out inline.
+> Production hardening has not yet been fully applied.
 
 ---
 
-## 📋 Overview
+## Summary of the Current Posture
 
-Minder platform implements a **zero-trust security architecture** where every service, user, and network flow must be authenticated and authorized. This is achieved through:
-
-- **Network Segmentation**: No exposed host ports (except Traefik)
-- **Authentication Required**: All services protected by Authelia SSO
-- **HTTPS-Only**: TLS/SSL enforced on all connections
-- **Service Discovery**: Internal-only Docker network communication
+- **Reverse proxy:** Traefik v3.7.7 (TLS termination, routing via Docker labels,
+  `exposedByDefault: false`). There is **no Nginx** in this stack.
+- **Authentication:** The **API Gateway** implements real JWT (HS256) authentication with
+  bcrypt-hashed credentials, plus Redis-backed rate limiting (60s window, fail-open).
+- **SSO / Authelia:** **DISABLED.** The Authelia service is commented out in compose. Traefik
+  has a `authelia-forwardauth` middleware referenced on a few routers, but because the
+  container is down the middleware does **not** enforce anything. Keep-vs-drop is an open
+  decision.
+- **RBAC:** **Not implemented.** Only JWT authentication exists on the gateway; there is no
+  role-based access control.
+- **Network:** Services communicate over Docker networks by container name. Some application
+  and observability services publish host ports directly (see
+  [Service Access Guide](./service-access.md)); storage backends are internal-only.
+- **Secrets:** Root `./.env` is the single source of truth (permissions `600`); setup.sh
+  mirrors it to `docker/compose/.env`.
 
 ---
 
-## 🏗️ Security Pillars
+## Reverse Proxy (Traefik v3)
 
-### Pillar 1: No Exposed Ports
+Traefik is the single ingress. It terminates TLS and routes by Docker labels. Only services
+that carry Traefik router labels are exposed through it (`exposedByDefault: false`).
 
-**Design Principle:** All services run on internal Docker network only
-
-**Implementation:**
 ```yaml
-# docker-compose.yml - No "ports:" mapping for internal services
-api-gateway:
-  # ❌ NO: ports: ["8000:8000"]
-  # ✅ YES: No port mapping = internal only
-  networks:
-    - docker_minder-network
-
-# Only Traefik binds to host
+# Only Traefik binds the public host ports
 traefik:
+  image: traefik:v3.7.7
   ports:
     - "80:80"
     - "443:443"
+    - "8081:8081"   # dashboard, IP-whitelisted
 ```
 
-**Benefits:**
-- Direct external access impossible
-- All traffic must go through reverse proxy
-- Attack surface minimized
+Capabilities in use:
+- TLS termination (self-signed certificates for `.local` domains in this environment).
+- HTTP→HTTPS redirect for routed hosts.
+- Router-level middleware, including IP whitelisting on admin routes (Traefik dashboard,
+  RabbitMQ management, Neo4j browser).
 
-**Verification:**
-```bash
-# Check that only Traefik has host port bindings
-docker ps --format "table {{.Names}}\t{{.Ports}}" | grep -v "0.0.0.0"
-# Should only see traefik with 0.0.0.0:80 and 0.0.0.0:443
-```
+> **Note:** Some services also publish their own host ports directly and are therefore
+> reachable without going through Traefik. This is acceptable for a development environment
+> but is not a locked-down production posture.
 
 ---
 
-### Pillar 2: Authentication Required
+## Authentication
 
-**Design Principle:** All web services require valid authentication
+### API Gateway JWT (real, in use)
 
-**Implementation:**
-```yaml
-# docker-compose.yml - All services have Authelia middleware
-api-gateway:
-  labels:
-    - "traefik.http.routers.api-gateway.middlewares=authelia-forwardauth@file,strip-api-prefix"
-```
+The API Gateway is the only service with application-level authentication:
 
-**Authentication Flow:**
-```
-1. User Request → https://api.minder.local/api/health
-                   ↓
-2. Traefik → Authelia ForwardAuth Middleware
-                   ↓
-3. Authelia → Check session cookie
-                   ↓
-4a. Valid Cookie → Allow access to service
-4b. No Cookie → 302 Redirect to Authelia login
-                   ↓
-5. User logs in → Session cookie issued
-                   ↓
-6. Retry request → Access granted
-```
+- JWT bearer tokens (HS256), issued at `POST /auth/login`.
+- Credentials stored as bcrypt hashes.
+- Redis-backed rate limiting: 60-second window, **fail-open** (if Redis is unreachable,
+  requests are allowed through).
 
-**Benefits:**
-- Single sign-on (SSO) across all services
-- Two-factor authentication (2FA) support
-- Centralized user management
-- Audit logging for all access
-
-**Verification:**
 ```bash
-# Test authentication redirect
-curl -skI https://api.minder.local/api/health
-# Should return: HTTP/2 302
-# Location: https://auth.minder.local/?rd=...
+curl -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "..."}'
 
-# Test with valid session
-curl -sk https://api.minder.local/api/health \
-  -b "authelia_session=VALID_SESSION"
-# Should return: HTTP/2 200 with response body
+curl -H "Authorization: Bearer <token>" http://localhost:8000/health
 ```
+
+### Authelia SSO (disabled)
+
+Authelia is **defined but disabled** (commented out in compose). It was intended to provide
+SSO/2FA in front of web services via a Traefik `forwardAuth` middleware. Because the
+container does not run, any router referencing that middleware currently passes traffic
+through **without** authentication. Whether to keep and wire Authelia or drop it is an open
+platform decision.
+
+### RBAC (not implemented)
+
+There is no role-based access control. Do not assume per-role or per-group authorization is
+enforced — only the gateway's JWT check exists today.
 
 ---
 
-### Pillar 3: HTTPS-Only
+## Network Model
 
-**Design Principle:** All connections encrypted with TLS/SSL
+- Services attach to the `minder-network` Docker network and resolve each other by container
+  name via Docker DNS. A second `minder-monitoring` network is prepared/attachable.
+- Storage backends (postgres, redis, qdrant, neo4j, minio, rabbitmq, schema-registry) and
+  the metric exporters are **internal-only** — no host port.
+- Application and observability services (API core 8000–8006/8008, Grafana, Prometheus,
+  Alertmanager, InfluxDB, Jaeger, OTel Collector) and Traefik publish host ports.
 
-**Implementation:**
-```yaml
-# traefik/dynamic/ssl-configuration.yml
-tls:
-  certificates:
-    - certFile: /letsencrypt/local-host.crt
-      keyFile: /letsencrypt/local-host.key
-      stores:
-        - default
-
-# docker-compose.yml - Traefik labels
-traefik:
-  labels:
-    - "traefik.http.routers.http-catchall.entrypoints=web"
-    - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
-```
-
-**HTTP to HTTPS Redirect:**
-```yaml
-# Automatic redirect for all HTTP requests
-redirect-to-https:
-  scheme: https
-  permanent: true
-```
-
-**Benefits:**
-- Data encryption in transit
-- Prevents man-in-the-middle attacks
-- SSL/TLS certificate validation
-- Secure credential transmission
-
-**Verification:**
-```bash
-# Test HTTP redirect
-curl -I http://api.minder.local/api/health
-# Should return: HTTP/1.1 308 Permanent Redirect
-# Location: https://api.minder.local/api/health
-
-# Test HTTPS connection
-curl -skI https://api.minder.local/api/health
-# Should return: HTTP/2 302 (auth redirect) or 200 (with auth)
-```
+See the [Service Access Guide](./service-access.md) for the authoritative port map.
 
 ---
 
-## 🔒 Network Architecture
+## Secrets Management
 
-### Docker Network Configuration
+- **Single source of truth:** root `./.env`. Edit this file only.
+- setup.sh **mirrors** it to `docker/compose/.env` on start/restart. Do not edit the mirror.
+- File permissions are kept at `600`.
+- There is **no** file-secrets overlay and **no** multi-environment layering (removed);
+  `.env` is the single mechanism.
 
-**Network Name:** `docker_minder-network`
-**Network Type:** Bridge
-**Subnet:** 172.19.0.0/16
-**Gateway:** 172.19.0.1
-
-**Service IP Assignment:**
-```
-Traefik:         172.19.0.2  (only service with host ports)
-Authelia:        172.19.0.3  (authentication service)
-PostgreSQL:      172.19.0.4  (primary database)
-Redis:           172.19.0.5  (cache)
-Qdrant:          172.19.0.6  (vector database)
-Neo4j:           172.19.0.7  (graph database)
-RabbitMQ:        172.19.0.8  (message broker)
-InfluxDB:        172.19.0.9  (time-series DB)
-MinIO:           172.19.0.10 (object storage)
-API Gateway:     172.19.0.14 (main API)
-Plugin Registry: 172.19.0.15 (plugin service)
-Marketplace:     172.19.0.16 (plugin marketplace)
-... and more
-```
-
-**Network Isolation:**
-- All services communicate via internal DNS (service names)
-- External access only through Traefik (80/443)
-- No cross-container network access violations
-- Service-to-service encryption possible
-
----
-
-## 🛡️ Security Layers
-
-### Layer 1: Network Security
-
-**Features:**
-- Internal-only Docker network
-- No exposed host ports
-- Service discovery via Docker DNS
-- Network segmentation by service type
-
-**Configuration:**
-```yaml
-# docker-compose.yml
-networks:
-  docker_minder-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.19.0.0/16
-```
-
-### Layer 2: Reverse Proxy Security
-
-**Traefik Configuration:**
-- SSL/TLS termination
-- Request routing and filtering
-- Rate limiting capabilities
-- IP whitelist support
-
-**Middleware Chain:**
-```yaml
-# Example: API Gateway security
-1. SSL/TLS (enforced)
-2. Authelia ForwardAuth (authentication)
-3. Strip API Prefix (URL normalization)
-4. Rate Limiting (optional)
-5. IP Whitelist (admin services)
-```
-
-### Layer 3: Application Security
-
-**Authelia Features:**
-- User authentication (local, LDAP, OAuth)
-- Two-factor authentication (TOTP, WebAuthn)
-- Session management
-- Access control rules
-
-**Access Control Examples:**
-```yaml
-# authelia/configuration.yml
-access_control:
-  default_policy: deny
-
-  rules:
-    # Domain-based access
-    - domain: "api.minder.local"
-      policy: one_factor
-      subject:
-        - ["group:developers"]
-
-    # Admin services - 2FA required
-    - domain: "grafana.minder.local"
-      policy: two_factor
-      subject:
-        - ["group:admins"]
-
-    # Public services (none in this architecture)
-    - domain: "public.minder.local"
-      policy: bypass
-```
-
-### Layer 4: Service Security
-
-**Internal Service Authentication:**
-- Service-to-service communication via internal network
-- API key authentication for sensitive operations
-- Database credential management via secrets
-- Environment variable isolation
-
----
-
-## 🔑 Authentication Methods
-
-### Method 1: Authelia SSO (Production)
-
-**Flow:**
-```
-User → Traefik → Authelia ForwardAuth → Authelia Service
-                                        ↓
-                                  Check Session Cookie
-                                        ↓
-                                  Valid? → Allow
-                                  Invalid? → Redirect to Login
-```
-
-**Configuration:**
-```yaml
-# traefik/dynamic/authelia-middleware.yml
-http:
-  middlewares:
-    authelia-forwardauth:
-      forwardAuth:
-        address: "http://minder-authelia:9091/api/verify?rd=https://auth.minder.local/"
-        trustForwardHeader: true
-        authResponseHeaders:
-          - "Remote-User"
-          - "Remote-Groups"
-```
-
-### Method 2: Direct Container Access (Development)
-
-**Purpose:** Debugging and development only
-
-**Methods:**
 ```bash
-# Shell access
-./setup.sh shell api-gateway
-
-# Docker exec
-docker exec minder-api-gateway curl http://localhost:8000/health
-
-# Via container IP (from host)
-curl http://172.19.0.14:8000/health
-```
-
-**⚠️ Security Note:** These methods bypass authentication and should only be used for development/debugging.
-
----
-
-## 🚨 Security Considerations
-
-### Production Deployment
-
-**Certificate Management:**
-```bash
-# Current: Self-signed certificates for .local domains
-# Production: Use Let's Encrypt or corporate CA
-
-# Update traefik/dynamic/ssl-configuration.yml
-tls:
-  certificates:
-    - certFile: /letsencrypt/production.crt
-      keyFile: /letsencrypt/production.key
-```
-
-**Password Security:**
-```bash
-# Generate strong passwords
-./setup.sh doctor --check-passwords
-
-# Update the env file (root ./.env is the single source of truth; setup.sh
-# mirrors it to docker/compose/.env on start/restart — do not edit that copy)
+# Edit the root env file
 nano .env
 
-# ⚠️ Changing an ALREADY-RUNNING stateful secret (e.g. POSTGRES_PASSWORD) in ./.env
-#    does NOT rotate the live credential by itself — the database keeps the old one.
-#    After editing POSTGRES_PASSWORD, run:
-./setup.sh sync-postgres-password
+# Changing an ALREADY-RUNNING stateful secret (e.g. POSTGRES_PASSWORD) does not rotate the
+# live credential by itself — the database keeps the old one. After editing, run:
+bash setup.sh sync-postgres-password
 ```
 
-**Access Control:**
-```bash
-# Review Authelia users
-cat docker/services/authelia/users_database.yml
-
-# Review access rules
-cat docker/services/authelia/configuration.yml | grep -A 20 "access_control"
-
-# Audit logs
-docker logs minder-authelia | grep -i "audit\|access\|denied"
-```
-
-### Security Best Practices
-
-1. **Never expose internal services on host ports**
-2. **Always use HTTPS in production**
-3. **Enable 2FA for all admin accounts**
-4. **Rotate credentials regularly**
-5. **Monitor Authelia logs for suspicious activity**
-6. **Keep Traefik and Authelia updated**
-7. **Use strong passwords for all services**
-8. **Limit access to Docker host**
-9. **Enable firewall rules for host ports 80/443 only**
-10. **Regular security audits**
+Never commit `.env` files containing real secrets.
 
 ---
 
-## 🔍 Security Verification
+## Security Considerations & Roadmap
 
-### Test 1: Verify No Exposed Ports
+This is a development deployment. Before treating it as production-ready:
 
-```bash
-# Should only see Traefik with 0.0.0.0:80 and 0.0.0.0:443
-docker ps --format "table {{.Names}}\t{{.Ports}}" | grep "0.0.0.0"
-```
-
-**Expected Output:**
-```
-NAMES           PORTS
-minder-traefik  0.0.0.0:80->80/tcp, 0.0.0.0:443->443/tcp
-```
-
-### Test 2: Verify HTTPS Redirect
-
-```bash
-curl -I http://api.minder.local/api/health
-```
-
-**Expected Output:**
-```
-HTTP/1.1 308 Permanent Redirect
-Location: https://api.minder.local/api/health
-```
-
-### Test 3: Verify Authentication Required
-
-```bash
-curl -skI https://api.minder.local/api/health
-```
-
-**Expected Output:**
-```
-HTTP/2 302
-Location: https://auth.minder.local/?rd=https%3A%2F%2Fapi.minder.local%2Fapi%2Fhealth
-```
-
-### Test 4: Verify Internal Network Access
-
-```bash
-# From API Gateway container
-docker exec minder-api-gateway curl http://minder-postgres:5432
-```
-
-**Expected:** Connection successful (internal communication works)
-
-### Test 5: Verify SSL/TLS Certificate
-
-```bash
-curl -vk https://api.minder.local/api/health 2>&1 | grep -i "ssl\|tls\|certificate"
-```
-
-**Expected:** SSL/TLS connection established (certificate may be self-signed)
+1. Decide and (if kept) actually enable Authelia SSO so routed services are gated.
+2. Lock down host-published ports; front everything through the proxy.
+3. Replace self-signed `.local` certificates with a real CA / Let's Encrypt.
+4. Implement authorization (RBAC) beyond the gateway's JWT check if multi-tenant/role
+   separation is required.
+5. Rotate credentials via `./.env` (and `sync-postgres-password` for stateful ones).
+6. Keep Traefik and images updated.
 
 ---
 
-## 📚 Additional Resources
+## Additional Resources
 
-- [Troubleshooting Guide](../troubleshooting/TROUBLESHOOTING.md)
 - [Service Access Guide](./service-access.md)
-- [Authelia Documentation](https://www.authelia.com/docs/)
 - [Traefik Documentation](https://doc.traefik.io/traefik/)
+- [Authelia Documentation](https://www.authelia.com/docs/) (for the deferred SSO rollout)
 
 ---
 
-*Last Updated: 2026-05-10*
-*Platform Version: 1.0.0*
-*Security Model: Zero-Trust Network Segmentation*
-*Status: Production Ready*
+*Last Updated: 2026-07-10 · Development environment · Reverse proxy: Traefik v3 · SSO: disabled · RBAC: not implemented*

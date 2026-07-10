@@ -1,449 +1,268 @@
-# Minder Platform - Upgrade Runbook
-## PostgreSQL 16 → 17 Migration & Service Version Upgrades
+# Minder Platform — Docker Image Upgrade Runbook
 
-**Target Date:** 2026-05-04
-**Engineer:** SRE Team
-**Platform:** RPi-4 (ARM64, 8GB RAM)
-**Downtime Window:** ~30 minutes (Postgres migration + service restarts)
+**Platform:** Raspberry Pi 4 (RPi-4-01, ARM64, 8 GB RAM)
+**Environment:** Development (production hardening not yet applied)
+**Last Updated:** 2026-07-10
 
 ---
 
-## Executive Summary
+## Overview
 
-This runbook upgrades the Minder AI Platform from current versions to 2026 stable targets. The **critical path** is PostgreSQL 16→17 migration, which requires data backup and restoration.
+This runbook covers upgrading the Docker image versions used by the Minder platform, plus
+the special handling required for a **PostgreSQL major-version** upgrade (which needs a
+dump/restore rather than an in-place volume swap).
 
-**Risk Level:** Medium (Postgres major version upgrade)
-**Rollback:** Full restore from backup available
+### How versions are managed (read this first)
+
+- **`docker/compose/docker-compose.yml` is the hand-maintained single source of truth.**
+  Image versions are pinned directly on the `image:` lines. You edit this file to change a
+  version — there is **no template and no regeneration step** (the old
+  template/regenerate machinery was removed in #31). Do **not** look for
+  `.setup/templates/…` or a `compose_gen.sh`; they no longer exist.
+- **`versions.sh`** *derives* the version list from the compose `image:` lines and produces
+  a **drift report** (installed vs. pinned vs. latest available). It does not itself edit
+  the compose file.
+- **`bash setup.sh update`** performs the update flow (pull + recreate) for the pinned
+  images.
+- **CI (`.github/workflows/docker-image-update.yml`)** periodically checks upstream
+  registries and **proposes** version bumps via PR. A human reviews and merges; the merged
+  compose file is what ships. CI reads/edits the compose file directly — it never touches a
+  template.
+
+> Bottom line: to change an image version, edit the `image:` tag in
+> `docker/compose/docker-compose.yml`, commit it, then apply with `bash setup.sh update`.
 
 ---
 
 ## Pre-Upgrade Checklist
 
-### 1. System Prerequisites
-- [ ] Verify RPi-4 has sufficient RAM (8GB required)
-- [ ] Check available disk space (minimum 10GB free for Postgres dump)
-- [ ] Ensure all services are healthy before starting
-- [ ] Notify users of planned maintenance window
+- [ ] Confirm the Pi has enough free disk for a dump (databases can be several GB).
+- [ ] All services healthy: `bash setup.sh status` and `bash setup.sh doctor`.
+- [ ] Take a fresh backup: **`bash setup.sh backup`** (see
+      `infrastructure-backup-strategy.md`).
+- [ ] Review the proposed version changes (the CI PR diff, or `versions.sh` drift report).
+- [ ] Note current versions so you can roll back.
 
-### 2. Backup Verification
 ```bash
-# Check disk space for backups
-df -h /root/minder
+# See installed vs. pinned vs. latest (drift report)
+bash versions.sh   # or: scripts/lib/versions.sh, per repo layout
 
-# Verify backup directory exists
-mkdir -p /root/minder/backups/$(date +%Y%m%d)
+# Snapshot current image tags for rollback reference
+grep -nE '^\s*image:' docker/compose/docker-compose.yml
 ```
 
 ---
 
-## Phase 1: Pre-Migration Data Backup
+## Standard Image Upgrade (no data migration)
 
-### Step 1.1: Stop Application Services
-**Goal:** Prevent data changes during backup
+Most image bumps (Grafana, Prometheus, Traefik, Redis minor, exporters, etc.) are safe
+in-place upgrades: the volume format is compatible, so pulling the new tag and recreating
+the container is enough.
+
+### Step 1 — Back up
 
 ```bash
-cd /root/minder/docker/compose
-
-# Stop all services except databases and monitoring
-docker compose stop api-gateway plugin-registry plugin-state-manager
-docker compose stop rag-pipeline model-management marketplace
-docker compose stop model-fine-tuning tts-service openwebui
+bash setup.sh backup
 ```
 
-**Verify:**
+### Step 2 — Update the pinned version
+
+Edit the `image:` tag in `docker/compose/docker-compose.yml` (or merge the CI-proposed
+PR). Example:
+
+```yaml
+# docker/compose/docker-compose.yml
+services:
+  grafana:
+    image: grafana/grafana:13.1        # bump to the new pinned tag
+```
+
+### Step 3 — Apply
+
 ```bash
+# Pull + recreate per the pinned compose
+bash setup.sh update
+
+# Or target a single service manually:
+docker compose --file docker/compose/docker-compose.yml pull grafana
+docker compose --file docker/compose/docker-compose.yml up -d grafana
+```
+
+### Step 4 — Verify
+
+```bash
+bash setup.sh status
 docker ps --format "table {{.Names}}\t{{.Status}}"
-# Should show only: postgres, redis, rabbitmq, influxdb, prometheus, grafana, exporters
 ```
 
-### Step 1.2: Dump PostgreSQL Data
-**Goal:** Complete data backup before version upgrade
+Remember: `otel-collector`, `redis-exporter`, and `rabbitmq-exporter` have **no
+healthcheck by design** — they will show "no healthcheck", which is normal, not
+"unhealthy".
+
+---
+
+## PostgreSQL Major-Version Upgrade (Critical Path)
+
+A **major** PostgreSQL version change (e.g. the data directory format changes) cannot be
+done by simply swapping the image — the new server will refuse an old-format volume. Use a
+logical dump/restore.
+
+> The platform currently pins `postgres:18.4-trixie`. Only follow this section when you
+> are actually crossing a major version that changes the on-disk format.
+
+### Step 1 — Quiesce writers and dump
 
 ```bash
-# Create backup directory
-BACKUP_DIR="/root/minder/backups/$(date +%Y%m%d)"
+# Stop the app services that write to Postgres (leave DBs/monitoring up)
+docker compose --file docker/compose/docker-compose.yml stop \
+  api-gateway plugin-registry plugin-state-manager \
+  marketplace rag-pipeline model-management tts-stt graph-rag openwebui
+
+BACKUP_DIR="./backups/pg-upgrade-$(date +%Y%m%d)"
 mkdir -p "$BACKUP_DIR"
 
-# Dump all databases (pg_dumpall includes global objects)
-docker exec minder-postgres pg_dumpall -U minder > "$BACKUP_DIR/postgres_full_dump.sql"
-
-# Verify backup file exists and is not empty
-ls -lh "$BACKUP_DIR/postgres_full_dump.sql"
-# Should show ~50-500MB depending on data size
-
-# Create checksum for integrity verification
+# pg_dumpall captures ALL databases + global objects (roles, grants).
+# The main DB plus aux DBs: minder_marketplace, tefas_db, weather_db,
+# news_db, crypto_db, minder_schemaregistry.
+docker exec minder-postgres pg_dumpall -U "$POSTGRES_USER" > "$BACKUP_DIR/postgres_full_dump.sql"
 sha256sum "$BACKUP_DIR/postgres_full_dump.sql" > "$BACKUP_DIR/postgres_dump.sha256"
-```
-
-**★ Insight ─────────────────────────────────────**
-**Why pg_dumpall instead of pg_dump?**
-- Includes all databases, roles, and permissions
-- Captures global objects (users, tablespaces)
-- Ensures complete system restoration
-- Critical for migration between major versions
-`─────────────────────────────────────────────────`
-
-### Step 1.3: Backup Additional Data
-**Goal:** Protect all persistent data
-
-```bash
-# Backup Docker volumes (optional but recommended)
-docker run --rm -v minder_postgres_data:/data -v "$BACKUP_DIR:/backup" \
-  alpine:3.19 tar czf /backup/postgres_volume.tar.gz -C /data .
-
-docker run --rm -v minder_redis_data:/data -v "$BACKUP_DIR:/backup" \
-  alpine:3.19 tar czf /backup/redis_volume.tar.gz -C /data .
-
-# Verify backups
 ls -lh "$BACKUP_DIR"
-# Expected output:
-# postgres_full_dump.sql
-# postgres_dump.sha256
-# postgres_volume.tar.gz
-# redis_volume.tar.gz
+```
+
+### Step 2 — Replace the container and volume
+
+```bash
+# Verify the dump exists before destroying anything
+[ -s "$BACKUP_DIR/postgres_full_dump.sql" ] || { echo "ABORT: empty/missing dump"; exit 1; }
+
+docker compose --file docker/compose/docker-compose.yml stop postgres
+docker compose --file docker/compose/docker-compose.yml rm -f postgres
+
+# Remove the old data volume (name is <project>_postgres_data — confirm first)
+docker volume ls | grep postgres_data
+docker volume rm <project>_postgres_data
+```
+
+### Step 3 — Bump the pinned image and start fresh
+
+Edit `docker/compose/docker-compose.yml` to the new `postgres:` tag, then:
+
+```bash
+docker compose --file docker/compose/docker-compose.yml up -d postgres
+
+# Wait for readiness
+until docker exec minder-postgres pg_isready -U "$POSTGRES_USER"; do sleep 5; done
+```
+
+### Step 4 — Restore
+
+```bash
+# pg_dumpall output recreates databases, roles and grants
+docker exec -i minder-postgres psql -U "$POSTGRES_USER" < "$BACKUP_DIR/postgres_full_dump.sql"
+
+# Sanity: list databases
+docker exec minder-postgres psql -U "$POSTGRES_USER" -c "\l"
+```
+
+> If the app-side password in `./.env` and the restored role password diverge, run
+> `bash setup.sh sync-postgres-password`.
+
+### Step 5 — Migrate schema and bring services back
+
+```bash
+# Apply any pending schema migrations
+bash setup.sh migrate
+
+# Start everything
+bash setup.sh start
+bash setup.sh status
 ```
 
 ---
 
-## Phase 2: Service Version Upgrades
-
-### Step 2.1: Update docker-compose.yml
-**Goal:** Apply all 2026 stable version targets
-
-**Changes Applied:**
-```yaml
-# Core Infrastructure
-traefik:v3.1.6 → v3.3.4
-authelia:4.38.7 → 4.38.18
-postgres:16 → 17.4-alpine
-redis:7.2-alpine → 7.4.2-alpine
-rabbitmq:3.13-management → 3.13-management-alpine
-
-# AI/ML Services
-ollama:0.5.7 → 0.5.12
-qdrant:v1.17.1 → v1.13.2
-neo4j:5.24-community → 5.26-community
-
-# Monitoring Stack
-prometheus:v2.55.1 → v3.1.0
-grafana:11.4.0 → 11.5.2
-telegraf:1.33.1 → 1.34.0
-influxdb:2.7.12 → 2.7.13
-
-# Exporters
-postgres-exporter:v0.15.0 → v0.16.0
-redis-exporter:v1.62.0 → v1.63.0
-```
-
-### Step 2.2: Apply Configuration Fixes
-**Goal:** Fix breaking changes in new versions
-
-**Authelia Configuration Fix:**
-```yaml
-# File: authelia/configuration.yml
-session:
-  cookies:
-    - name: authelia_session
-      domain: minder.local
-      authelia_url: https://authelia.minder.local
-      default_redirection_url: https://authelia.minder.local  # ADDED
-```
-
-**Telegraf Configuration Fix:**
-```toml
-# File: telegraf/telegraf.conf
-[[inputs.docker]]
-  endpoint = "unix:///var/run/docker.sock"
-  timeout = "5s"
-  source_tag = true
-  perdevice_include = ["cpu", "mem", "net", "blkio"]  # REPLACED deprecated options
-```
-
-**RabbitMQ Exporter Healthcheck Fix:**
-```yaml
-# File: docker-compose.yml
-rabbitmq-exporter:
-  healthcheck:
-    test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/metrics"]
-```
-
----
-
-## Phase 3: PostgreSQL Migration (Critical Path)
-
-### Step 3.1: Stop Old PostgreSQL Container
-**Goal:** Clean shutdown before migration
+## Verification
 
 ```bash
-# Stop Postgres gracefully
-docker compose stop postgres
+# Core API health
+curl -f http://localhost:8000/health   # api-gateway
+curl -f http://localhost:8001/health   # plugin-registry
 
-# Verify stopped
-docker ps -a --filter "name=minder-postgres" --format "table {{.Names}}\t{{.Status}}"
-```
+# Monitoring
+curl -f http://localhost:9090/-/healthy # prometheus
+curl -f http://localhost:3000/api/health # grafana
 
-### Step 3.2: Remove Old Container and Volume
-**⚠️ CRITICAL: Backup verified before proceeding!**
+# Data stores (internal — exec into containers)
+docker exec minder-postgres pg_isready -U "$POSTGRES_USER"
+docker exec minder-redis redis-cli -a "$REDIS_PASSWORD" ping
 
-```bash
-# Verify backup exists
-if [ ! -f "$BACKUP_DIR/postgres_full_dump.sql" ]; then
-  echo "ERROR: Backup not found! Aborting migration."
-  exit 1
-fi
+# Overall
+bash setup.sh doctor
 
-# Remove old container and volume
-docker compose rm -f postgres
-docker volume rm minder_postgres_data
-
-# Verify removal
-docker volume ls | grep postgres
-# Should show empty
-```
-
-### Step 3.3: Start New PostgreSQL 17
-**Goal:** Launch upgraded version
-
-```bash
-# Start new Postgres 17 container
-docker compose up -d postgres
-
-# Wait for health check
-echo "Waiting for PostgreSQL 17 to be healthy..."
-while ! docker exec minder-postgres pg_isready -U minder; do
-  echo "PostgreSQL is starting..."
-  sleep 5
-done
-
-echo "PostgreSQL 17 is ready!"
-```
-
-### Step 3.4: Restore Data
-**Goal:** Migrate data to new version
-
-```bash
-# Create databases (needed for restore)
-docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" minder-postgres psql -U minder -d postgres <<EOF
-CREATE DATABASE tefas_db;
-CREATE DATABASE weather_db;
-CREATE DATABASE news_db;
-CREATE DATABASE crypto_db;
-CREATE DATABASE minder_marketplace;
-EOF
-
-# Restore all data from backup
-docker exec -i minder-postgres psql -U minder < "$BACKUP_DIR/postgres_full_dump.sql"
-
-# Verify restore
-docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" minder-postgres psql -U minder -d minder -c "\l"
-
-# Expected output: List of all databases including minder, tefas_db, weather_db, etc.
-```
-
-**★ Insight ─────────────────────────────────────`
-**Why recreate databases before restore?**
-- pg_dumpall includes CREATE DATABASE statements
-- But Postgres 17 may have different template database defaults
-- Explicit creation ensures correct encoding and collation
-- Prevents "database already exists" errors during restore
-`─────────────────────────────────────────────────`
-
----
-
-## Phase 4: Service Restart and Verification
-
-### Step 4.1: Start All Services
-**Goal:** Bring platform back online
-
-```bash
-# Start all services with new versions
-docker compose up -d
-
-# Wait for health checks
-echo "Waiting for services to be healthy..."
-sleep 30
-
-# Check status
-docker ps --format "table {{.Names}}\t{{.Status}}"
-```
-
-### Step 4.2: Verify Service Health
-**Goal:** Ensure all services started successfully
-
-```bash
-# Check for restarting containers
-docker ps --filter "status=restarting"
-
-# If any are restarting, check logs
-docker logs minder-authelia --tail 50
-docker logs minder-telegraf --tail 50
-docker logs minder-rabbitmq-exporter --tail 50
-
-# Verify healthchecks
-docker inspect --format='{{.State.Health.Status}}' \
-  minder-authelia \
-  minder-telegraf \
-  minder-rabbitmq-exporter \
-  minder-postgres \
-  minder-redis
-```
-
-### Step 4.3: Functional Testing
-**Goal:** Verify platform functionality
-
-```bash
-# Test API Gateway
-curl -f http://localhost:8000/health || echo "API Gateway unhealthy"
-
-# Test Plugin Registry
-curl -f http://localhost:8001/health || echo "Plugin Registry unhealthy"
-
-# Test Grafana
-curl -f http://localhost:3000/api/health || echo "Grafana unhealthy"
-
-# Test Prometheus
-curl -f http://localhost:9090/-/healthy || echo "Prometheus unhealthy"
-
-# Test Postgres connection
-docker exec minder-postgres pg_isready -U minder || echo "Postgres unhealthy"
-
-# Test Redis connection
-docker exec minder-redis redis-cli -a "${REDIS_PASSWORD}" ping || echo "Redis unhealthy"
-```
-
----
-
-## Phase 5: Post-Migration Verification
-
-### Step 5.1: Data Integrity Check
-**Goal:** Verify no data loss during migration
-
-```bash
-# Count records in key tables
-docker exec -e PGPASSWORD="${POSTGRES_PASSWORD}" minder-postgres psql -U minder -d minder -c "
-  SELECT 'plugins' as table_name, count(*) FROM plugin_registry
-  UNION ALL
-  SELECT 'users', count(*) FROM users
-  UNION ALL
-  SELECT 'marketplace', count(*) FROM marketplace_items;
-"
-
-# Verify expected row counts match pre-migration
-```
-
-### Step 5.2: Performance Verification
-**Goal:** Ensure no performance regression
-
-```bash
-# Check Postgres query performance
-docker exec minder-postgres psql -U minder -d minder -c "
-EXPLAIN ANALYZE SELECT * FROM plugin_registry LIMIT 10;
-"
-
-# Monitor resource usage
+# Resource usage on the Pi
 docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 ```
 
 ---
 
-## Rollback Procedure (If Needed)
+## Rollback
 
-### Immediate Rollback (< 5 min after migration):
+### Revert an image bump
+
 ```bash
-# Stop new Postgres 17
-docker compose stop postgres
-docker compose rm -f postgres
-docker volume rm minder_postgres_data
+# Restore the previous pinned tag(s) in the compose file
+git checkout -- docker/compose/docker-compose.yml   # if the bump was committed
+# ...or hand-edit the image: tag back to the previous version
 
-# Restore old Postgres 16 container
-# Update docker-compose.yml: postgres:17.4-alpine → postgres:16
-docker compose up -d postgres
-
-# Restore data from backup
-docker exec -i minder-postgres psql -U minder < "$BACKUP_DIR/postgres_full_dump.sql"
-
-# Restart services
-docker compose up -d
+bash setup.sh update
 ```
 
-### Full System Rollback:
-```bash
-# Revert docker-compose.yml to previous version
-cd /root/minder/docker/compose
-git checkout docker-compose.yml
+### Roll back a failed Postgres major upgrade
 
-# Restart all services
-docker compose down
-docker compose up -d
+```bash
+docker compose --file docker/compose/docker-compose.yml stop postgres
+docker compose --file docker/compose/docker-compose.yml rm -f postgres
+docker volume rm <project>_postgres_data
+
+# Revert the postgres: tag in the compose file to the previous major, then:
+docker compose --file docker/compose/docker-compose.yml up -d postgres
+until docker exec minder-postgres pg_isready -U "$POSTGRES_USER"; do sleep 5; done
+docker exec -i minder-postgres psql -U "$POSTGRES_USER" < "$BACKUP_DIR/postgres_full_dump.sql"
+
+bash setup.sh start
+```
+
+### Full restore
+
+If a broader failure occurs, restore from the pre-upgrade backup:
+
+```bash
+bash setup.sh stop
+bash setup.sh restore
+bash setup.sh start
 ```
 
 ---
 
-## Post-Migration Tasks
+## Notes on ARM
 
-### 1. Monitor Logs
-```bash
-# Watch for any errors in first hour
-tail -f /var/log/minder/*.log
-
-# Check Docker logs
-docker logs --tail 100 -f minder-authelia
-docker logs --tail 100 -f minder-telegraf
-```
-
-### 2. Update Documentation
-- [ ] Update runbook with current versions
-- [ ] Document any configuration changes
-- [ ] Update monitoring dashboards
-
-### 3. Cleanup Old Backups
-```bash
-# Keep backups for 7 days, then cleanup
-find /root/minder/backups -mtime +7 -exec rm {} \;
-```
+- All pinned images must have an `arm64`/`linux/arm64` variant — the Pi 4 is ARM64. The CI
+  update job and manual bumps should only propose tags that publish ARM builds.
+- Memory is the constraint on a Pi 4 (8 GB). See `hardware-optimization.md`: the API
+  gateway is capped at 2 G / 2 CPU in compose; Ollama and Neo4j are the next largest
+  consumers. Verify RAM headroom (`free -h`) before and after an upgrade.
 
 ---
 
 ## Success Criteria
 
-✅ **Migration Complete When:**
-- [ ] All containers show "healthy" status
-- [ ] No containers in "restarting" state
-- [ ] All health checks passing
-- [ ] Data integrity verified (row counts match)
-- [ ] Performance acceptable (query times within 10% of baseline)
-- [ ] No errors in logs for 30 minutes
+- [ ] All containers `healthy` (or "no healthcheck" for the 3 by-design exceptions); none
+      stuck `restarting`.
+- [ ] Core API and monitoring health checks pass.
+- [ ] Postgres data intact (row counts match pre-upgrade for key tables).
+- [ ] No error spikes in logs for ~30 minutes: `docker logs minder-<service> --tail 100 -f`.
+- [ ] `bash setup.sh doctor` clean.
 
 ---
 
-## Resource Limits Applied
-
-**Memory Limits for RPi-4 (8GB RAM):**
-```yaml
-ollama:
-  mem_limit: 2GB
-
-qdrant:
-  mem_limit: 512MB
-
-# All other services: No explicit limits (use defaults)
-# Total expected usage: ~4-5GB (leaving 3-4GB headroom)
-```
-
----
-
-## Timeline Estimate
-
-| Phase | Duration |
-|-------|----------|
-| Pre-Migration Backup | 10 min |
-| Service Upgrades | 5 min |
-| Postgres Migration | 15 min |
-| Verification | 10 min |
-| **Total** | **~40 min** |
-
----
-
-**Status:** ✅ Ready for Execution
-**Backup Location:** `/root/minder/backups/$(date +%Y%m%d)/`
-**Rollback:** Fully tested and available
+**Rollback:** Backup via `bash setup.sh backup`; restore via `bash setup.sh restore`.
+**Backup location:** `./backups/…` and the MinIO `backup-archives` bucket.

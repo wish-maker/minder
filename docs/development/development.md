@@ -1,279 +1,219 @@
 # Development Guide
 
+**Last Updated:** 2026-07-10
+
 ## Overview
 
-This guide covers local development setup, workflow, and best practices for contributing to Minder Platform.
+This guide covers local development setup, workflow, and conventions for the Minder
+platform. Minder is a set of Python (3.11 / 3.12) FastAPI services orchestrated with
+Docker Compose, fronted by the **Traefik** reverse proxy. There is **no separate frontend
+app** — the web UI is **OpenWebUI**.
 
 ## Prerequisites
 
 ### Required Software
 
-- **Python** 3.11+ - Core runtime
-- **Docker** 20.10+ - Container runtime
-- **Docker Compose** 2.20+ - Service orchestration
-- **Git** - Version control
-- **VS Code** or **PyCharm** - Recommended IDE
+- **Docker** and **Docker Compose v2** — container runtime and orchestration
+- **Git** — version control
+- **Python 3.11 / 3.12** — only needed if running a service or tests outside Docker
+- An editor of your choice (VS Code, PyCharm, etc.)
 
 ### Recommended Tools
 
-- **Postman** or **curl** - API testing
-- **pgAdmin** - Database management
-- **Redis Insight** - Redis GUI
-- **make** - Build automation
+- **curl** / **httpie** — API testing
+
+## Layout
+
+```
+minder/
+├── setup.sh                       # single entry point for all lifecycle commands
+├── pyproject.toml                 # Python tooling config (black, isort, pytest, mypy)
+├── docker-compose.test.yml        # test dependencies
+├── docker/
+│   └── compose/
+│       └── docker-compose.yml     # hand-maintained source of truth for services
+├── src/
+│   ├── services/                  # one FastAPI app per service (see below)
+│   ├── core/                      # shared core logic (plugin interface, loaders)
+│   ├── plugins/                   # plugin implementations
+│   ├── shared/                    # shared helpers/utilities
+│   └── requirements/              # shared dependency pins
+└── tests/                         # unit / integration / e2e / performance / manual
+```
+
+### Services (`src/services/`)
+
+Eight FastAPI services:
+
+| Directory | Container | Host Port |
+|-----------|-----------|-----------|
+| `api-gateway` | minder-api-gateway | 8000 |
+| `plugin-registry` | minder-plugin-registry | 8001 |
+| `marketplace` | minder-marketplace | 8002 |
+| `plugin-state-manager` | minder-plugin-state-manager | 8003 |
+| `rag-pipeline` | minder-rag-pipeline | 8004 |
+| `model-management` | minder-model-management | 8005 |
+| `tts-stt` | minder-tts-stt | 8006 |
+| `graph-rag` | minder-graph-rag | 8008 |
+
+Most services build on `python:3.12-slim`; `graph-rag` uses `python:3.11-slim`.
 
 ## Local Development Setup
 
 ### Quick Start
 
 ```bash
-# Clone repository
+# Clone
 git clone git@github.com:wish-maker/minder.git
 cd minder
 
-# Run setup
-./setup.sh
-
-# Verify installation
-./scripts/health-check.sh
-```
-
-### Manual Setup
-
-#### Step 1: Environment Configuration
-
-```bash
 # Create the environment file (root ./.env is the single source of truth)
 cp .env.example .env
 
-# You do NOT need to generate secrets by hand — setup.sh auto-fills every CHANGEME
-# placeholder with a secure random value on install/start/restart, and leaves any
-# value you set yourself untouched. Just set the non-secret dev options you want:
-cat >> .env << EOF
+# Start everything (setup.sh auto-fills any CHANGEME secret with a secure random
+# value, then mirrors ./.env → docker/compose/.env and brings the stack up)
+bash setup.sh start
+
+# Check status
+bash setup.sh status
+```
+
+### Environment Configuration
+
+The **root `./.env` is the single source of truth**. `setup.sh` mirrors it to
+`docker/compose/.env` (auto-generated — do **not** edit that copy). You do not need to
+generate secrets by hand: `setup.sh` fills every `CHANGEME` placeholder with a secure
+random value on install/start/restart and leaves any value you set yourself untouched.
+
+Set non-secret dev options directly in `./.env`, e.g.:
+
+```bash
 ENVIRONMENT=development
 LOG_LEVEL=DEBUG
-EOF
-
-# Then start (auto-fills remaining secrets and mirrors ./.env → docker/compose/.env):
-bash setup.sh start
 ```
 
-#### Step 2: Start Infrastructure
+### setup.sh commands
 
-```bash
-# Start databases and core services
-docker compose -f docker/compose/docker-compose.yml up -d postgres redis qdrant ollama neo4j
+`setup.sh` is the single entry point:
 
-# Wait for services to be ready
-sleep 30
+```
+install | start | stop | restart | status | logs | shell | migrate |
+backup | restore | doctor | update | ollama-mode | sync-postgres-password | uninstall
 ```
 
-#### Step 3: Start Application Services
+Common usage:
 
 ```bash
-# Start security layer
-docker compose -f docker/compose/docker-compose.yml up -d traefik authelia
-
-# Start core APIs
-docker compose -f docker/compose/docker-compose.yml up -d api-gateway plugin-registry marketplace plugin-state-manager
-
-# Start AI services
-docker compose -f docker/compose/docker-compose.yml up -d rag-pipeline model-management
-
-# Start AI enhancement and monitoring
-docker compose -f docker/compose/docker-compose.yml up -d openwebui tts-service model-fine-tuning prometheus grafana
+bash setup.sh start          # bring the stack up
+bash setup.sh status         # health overview
+bash setup.sh logs <svc>     # tail a service's logs
+bash setup.sh restart <svc>  # restart a service
+bash setup.sh doctor         # environment / dependency diagnostics
+bash setup.sh shell <svc>    # shell into a service container
 ```
 
-#### Step 4: Verify Setup
+Under the hood, Compose is invoked as:
 
 ```bash
-# Health check
-./scripts/health-check.sh
+docker compose --file docker/compose/docker-compose.yml <command>
+```
 
-# Run tests (118 passing, 93% coverage)
-pytest tests/unit/ -v
+### Bringing up individual services (advanced)
+
+`setup.sh start` is the normal path. If you need to bring up a subset manually, use the
+compose file directly:
+
+```bash
+docker compose -f docker/compose/docker-compose.yml up -d postgres redis qdrant neo4j
+docker compose -f docker/compose/docker-compose.yml up -d api-gateway rag-pipeline
 ```
 
 ## Development Workflow
 
-### 1. Feature Development
+### Feature Development
 
 ```bash
-# Create feature branch
-git checkout -b feature/new-plugin-system
-
-# Make changes
-# ... code changes ...
-
-# Test changes
+git checkout -b feature/my-change
+# ... edit code ...
 pytest tests/unit/ -v
-
-# Commit changes
-git add .
-git commit -m "Add new plugin system"
+black src/ && isort src/
+git add -A
+git commit -m "feat(scope): describe the change"
 ```
 
-### 2. Service Development
-
-#### Adding a New Service
+### Adding a New Service
 
 ```bash
-# Create service directory
-mkdir services/new-service
-cd services/new-service
+# Create the service package
+mkdir -p src/services/new-service
+cd src/services/new-service
+touch main.py config.py Dockerfile
 
-# Create service structure
-touch main.py config.py Dockerfile requirements.txt
+# Add a service definition to docker/compose/docker-compose.yml
+# (this file is hand-maintained — edit it directly)
 
-# Implement service
-# ... write code ...
-
-# Add to docker-compose.yml
-# Add service definition
-
-# Build and test
+# Build and start
 docker compose -f docker/compose/docker-compose.yml up -d --build new-service
 ```
 
-#### Service Template
+**Minimal FastAPI service:**
 
 ```python
 # main.py
 from fastapi import FastAPI
-from .config import settings
+
+from config import settings
 
 app = FastAPI(title="New Service", version="1.0.0")
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "new-service"}
 
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8008)
+
+    uvicorn.run(app, host="0.0.0.0", port=8009)
 ```
 
-### 3. Testing
-
-#### Run Tests
-
-```bash
-# Unit tests
-pytest tests/unit/ -v
-
-# Integration tests
-pytest tests/integration/ -v
-
-# With coverage
-pytest tests/ --cov=src --cov-report=html
-
-# Specific test file
-pytest tests/unit/test_module_management.py -v
-
-# Watch mode (auto-rerun on changes)
-pytest tests/unit/ -f
-```
-
-#### Write Tests
+### Adding an API Endpoint
 
 ```python
-# tests/unit/test_example.py
-import pytest
-from src.shared.validators import validate_plugin_name
+from fastapi import APIRouter
 
-def test_valid_plugin_name():
-    assert validate_plugin_name("my-plugin") == True
-    
-def test_invalid_plugin_name():
-    assert validate_plugin_name("invalid name!") == False
+router = APIRouter(prefix="/api/v1/plugins", tags=["plugins"])
+
+
+@router.post("/")
+async def create_plugin(plugin: PluginCreate):
+    ...
+    return {"id": "123", "status": "created"}
 ```
 
-### 4. Code Quality
+## Testing
 
-#### Type Checking
+See [testing.md](testing.md) for the full guide. Quick reference:
 
 ```bash
-# Run mypy
-mypy src/
-
-# Check specific module
-mypy src/shared/utils/validation.py
+pytest tests/unit/ -v          # unit tests
+pytest tests/integration/ -v   # integration tests (needs docker-compose.test.yml deps)
+pytest --cov=src --cov-report=term-missing
 ```
 
-#### Linting
+pytest uses `asyncio_mode = "auto"` (root `pyproject.toml`), so async tests need no
+explicit marker.
+
+## Code Quality
+
+Config lives in the **root `pyproject.toml`**; CI (`quality.yml`) enforces it. See
+[code-style.md](code-style.md).
 
 ```bash
-# Run ruff linter
-ruff check src/
-
-# Auto-fix issues
-ruff check --fix src/
-
-# Format code
-ruff format src/
-```
-
-#### Import Sorting
-
-```bash
-# Sort imports
-isort src/
-
-# Check import sorting
-isort --check-only src/
-```
-
-## Service-Specific Development
-
-### API Gateway Development
-
-```bash
-# Enter container
-docker exec -it minder-api-gateway bash
-
-# Install dependencies
-pip install new-package
-
-# Update requirements.txt
-pip freeze > requirements.txt
-
-# Rebuild container
-docker compose -f docker/compose/docker-compose.yml build api-gateway
-docker compose -f docker/compose/docker-compose.yml up -d api-gateway
-```
-
-### Database Development
-
-```bash
-# Connect to PostgreSQL
-docker exec -it minder-postgres psql -U minder
-
-# View databases
-\l
-
-# Connect to specific database
-\c minder
-
-# View tables
-\dt
-
-# Run queries
-SELECT * FROM plugins LIMIT 10;
-```
-
-### Redis Development
-
-```bash
-# Connect to Redis
-docker exec -it minder-redis redis-cli -a ${REDIS_PASSWORD}
-
-# View keys
-KEYS *
-
-# Get value
-GET key:plugin:123
-
-# Monitor commands
-MONITOR
+black src/                 # format (line length 88)
+isort src/                 # sort imports (black profile)
+mypy src/                  # type check
 ```
 
 ## Debugging
@@ -281,314 +221,123 @@ MONITOR
 ### View Logs
 
 ```bash
-# All services
-docker compose -f docker/compose/docker-compose.yml logs -f
+# Via setup.sh
+bash setup.sh logs api-gateway
 
-# Specific service
-docker logs minder-api-gateway -f
-
-# Last 100 lines
-docker logs minder-api-gateway --tail 100
-
-# Since specific time
+# Directly
+docker logs minder-api-gateway --tail 100 -f
 docker logs minder-api-gateway --since 1h
 ```
 
-### Enter Container
+### Enter a Container
 
 ```bash
-# Enter shell
+bash setup.sh shell api-gateway
+# or
 docker exec -it minder-api-gateway bash
-
-# Debug with Python
-docker exec -it minder-api-gateway python -m pdb main.py
 ```
 
-### Performance Profiling
+### Resource Usage
 
 ```bash
-# Check resource usage
-docker stats
-
-# Profile service
-docker exec minder-api-gateway python -m cProfile -o profile.stats main.py
-
-# View stats
-docker exec minder-api-gateway python -m pstats profile.stats
+docker stats --no-stream
 ```
 
-## Hot Reload
+## Working with Storage Backends
 
-### Development with Auto-Reload
+Storage services are **internal-only** (not exposed on host ports). Reach them by exec'ing
+into their container.
 
-For local development without Docker:
+### PostgreSQL
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run with auto-reload
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+docker exec -it minder-postgres psql -U minder
+# \l   list databases   \dt  list tables
 ```
 
-### Docker Compose Auto-Reload
+Auxiliary databases exist alongside the main DB (e.g. `minder_marketplace`,
+`minder_schemaregistry`, and per-domain DBs).
 
-```yaml
-# In docker-compose.yml
-services:
-  api-gateway:
-    volumes:
-      - ./services/api-gateway:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## Common Development Tasks
-
-### Add New API Endpoint
-
-```python
-# In a new route module under src/services/api-gateway/routes/
-from fastapi import APIRouter, HTTPException
-from loguru import logger
-
-router = APIRouter(prefix="/api/v1/plugins", tags=["plugins"])
-
-@router.post("/")
-async def create_plugin(plugin: PluginCreate):
-    logger.info(f"Creating plugin: {plugin.name}")
-    # Implementation here
-    return {"id": "123", "status": "created"}
-```
-
-### Add Database Migration
-
-```sql
-# In migrations/001_add_new_table.sql
-CREATE TABLE new_table (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Run migration
-docker exec -i minder-postgres psql -U minder < migrations/001_add_new_table.sql
-```
-
-### Update Dependencies
+### Redis
 
 ```bash
-# Update specific dependency
-pip install --upgrade fastapi
+docker exec -it minder-redis redis-cli -a "$REDIS_PASSWORD"
+```
 
-# Update requirements.txt
-pip freeze > requirements.txt
+### Qdrant / Neo4j
 
-# Rebuild container
-docker compose -f docker/compose/docker-compose.yml build <service>
+```bash
+docker exec -it minder-qdrant sh
+docker exec -it minder-neo4j cypher-shell -u neo4j -p "$NEO4J_PASSWORD"
+```
+
+## Database Migrations
+
+```bash
+# Apply migrations
+bash setup.sh migrate
+
+# Or run a SQL file directly
+docker exec -i minder-postgres psql -U minder -d minder < migration.sql
 ```
 
 ## Git Workflow
 
-### Branch Strategy
-
-```
-main (production)
-  └── develop (staging)
-      ├── feature/new-plugin
-      ├── feature/refactor-api
-      └── bugfix/fix-rate-limiter
-```
-
 ### Commit Conventions
 
+Conventional Commits (see [code-style.md](code-style.md)):
+
 ```
-feat: add new plugin registration endpoint
-fix: resolve rate limiter memory leak
-docs: update architecture documentation
-refactor: simplify database connection pooling
-test: add integration tests for marketplace
-chore: update dependencies
+feat: add graph-rag entity extraction endpoint
+fix: resolve rate limiter fail-open edge case
+docs: update development guide
+refactor: simplify plugin loader
+test: add rag-pipeline integration tests
+chore: bump third-party image versions
+ci: consolidate workflows
 ```
 
 ### Pull Request Process
 
-1. Create feature branch
-2. Make changes and commit
+1. Branch from `main`
+2. Make focused changes
 3. Run tests: `pytest tests/unit/ -v`
-4. Run linting: `ruff check src/`
-5. Push to GitHub
-6. Create pull request
-7. Request review
-8. Address feedback
-9. Merge to main
+4. Run formatters/linters: `black src/ && isort src/ && mypy src/`
+5. Push and open a PR
+6. Address review feedback and merge
 
-## Code Review Guidelines
+## Security Notes (development)
 
-### What to Check
+This is a development environment; production hardening is not yet applied. Still:
 
-- [ ] Code follows PEP 8 style guide
-- [ ] Tests added for new features
-- [ ] Documentation updated
-- [ ] No hardcoded credentials
-- [ ] Error handling implemented
-- [ ] Performance considered
-- [ ] Security implications reviewed
+- **Never hardcode credentials** — read from environment / `./.env`.
+- **Validate all inputs** with Pydantic models.
+- **Use parameterized queries** — never string-format SQL.
 
-### Review Checklist
-
-- [ ] Clear commit message
-- [ ] Focused changes (one feature per PR)
-- [ ] Tests pass locally
-- [ ] No merge conflicts
-- [ ] Backwards compatible
-- [ ] Documentation complete
-
-## Performance Optimization
-
-### Database Queries
-
-```python
-# Bad: N+1 queries
-for plugin in plugins:
-    tags = db.query(Tag).filter(Tag.plugin_id == plugin.id).all()
-
-# Good: Single query with join
-plugins = db.query(Plugin).options(joinedload(Tag)).all()
-```
-
-### Caching Strategy
-
-```python
-from functools import lru_cache
-
-@lru_cache(maxsize=128)
-def get_plugin_config(plugin_id: str):
-    return db.query(Plugin).filter(Plugin.id == plugin_id).first()
-```
-
-### Async Operations
-
-```python
-import asyncio
-
-async def fetch_multiple_services():
-    tasks = [
-        fetch_service_a(),
-        fetch_service_b(),
-        fetch_service_c()
-    ]
-    results = await asyncio.gather(*tasks)
-    return results
-```
-
-## Security Best Practices
-
-### Input Validation
-
-```python
-from pydantic import BaseModel, validator
-
-class PluginCreate(BaseModel):
-    name: str
-    version: str
-    
-    @validator('name')
-    def validate_name(cls, v):
-        if not v or len(v) > 100:
-            raise ValueError('Invalid plugin name')
-        return v
-```
-
-### SQL Injection Prevention
-
-```python
-# Bad: String concatenation
-query = f"SELECT * FROM plugins WHERE name = '{name}'"
-
-# Good: Parameterized queries
-query = "SELECT * FROM plugins WHERE name = %s"
-cursor.execute(query, (name,))
-```
-
-### Secrets Management
-
-```python
-import os
-from cryptography.fernet import Fernet
-
-# Load secret from environment
-secret_key = os.getenv('ENCRYPTION_KEY')
-
-# Use for encryption
-f = Fernet(secret_key)
-encrypted = f.encrypt(data)
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Import Errors**:
-```bash
-# Check Python path
-python -c "import sys; print('\n'.join(sys.path))"
-
-# Install missing dependency
-pip install missing-package
-```
-
-**Database Connection Errors**:
-```bash
-# Check database is running
-docker exec minder-postgres pg_isready -U minder
-
-# Check connection string (./.env is the source of truth)
-grep POSTGRES .env
-```
-
-**Port Already in Use**:
-```bash
-# Find process using port
-lsof -i :8000
-
-# Kill process
-kill -9 <PID>
-```
+Authentication in api-gateway is **JWT + bcrypt** with Redis-backed rate limiting. There is
+**no RBAC** implemented (JWT auth only). The Authelia SSO component is currently disabled
+(commented out in compose); auth via Traefik forward-auth is therefore not enforced.
 
 ## Resources
 
-### Documentation
-
-- [FastAPI Docs](https://fastapi.tiangolo.com/)
+### External
+- [FastAPI](https://fastapi.tiangolo.com/)
 - [Docker Compose](https://docs.docker.com/compose/)
 - [Pydantic](https://docs.pydantic.dev/)
 - [pytest](https://docs.pytest.org/)
 
-### Internal Documentation
-
-- `docs/architecture/overview.md` - System design
-- `docs/api/reference.md` - API documentation
-- `docs/troubleshooting/TROUBLESHOOTING.md` - Common issues
-
-### Getting Help
-
-- GitHub Issues: https://github.com/wish-maker/minder/issues
-- Slack Channel: #minder-dev
-- Email: dev@minder-platform.com
+### Internal
+- [Code Style Guide](code-style.md)
+- [Testing Guide](testing.md)
+- [Plugin Development](plugin-development.md)
+- [Troubleshooting](../troubleshooting/TROUBLESHOOTING.md)
 
 ## Best Practices Summary
 
-1. **Write Tests**: Maintain >90% test coverage
-2. **Document Code**: Complex logic needs comments
-3. **Use Type Hints**: Improve code clarity
-4. **Follow PEP 8**: Consistent code style
-5. **Security First**: Validate all inputs
-6. **Performance**: Profile before optimizing
-7. **Git Hygiene**: Clear commit messages
-8. **Code Review**: All changes reviewed
-9. **Backup Often**: Don't lose work
-10. **Stay Updated**: Keep dependencies current
+1. Use `bash setup.sh` for lifecycle operations
+2. Edit the root `./.env`, never `docker/compose/.env`
+3. Edit `docker/compose/docker-compose.yml` directly (it is the source of truth)
+4. Write tests for new behavior
+5. Run `black` / `isort` / `mypy` before pushing
+6. Use type hints and Pydantic validation
+7. Keep commits focused; use Conventional Commits
