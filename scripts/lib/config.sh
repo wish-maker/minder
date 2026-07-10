@@ -30,7 +30,11 @@ readonly NETWORK_NAME="docker_minder-network"
 readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
 readonly -a SECURITY_SERVICES=(traefik)
-readonly -a CORE_SERVICES=(postgres redis qdrant neo4j rabbitmq )
+readonly -a CORE_SERVICES=(postgres redis qdrant neo4j rabbitmq minio schema-registry )
+# minio + schema-registry are wired here so `start` brings them up too — previously minio
+# was started only by `install` (initialize_minio) [#43] and schema-registry by nothing at
+# all [#42]. Their dependent Postgres DBs are created by initialize_database before start.
+# (install still runs initialize_minio afterwards for bucket creation — idempotent.)
 # ollama is intentionally NOT listed here. It is gated by the compose 'internal-ollama'
 # profile (see docker-compose.yml). start_services activates that profile ONLY when
 # OLLAMA_BASE_URL is empty (internal mode); naming a profile-disabled service in a
