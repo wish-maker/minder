@@ -8,7 +8,7 @@ PluginInfo are imported directly (no request state). Mirrors routes/services.py.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 import yaml
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
@@ -261,14 +261,14 @@ def build_plugins_router(
         username = current_user.get("username", "unknown")
         logger.info(
             f"Data collection triggered for plugin: {plugin_name} | User: {username} "
-            f"({current_user.get('role', 'unknown')}) | {datetime.utcnow().isoformat()}"
+            f"({current_user.get('role', 'unknown')}) | {datetime.now(timezone.utc).isoformat()}"
         )
         return {
             "message": f"Data collection triggered for {plugin_name}",
             "plugin": plugin_name,
             "status": "collecting",
             "triggered_by": username,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "note": "Collection runs in background. Check /health endpoint for results.",
         }
 

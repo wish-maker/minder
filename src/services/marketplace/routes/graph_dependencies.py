@@ -76,6 +76,11 @@ async def add_plugin_dependency(
             "depends_on": depends_on,
             "type": dependency_type,
         }
+    except ValueError as e:
+        # Invalid dependency_type (rejected by the allowlist in add_dependency)
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to add dependency: {e}")
         raise HTTPException(status_code=500, detail=str(e))

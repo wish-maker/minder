@@ -6,7 +6,7 @@ Handles knowledge bases, pipelines, and conversation storage.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -407,7 +407,7 @@ async def save_conversation_turn_to_postgres(
                 json.dumps(sources) if sources else None,
                 confidence,
                 embedding_array,
-                datetime.utcnow(),
+                datetime.now(timezone.utc).replace(tzinfo=None),
             )
 
         logger.debug(f"✅ Conversation turn saved to PostgreSQL: {turn_id}")

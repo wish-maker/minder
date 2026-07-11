@@ -6,7 +6,7 @@ Real PostgreSQL + bcrypt implementation.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 import asyncpg
@@ -189,7 +189,9 @@ def create_jwt_token(data: Dict[str, Any]) -> str:
         True
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.JWT_EXPIRATION_MINUTES
+    )
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
         to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM

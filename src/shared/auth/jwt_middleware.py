@@ -6,7 +6,7 @@ All services must use the same JWT_SECRET environment variable.
 """
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Dict, Optional
 
@@ -42,7 +42,7 @@ def create_jwt_token(data: Dict) -> str:
         Encoded JWT token as string
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=JWT_EXPIRATION_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRATION_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
     return encoded_jwt
@@ -187,7 +187,7 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
 
             # Check rate limit
             key = f"{user_id}:{request.url.path}"
-            now = datetime.utcnow().timestamp()
+            now = datetime.now(timezone.utc).timestamp()
 
             # Clean old entries
             if key in _rate_limit_store:

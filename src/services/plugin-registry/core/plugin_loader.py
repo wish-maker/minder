@@ -1,149 +1,254 @@
 """
 Core Plugin Loader Module
 
-Handles plugin loading from disk, manifests, and modules.
-Supports both manifest-based and module-based plugin discovery.
+Discovers and loads plugins from ``settings.PLUGINS_PATH``: manifest-based plugins
+(JSON/YAML) are registered from metadata, module-based plugins are imported and
+instantiated. Loaded plugins are cached in ``core.state``, persisted via
+``core.database``, and their AI tools synced via ``core.marketplace_sync``.
 """
 
-import importlib
 import json
-import logging
-import sys
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import yaml
+from core.database import update_plugin_in_database
+from core.marketplace_sync import sync_plugin_ai_tools
+from core.state import logger, plugin_instances, plugins_db
+from models import PluginInfo
 
-logger = logging.getLogger(__name__)
+from config import settings
 
 
 async def load_plugins_from_disk():
-    """
-    Load all plugins from the plugins directory
+    """Load all plugins from PLUGINS_PATH"""
+    plugins_path = Path(settings.PLUGINS_PATH)
 
-    Scans /app/plugins for plugin directories and loads them.
-    Supports both manifest.yml files and Python modules.
+    if not plugins_path.exists():
+        logger.warning(f"Plugins path does not exist: {plugins_path}")
+        return
 
-    Returns:
-        Dict[str, dict]: Loaded plugins keyed by plugin name
-    """
-    plugins_dir = Path("/app/plugins")
-    if not plugins_dir.exists():
-        logger.warning(f"Plugins directory not found: {plugins_dir}")
-        return {}
-
-    plugins = {}
-
-    for plugin_dir in plugins_dir.iterdir():
+    for plugin_dir in plugins_path.iterdir():
         if not plugin_dir.is_dir():
             continue
 
-        plugin_name = plugin_dir.name
-        manifest_path = plugin_dir / "manifest.yml"
+        # Look for plugin manifest (JSON or YAML) FIRST, then main module
+        manifest_json = plugin_dir / "manifest.json"
+        manifest_yml = plugin_dir / "manifest.yml"
+        manifest_yaml = plugin_dir / "manifest.yaml"
+        main_module = plugin_dir / "__init__.py"
 
-        if manifest_path.exists():
-            # Load from manifest
-            try:
-                plugin_data = await load_plugin_from_manifest(manifest_path)
-                if plugin_data:
-                    plugins[plugin_name] = plugin_data
-                    logger.info(f"✅ Loaded plugin from manifest: {plugin_name}")
-            except Exception as e:
-                logger.error(
-                    f"❌ Failed to load plugin {plugin_name} from manifest: {e}"
-                )
-        else:
-            # Try loading as Python module
-            try:
-                plugin_data = await load_plugin_from_module(plugin_dir)
-                if plugin_data:
-                    plugins[plugin_name] = plugin_data
-                    logger.info(f"✅ Loaded plugin from module: {plugin_name}")
-            except Exception as e:
-                logger.error(f"❌ Failed to load plugin {plugin_name} from module: {e}")
-
-    logger.info(f"Loaded {len(plugins)} plugins from disk")
-    return plugins
+        # Prefer manifest files over __init__.py
+        if manifest_json.exists():
+            await load_plugin_from_manifest(manifest_json, "json")
+        elif manifest_yml.exists():
+            await load_plugin_from_manifest(manifest_yml, "yaml")
+        elif manifest_yaml.exists():
+            await load_plugin_from_manifest(manifest_yaml, "yaml")
+        elif main_module.exists():
+            await load_plugin_from_module(plugin_dir)
 
 
-async def load_plugin_from_manifest(
-    manifest_path: Path, manifest_type: str = "json"
-) -> Dict:
-    """
-    Load plugin from manifest file
-
-    Args:
-        manifest_path: Path to manifest file (manifest.yml or manifest.json)
-        manifest_type: Type of manifest ('json' or 'yaml')
-
-    Returns:
-        Plugin data dictionary
-
-    Raises:
-        ValueError: If manifest file not found or invalid
-    """
-    if not manifest_path.exists():
-        raise ValueError(f"Manifest file not found: {manifest_path}")
-
+async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "json"):
+    """Load plugin from manifest file (JSON or YAML)"""
     try:
         with open(manifest_path, "r") as f:
-            if manifest_type == "yaml":
-                manifest_data = yaml.safe_load(f)
-            else:
-                manifest_data = json.load(f)
+            if manifest_type == "json":
+                manifest = json.load(f)
+            else:  # yaml or yml
+                manifest = yaml.safe_load(f)
 
-        # Validate manifest structure
-        if not manifest_data.get("name"):
-            raise ValueError("Manifest must have 'name' field")
+        plugin_name = manifest.get("name")
+        if not plugin_name:
+            logger.error(f"Manifest missing 'name' field: {manifest_path}")
+            return
 
-        # Add metadata
-        manifest_data["loaded_from"] = str(manifest_path)
-        manifest_data["loaded_at"] = datetime.now().isoformat()
+        # Extract dependencies if present (handle both list and dict formats)
+        dependencies_data = manifest.get("dependencies", {})
+        if isinstance(dependencies_data, dict):
+            dependencies_list = dependencies_data.get("python", [])
+        else:
+            dependencies_list = (
+                dependencies_data if isinstance(dependencies_data, list) else []
+            )
 
-        return manifest_data
+        # TODO: Load plugin module and call register()
+        # For now, just store metadata
+        plugin_info = PluginInfo(
+            name=plugin_name,
+            version=manifest.get("version", "1.0.0"),
+            description=manifest.get("description", ""),
+            author=manifest.get("author", ""),
+            status="registered",
+            dependencies=dependencies_list,
+            capabilities=manifest.get("capabilities", []),
+            data_sources=manifest.get("data_sources", []),
+            databases=manifest.get("databases", []),
+            registered_at=datetime.now().isoformat(),
+        )
+
+        plugins_db[plugin_name] = plugin_info
+        logger.info(f"Loaded plugin: {plugin_name} (version {plugin_info.version})")
+
+        # Persist to database
+        await update_plugin_in_database(
+            plugin_name,
+            version=plugin_info.version,
+            description=plugin_info.description,
+            author=plugin_info.author,
+            dependencies=(
+                json.dumps(plugin_info.dependencies)
+                if plugin_info.dependencies
+                else None
+            ),
+            capabilities=(
+                json.dumps(plugin_info.capabilities)
+                if plugin_info.capabilities
+                else None
+            ),
+            data_sources=(
+                json.dumps(plugin_info.data_sources)
+                if plugin_info.data_sources
+                else None
+            ),
+            databases=(
+                json.dumps(plugin_info.databases) if plugin_info.databases else None
+            ),
+        )
+
+        # Auto-sync AI tools with marketplace
+        await sync_plugin_ai_tools(plugin_name, manifest_path.parent)
 
     except Exception as e:
-        raise ValueError(f"Failed to load manifest: {e}")
+        logger.error(f"Failed to load plugin from {manifest_path}: {e}")
 
 
-async def load_plugin_from_module(plugin_dir: Path) -> Dict:
-    """
-    Load plugin from Python module
-
-    Args:
-        plugin_dir: Path to plugin directory
-
-    Returns:
-        Plugin data dictionary
-
-    Raises:
-        ValueError: If plugin module not found or invalid
-    """
+async def load_plugin_from_module(plugin_dir: Path):
+    """Load plugin from Python module directory"""
     plugin_name = plugin_dir.name
-    module_path = plugin_dir / "plugin.py"
-
-    if not module_path.exists():
-        raise ValueError(f"Plugin module not found: {module_path}")
 
     try:
-        # Add plugin directory to Python path
-        sys.path.insert(0, str(plugin_dir))
+        # Import plugin module using importlib
+        import importlib
 
-        # Import plugin module
-        module = importlib.import_module(f"{plugin_name}.plugin")
+        # Build module path: plugins.{plugin_name}
+        # (/app/src is in sys.path, so we import from plugins subdir)
+        module_path = f"plugins.{plugin_name}"
 
-        # Extract plugin metadata from module
-        plugin_data = {
-            "name": getattr(module, "PLUGIN_NAME", plugin_name),
-            "version": getattr(module, "PLUGIN_VERSION", "1.0.0"),
-            "description": getattr(module, "PLUGIN_DESCRIPTION", ""),
-            "author": getattr(module, "PLUGIN_AUTHOR", ""),
-            "loaded_from": str(module_path),
-            "loaded_at": datetime.now().isoformat(),
-        }
+        module = importlib.import_module(module_path)
 
-        return plugin_data
+        # Look for Plugin class in __all__ or module attributes
+        plugin_class = None
+        if hasattr(module, "__all__"):
+            for attr_name in module.__all__:
+                attr = getattr(module, attr_name)
+                if isinstance(attr, type) and hasattr(attr, "__bases__"):
+                    plugin_class = attr
+                    break
+
+        if not plugin_class:
+            # Fallback: search for BaseModule subclass
+            from src.core.interface import BaseModule
+
+            for attr_name in dir(module):
+                attr = getattr(module, attr_name)
+                if (
+                    isinstance(attr, type)
+                    and issubclass(attr, BaseModule)
+                    and attr != BaseModule
+                ):
+                    plugin_class = attr
+                    break
+
+        if plugin_class:
+            # Create plugin configuration with proper database host
+            plugin_config = {
+                "database": {
+                    "host": "minder-postgres",
+                    "port": 5432,
+                    "user": "minder",
+                    "password": os.environ.get(
+                        "POSTGRES_PASSWORD", "dev_password_change_me"
+                    ),
+                    "database": "minder",
+                },
+                "redis": {
+                    "host": "minder-redis",
+                    "port": 6379,
+                    "password": os.environ.get(
+                        "REDIS_PASSWORD", "dev_password_change_me"
+                    ),
+                    "db": 0,
+                },
+                "influxdb": {
+                    "enabled": True,
+                    "host": "minder-influxdb",
+                    "port": 8086,
+                    "token": os.environ.get(
+                        "INFLUXDB_TOKEN",
+                        "minder-super-secret-token-change-me-in-production",
+                    ),
+                    "org": "minder",
+                    "bucket": "minder-metrics",
+                },
+            }
+
+            # Instantiate and register plugin
+            plugin_instance = plugin_class(plugin_config)
+            metadata = await plugin_instance.register()
+
+            # Initialize plugin to set status to READY
+            await plugin_instance.initialize()
+
+            plugin_info = PluginInfo(
+                name=metadata.name,
+                version=metadata.version,
+                description=metadata.description,
+                author=metadata.author,
+                status="registered",  # Will be updated by health check
+                dependencies=metadata.dependencies,
+                capabilities=metadata.capabilities,
+                data_sources=metadata.data_sources,
+                databases=metadata.databases,
+                registered_at=metadata.registered_at.isoformat(),
+            )
+
+            plugins_db[plugin_name] = plugin_info
+            plugin_instances[plugin_name] = plugin_instance
+
+            logger.info(
+                f"Loaded and registered plugin: {plugin_name} (version {plugin_info.version})"
+            )
+
+            # Persist to database
+            await update_plugin_in_database(
+                plugin_name,
+                version=plugin_info.version,
+                description=plugin_info.description,
+                author=plugin_info.author,
+                dependencies=(
+                    json.dumps(plugin_info.dependencies)
+                    if plugin_info.dependencies
+                    else None
+                ),
+                capabilities=(
+                    json.dumps(plugin_info.capabilities)
+                    if plugin_info.capabilities
+                    else None
+                ),
+                data_sources=(
+                    json.dumps(plugin_info.data_sources)
+                    if plugin_info.data_sources
+                    else None
+                ),
+                databases=(
+                    json.dumps(plugin_info.databases) if plugin_info.databases else None
+                ),
+            )
+
+            # Auto-sync AI tools with marketplace
+            await sync_plugin_ai_tools(plugin_name, plugin_dir)
 
     except Exception as e:
-        raise ValueError(f"Failed to load plugin module: {e}")
+        logger.error(f"Failed to load plugin from {plugin_dir}: {e}")

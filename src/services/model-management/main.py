@@ -6,6 +6,7 @@ Real Ollama integration for model lifecycle
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -35,11 +36,32 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 
-# Initialize FastAPI
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize the Ollama client on startup; no explicit shutdown cleanup."""
+    try:
+        if not OLLAMA_AVAILABLE:
+            logger.error("❌ Ollama package not available - service will not function")
+        else:
+            await ollama_manager.initialize()
+            # Test connection by listing models
+            models = await ollama_manager.list_models()
+            logger.info(f"✅ Connected to Ollama - {len(models)} models available")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize model-management service: {e}")
+
+    yield
+
+    logger.info("Model Management service shutting down...")
+    # Ollama client doesn't need explicit cleanup
+
+
 app = FastAPI(
     title="Minder Model Management",
     description="Model management and fine-tuning service",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -191,9 +213,11 @@ app.include_router(
 async def health_check():
     """Service health check"""
     return {
+        "service": "model-management",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": app.version,
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "models_registered": len(models),
     }
 
@@ -248,31 +272,6 @@ async def root():
 # ============================================================================
 # Startup/Shutdown Events
 # ============================================================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize Ollama client on startup"""
-    try:
-        if not OLLAMA_AVAILABLE:
-            logger.error("❌ Ollama package not available - service will not function")
-            return
-
-        await ollama_manager.initialize()
-
-        # Test connection by listing models
-        models = await ollama_manager.list_models()
-        logger.info(f"✅ Connected to Ollama - {len(models)} models available")
-
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize model-management service: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    logger.info("Model Management service shutting down...")
-    # Ollama client doesn't need explicit cleanup
 
 
 if __name__ == "__main__":

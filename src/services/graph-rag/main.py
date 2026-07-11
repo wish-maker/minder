@@ -7,6 +7,8 @@ This refactored version uses clean separation of concerns.
 
 import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime
 
 # Import core modules
 from core.entity_extractor import EntityExtractor
@@ -65,25 +67,13 @@ graph_constructor: KnowledgeGraphConstructor = None
 graph_retriever: GraphRetriever = None
 
 # ============================================================================
-# Initialize FastAPI App
-# ============================================================================
-
-app = FastAPI(
-    title="Minder Graph RAG",
-    description="Entity extraction and knowledge graph construction for RAG",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
-
-# ============================================================================
 # Startup/Shutdown Events
 # ============================================================================
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize service instances on startup; close Neo4j drivers on shutdown."""
     global entity_extractor, graph_constructor, graph_retriever
 
     logger.info("🚀 Starting Graph RAG Service...")
@@ -103,15 +93,23 @@ async def startup_event():
 
     logger.info("✅ Graph RAG Service initialized")
 
+    yield
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
     if graph_constructor:
         await graph_constructor.close()
     if graph_retriever:
         await graph_retriever.close()
     logger.info("🛑 Graph RAG Service shut down")
+
+
+app = FastAPI(
+    title="Minder Graph RAG",
+    description="Entity extraction and knowledge graph construction for RAG",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
 
 
 # ============================================================================
@@ -141,7 +139,9 @@ async def health_check():
     return {
         "service": "graph-rag",
         "status": overall_status,
+        "timestamp": datetime.now().isoformat(),
         "version": app.version,
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "checks": checks,
     }
 

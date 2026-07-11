@@ -2,6 +2,7 @@
 import logging
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 # Add src to path for shared module imports (MUST be before other imports)
 sys.path.insert(0, "/app/src")
@@ -71,8 +72,9 @@ app.add_middleware(
 async def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy",
         "service": "marketplace",
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
         "version": app.version,
         "environment": settings.ENVIRONMENT,
     }
