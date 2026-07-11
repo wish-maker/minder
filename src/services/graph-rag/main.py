@@ -8,6 +8,7 @@ This refactored version uses clean separation of concerns.
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 # Import core modules
 from core.entity_extractor import EntityExtractor
@@ -138,7 +139,9 @@ async def health_check():
     return {
         "service": "graph-rag",
         "status": overall_status,
+        "timestamp": datetime.now().isoformat(),
         "version": app.version,
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "checks": checks,
     }
 

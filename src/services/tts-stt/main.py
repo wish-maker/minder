@@ -247,9 +247,11 @@ async def get_stt_languages():
 async def health_check():
     """Service health check"""
     return {
+        "service": "tts-stt",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "version": "1.0.0",
+        "version": app.version,
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
     }

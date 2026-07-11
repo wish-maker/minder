@@ -213,9 +213,11 @@ app.include_router(
 async def health_check():
     """Service health check"""
     return {
+        "service": "model-management",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": app.version,
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "models_registered": len(models),
     }
 

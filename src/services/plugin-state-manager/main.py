@@ -5,6 +5,7 @@ Central plugin management, state control, and AI tools execution
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
@@ -134,9 +135,11 @@ async def health_check():
     """Health check endpoint"""
     pool = await get_db_pool()
     return {
-        "service": settings.APP_NAME,
-        "version": settings.VERSION,
+        "service": "plugin-state-manager",
         "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": settings.VERSION,
+        "environment": settings.ENVIRONMENT,
         "database": "connected" if pool else "disconnected",
     }
 

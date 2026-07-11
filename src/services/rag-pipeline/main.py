@@ -561,9 +561,11 @@ def chunk_text(text: str, chunk_size: int = 512, chunk_overlap: int = 50) -> Lis
 async def health_check():
     """Service health check"""
     return {
+        "service": "rag-pipeline",
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": app.version,
+        "environment": os.getenv("ENVIRONMENT", "development"),
         "knowledge_bases": len(knowledge_bases),
         "rag_pipelines": len(rag_pipelines),
         "ollama_available": OLLAMA_AVAILABLE,
