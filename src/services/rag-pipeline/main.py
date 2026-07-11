@@ -831,7 +831,6 @@ async def retrieve_relevant_documents(
             # Extract points from QueryResponse
             results = search_result.points
             all_results.extend(results)
-            all_results.extend(results)
         except Exception as e:
             logger.warning(f"⚠️  Search failed for KB {kb_id}: {e}")
 
