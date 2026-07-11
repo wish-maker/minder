@@ -6,6 +6,7 @@ Simple text-to-speech and speech-to-text functionality
 import logging
 import os
 import tempfile
+from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI, File, HTTPException
@@ -59,10 +60,21 @@ SUPPORTED_LANGUAGES = {
 # FastAPI App
 # ============================================================================
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup/shutdown lifecycle for the TTS/STT service."""
+    logger.info("🚀 Starting TTS/STT service...")
+    logger.info(f"TTS Available: {TTS_AVAILABLE}")
+    logger.info(f"STT Available: {STT_AVAILABLE}")
+    yield
+
+
 app = FastAPI(
     title="Minder TTS/STT",
     description="Text-to-Speech and Speech-to-Text service",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # ============================================================================
@@ -264,14 +276,6 @@ async def root():
 # ============================================================================
 # Startup Event
 # ============================================================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    logger.info("🚀 Starting TTS/STT service...")
-    logger.info(f"TTS Available: {TTS_AVAILABLE}")
-    logger.info(f"STT Available: {STT_AVAILABLE}")
 
 
 if __name__ == "__main__":

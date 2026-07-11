@@ -35,7 +35,7 @@ def build_services_router(
         logger.info(f"Service registered: {service.service_name}")
         return {
             "message": f"Service {service.service_name} registered",
-            "service": service.dict(),
+            "service": service.model_dump(),
         }
 
     @router.get("/v1/services")

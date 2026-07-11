@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import sys
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
@@ -36,13 +37,103 @@ from routes.plugins_api import build_plugins_router  # noqa: E402
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.plugin-registry")
 
-# Initialize FastAPI app
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize DB/Redis/plugins/webhooks on startup; tear them down on shutdown."""
+    # ----- Startup -----
+    logger.info("Plugin Registry starting...")
+    logger.info(f"Plugins path: {settings.PLUGINS_PATH}")
+
+    # Initialize PostgreSQL connection
+    await get_postgres_connection()
+
+    # Create plugins table if not exists (CRITICAL: prevents startup failures)
+    await create_plugins_table_if_not_exists()
+
+    # Load services from Redis into memory (CRITICAL: prevents service loss on restart)
+    await load_services_from_redis()
+
+    # Load plugins from database
+    await load_plugins_from_database()
+
+    # Load plugins from disk (sync with database)
+    await load_plugins_from_disk()
+
+    # Initialize execution engine
+    import sys
+
+    sys.path.insert(0, "/app/services/plugin-registry")
+    from core.execution_engine import ExecutionEngine, set_execution_engine
+
+    engine = ExecutionEngine()
+    set_execution_engine(engine)
+    logger.info("Execution engine initialized")
+
+    # Register all webhook routes from disk (RESTART-SAFE)
+    await register_all_webhooks_on_startup()
+    logger.info(f"Webhook routes registered: {list(webhook_routes.keys())}")
+
+    # Auto-enable all plugins on startup
+    await auto_enable_plugins()
+
+    # Start health check loop
+    asyncio.create_task(health_check_loop())
+
+    # Start automatic data collection scheduler
+    asyncio.create_task(data_collection_scheduler())
+
+    logger.info(
+        f"✅ Startup: {len(plugins_db)} plugins, "
+        f"{len(services_db)} services, {len(webhook_routes)} webhooks"
+    )
+
+    yield
+
+    # ----- Shutdown -----
+    logger.info("Plugin Registry shutting down...")
+
+    # Close PostgreSQL connection
+    if postgres_pool:
+        await postgres_pool.close()
+
+    # Shutdown all plugin instances
+    for plugin_name, plugin_instance in plugin_instances.items():
+        try:
+            await plugin_instance.shutdown()
+        except Exception as e:
+            logger.error(f"Error shutting down {plugin_name}: {e}")
+
+    # Close proxy router HTTP client
+    try:
+        await proxy_router.close()
+        logger.info("✅ Proxy router closed")
+    except Exception as e:
+        logger.error(f"Error closing proxy router: {e}")
+
+    # Close execution engine
+    try:
+        import sys
+
+        sys.path.insert(0, "/app/services/plugin-registry")
+        from core.execution_engine import get_execution_engine
+
+        engine = get_execution_engine()
+        await engine.close()
+        logger.info("✅ Execution engine closed")
+    except Exception as e:
+        logger.error(f"Error closing execution engine: {e}")
+
+    redis_client.close()
+
+
 app = FastAPI(
     title="Minder Plugin Registry",
     description="Plugin discovery and lifecycle management",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # ============================================================================
@@ -685,56 +776,6 @@ async def track_requests(request, call_next):
 # ============================================================================
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    logger.info("Plugin Registry starting...")
-    logger.info(f"Plugins path: {settings.PLUGINS_PATH}")
-
-    # Initialize PostgreSQL connection
-    await get_postgres_connection()
-
-    # Create plugins table if not exists (CRITICAL: prevents startup failures)
-    await create_plugins_table_if_not_exists()
-
-    # Load services from Redis into memory (CRITICAL: prevents service loss on restart)
-    await load_services_from_redis()
-
-    # Load plugins from database
-    await load_plugins_from_database()
-
-    # Load plugins from disk (sync with database)
-    await load_plugins_from_disk()
-
-    # Initialize execution engine
-    import sys
-
-    sys.path.insert(0, "/app/services/plugin-registry")
-    from core.execution_engine import ExecutionEngine, set_execution_engine
-
-    engine = ExecutionEngine()
-    set_execution_engine(engine)
-    logger.info("Execution engine initialized")
-
-    # Register all webhook routes from disk (RESTART-SAFE)
-    await register_all_webhooks_on_startup()
-    logger.info(f"Webhook routes registered: {list(webhook_routes.keys())}")
-
-    # Auto-enable all plugins on startup
-    await auto_enable_plugins()
-
-    # Start health check loop
-    asyncio.create_task(health_check_loop())
-
-    # Start automatic data collection scheduler
-    asyncio.create_task(data_collection_scheduler())
-
-    logger.info(
-        f"✅ Startup: {len(plugins_db)} plugins, "
-        f"{len(services_db)} services, {len(webhook_routes)} webhooks"
-    )
-
-
 async def auto_enable_plugins():
     """Automatically enable all plugins on startup"""
     logger.info("Auto-enabling all plugins...")
@@ -783,45 +824,6 @@ async def data_collection_scheduler():
             logger.error(f"❌ Data collection scheduler error: {e}")
             # Wait 5 minutes before retry
             await asyncio.sleep(300)
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown"""
-    logger.info("Plugin Registry shutting down...")
-
-    # Close PostgreSQL connection
-    if postgres_pool:
-        await postgres_pool.close()
-
-    # Shutdown all plugin instances
-    for plugin_name, plugin_instance in plugin_instances.items():
-        try:
-            await plugin_instance.shutdown()
-        except Exception as e:
-            logger.error(f"Error shutting down {plugin_name}: {e}")
-
-    # Close proxy router HTTP client
-    try:
-        await proxy_router.close()
-        logger.info("✅ Proxy router closed")
-    except Exception as e:
-        logger.error(f"Error closing proxy router: {e}")
-
-    # Close execution engine
-    try:
-        import sys
-
-        sys.path.insert(0, "/app/services/plugin-registry")
-        from core.execution_engine import get_execution_engine
-
-        engine = get_execution_engine()
-        await engine.close()
-        logger.info("✅ Execution engine closed")
-    except Exception as e:
-        logger.error(f"Error closing execution engine: {e}")
-
-    redis_client.close()
 
 
 # ============================================================================

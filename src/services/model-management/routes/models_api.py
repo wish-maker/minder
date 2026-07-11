@@ -38,7 +38,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
                 )
             models.clear()
             for m in result:
-                models[m.id] = m.dict()
+                models[m.id] = m.model_dump()
             logger.info(f"✅ Listed {len(result)} models from Ollama")
             return result
         except HTTPException:

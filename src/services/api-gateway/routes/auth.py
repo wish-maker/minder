@@ -6,7 +6,7 @@ teardown stay in main's lifespan.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from modules.auth import (
@@ -85,7 +85,7 @@ async def login(request: Request):
                 "username": user["username"],
                 "email": user["email"],
                 "role": user["role"],
-                "iat": datetime.utcnow(),
+                "iat": datetime.now(timezone.utc),
             }
         )
         logger.info(f"User logged in: {username}")
@@ -119,7 +119,7 @@ async def refresh_token(request: Request):
         {
             "sub": payload.get("sub"),
             "username": payload.get("username"),
-            "iat": datetime.utcnow(),
+            "iat": datetime.now(timezone.utc),
         }
     )
     return {

@@ -5,6 +5,7 @@ Real Ollama integration with proper embedding generation and LLM inference
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -77,10 +78,70 @@ EMBEDDING_DIMENSIONS = {
 # FastAPI App
 # ============================================================================
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize storage/Ollama on startup (see body); no explicit shutdown work."""
+    logger.info("🚀 Starting RAG Pipeline service...")
+    logger.info(f"Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
+    logger.info(f"Ollama: {OLLAMA_HOST}")
+    logger.info(f"Default LLM: {DEFAULT_LLM_MODEL}")
+    logger.info(f"Default Embedding: {DEFAULT_EMBEDDING_MODEL}")
+
+    # Load data from PostgreSQL if available
+    if PG_AVAILABLE:
+        try:
+            # Initialize database schema (will preserve existing data)
+            await initialize_schema()
+
+            loaded_kbs = await load_kb_from_postgres()
+            knowledge_bases.update(loaded_kbs)
+            logger.info(f"✅ Loaded {len(loaded_kbs)} knowledge bases from PostgreSQL")
+
+            loaded_pipelines = await load_pipelines_from_postgres()
+            rag_pipelines.update(loaded_pipelines)
+            logger.info(
+                f"✅ Loaded {len(loaded_pipelines)} RAG pipelines from PostgreSQL"
+            )
+
+            # Initialize ConversationRepository for conversational RAG
+            global conversation_repository
+            if CONVERSATION_REPO_AVAILABLE and pg_client.pg_pool:
+                try:
+                    conversation_repository = ConversationRepository(pg_client.pg_pool)
+                    logger.info("✅ ConversationRepository initialized")
+                except Exception as e:
+                    logger.error(f"❌ Failed to initialize ConversationRepository: {e}")
+                    conversation_repository = None
+            else:
+                logger.warning(
+                    "⚠️  ConversationRepository not available (pg_pool or module missing)"
+                )
+                conversation_repository = None
+        except Exception as e:
+            logger.error(f"❌ Failed to load from PostgreSQL: {e}")
+    else:
+        logger.info("ℹ️  Using in-memory storage (PostgreSQL not available)")
+
+    # Initialize Ollama manager
+    if OLLAMA_AVAILABLE:
+        try:
+            await ollama_manager.initialize()
+            logger.info("✅ Ollama manager initialized successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Ollama manager: {e}")
+            # Don't fail startup, just log the error
+    else:
+        logger.warning("⚠️  Ollama not available, RAG features will be limited")
+
+    yield
+
+
 app = FastAPI(
     title="Minder RAG Pipeline",
     description="Production RAG Pipeline with Ollama integration",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -807,62 +868,6 @@ async def root():
 # ============================================================================
 # Startup Event
 # ============================================================================
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize on startup"""
-    logger.info("🚀 Starting RAG Pipeline service...")
-    logger.info(f"Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
-    logger.info(f"Ollama: {OLLAMA_HOST}")
-    logger.info(f"Default LLM: {DEFAULT_LLM_MODEL}")
-    logger.info(f"Default Embedding: {DEFAULT_EMBEDDING_MODEL}")
-
-    # Load data from PostgreSQL if available
-    if PG_AVAILABLE:
-        try:
-            # Initialize database schema (will preserve existing data)
-            await initialize_schema()
-
-            loaded_kbs = await load_kb_from_postgres()
-            knowledge_bases.update(loaded_kbs)
-            logger.info(f"✅ Loaded {len(loaded_kbs)} knowledge bases from PostgreSQL")
-
-            loaded_pipelines = await load_pipelines_from_postgres()
-            rag_pipelines.update(loaded_pipelines)
-            logger.info(
-                f"✅ Loaded {len(loaded_pipelines)} RAG pipelines from PostgreSQL"
-            )
-
-            # Initialize ConversationRepository for conversational RAG
-            global conversation_repository
-            if CONVERSATION_REPO_AVAILABLE and pg_client.pg_pool:
-                try:
-                    conversation_repository = ConversationRepository(pg_client.pg_pool)
-                    logger.info("✅ ConversationRepository initialized")
-                except Exception as e:
-                    logger.error(f"❌ Failed to initialize ConversationRepository: {e}")
-                    conversation_repository = None
-            else:
-                logger.warning(
-                    "⚠️  ConversationRepository not available (pg_pool or module missing)"
-                )
-                conversation_repository = None
-        except Exception as e:
-            logger.error(f"❌ Failed to load from PostgreSQL: {e}")
-    else:
-        logger.info("ℹ️  Using in-memory storage (PostgreSQL not available)")
-
-    # Initialize Ollama manager
-    if OLLAMA_AVAILABLE:
-        try:
-            await ollama_manager.initialize()
-            logger.info("✅ Ollama manager initialized successfully")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Ollama manager: {e}")
-            # Don't fail startup, just log the error
-    else:
-        logger.warning("⚠️  Ollama not available, RAG features will be limited")
 
 
 if __name__ == "__main__":
