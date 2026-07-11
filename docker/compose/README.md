@@ -31,12 +31,15 @@ including image tags. Config-file *mounts* should point at `../services/<name>/�
 - **`../services/`** = all per-service mounted config (postgres init.sql, prometheus,
   grafana, rabbitmq, traefik, ollama init-models.sh, …), mounted via `../services/<name>/`.
 
-A few config dirs still live **here** under `compose/` as `./`-mounted sources, pending
-their tracking issues — they migrate to `../services/` as each resolves (see #23):
+`compose/` now holds **no `./`-mounted config sources** — every config mount points at
+`../services/<name>/`, so the split above is complete (the last two `./`-mounted dirs
+were retired, see #23):
 
-| Path | Issue |
-|------|-------|
-| `rabbitmq/definitions.json` | #27 (stale export, unsafe to load as-is) |
-| `traefik/dynamic/` | #25 (dynamic/access-mode feature is half-built) |
+- **rabbitmq `definitions.json`** — no longer mounted. The old export was a stale v3.13
+  file with no `password_hash`, and `rabbitmq.conf` has no `load_definitions` directive,
+  so the mount was inert and only produced a Docker empty-dir (dangling-source footgun).
+  Revisit under #27 if declarative definitions are ever needed.
+- **traefik dynamic config** — lives under `../services/traefik/dynamic/`; the
+  dynamic/access-mode feature itself is still half-built (#25).
 
 For the platform/service overview, see the repo-root `CLAUDE.md`.
