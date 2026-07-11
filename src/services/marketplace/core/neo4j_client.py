@@ -105,16 +105,37 @@ class Neo4jClient:
         Returns:
             True if successful
         """
+        # Cypher cannot parameterize a relationship type, so the type is
+        # interpolated into the query string. Guard against Cypher injection with a
+        # strict allowlist of literal, safe relationship types — the caller-supplied
+        # dependency_type is NEVER interpolated directly. The original value is also
+        # stored as a property so reads (r.dependency_type) still see it.
+        allowed_rel_types = {
+            "requires": "REQUIRES",
+            "suggests": "SUGGESTS",
+            "conflicts_with": "CONFLICTS_WITH",
+        }
+        rel_type = allowed_rel_types.get(dependency_type)
+        if rel_type is None:
+            raise ValueError(
+                f"Invalid dependency_type {dependency_type!r}; "
+                f"allowed: {sorted(allowed_rel_types)}"
+            )
+
         query = f"""
         MATCH (p1:Plugin {{id: $plugin_id}})
         MATCH (p2:Plugin {{id: $depends_on_id}})
-        MERGE (p1)-[r:{dependency_type}]->(p2)
+        MERGE (p1)-[r:{rel_type}]->(p2)
+        SET r.dependency_type = $dependency_type
         RETURN true
-        """
+        """  # nosec B608 - rel_type is from a fixed allowlist, not user input
 
         async with self.driver.session() as session:
             result = await session.run(
-                query, plugin_id=plugin_id, depends_on_id=depends_on_plugin_id
+                query,
+                plugin_id=plugin_id,
+                depends_on_id=depends_on_plugin_id,
+                dependency_type=dependency_type,
             )
             record = await result.single()
             return record["true"] if record else False
