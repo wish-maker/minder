@@ -69,6 +69,11 @@ jobs:
           POSTGRES_DB: minder_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          # Dummy secrets so config-importing tests + the conftest service
+          # loader can instantiate Settings (services require these).
+          REDIS_PASSWORD: test_password
+          JWT_SECRET: test_jwt_secret_for_ci
+          NEO4J_AUTH: neo4j/test_password
         run: |
           pytest tests/unit/ -v \
             --cov=src \
@@ -151,6 +156,9 @@ jobs:
           POSTGRES_DB: minder_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          REDIS_PASSWORD: test_password
+          JWT_SECRET: test_jwt_secret_for_ci
+          NEO4J_AUTH: neo4j/test_password
         run: |
           pytest tests/integration/ -v \
             --tb=short \
@@ -211,6 +219,9 @@ jobs:
           POSTGRES_DB: minder_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          REDIS_PASSWORD: test_password
+          JWT_SECRET: test_jwt_secret_for_ci
+          NEO4J_AUTH: neo4j/test_password
         run: |
           pytest tests/e2e/ -v \
             --tb=short \
