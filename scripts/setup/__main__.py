@@ -17,11 +17,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import config
 from . import help as help_module
 from . import ollama as ollama_module
 
-# repo root = two levels up from this file (scripts/setup/__main__.py)
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = config.REPO_ROOT
 SETUP_SH = REPO_ROOT / "setup.sh"
 
 # Global flags setup.sh's main() strips before picking the command (keep in sync).
@@ -55,6 +55,13 @@ def _find_bash() -> str | None:
 
 
 def main(argv: list[str]) -> int:
+    # Mirror setup.sh main()'s flag loop: --dry-run/--verbose set the globals the
+    # ported modules (docker.run) read. The env-var form is already applied in config.
+    if "--dry-run" in argv:
+        config.DRY_RUN = True
+    if "--verbose" in argv:
+        config.VERBOSE = True
+
     # Ported verbs run natively in Python (no bash needed) — the cross-platform
     # steps of the strangler-fig port (#7). Everything else still delegates.
     cmd = _command(argv)

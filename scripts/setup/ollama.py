@@ -11,14 +11,11 @@ fully verifiable by diffing the resulting .env + stdout against the bash verb.
 """
 
 import re
-from pathlib import Path
 
-from . import log
+from . import config, log
 
-# SCRIPT_DIR in bash = the setup.sh dir = repo root; ENV_FILE = <root>/.env.
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ENV_FILE = REPO_ROOT / ".env"
-SCRIPT_NAME = "setup.sh"
+ENV_FILE = config.ENV_FILE
+SCRIPT_NAME = config.SCRIPT_NAME
 
 _DEFAULT_URL = "http://host.docker.internal:11434"
 # Identical to the bash regex: ^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/.*)?$

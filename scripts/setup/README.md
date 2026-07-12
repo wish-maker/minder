@@ -54,10 +54,20 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       `logs/*.log` file mirroring + `trap _cleanup EXIT` epilogue are deferred to
       the full module port (they need `config`'s LOG_FILE/LOGS_DIR)
 
+Foundation modules (used by the ported verbs; grow as more verbs land):
+
+- [~] `config` — constants the Python side consumes (`config.py`: paths, names,
+      DRY_RUN/VERBOSE flags). Kept identical to `config.sh`; the compose-derived
+      image specs / service arrays are added when a verb needs them.
+- [~] `docker` — helpers ported (`docker.py`: `run` dry-run seam,
+      `container_name/_running/_exists/_health`, `compose`/`compose_monitoring`).
+      Verified live against the running stack (`scripts/gate/docker_verify.sh`,
+      positive + negative branches). Wait/poll helpers deferred (need the spinner).
+
 Modules still fully in bash:
 
-- [ ] config · docker · secrets · cache · versions · preflight · env ·
-      infra · lifecycle · commands (health/status, install, start, …)
+- [ ] secrets · cache · versions · preflight · env · infra · lifecycle ·
+      commands (logs/shell, status, migrate, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
