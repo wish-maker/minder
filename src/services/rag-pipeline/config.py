@@ -7,6 +7,8 @@ share a single source of truth.
 
 import os
 
+APP_VERSION = "1.0.0"
+
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
 QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
