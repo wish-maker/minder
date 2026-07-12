@@ -17,14 +17,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import yaml
-from fastapi import FastAPI, Response
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+from fastapi import FastAPI
+from prometheus_client import Counter, Gauge
 
 from config import settings
 
@@ -64,6 +58,8 @@ from routes.ai_tools import build_ai_tools_router  # noqa: E402
 from routes.plugins import ProxyRouter  # noqa: E402
 from routes.plugins_api import build_plugins_router  # noqa: E402
 from routes.services import build_services_router  # noqa: E402
+
+from shared.metrics import setup_metrics  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
@@ -169,17 +165,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ============================================================================
-# Prometheus Metrics
-# ============================================================================
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
 
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
-
-http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
-)
+# ============================================================================
+# Prometheus Metrics (domain-specific; HTTP request metrics from shared.metrics)
+# ============================================================================
 
 plugins_total = Gauge(
     "plugins_total", "Total number of plugins", ["status"]
@@ -255,40 +246,6 @@ async def force_webhooks():
         "message": f"Registered {count} webhook(s)",
         "webhooks": list(webhook_routes.keys()),
     }
-
-
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-# ============================================================================
-# Request Tracking Middleware
-# ============================================================================
-
-
-@app.middleware("http")
-async def track_requests(request, call_next):
-    """Track HTTP requests for metrics"""
-    import time
-
-    start_time = time.time()
-    endpoint = request.url.path
-    method = request.method
-
-    response = await call_next(request)
-
-    # Update metrics
-    duration = time.time() - start_time
-    http_requests_total.labels(
-        method=method, endpoint=endpoint, status=response.status_code
-    ).inc()
-    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
-        duration
-    )
-
-    return response
 
 
 # Plugin CRUD/lifecycle endpoints (routes/plugins_api.py). Included last so the

@@ -25,8 +25,9 @@ COPY src/services/model-management/main.py .
 COPY src/services/model-management/models.py .
 COPY src/services/model-management/routes /app/routes
 
-# Copy core modules
+# Copy core + shared modules (shared.* imported via /app/src on sys.path)
 COPY src/core /app/src/core
+COPY src/shared /app/src/shared
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

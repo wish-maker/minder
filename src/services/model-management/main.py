@@ -6,18 +6,17 @@ Real Ollama integration for model lifecycle
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Response
-from prometheus_client import (
-    CONTENT_TYPE_LATEST,
-    Counter,
-    Gauge,
-    Histogram,
-    generate_latest,
-)
+from fastapi import FastAPI, HTTPException
+from prometheus_client import Gauge
+
+# Shared library (needs src/ on the path)
+sys.path.insert(0, "/app/src")
+from shared.metrics import setup_metrics  # noqa: E402
 
 # Ollama client for real model management
 try:
@@ -65,18 +64,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
+
 
 # ============================================================================
-# Prometheus Metrics
+# Prometheus Metrics (domain-specific; HTTP request metrics from shared.metrics)
 # ============================================================================
-
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
-
-http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
-)
 
 models_registered_total = Gauge(
     "models_registered_total", "Total number of registered models"
@@ -213,6 +207,7 @@ app.include_router(
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Service health check"""
+    models_registered_total.set(len(models))
     return {
         "service": "model-management",
         "status": "healthy",
@@ -221,40 +216,6 @@ async def health_check():
         "environment": os.getenv("ENVIRONMENT", "development"),
         "models_registered": len(models),
     }
-
-
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-
-# Request tracking middleware
-@app.middleware("http")
-async def track_requests(request, call_next):
-    """Track HTTP requests for metrics"""
-    import time
-
-    start_time = time.time()
-    endpoint = request.url.path
-    method = request.method
-
-    response = await call_next(request)
-
-    # Update metrics
-    duration = time.time() - start_time
-    http_requests_total.labels(
-        method=method, endpoint=endpoint, status=response.status_code
-    ).inc()
-    http_request_duration_seconds.labels(method=method, endpoint=endpoint).observe(
-        duration
-    )
-
-    # Update models count
-    if endpoint == "/health":
-        models_registered_total.set(len(models))
-
-    return response
 
 
 # Root endpoint
