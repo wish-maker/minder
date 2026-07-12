@@ -58,7 +58,7 @@ async def clean_database(verify_postgres_running):
     Teardown: Drop all data and table
     """
     import asyncpg
-    from modules.auth import close_pg_pool, get_pg_pool, init_users_table
+    from core.auth import close_pg_pool, get_pg_pool, init_users_table
 
     # Close any existing pool
     await close_pg_pool()
@@ -118,7 +118,7 @@ class TestAuthFlowE2E:
     async def test_1_register_creates_user_in_db(self, api_client):
         """Step 1: Register creates user in PostgreSQL with hashed password"""
         import asyncpg
-        from modules.auth import get_pg_pool
+        from core.auth import get_pg_pool
 
         response = await api_client.post(
             "/v1/auth/register",
@@ -175,7 +175,7 @@ class TestAuthFlowE2E:
         assert data["access_token"].count(".") == 2  # JWT: header.payload.signature
 
         # Verify token can be decoded
-        from modules.auth import verify_jwt_token
+        from core.auth import verify_jwt_token
 
         payload = verify_jwt_token(data["access_token"])
         assert payload["username"] == "loginuser"
@@ -292,7 +292,7 @@ class TestAuthProtectedEndpoints:
         token = login.json()["access_token"]
 
         # Test token verification directly
-        from modules.auth import verify_jwt_token
+        from core.auth import verify_jwt_token
 
         payload = verify_jwt_token(token)
         assert payload["username"] == "protecteduser"
@@ -304,7 +304,7 @@ class TestAuthProtectedEndpoints:
 
         from fastapi import HTTPException
         from jose import jwt
-        from modules.auth import verify_jwt_token
+        from core.auth import verify_jwt_token
 
         # Create expired token
         expired_payload = {
@@ -324,7 +324,7 @@ class TestAuthProtectedEndpoints:
     async def test_invalid_jwt_returns_401(self):
         """Invalid JWT returns 401"""
         from fastapi import HTTPException
-        from modules.auth import verify_jwt_token
+        from core.auth import verify_jwt_token
 
         with pytest.raises(HTTPException) as exc:
             verify_jwt_token("not.a.valid.jwt.token")
