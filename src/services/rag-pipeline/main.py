@@ -5,6 +5,7 @@ Real Ollama integration with proper embedding generation and LLM inference
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 
 import state
@@ -20,6 +21,10 @@ from config import (
     QDRANT_HOST,
     QDRANT_PORT,
 )
+
+# Shared library (needs src/ on the path)
+sys.path.insert(0, "/app/src")
+from shared.metrics import setup_metrics  # noqa: E402
 
 _LOG_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 logger = logging.getLogger("minder.rag-pipeline")
@@ -113,6 +118,9 @@ app = FastAPI(
     version=APP_VERSION,
     lifespan=lifespan,
 )
+
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
 
 app.include_router(system_router)
 app.include_router(rag_router)

@@ -5,8 +5,6 @@ from datetime import datetime
 
 import state
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from config import APP_VERSION
 
@@ -27,12 +25,6 @@ async def health_check():
         "ollama_available": state.OLLAMA_AVAILABLE,
         "ollama_initialized": state.ollama_manager._initialized,
     }
-
-
-@router.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @router.post("/initialize", tags=["System"])

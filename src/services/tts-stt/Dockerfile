@@ -27,6 +27,9 @@ COPY src/services/tts-stt/config.py .
 COPY src/services/tts-stt/models.py .
 COPY src/services/tts-stt/routes /app/routes
 
+# Shared library (shared.* imported via /app/src on sys.path)
+COPY src/shared /app/src/shared
+
 # Create non-root user for security
 RUN useradd -m -u 1000 ttsst && \
     chown -R ttsst:ttsst /app

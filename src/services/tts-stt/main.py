@@ -5,16 +5,19 @@ Simple text-to-speech and speech-to-text functionality
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI
-from fastapi.responses import Response as FastAPIResponse
-from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from routes.stt import STT_AVAILABLE
 from routes.stt import router as stt_router
 from routes.tts import TTS_AVAILABLE
 from routes.tts import router as tts_router
+
+# Shared library (needs src/ on the path)
+sys.path.insert(0, "/app/src")
+from shared.metrics import setup_metrics  # noqa: E402
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
 logger = logging.getLogger("minder.tts-stt")
@@ -41,6 +44,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
+
 app.include_router(tts_router)
 app.include_router(stt_router)
 
@@ -62,12 +68,6 @@ async def health_check():
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
     }
-
-
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return FastAPIResponse(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/", tags=["Root"])

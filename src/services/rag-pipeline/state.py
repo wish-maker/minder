@@ -13,7 +13,7 @@ would bind the initial ``None``.
 import logging
 from typing import Any, Dict, Optional
 
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import Counter, Histogram
 from qdrant_client import QdrantClient
 from rag.ollama_manager import OLLAMA_AVAILABLE, OllamaManager  # noqa: F401
 
@@ -22,20 +22,9 @@ from config import OLLAMA_HOST, QDRANT_HOST, QDRANT_PORT
 logger = logging.getLogger("minder.rag-pipeline")
 
 # ============================================================================
-# Prometheus Metrics
+# Prometheus Metrics (domain-specific; HTTP request metrics come from
+# shared.metrics.setup_metrics, wired in main)
 # ============================================================================
-
-http_requests_total = Counter(
-    "http_requests_total", "Total HTTP requests", ["method", "endpoint", "status"]
-)
-
-http_request_duration_seconds = Histogram(
-    "http_request_duration_seconds", "HTTP request latency", ["method", "endpoint"]
-)
-
-knowledge_bases_total = Gauge(
-    "knowledge_bases_total", "Total number of knowledge bases"
-)
 
 documents_processed_total = Counter(
     "documents_processed_total", "Total documents processed", ["status"]
