@@ -5,6 +5,7 @@ Central plugin management, state control, and AI tools execution
 """
 
 import logging
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -14,6 +15,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from routes import licensing, state, tools
+
+# Shared library (needs src/ on the path)
+sys.path.insert(0, "/app/src")
+from shared.metrics import setup_metrics  # noqa: E402
 
 # ============================================================================
 # Settings
@@ -129,6 +134,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
 
 
 # ============================================================================

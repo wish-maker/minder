@@ -7,6 +7,7 @@ This refactored version uses clean separation of concerns.
 
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -31,6 +32,10 @@ from routes.api import (
     get_entity_context_handler,
     retrieve_with_graph_handler,
 )
+
+# Shared library (needs src/ on the path)
+sys.path.insert(0, "/app/src")
+from shared.metrics import setup_metrics  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
@@ -110,6 +115,9 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
 
 
 # ============================================================================

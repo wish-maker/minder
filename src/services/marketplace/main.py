@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse  # noqa: E402
 
 from services.marketplace.config import settings  # noqa: E402
 from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
+from shared.metrics import setup_metrics  # noqa: E402
 
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.marketplace")
@@ -66,6 +67,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Prometheus metrics: request-tracking middleware + /metrics endpoint
+setup_metrics(app)
 
 
 # Health check endpoint

@@ -21,6 +21,9 @@ COPY src/services/graph-rag/core ./core
 COPY src/services/graph-rag/routes ./routes
 COPY src/services/graph-rag/models ./models
 
+# Shared library (imported as shared.* via /app/src on sys.path)
+COPY src/shared /app/src/shared
+
 # Expose port
 EXPOSE 8008
 

@@ -12,6 +12,9 @@ psycopg2-binary==2.9.9
 # HTTP client
 httpx==0.25.2
 
+# Metrics
+prometheus-client==0.20.0
+
 # Redis (caching)
 redis==5.0.1
 

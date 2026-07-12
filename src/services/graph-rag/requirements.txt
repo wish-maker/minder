@@ -4,3 +4,4 @@ pydantic==2.9.0
 spacy>=3.7.0
 neo4j==5.26.0
 python-multipart==0.0.32
+prometheus-client==0.20.0
