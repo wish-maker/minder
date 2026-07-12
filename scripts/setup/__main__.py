@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from . import help as help_module
+from . import ollama as ollama_module
 
 # repo root = two levels up from this file (scripts/setup/__main__.py)
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -28,9 +29,14 @@ _GLOBAL_FLAGS = {"--dry-run", "--verbose", "--json", "--skip-version-check"}
 _HELP_VERBS = {"-h", "--help", "help"}
 
 
+def _positional(argv: list[str]) -> list[str]:
+    """Args left after stripping global flags — mirrors setup.sh main()'s `args`."""
+    return [a for a in argv if a not in _GLOBAL_FLAGS]
+
+
 def _command(argv: list[str]) -> str:
     """The first positional after global flags — mirrors setup.sh main() (default install)."""
-    positional = [a for a in argv if a not in _GLOBAL_FLAGS]
+    positional = _positional(argv)
     return positional[0] if positional else "install"
 
 
@@ -49,11 +55,18 @@ def _find_bash() -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    # Ported verb: help runs natively in Python (no bash needed) — the first
-    # cross-platform step of the strangler-fig port (#7).
-    if _command(argv) in _HELP_VERBS:
+    # Ported verbs run natively in Python (no bash needed) — the cross-platform
+    # steps of the strangler-fig port (#7). Everything else still delegates.
+    cmd = _command(argv)
+    if cmd in _HELP_VERBS:
         help_module.print_help()
         return 0
+    if cmd == "ollama-mode":
+        # setup.sh: cmd_ollama_mode "$arg1" "$arg2" (args[1], args[2] after flags).
+        pos = _positional(argv)
+        mode = pos[1] if len(pos) > 1 else ""
+        url = pos[2] if len(pos) > 2 else ""
+        return ollama_module.run(mode, url)
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

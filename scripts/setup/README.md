@@ -42,6 +42,25 @@ consumers are ported too).
 
 ## Status
 
+Ported verbs run natively in Python (no bash); everything else still delegates.
+
 - [x] entrypoint seam (`python -m scripts.setup` → delegates to bash)
-- [ ] config · log · docker · secrets · cache · versions · preflight · env ·
-      infra · lifecycle · health · commands · help
+- [x] **`help` / `-h` / `--help`** — native (`help.py`); content byte-identical
+      to `bash setup.sh --help`
+- [x] **`ollama-mode internal|external [url]`** — native (`ollama.py`); flips
+      `.env` only. Verified identical to the bash verb across 8 cases (success /
+      append / no-change / invalid-url / usage) via `scripts/gate/ollama_verify.sh`
+- [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`); the
+      `logs/*.log` file mirroring + `trap _cleanup EXIT` epilogue are deferred to
+      the full module port (they need `config`'s LOG_FILE/LOGS_DIR)
+
+Modules still fully in bash:
+
+- [ ] config · docker · secrets · cache · versions · preflight · env ·
+      infra · lifecycle · commands (health/status, install, start, …)
+
+Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
+after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
+`.env` path (OS-specific by design), ANSI/CR, and setup.sh's global
+`trap _cleanup EXIT` epilogue (log module, not the verb). See
+`scripts/gate/ollama_verify.sh` for the pattern.
