@@ -7,9 +7,17 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI, File, HTTPException, Response, UploadFile
+from models import (
+    DocumentUploadResponse,
+    KnowledgeBaseCreate,
+    KnowledgeBaseResponse,
+    QueryRequest,
+    QueryResponse,
+    RAGPipelineCreate,
+)
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,
@@ -17,20 +25,21 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
-from pydantic import BaseModel
-
-# Ollama client for real embeddings and LLM
-try:
-    from ollama import AsyncClient
-
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
-    logging.warning("ollama package not installed. Install with: pip install ollama")
 
 # Qdrant client
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
+from rag.ollama_manager import OLLAMA_AVAILABLE, OllamaManager
+from rag.text_utils import chunk_text, extract_text_from_file
+
+from config import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_LLM_MODEL,
+    EMBEDDING_DIMENSIONS,
+    OLLAMA_HOST,
+    QDRANT_HOST,
+    QDRANT_PORT,
+)
 
 _LOG_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
 logger = logging.getLogger("minder.rag-pipeline")
@@ -52,28 +61,6 @@ if not logger.handlers:
         if not _pkg_logger.handlers:
             _pkg_logger.addHandler(handler)
             _pkg_logger.setLevel(_LOG_LEVEL)
-
-# ============================================================================
-# Configuration
-# ============================================================================
-
-QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
-QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-MODEL_MANAGEMENT_URL = os.getenv(
-    "MODEL_MANAGEMENT_URL", "http://minder-model-management:8005"
-)
-
-# Default models (can be overridden per knowledge base)
-DEFAULT_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-DEFAULT_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
-
-# Embedding dimensions (depends on model)
-EMBEDDING_DIMENSIONS = {
-    "nomic-embed-text": 768,
-    "mxbai-embed-large": 1024,
-    "all-minilm": 384,
-}
 
 # ============================================================================
 # FastAPI App
@@ -176,79 +163,6 @@ llm_generation_duration = Histogram(
 
 
 # ============================================================================
-# Pydantic Models
-# ============================================================================
-
-
-class KnowledgeBaseCreate(BaseModel):
-    """Knowledge base creation request"""
-
-    name: str
-    description: str
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL
-    llm_model: str = DEFAULT_LLM_MODEL
-    chunk_size: int = 512
-    chunk_overlap: int = 50
-
-
-class KnowledgeBaseResponse(BaseModel):
-    """Knowledge base response"""
-
-    id: str
-    name: str
-    description: str
-    embedding_model: str
-    llm_model: str
-    document_count: int
-    vector_count: int
-    created_at: str
-
-
-class RAGPipelineCreate(BaseModel):
-    """RAG Pipeline creation request"""
-
-    name: str
-    knowledge_base_ids: List[str]
-    retrieval_config: Dict[str, Any] = {}
-    generation_config: Dict[str, Any] = {}
-
-
-class QueryRequest(BaseModel):
-    """Query request"""
-
-    question: str
-    top_k: int = 5
-    stream: bool = False
-    conversation_id: Optional[
-        str
-    ] = None  # For conversational RAG - enables conversation history
-    method: str = "standard"  # standard | hyde | self_rag | auto (decision engine)
-
-
-class QueryResponse(BaseModel):
-    """Query response"""
-
-    answer: str
-    sources: List[Dict[str, Any]]
-    confidence: float
-    model_used: str
-    tokens_used: Optional[int] = None
-    method: str = "standard"  # which RAG method actually ran
-    method_details: Optional[
-        Dict[str, Any]
-    ] = None  # e.g. HyDE/Self-RAG/decision metadata
-
-
-class DocumentUploadResponse(BaseModel):
-    """Document upload response"""
-
-    message: str
-    chunks_processed: int
-    vectors_created: int
-    filename: str
-
-
-# ============================================================================
 # PostgreSQL Persistence (Production Storage)
 # ============================================================================
 
@@ -315,153 +229,7 @@ conversation_repository: Optional[ConversationRepository] = None
 # Ollama Client Management
 # ============================================================================
 
-
-class OllamaManager:
-    """Manage Ollama client connections"""
-
-    def __init__(self):
-        self.client: Optional[AsyncClient] = None
-        self.embed_client: Optional[AsyncClient] = None
-        self._initialized = False
-
-    async def initialize(self):
-        """Initialize Ollama clients"""
-        if not OLLAMA_AVAILABLE:
-            raise RuntimeError("Ollama package not installed")
-
-        try:
-            self.client = AsyncClient(host=OLLAMA_HOST)
-            self.embed_client = AsyncClient(host=OLLAMA_HOST)
-
-            # Test connection
-            await self._test_connection()
-            self._initialized = True
-            logger.info(f"✅ Ollama client initialized: {OLLAMA_HOST}")
-
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Ollama client: {e}")
-            raise
-
-    async def _test_connection(self):
-        """Test Ollama connection"""
-        try:
-            # List available models to verify connection
-            models = await self.client.list()
-            logger.info(
-                f"✅ Ollama connection verified. Available models: {[m['name'] for m in models.get('models', [])]}"
-            )
-        except Exception as e:
-            logger.warning(f"⚠️  Ollama connection test failed: {e}")
-            # Don't fail - models might not be pulled yet
-
-    async def ensure_model(self, model_name: str):
-        """Ensure model is available, pull if necessary"""
-        try:
-            models = await self.client.list()
-            available = [m["name"] for m in models.get("models", [])]
-
-            # Check if model exists with any version tag
-            model_exists = any(
-                model_name in available_model
-                or available_model.startswith(model_name + ":")
-                for available_model in available
-            )
-
-            if not model_exists:
-                logger.info(f"📥 Pulling model: {model_name}")
-                await self.client.pull(model_name)
-                logger.info(f"✅ Model pulled: {model_name}")
-            else:
-                logger.debug(f"✅ Model {model_name} already available")
-
-        except Exception as e:
-            logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
-
-    async def generate_embeddings(
-        self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
-    ) -> List[List[float]]:
-        """Generate embeddings using Ollama"""
-        if not self._initialized:
-            await self.initialize()
-
-        await self.ensure_model(model)
-
-        embeddings = []
-        for text in texts:
-            try:
-                response = await self.embed_client.embeddings(model=model, prompt=text)
-                embedding = response.get("embedding", [])
-                embeddings.append(embedding)
-            except Exception as e:
-                logger.error(f"❌ Embedding generation failed: {e}")
-                # Return zero vector as fallback
-                dim = EMBEDDING_DIMENSIONS.get(model, 768)
-                embeddings.append([0.0] * dim)
-
-        return embeddings
-
-    async def generate_response(
-        self,
-        prompt: str,
-        model: str = DEFAULT_LLM_MODEL,
-        context: str = "",
-        temperature: float = 0.7,
-        stream: bool = False,
-    ) -> Dict[str, Any]:
-        """Generate response using Ollama LLM"""
-        if not self._initialized:
-            await self.initialize()
-
-        await self.ensure_model(model)
-
-        # Build full prompt with context
-        full_prompt = self._build_rag_prompt(prompt, context)
-
-        try:
-            response = await self.client.generate(
-                model=model,
-                prompt=full_prompt,
-                stream=stream,
-                options={
-                    "temperature": temperature,
-                    "num_predict": 2000,  # Max tokens
-                },
-            )
-
-            return {
-                "text": response.get("response", ""),
-                "model": model,
-                "context": context,
-                "tokens_used": response.get("prompt_eval_count", 0)
-                + response.get("eval_count", 0),
-            }
-
-        except Exception as e:
-            logger.error(f"❌ LLM generation failed: {e}")
-            return {
-                "text": f"Error generating response: {str(e)}",
-                "model": model,
-                "context": context,
-                "tokens_used": 0,
-            }
-
-    def _build_rag_prompt(self, question: str, context: str) -> str:
-        """Build RAG prompt with context"""
-        if context:
-            return f"""Context information is below.
----------------------
-{context}
----------------------
-
-Given the context information and not prior knowledge, answer the query.
-Query: {question}
-
-Answer:"""
-        else:
-            return f"Answer the following question: {question}"
-
-
-# Global Ollama manager
+# Global Ollama manager (OllamaManager lives in rag/ollama_manager.py)
 ollama_manager = OllamaManager()
 
 
@@ -508,49 +276,6 @@ from rag.runner import RagComponents, run_query  # noqa: E402
 def get_qdrant_client() -> QdrantClient:
     """Get Qdrant client"""
     return QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
-
-
-# ============================================================================
-# Text Processing
-# ============================================================================
-
-
-async def extract_text_from_file(content: bytes, filename: str) -> str:
-    """Extract text from file based on type"""
-    import io
-
-    from pypdf import PdfReader
-
-    if filename.endswith(".pdf"):
-        pdf_file = io.BytesIO(content)
-        reader = PdfReader(pdf_file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
-        return text
-    elif filename.endswith(".txt") or filename.endswith(".md"):
-        return content.decode("utf-8")
-    else:
-        # Default: try UTF-8 decode
-        try:
-            return content.decode("utf-8")
-        except UnicodeDecodeError:
-            return content.decode("latin-1")
-
-
-def chunk_text(text: str, chunk_size: int = 512, chunk_overlap: int = 50) -> List[str]:
-    """Chunk text into smaller pieces"""
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        length_function=len,
-        separators=["\n\n", "\n", ". ", " ", ""],
-    )
-
-    chunks = text_splitter.split_text(text)
-    return chunks
 
 
 # ============================================================================

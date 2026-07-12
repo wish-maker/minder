@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 
 # Copy application
 COPY src/services/rag-pipeline/main.py .
+COPY src/services/rag-pipeline/config.py .
+COPY src/services/rag-pipeline/models.py .
 COPY src/services/rag-pipeline/pg_client.py .
 COPY src/services/rag-pipeline/config.yaml .
 COPY src/services/rag-pipeline/quality_evaluator.py .
