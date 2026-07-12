@@ -3,60 +3,22 @@ Minder TTS/STT Service - Minimal Working Version
 Simple text-to-speech and speech-to-text functionality
 """
 
-import asyncio
 import logging
 import os
-import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI, File, HTTPException
-from fastapi import Response as FastAPIResponse
-from fastapi import UploadFile
-from fastapi.responses import Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
-from pydantic import BaseModel
-
-# TTS/STT libraries
-try:
-    from gtts import gTTS
-
-    TTS_AVAILABLE = True
-except ImportError:
-    TTS_AVAILABLE = False
-    logging.warning("gTTS not installed")
-
-try:
-    import speech_recognition as sr
-
-    STT_AVAILABLE = True
-except ImportError:
-    STT_AVAILABLE = False
-    logging.warning("SpeechRecognition not installed")
+from fastapi import FastAPI
+from fastapi.responses import Response as FastAPIResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from routes.stt import STT_AVAILABLE
+from routes.stt import router as stt_router
+from routes.tts import TTS_AVAILABLE
+from routes.tts import router as tts_router
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
 logger = logging.getLogger("minder.tts-stt")
 
-# ============================================================================
-# Configuration
-# ============================================================================
-
-DEFAULT_TTS_LANG = "tr"
-DEFAULT_STT_LANG = "tr-TR"
-
-SUPPORTED_LANGUAGES = {
-    "tr": "Turkish",
-    "en": "English",
-    "de": "German",
-    "fr": "French",
-    "es": "Spanish",
-    "it": "Italian",
-    "pt": "Portuguese",
-    "nl": "Dutch",
-    "ru": "Russian",
-    "ja": "Japanese",
-    "ko": "Korean",
-}
 
 # ============================================================================
 # FastAPI App
@@ -79,164 +41,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# ============================================================================
-# Prometheus Metrics
-# ============================================================================
-
-tts_requests_total = Counter(
-    "tts_requests_total", "Total TTS requests", ["language", "status"]
-)
-
-stt_requests_total = Counter(
-    "stt_requests_total", "Total STT requests", ["language", "status"]
-)
-
-# ============================================================================
-# Pydantic Models
-# ============================================================================
-
-
-class TTSRequest(BaseModel):
-    """Text-to-Speech request"""
-
-    text: str
-    language: str = DEFAULT_TTS_LANG
-    slow: bool = False
-
-
-class STTResponse(BaseModel):
-    """STT response"""
-
-    text: str
-    language: str
-    confidence: float
-
-
-# ============================================================================
-# TTS Endpoints
-# ============================================================================
-
-
-@app.post("/tts", tags=["TTS"])
-async def text_to_speech(request: TTSRequest):
-    """Convert text to speech (MP3 format)"""
-    if not TTS_AVAILABLE:
-        raise HTTPException(status_code=503, detail="TTS not available")
-
-    # Validate language
-    if request.language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(
-            status_code=400, detail=f"Unsupported language: {request.language}"
-        )
-
-    try:
-        tts_requests_total.labels(language=request.language, status="success").inc()
-
-        # gTTS synthesis + file I/O are blocking; run off the event loop so
-        # concurrent requests aren't stalled.
-        def _synthesize() -> bytes:
-            tts = gTTS(text=request.text, lang=request.language, slow=request.slow)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-                tts.save(temp_file.name)
-                temp_path = temp_file.name
-            try:
-                with open(temp_path, "rb") as audio_file:
-                    return audio_file.read()
-            finally:
-                os.unlink(temp_path)
-
-        audio_bytes = await asyncio.to_thread(_synthesize)
-
-        # Estimate duration
-        duration = len(request.text) / 15  # Rough estimate
-
-        return Response(
-            content=audio_bytes,
-            media_type="audio/mpeg",
-            headers={
-                "Content-Disposition": "attachment; filename=speech.mp3",
-                "X-Duration": str(duration),
-                "X-Language": request.language,
-            },
-        )
-
-    except Exception as e:
-        tts_requests_total.labels(language=request.language, status="error").inc()
-        logger.error(f"❌ TTS failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/tts/languages", tags=["TTS"])
-async def get_tts_languages():
-    """Get supported languages"""
-    return {
-        "languages": SUPPORTED_LANGUAGES,
-        "default": DEFAULT_TTS_LANG,
-        "available": TTS_AVAILABLE,
-    }
-
-
-# ============================================================================
-# STT Endpoints
-# ============================================================================
-
-
-@app.post("/stt", response_model=STTResponse, tags=["STT"])
-async def speech_to_text(
-    file: UploadFile = File(...), language: str = DEFAULT_STT_LANG
-):
-    """Convert speech to text"""
-    if not STT_AVAILABLE:
-        raise HTTPException(status_code=503, detail="STT not available")
-
-    try:
-        # Read audio file
-        audio_bytes = await file.read()
-
-        # Save to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            temp_file.write(audio_bytes)
-            temp_path = temp_file.name
-
-        # Recording + Google recognition are blocking (CPU + network); run them
-        # off the event loop so a single transcription can't stall the service.
-        def _transcribe() -> tuple[str, float]:
-            recognizer = sr.Recognizer()
-            try:
-                with sr.AudioFile(temp_path) as source:
-                    audio_data = recognizer.record(source)
-                try:
-                    text = recognizer.recognize_google(audio_data, language=language)
-                    return text, 0.9
-                except sr.UnknownValueError:
-                    return "", 0.0
-                except sr.RequestError as e:
-                    logger.warning(f"Speech recognition API error: {e}")
-                    return f"[API Error: {str(e)}]", 0.0
-            finally:
-                os.unlink(temp_path)
-
-        text, confidence = await asyncio.to_thread(_transcribe)
-
-        stt_requests_total.labels(language=language, status="success").inc()
-
-        return STTResponse(text=text, language=language, confidence=confidence)
-
-    except Exception as e:
-        stt_requests_total.labels(language=language, status="error").inc()
-        logger.error(f"❌ STT failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/stt/languages", tags=["STT"])
-async def get_stt_languages():
-    """Get supported languages"""
-    return {
-        "languages": SUPPORTED_LANGUAGES,
-        "auto_detect": True,
-        "default": DEFAULT_STT_LANG,
-        "available": STT_AVAILABLE,
-    }
+app.include_router(tts_router)
+app.include_router(stt_router)
 
 
 # ============================================================================
@@ -274,11 +80,6 @@ async def root():
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
     }
-
-
-# ============================================================================
-# Startup Event
-# ============================================================================
 
 
 if __name__ == "__main__":
