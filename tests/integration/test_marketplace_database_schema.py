@@ -1,6 +1,10 @@
-# services/marketplace/tests/test_database_schema.py
-
 import asyncpg
+import pytest
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(reason="Requires a running PostgreSQL (marketplace DB)"),
+]
 
 
 async def get_db_connection():

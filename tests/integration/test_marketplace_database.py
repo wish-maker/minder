@@ -1,7 +1,15 @@
-# services/marketplace/tests/test_database.py
 import pytest
 
-from services.marketplace.core.database import close_pool, get_pool
+pytestmark = pytest.mark.integration
+
+# Needs a live marketplace PostgreSQL. Skip at module level so importing
+# core.database (which instantiates Settings, requiring secret env vars) never
+# fails collection in a plain unit run.
+pytest.skip(
+    "Requires a running PostgreSQL (marketplace DB)", allow_module_level=True
+)
+
+from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
 
 
 @pytest.mark.asyncio

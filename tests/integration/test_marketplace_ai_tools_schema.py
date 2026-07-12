@@ -8,6 +8,11 @@ import json
 import asyncpg
 import pytest
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skip(reason="Requires a running PostgreSQL (marketplace DB)"),
+]
+
 
 @pytest.mark.asyncio
 async def test_ai_tools_enhanced_schema():
