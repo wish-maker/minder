@@ -21,10 +21,3 @@ http_requests_in_progress = Gauge(
     "HTTP requests currently in progress",
     ["method", "endpoint"],
 )
-
-# Service health metrics
-service_health_up = Gauge(
-    "service_health_up", "Service health status (1=up, 0=down)", ["service"]
-)
-
-active_plugins_gauge = Gauge("active_plugins_total", "Number of active plugins")

@@ -5,8 +5,8 @@ Manages plugin discovery, lifecycle, health monitoring, and service registration
 Thin composition root: the actual work lives in the `core/` package
 (state / database / plugin_loader / webhooks / marketplace_sync / monitoring) and
 the `routes/` package. This module wires them together — lifespan orchestration,
-Prometheus metrics + request middleware, a couple of service-level endpoints, and
-router inclusion.
+shared request-metrics setup + a couple of domain metrics, service-level
+endpoints, and router inclusion.
 """
 
 import asyncio
