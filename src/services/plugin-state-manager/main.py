@@ -12,12 +12,11 @@ from datetime import datetime
 from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import field_validator
-from pydantic_settings import BaseSettings
 from routes import licensing, state, tools
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.config import MinderBaseSettings  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
 # ============================================================================
@@ -25,56 +24,18 @@ from shared.metrics import setup_metrics  # noqa: E402
 # ============================================================================
 
 
-class Settings(BaseSettings):
-    """Application settings"""
+class Settings(MinderBaseSettings):
+    """Plugin State Manager settings.
 
-    # Server
+    Inherits common fields + the required-secret contract (DB_PASSWORD,
+    REDIS_PASSWORD, JWT_SECRET) from shared.config.MinderBaseSettings; only the
+    service-specific overrides live here.
+    """
+
     APP_NAME: str = "Plugin State Manager"
     VERSION: str = "2.1.0"
-    HOST: str = "127.0.0.1"
     PORT: int = 8003
-
-    # Database
-    DB_HOST: str = "postgres"
-    DB_PORT: int = 5432
-    DB_USER: str = "minder"
-    DB_PASSWORD: str = "minder"
     DB_NAME: str = "minder_marketplace"
-
-    # Redis
-    REDIS_HOST: str = "redis"
-    REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str  # Required: must be set via environment variable
-
-    @field_validator("REDIS_PASSWORD")
-    @classmethod
-    def check_redis_password(cls, v: str) -> str:
-        if not v:
-            raise ValueError("REDIS_PASSWORD must be set via environment variable")
-        return v
-
-    # Services
-    MARKETPLACE_URL: str = "http://minder-marketplace:8002"
-    PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
-
-    # Security
-    JWT_SECRET: str  # Required: must be set via environment variable
-    JWT_ALGORITHM: str = "HS256"
-
-    @field_validator("JWT_SECRET")
-    @classmethod
-    def check_jwt_secret(cls, v: str) -> str:
-        if not v:
-            raise ValueError("JWT_SECRET must be set via environment variable")
-        return v
-
-    # Application
-    LOG_LEVEL: str = "INFO"
-    ENVIRONMENT: str = "development"
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 settings = Settings()
