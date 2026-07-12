@@ -1,4 +1,6 @@
 # services/marketplace/config.py
+from typing import Optional
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -58,6 +60,10 @@ class MarketplaceSettings(BaseSettings):
 
     # Plugin Registry integration
     PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
+
+    # CORS — comma-separated origins; when unset, falls back to the dev localhost
+    # list in main. Set to a real origin list in production.
+    CORS_ALLOWED_ORIGINS: Optional[str] = None
 
     # Neo4j Graph Database - use platform-standard NEO4J_AUTH (format: neo4j/password)
     NEO4J_URI: str = "bolt://neo4j:7687"
