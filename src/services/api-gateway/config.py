@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
     API_VERSION: str = "v1"
+    APP_VERSION: str = "1.0.0"
 
     # CORS Configuration
     CORS_ALLOWED_ORIGINS: str = (
