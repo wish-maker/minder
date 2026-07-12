@@ -12,12 +12,12 @@ from datetime import datetime
 
 import httpx
 import redis
+
+# Import auth functions
+from core.auth import close_pg_pool, init_users_table, verify_jwt_token
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-# Import auth functions
-from modules.auth import close_pg_pool, init_users_table, verify_jwt_token
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     Counter,

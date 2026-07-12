@@ -1,20 +1,20 @@
 """Authentication endpoints (register / login / refresh).
 
 A plain APIRouter (like routes/ai.py) — all dependencies are module-level imports
-(modules.auth + config), so no state injection is needed. Auth-table init and pool
+(core.auth + config), so no state injection is needed. Auth-table init and pool
 teardown stay in main's lifespan.
 """
 
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, HTTPException, Request
-from modules.auth import (
+from core.auth import (
     create_jwt_token,
     create_user,
     verify_jwt_token,
     verify_user_credentials,
 )
+from fastapi import APIRouter, HTTPException, Request
 
 from config import settings
 

@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 # Copy application code
 COPY src/services/api-gateway/main.py .
 COPY src/services/api-gateway/config.py .
-COPY src/services/api-gateway/modules /app/modules
+COPY src/services/api-gateway/core /app/core
 COPY src/services/api-gateway/routes /app/routes
 
 # Copy shared libraries
