@@ -26,7 +26,6 @@ COPY src/services/rag-pipeline/models.py .
 COPY src/services/rag-pipeline/state.py .
 COPY src/services/rag-pipeline/routes /app/routes
 COPY src/services/rag-pipeline/pg_client.py .
-COPY src/services/rag-pipeline/config.yaml .
 COPY src/services/rag-pipeline/quality_evaluator.py .
 COPY src/services/rag-pipeline/repositories /app/repositories
 
