@@ -28,7 +28,8 @@ except ImportError:
     OLLAMA_AVAILABLE = False
     logging.warning("ollama package not installed. Install with: pip install ollama")
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
+logger = logging.getLogger("minder.model-management")
 
 # ============================================================================
 # Configuration

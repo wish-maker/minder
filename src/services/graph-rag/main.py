@@ -33,8 +33,8 @@ from routes.api import (
 )
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
+logger = logging.getLogger("minder.graph-rag")
 
 # ============================================================================
 # Configuration

@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse  # noqa: E402
 from services.marketplace.config import settings  # noqa: E402
 from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
 
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.marketplace")
 
 

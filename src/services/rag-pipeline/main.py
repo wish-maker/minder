@@ -32,25 +32,26 @@ except ImportError:
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, PointStruct, VectorParams
 
-logger = logging.getLogger(__name__)
+_LOG_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
+logger = logging.getLogger("minder.rag-pipeline")
 
-# Configure logging to output INFO level logs to stdout
+# Configure logging to output logs to stdout at the configured level
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
+    handler.setLevel(_LOG_LEVEL)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
-    logger.setLevel(logging.INFO)
-    # Surface INFO logs from the RAG method packages (rag/, domain/, agent/) with
-    # the same handler, so the extracted modules log consistently with main.
+    logger.setLevel(_LOG_LEVEL)
+    # Surface logs from the RAG method packages (rag/, domain/, agent/) with the
+    # same handler, so the extracted modules log consistently with main.
     for _pkg in ("rag", "domain", "agent"):
         _pkg_logger = logging.getLogger(_pkg)
         if not _pkg_logger.handlers:
             _pkg_logger.addHandler(handler)
-            _pkg_logger.setLevel(logging.INFO)
+            _pkg_logger.setLevel(_LOG_LEVEL)
 
 # ============================================================================
 # Configuration

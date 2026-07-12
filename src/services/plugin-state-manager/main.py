@@ -4,6 +4,7 @@ Plugin State Manager Service
 Central plugin management, state control, and AI tools execution
 """
 
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 
@@ -73,6 +74,9 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
+logger = logging.getLogger("minder.plugin-state-manager")
+
 
 # ============================================================================
 # FastAPI Application
@@ -83,9 +87,11 @@ settings = Settings()
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
-    print(f"🚀 {settings.APP_NAME} v{settings.VERSION} starting...")
-    print(f"   Environment: {settings.ENVIRONMENT}")
-    print(f"   Database: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}")
+    logger.info(f"🚀 {settings.APP_NAME} v{settings.VERSION} starting...")
+    logger.info(f"   Environment: {settings.ENVIRONMENT}")
+    logger.info(
+        f"   Database: {settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    )
 
     # Initialize database pool
     await get_db_pool()
@@ -98,14 +104,14 @@ async def lifespan(app: FastAPI):
 
     await bootstrap_default_plugins()
 
-    print(f"✅ {settings.APP_NAME} started successfully")
+    logger.info(f"✅ {settings.APP_NAME} started successfully")
 
     yield
 
     # Shutdown
-    print(f"🛑 Shutting down {settings.APP_NAME}...")
+    logger.info(f"🛑 Shutting down {settings.APP_NAME}...")
     await close_db_pool()
-    print(f"✅ {settings.APP_NAME} stopped")
+    logger.info(f"✅ {settings.APP_NAME} stopped")
 
 
 app = FastAPI(
