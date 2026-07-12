@@ -12,9 +12,12 @@
 3. [Test Categories](#test-categories)
 4. [Running Tests](#running-tests)
 5. [Test Coverage](#test-coverage)
-6. [Testing Against Services](#testing-against-services)
-7. [Code Quality](#code-quality)
-8. [CI Integration](#ci-integration)
+6. [Fixtures](#fixtures)
+7. [Writing Tests](#writing-tests)
+8. [Testing Against Services](#testing-against-services)
+9. [Code Quality](#code-quality)
+10. [CI Integration](#ci-integration)
+11. [Debugging](#debugging)
 
 ---
 
@@ -127,6 +130,16 @@ pytest tests/unit/test_validators.py::TestValidators::test_accepts_valid_name -v
 pytest -k "validate_plugin"
 ```
 
+### By Marker
+
+Markers registered in the root `pyproject.toml` — `integration`, `e2e`, `slow`,
+`security`:
+
+```bash
+pytest -m integration
+pytest -m "not integration"    # skip integration tests
+```
+
 ### Parallel Execution
 
 ```bash
@@ -153,6 +166,87 @@ pytest --cov=src --cov-report=xml
 
 > Coverage targets/thresholds are being evaluated (see repo issue tracker). Measure the
 > current baseline before asserting a specific percentage — do not assume a fixed number.
+
+---
+
+## Fixtures
+
+Shared fixtures live in `tests/conftest.py`. Commonly used ones:
+
+| Fixture | Purpose |
+|---|---|
+| `mock_redis`, `mock_redis_client`, `mock_redis_pipeline` | Mocked Redis for unit tests |
+| `mock_postgres_pool` | Mocked Postgres pool for unit tests |
+| `test_db_pool`, `test_db_connection` | Real Postgres pool/connection (integration) |
+| `test_redis`, `redis_client` | Real Redis client (integration) |
+| `test_client`, `gateway_test_client` | HTTP test clients |
+| `test_token`, `test_headers` | A JWT and `Authorization`-bearing headers |
+
+```python
+def test_redis_operation(mock_redis):
+    mock_redis.get.return_value = "test_value"
+    assert mock_redis.get("my_key") == "test_value"
+```
+
+---
+
+## Writing Tests
+
+### Unit test (mocked, no external services)
+
+```python
+from unittest.mock import patch
+
+def test_redis_client_factory():
+    with patch("redis.Redis") as mock_redis:
+        client = create_redis_client(host="localhost")
+        assert client is not None
+```
+
+### Integration test (real service, skip if unavailable)
+
+```python
+import pytest
+
+@pytest.mark.integration
+def test_real_redis_connection(redis_client):
+    try:
+        assert redis_client.ping() is True
+    except ConnectionError:
+        pytest.skip("Redis not available")
+```
+
+### Async test
+
+With `asyncio_mode = "auto"`, an `async def` test just works:
+
+```python
+async def test_async_operation():
+    result = await async_function()
+    assert result is not None
+```
+
+### Testing an endpoint
+
+```python
+def test_health_endpoint(gateway_test_client):
+    response = gateway_test_client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] in ("healthy", "degraded", "unhealthy")
+```
+
+### Best Practices
+
+- Descriptive test names (`test_login_rejects_bad_password`, not `test_1`).
+- Arrange–Act–Assert structure.
+- Mark tests that hit real services with `@pytest.mark.integration` and skip
+  gracefully when the dependency is absent.
+- Use `pytest.raises` for expected failures:
+
+```python
+with pytest.raises(ValueError, match="Invalid input"):
+    process_invalid_data("bad input")
+```
 
 ---
 
@@ -209,6 +303,23 @@ Tests run on Python 3.11 / 3.12 to match the service runtimes.
 
 ---
 
+## Debugging
+
+```bash
+pytest -s          # show print output
+pytest --pdb       # drop into debugger on failure
+pytest -x          # stop at first failure
+```
+
+```python
+def test_with_logging(caplog):
+    with caplog.at_level("INFO"):
+        logger.info("Test message")
+    assert "Test message" in caplog.text
+```
+
+---
+
 ## Quality Checklist
 
 ### Before Committing
@@ -227,7 +338,9 @@ Tests run on Python 3.11 / 3.12 to match the service runtimes.
 ## Getting Help
 
 - pytest: https://docs.pytest.org/
+- pytest-asyncio: https://pytest-asyncio.readthedocs.io/
 - coverage: https://coverage.readthedocs.io/
+- FastAPI testing: https://fastapi.tiangolo.com/tutorial/testing/
 
 ---
 
