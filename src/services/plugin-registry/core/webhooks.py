@@ -87,8 +87,23 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
     secret_ref = webhook_config.get("secretRef")
 
     if secret_ref:
-        # TODO: Validate against secrets store
-        pass
+        # Fail closed (#47): the manifest declares a secretRef, meaning this
+        # webhook is meant to be authenticated, but no secrets store is wired to
+        # verify it yet. Rejecting is the safe posture — silently accepting an
+        # unverified request would be a security bypass.
+        logger.warning(
+            "Webhook for %s declares secretRef '%s' but secret verification is "
+            "not implemented; rejecting (fail-closed).",
+            plugin_name,
+            secret_ref,
+        )
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Webhook secret verification is not implemented; requests that "
+                "declare a secretRef are rejected until a secrets store is wired."
+            ),
+        )
 
     # Execute using execution engine
     import sys
