@@ -3,6 +3,7 @@ Minder TTS/STT Service - Minimal Working Version
 Simple text-to-speech and speech-to-text functionality
 """
 
+import asyncio
 import logging
 import os
 import tempfile
@@ -33,7 +34,8 @@ except ImportError:
     STT_AVAILABLE = False
     logging.warning("SpeechRecognition not installed")
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
+logger = logging.getLogger("minder.tts-stt")
 
 # ============================================================================
 # Configuration
@@ -130,20 +132,20 @@ async def text_to_speech(request: TTSRequest):
     try:
         tts_requests_total.labels(language=request.language, status="success").inc()
 
-        # Generate speech using gTTS
-        tts = gTTS(text=request.text, lang=request.language, slow=request.slow)
+        # gTTS synthesis + file I/O are blocking; run off the event loop so
+        # concurrent requests aren't stalled.
+        def _synthesize() -> bytes:
+            tts = gTTS(text=request.text, lang=request.language, slow=request.slow)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+                tts.save(temp_file.name)
+                temp_path = temp_file.name
+            try:
+                with open(temp_path, "rb") as audio_file:
+                    return audio_file.read()
+            finally:
+                os.unlink(temp_path)
 
-        # Save to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-            tts.save(temp_file.name)
-            temp_path = temp_file.name
-
-        # Read audio file
-        with open(temp_path, "rb") as audio_file:
-            audio_bytes = audio_file.read()
-
-        # Clean up temp file
-        os.unlink(temp_path)
+        audio_bytes = await asyncio.to_thread(_synthesize)
 
         # Estimate duration
         duration = len(request.text) / 15  # Rough estimate
@@ -196,26 +198,25 @@ async def speech_to_text(
             temp_file.write(audio_bytes)
             temp_path = temp_file.name
 
-        # Transcribe
-        recognizer = sr.Recognizer()
-
-        with sr.AudioFile(temp_path) as source:
-            audio_data = recognizer.record(source)
-
+        # Recording + Google recognition are blocking (CPU + network); run them
+        # off the event loop so a single transcription can't stall the service.
+        def _transcribe() -> tuple[str, float]:
+            recognizer = sr.Recognizer()
             try:
-                # Try Google Speech Recognition first
-                text = recognizer.recognize_google(audio_data, language=language)
-                confidence = 0.9
-            except sr.UnknownValueError:
-                text = ""
-                confidence = 0.0
-            except sr.RequestError as e:
-                logger.warning(f"Speech recognition API error: {e}")
-                text = f"[API Error: {str(e)}]"
-                confidence = 0.0
+                with sr.AudioFile(temp_path) as source:
+                    audio_data = recognizer.record(source)
+                try:
+                    text = recognizer.recognize_google(audio_data, language=language)
+                    return text, 0.9
+                except sr.UnknownValueError:
+                    return "", 0.0
+                except sr.RequestError as e:
+                    logger.warning(f"Speech recognition API error: {e}")
+                    return f"[API Error: {str(e)}]", 0.0
+            finally:
+                os.unlink(temp_path)
 
-        # Clean up temp file
-        os.unlink(temp_path)
+        text, confidence = await asyncio.to_thread(_transcribe)
 
         stt_requests_total.labels(language=language, status="success").inc()
 
