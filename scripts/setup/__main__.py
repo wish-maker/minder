@@ -29,6 +29,7 @@ from . import start as start_module
 from . import status as status_module
 from . import stop as stop_module
 from . import uninstall as uninstall_module
+from . import update as update_module
 
 REPO_ROOT = config.REPO_ROOT
 SETUP_SH = REPO_ROOT / "setup.sh"
@@ -123,6 +124,11 @@ def main(argv: list[str]) -> int:
     if cmd == "status":
         # setup.sh: status --json (or global --json) → json; else human.
         return status_module.run(json_mode="--json" in argv)
+    if cmd == "update":
+        # setup.sh: cmd_update "${arg1:-}" (optional --check).
+        pos = _positional(argv)
+        arg1 = pos[1] if len(pos) > 1 else ""
+        return update_module.run(arg1)
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)
