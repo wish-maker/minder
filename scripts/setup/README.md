@@ -122,10 +122,18 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       spinner, RESOLVED_IMAGE_TAGS + THIRD_PARTY_IMAGE_SPECS, and only the
       still-bash install/update/doctor verbs enter it. That layer consumes
       `cache.py`.
+- [~] `preflight` — partial: the two PURE Phase-4 config validators ported
+      (`preflight.py`: `validate_ai_compute_mode` / `validate_compute_resource_profile`
+      — read a mode from `.env` via `env.get`, print the resolved config, export
+      the derived vars docker compose reads). Verified vs preflight.sh across 13
+      mode/branch cases via `scripts/gate/preflight_verify.sh`. Deferred (env-
+      dependent or mutating, entered only from start/install): `check_prerequisites`,
+      `validate_gpu_environment`, `validate_access_mode`/`configure_traefik_access_mode`
+      (the latter MOVES traefik dynamic config files).
 
 Modules still fully in bash:
 
-- [ ] preflight · infra · lifecycle · versions-network-layer ·
+- [ ] infra · lifecycle · versions-network-layer · preflight-{prereq,gpu,access} ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
