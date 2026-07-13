@@ -15,11 +15,57 @@ cache in cache.py is consumed by that deferred layer.)
 """
 
 import re
+import sys
+
+from . import config
 
 # Tags carrying these markers are pre-release / rolling and never eligible.
 _PRERELEASE_RE = re.compile(r"(rc|alpha|beta|dev|nightly|edge|test)")
 # A clean numeric release tag: 1 / 1.2 / 1.2.3 optionally with a single -suffix.
 _NUMERIC_TAG_RE = re.compile(r"^[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9]+)?$")
+
+
+def compose_image_refs() -> list:
+    """bash _compose_image_refs: the pinned `image:tag` refs from the compose file
+    (grep '^<ws>image:<ws>…', strip the prefix + trailing comment/space)."""
+    try:
+        text = config.COMPOSE_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    refs = []
+    for line in text.splitlines():
+        m = re.match(r"^[ \t]+image:[ \t]+(.*)$", line)
+        if m:
+            refs.append(re.sub(r"[ \t]*(#.*)?$", "", m.group(1)))
+    return refs
+
+
+def third_party_image_specs() -> list:
+    """bash _derive_third_party_specs / THIRD_PARTY_IMAGE_SPECS: join each 3rd-party
+    compose image with its metadata into "image:tag|stable_prefix|constraint", in
+    compose-file order. Warns (stderr) on metadata whose image compose no longer has."""
+    specs = []
+    seen = set()
+    for ref in compose_image_refs():
+        if not ref:
+            continue
+        name = ref.rsplit(":", 1)[0]  # ${ref%:*}
+        meta = config.THIRD_PARTY_IMAGE_META.get(name)
+        if meta:
+            specs.append(f"{ref}|{meta}")
+            seen.add(name)
+    for key in config.THIRD_PARTY_IMAGE_META:
+        if key not in seen:
+            print(
+                f"WARN: THIRD_PARTY_IMAGE_META has '{key}' but no matching image in compose",
+                file=sys.stderr,
+            )
+    return specs
+
+
+def third_party_images() -> list:
+    """bash THIRD_PARTY_IMAGES: the pinned refs (spec before the first '|')."""
+    return [spec.split("|", 1)[0] for spec in third_party_image_specs()]
 
 
 def registry_type(image_ref: str) -> str:

@@ -73,5 +73,17 @@ cmp "best_tag none"   "$(bt_b '1.0\n1.2\n1.10\n2.0\nlatest' '1.0.0' 'none')"  "$
 cmp "best_tag minor"  "$(bt_b '1.0\n1.2\n1.10\n2.0' '1.2.0' 'minor')"         "$(pyi "print(v.best_tag('1.0\n1.2\n1.10\n2.0','1.2.0','minor'))")"
 cmp "best_tag empty"  "$(bt_b 'latest\nmain' '1.0.0' 'none')"                 "$(pyi "print(v.best_tag('latest\nmain','1.0.0','none'))")"
 
+# --- third_party_image_specs (derived from compose image: lines + metadata) ---
+b_specs="$(bsh 'printf "%s\n" "${THIRD_PARTY_IMAGE_SPECS[@]}"')"
+p_specs="$(pyi 'print(chr(10).join(v.third_party_image_specs()))')"; p_specs="${p_specs//$'\r'/}"
+if [ "$b_specs" = "$p_specs" ]; then
+  echo "PASS  third_party_image_specs ($(printf '%s\n' "$b_specs" | grep -c .) specs)"
+else FAIL=1; echo "FAIL  third_party_image_specs"; diff <(printf '%s\n' "$b_specs") <(printf '%s\n' "$p_specs") | sed 's/^/    /'; fi
+# THIRD_PARTY_IMAGES (pinned refs = spec before first '|')
+b_imgs="$(bsh 'printf "%s\n" "${THIRD_PARTY_IMAGES[@]}"')"
+p_imgs="$(pyi 'print(chr(10).join(v.third_party_images()))')"; p_imgs="${p_imgs//$'\r'/}"
+if [ "$b_imgs" = "$p_imgs" ]; then echo "PASS  third_party_images"
+else FAIL=1; echo "FAIL  third_party_images"; diff <(printf '%s\n' "$b_imgs") <(printf '%s\n' "$p_imgs") | sed 's/^/    /'; fi
+
 echo "----"; [ "$FAIL" = 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit $FAIL

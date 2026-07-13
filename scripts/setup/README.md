@@ -145,15 +145,17 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       `scripts/gate/cache_verify.sh`. Ported ahead of its consumer (the deferred
       versions network layer) — `cache_tags` takes the timestamp as a param
       (deterministic) and writes LF (newline="") to stay byte-identical + cross-OS.
-- [~] `versions` — partial: the PURE deterministic core ported (`versions.py`:
-      `registry_type`/`image_repo`/`strip_v`/`ver_ge`/`tag_satisfies_constraint`/
-      `best_tag`), verified 1:1 vs versions.sh across 33 cases (incl. `sort -V`
-      ordering) via `scripts/gate/versions_verify.sh`. The network + orchestration
-      layer (`*_list_tags` fetches, `resolve_image_tag`/`pull_*`/
-      `version_drift_report`) is deferred — it needs a curl→urllib decision, the
-      spinner, RESOLVED_IMAGE_TAGS + THIRD_PARTY_IMAGE_SPECS, and only the
-      still-bash install/update/doctor verbs enter it. That layer consumes
-      `cache.py`.
+- [~] `versions` — partial: the PURE deterministic core
+      (`registry_type`/`image_repo`/`strip_v`/`ver_ge`/`tag_satisfies_constraint`/
+      `best_tag`, 33 cases) + the spec derivation (`compose_image_refs`,
+      `third_party_image_specs`, `third_party_images` — joins the compose `image:`
+      pins with `config.THIRD_PARTY_IMAGE_META`) ported (`versions.py`), verified
+      1:1 vs versions.sh via `scripts/gate/versions_verify.sh` (incl. the 23
+      derived specs byte-exact). Deferred: the network + orchestration layer
+      (`*_list_tags` fetches, `resolve_image_tag`/`pull_*`/`version_drift_report`)
+      — needs a curl→urllib decision, the spinner, and the RESOLVED_IMAGE_TAGS
+      cache; only the still-bash install/update/doctor verbs enter it. That layer
+      consumes `cache.py`.
 - [x] `preflight` — DONE (`preflight.py`): `check_prerequisites`,
       `validate_gpu_environment`, `validate_access_mode` +
       `configure_traefik_access_mode`, `validate_ai_compute_mode`,

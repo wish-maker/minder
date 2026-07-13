@@ -61,6 +61,36 @@ EXPORTER_SERVICES = (
     "blackbox-exporter", "cadvisor", "node-exporter",
 )
 
+# Per-image version-resolution metadata "stable_prefix|constraint" (config.sh
+# THIRD_PARTY_IMAGE_META). The pinned VERSION lives only in docker-compose.yml;
+# versions.third_party_image_specs() joins each 3rd-party compose image with this.
+# (authelia stays commented out, matching config.sh, until it returns.)
+THIRD_PARTY_IMAGE_META = {
+    "postgres": "18|none",
+    "redis": "8|none",
+    "rabbitmq": "4|none",
+    "qdrant/qdrant": "v1|none",
+    "neo4j": "2026|none",
+    "ollama/ollama": "0|none",
+    "prom/prometheus": "v3|none",
+    "grafana/grafana": "13|none",
+    "prom/alertmanager": "v0|none",
+    "traefik": "v3|none",
+    "influxdb": "3|none",
+    "telegraf": "1|none",
+    "apicurio/apicurio-registry-sql": "2|none",
+    "minio/minio": "RELEASE|none",
+    "jaegertracing/all-in-one": "1|none",
+    "otel/opentelemetry-collector": "0|none",
+    "ghcr.io/open-webui/open-webui": "v0|none",
+    "prometheuscommunity/postgres-exporter": "v0|none",
+    "oliver006/redis_exporter": "v1|none",
+    "kbudde/rabbitmq-exporter": "v1|none",
+    "prom/node-exporter": "v1|none",
+    "gcr.io/cadvisor/cadvisor": "v0|none",
+    "prom/blackbox-exporter": "v0|none",
+}
+
 # Health endpoints "port[/path]" (config.sh SERVICE_PORTS). Only services with an
 # entry are health-checked. Path defaults to /health when the value is bare port.
 # (openwebui/rabbitmq are Traefik-only → intentionally absent; authelia disabled.)
