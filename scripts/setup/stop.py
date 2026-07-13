@@ -17,25 +17,12 @@ import subprocess
 from . import config, docker, log
 
 
-def _network_exists(name: str) -> bool:
-    """Mirror: docker network ls --format '{{.Name}}' | grep -q "^name$"."""
-    try:
-        out = subprocess.run(
-            ["docker", "network", "ls", "--format", "{{.Name}}"],
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return False
-    return name in out.stdout.splitlines()
-
-
 def run() -> int:
     log.step("Stopping all services")
 
     docker.compose_monitoring("down")
 
-    if _network_exists(config.NETWORK_NAME):
+    if docker.network_exists(config.NETWORK_NAME):
         # bash: run docker network rm NAME && log_success || log_warn
         if docker.run("docker", "network", "rm", config.NETWORK_NAME) == 0:
             log.success(f"Network '{config.NETWORK_NAME}' removed")

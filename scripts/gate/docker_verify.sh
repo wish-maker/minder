@@ -66,6 +66,13 @@ cmp "run (dry)" "$(bsh "DRY_RUN=1 run docker compose ps --services")" \
 cmp "run true (exit)"  "$(bsh "run true;  echo \$?")"  "$(pyi "print(docker.run('true'))")"
 cmp "run false (exit)" "$(bsh "run false; echo \$?")"  "$(pyi "print(docker.run('false'))")"
 
+# --- network_exists (LIVE) — bash idiom is inlined; compare to the ported helper ---
+for n in "docker_minder-network" "definitely-not-a-real-network"; do
+  cmp "network_exists $n" \
+    "$(bsh "docker network ls --format '{{.Name}}' | grep -q \"^${n}\$\" && echo true || echo false")" \
+    "$(pyi "print('true' if docker.network_exists('$n') else 'false')")"
+done
+
 # --- compose() / compose_monitoring() dry-run command construction ---
 cmp "compose (dry)"     "$(bsh "DRY_RUN=1 compose ps")" \
                         "$(DRY_RUN=1 pyi "config.DRY_RUN=True; docker.compose('ps')")"

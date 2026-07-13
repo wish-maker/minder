@@ -92,7 +92,8 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       `config.sh` (INTERACTIVE mirrors its tty/CI/NONINTERACTIVE gate); the
       compose-derived image specs / service arrays are added when a verb needs them.
 - [~] `docker` — helpers ported (`docker.py`: `run` dry-run seam,
-      `container_name/_running/_exists/_health`, `compose`/`compose_monitoring`).
+      `container_name/_running/_exists/_health`, `network_exists`,
+      `compose`/`compose_monitoring`).
       Verified live against the running stack (`scripts/gate/docker_verify.sh`,
       positive + negative branches). Wait/poll helpers deferred (need the spinner).
       NOTE: `run()`'s dry-run print joins its args with NEWLINES, not spaces —
@@ -130,10 +131,17 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       dependent or mutating, entered only from start/install): `check_prerequisites`,
       `validate_gpu_environment`, `validate_access_mode`/`configure_traefik_access_mode`
       (the latter MOVES traefik dynamic config files).
+- [~] `infra` — partial: `create_networks` ported (`infra.py`), dry-run-gated like
+      `stop`, verified via `scripts/gate/infra_verify.sh`. Uses the new shared
+      `docker.network_exists` (which also replaced `stop.py`'s local copy).
+      Deferred (un-gated mutations + waits, entered only from start/install):
+      `initialize_database` (`psql CREATE DATABASE`) and `initialize_minio`
+      (`mc mb` buckets).
 
 Modules still fully in bash:
 
-- [ ] infra · lifecycle · versions-network-layer · preflight-{prereq,gpu,access} ·
+- [ ] lifecycle · versions-network-layer · preflight-{prereq,gpu,access} ·
+      infra-{db,minio}-init ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`

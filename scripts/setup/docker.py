@@ -73,6 +73,20 @@ def container_health(service: str) -> str:
     return val or "n/a"
 
 
+def network_exists(name: str) -> bool:
+    # bash idiom (inlined in create_networks + cmd_stop):
+    #   docker network ls --format '{{.Name}}' | grep -q "^name$"
+    try:
+        out = subprocess.run(
+            ["docker", "network", "ls", "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+    return name in out.stdout.splitlines()
+
+
 def compose(*args: object) -> int:
     return run("docker", "compose", "-f", config.COMPOSE_FILE, *args)
 
