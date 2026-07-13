@@ -20,6 +20,7 @@ from pathlib import Path
 from . import config
 from . import doctor as doctor_module
 from . import help as help_module
+from . import install as install_module
 from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
@@ -133,6 +134,9 @@ def main(argv: list[str]) -> int:
     if cmd == "doctor":
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()
+    if cmd == "install":
+        # setup.sh: default command (no verb) → cmd_install.
+        return install_module.run()
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

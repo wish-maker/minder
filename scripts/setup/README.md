@@ -61,6 +61,15 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       arbitrary-target) via `scripts/gate/migrate_verify.sh` — non-mutating on
       an Alembic-less stack (every service takes the skip branch, so the
       `alembic upgrade` call is never reached).
+- [x] **`install`** (default, no verb) — native (`install.py`); the full install:
+      clear + banner + 11 progress-tracked phases (check_prerequisites → prepare_env
+      → create_networks → pull_all_images → initialize_database → initialize_minio
+      → start_services → wait_for_services → download_ollama_models → migrate →
+      run_health_checks) + success banner. Every phase is a ported+verified step.
+      Verified vs cmd_install via `scripts/gate/install_cmd_verify.sh`: the 11 steps
+      are stubbed on both sides and install's own output (banner + phase labels in
+      order + success banner) is compared — capturing the scaffolding + call order
+      without live calls/waits.
 - [x] **`start`** — native (`start.py`); the first orchestration verb — calls the
       ported steps in order: check_prerequisites → prepare_env → validate_gpu →
       validate_access_mode → validate_ai_compute_mode →
@@ -214,7 +223,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] commands (install, backup/restore) · log-file-mirroring · docker-wait-poll-done
+- [ ] commands (backup/restore) · log-file-mirroring
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
