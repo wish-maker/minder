@@ -131,18 +131,18 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       spinner, RESOLVED_IMAGE_TAGS + THIRD_PARTY_IMAGE_SPECS, and only the
       still-bash install/update/doctor verbs enter it. That layer consumes
       `cache.py`.
-- [~] `preflight` — partial: the two Phase-4 config validators
-      (`validate_ai_compute_mode` / `validate_compute_resource_profile`) + now
-      `check_prerequisites` (docker/compose/daemon + openssl/curl + compose-file +
-      disk + port-conflict checks) ported (`preflight.py`). Verified vs
-      preflight.sh via `scripts/gate/preflight_verify.sh` — the validators
-      byte-exact (13 cases), check_prerequisites structurally (versions/disk/ports
-      masked; the openssl/curl advisory is dropped since Git-Bash PATH vs
-      native-Windows PATH disagree on their presence here — they agree on the Pi).
-      Deferred (env-dependent or mutating, entered only from start/install):
-      `validate_gpu_environment` (`docker run --gpus`),
-      `validate_access_mode`/`configure_traefik_access_mode` (MOVES traefik
-      dynamic config files).
+- [x] `preflight` — DONE (`preflight.py`): `check_prerequisites`,
+      `validate_gpu_environment`, `validate_access_mode` +
+      `configure_traefik_access_mode`, `validate_ai_compute_mode`,
+      `validate_compute_resource_profile`. Verified via
+      `scripts/gate/preflight_verify.sh`: the config validators byte-exact (13
+      cases); check_prerequisites structurally (versions/disk/ports masked;
+      openssl/curl advisory dropped — Git-Bash vs native-Windows PATH disagree
+      here, agree on the Pi); validate_gpu_environment's no-toolkit CPU-fallback
+      branch (the `docker run --gpus` fails fast — image not found, no pull);
+      validate_access_mode `local` (compares the resulting active traefik-config
+      file set — the real side effect — with the files snapshotted + restored)
+      and `invalid`.
 - [~] `lifecycle` — partial: `start_services` ported (`lifecycle.py`) — ordered
       `compose up` groups, dry-run-gated; gates the ollama container on the
       'internal-ollama' compose profile via OLLAMA_BASE_URL. Verified across both
@@ -168,7 +168,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] versions-network-layer · preflight-{gpu,access} · infra-{db,minio}-init ·
+- [ ] versions-network-layer · infra-{db,minio}-init ·
       lifecycle-wait_for_services · health-download_ollama_models ·
       commands (status, backup/restore, doctor, update, install, start, …)
 

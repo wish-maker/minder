@@ -127,6 +127,91 @@ def check_prerequisites() -> None:
     log.success("All prerequisites satisfied")
 
 
+def validate_gpu_environment() -> None:
+    """bash validate_gpu_environment: probe the NVIDIA Container Toolkit via a
+    throwaway `docker run --gpus`; on failure (or no GPU) fall back to CPU and set
+    GPU_AVAILABLE=false, else record the detected GPU and set GPU_AVAILABLE=true."""
+    log.info("Validating GPU environment for AI acceleration...")
+
+    if not _cmd_ok(
+        ["docker", "run", "--rm", "--gpus", "all", "nvidia/cuda:11.0-base-ubuntu20.04", "nvidia-smi"]
+    ):
+        log.warn("NVIDIA Container Toolkit not found")
+        log.detail("GPU acceleration disabled - falling back to CPU mode")
+        log.detail("Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide")
+        os.environ["GPU_AVAILABLE"] = "false"
+        return
+
+    gpu_count = _capture(["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"]).strip() or "0"
+    try:
+        count_zero = int(gpu_count) == 0
+    except ValueError:
+        count_zero = False
+    if count_zero:
+        log.warn("No NVIDIA GPUs detected - falling back to CPU mode")
+        os.environ["GPU_AVAILABLE"] = "false"
+        return
+
+    log.detail(f"GPUs detected: {gpu_count}")
+    gpu_model = (_capture(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]).splitlines() or ["Unknown"])[0]
+    log.detail(f"GPU Model: {gpu_model}")
+    gpu_memory = (_capture(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader"]).splitlines() or ["Unknown"])[0]
+    log.detail(f"GPU Memory: {gpu_memory}")
+    os.environ["GPU_AVAILABLE"] = "true"
+    log.success("GPU validation passed - hardware acceleration enabled")
+
+
+def configure_traefik_access_mode() -> None:
+    """bash configure_traefik_access_mode: disable every access-mode-*.yml, then
+    enable access-mode-<mode>.yml (by renaming its .disabled twin)."""
+    mode = env.get("ACCESS_MODE") or "local"
+    log.info(f"Configuring Traefik access mode: {mode}")
+
+    dyn = config.SCRIPT_DIR / "docker" / "services" / "traefik" / "dynamic"
+    for cfg in sorted(dyn.glob("access-mode-*.yml")):
+        cfg.rename(cfg.parent / (cfg.name + ".disabled"))
+
+    target = dyn / f"access-mode-{mode}.yml.disabled"
+    if target.is_file():
+        target.rename(target.parent / target.name[: -len(".disabled")])
+        log.success(f"Enabled Traefik config: access-mode-{mode}.yml")
+    else:
+        log.warn(f"Traefik config not found: access-mode-{mode}.yml")
+        log.detail("Using default middleware configuration")
+
+
+def validate_access_mode() -> int:
+    """bash validate_access_mode: local (localhost) / vpn (LAN+VPN) / public
+    (internet) — log the posture, export TRAEFIK_ACCESS_MODE, then wire the
+    matching Traefik dynamic config."""
+    mode = env.get("ACCESS_MODE") or "local"
+    log.info("Validating Access Mode configuration...")
+
+    if mode == "local":
+        log.detail("Access Mode: LOCAL (localhost only)")
+        log.detail("Services accessible only on 127.0.0.1")
+        os.environ["TRAEFIK_ACCESS_MODE"] = "local"
+    elif mode == "vpn":
+        log.detail("Access Mode: VPN (LAN/VPN subnets)")
+        log.detail("Services accessible via VPN with enhanced security")
+        log.detail("Allowed CIDRs: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16")
+        os.environ["TRAEFIK_ACCESS_MODE"] = "vpn"
+    elif mode == "public":
+        log.detail("Access Mode: PUBLIC (internet-facing)")
+        log.detail("Services accessible via internet with DDoS protection")
+        log.detail("WARNING: Ensure SSL certificates and firewall rules are configured")
+        os.environ["TRAEFIK_ACCESS_MODE"] = "public"
+    else:
+        log.error(f"Invalid ACCESS_MODE: {mode}")
+        log.detail("Valid options: local, vpn, public")
+        log.detail(f"Fix: Set ACCESS_MODE in {env.ENV_FILE}")
+        return 1
+
+    configure_traefik_access_mode()
+    log.success(f"Access Mode validation passed: {mode}")
+    return 0
+
+
 def validate_ai_compute_mode() -> int:
     """bash validate_ai_compute_mode: internal (local Ollama) / external (remote
     GPU node, requires EXTERNAL_GPU_NODE_URL) / hybrid (local + fallback)."""
