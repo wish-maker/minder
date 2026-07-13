@@ -107,10 +107,16 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       copies that `ollama.py`/`secrets.py` carried. The rest of env.sh
       (prepare_env / secret self-heal / compose-.env mirror / gen_secret) is
       consumed only by the still-bash start/install verbs — deferred with them.
+- [x] `cache` — DONE (`cache.py`): `cache_file`/`cache_expired`/`load_cached_tags`/
+      `cache_tags` (the tag-cache the version engine reads). Verified vs cache.sh
+      across path-mapping / fresh-missing-old expiry / parse / write cases via
+      `scripts/gate/cache_verify.sh`. Ported ahead of its consumer (`versions`,
+      next) — `cache_tags` takes the timestamp as a param (deterministic) and
+      writes LF (newline="") to stay byte-identical + cross-OS stable.
 
 Modules still fully in bash:
 
-- [ ] cache · versions · preflight · infra · lifecycle ·
+- [ ] versions · preflight · infra · lifecycle ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`

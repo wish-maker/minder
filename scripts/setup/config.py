@@ -24,6 +24,11 @@ ENV_EXAMPLE = REPO_ROOT / ".env.example"
 COMPOSE_FILE = REPO_ROOT / "docker" / "compose" / "docker-compose.yml"
 COMPOSE_ENV_FILE = REPO_ROOT / "docker" / "compose" / ".env"
 
+# Tag cache (config.sh PATHS block). CACHE_TTL_HOURS: tag lists expire after 24h.
+CACHE_DIR = REPO_ROOT / ".cache"
+TAGS_CACHE_DIR = CACHE_DIR / "tags"
+CACHE_TTL_HOURS = 24
+
 # Service naming (config.sh SERVICE DEFINITIONS block).
 CONTAINER_PREFIX = "minder"
 NETWORK_NAME = "docker_minder-network"
