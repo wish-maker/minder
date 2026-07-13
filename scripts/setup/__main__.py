@@ -20,6 +20,7 @@ from pathlib import Path
 from . import config
 from . import help as help_module
 from . import ollama as ollama_module
+from . import secrets as secrets_module
 
 REPO_ROOT = config.REPO_ROOT
 SETUP_SH = REPO_ROOT / "setup.sh"
@@ -74,6 +75,9 @@ def main(argv: list[str]) -> int:
         mode = pos[1] if len(pos) > 1 else ""
         url = pos[2] if len(pos) > 2 else ""
         return ollama_module.run(mode, url)
+    if cmd == "sync-postgres-password":
+        # setup.sh: sync_postgres_password (no args). Reads/writes .env + docker exec.
+        return secrets_module.sync_postgres_password()
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

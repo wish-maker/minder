@@ -50,9 +50,15 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
 - [x] **`ollama-mode internal|external [url]`** — native (`ollama.py`); flips
       `.env` only. Verified identical to the bash verb across 8 cases (success /
       append / no-change / invalid-url / usage) via `scripts/gate/ollama_verify.sh`
-- [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`); the
-      `logs/*.log` file mirroring + `trap _cleanup EXIT` epilogue are deferred to
-      the full module port (they need `config`'s LOG_FILE/LOGS_DIR)
+- [x] **`sync-postgres-password`** — native (`secrets.py`); reads `.env`, pushes
+      POSTGRES_PASSWORD into the running container via `ALTER USER`. Verified
+      identical to the bash verb (no-`.env` / unset-password / live-sync) via
+      `scripts/gate/secrets_verify.sh` — the live case re-applies the current
+      password (a safe no-op), never writing a synthetic one to the DB.
+- [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`/`secrets.py`);
+      `step()` added for the `▸` headings. The `logs/*.log` file mirroring +
+      `trap _cleanup EXIT` epilogue are deferred to the full module port (they
+      need `config`'s LOG_FILE/LOGS_DIR)
 
 Foundation modules (used by the ported verbs; grow as more verbs land):
 
@@ -66,7 +72,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] secrets · cache · versions · preflight · env · infra · lifecycle ·
+- [ ] cache · versions · preflight · env · infra · lifecycle ·
       commands (logs/shell, status, migrate, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`

@@ -22,6 +22,8 @@ _RED = "\033[0;31m"
 _GREEN = "\033[0;32m"
 _YELLOW = "\033[1;33m"
 _BLUE = "\033[0;34m"
+_CYAN = "\033[0;36m"
+_BOLD = "\033[1m"
 _DIM = "\033[2m"
 _NC = "\033[0m"
 
@@ -76,3 +78,10 @@ def error(msg: str) -> None:
 def detail(msg: str) -> None:
     # bash: echo -e "  ${DIM}$*${NC}"
     _emit(f"  {_DIM}{msg}{_NC}" if _colors_on() else f"  {msg}")
+
+
+def step(msg: str) -> None:
+    # bash: echo -e "\n${BOLD}${CYAN}▸ $*${NC}" (a blank line precedes the heading).
+    # The "[STEP] …" LOG_FILE append is deferred to the full log-module port
+    # (needs config's LOG_FILE), exactly like the other file-mirroring above.
+    _emit(f"\n{_BOLD}{_CYAN}▸ {msg}{_NC}" if _colors_on() else f"\n▸ {msg}")
