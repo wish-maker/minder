@@ -66,6 +66,14 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       verb under `DRY_RUN=1` via `scripts/gate/stop_verify.sh` (non-destructive
       there: the mutating ops are dry-run-gated; the `--clean` prune is not gated
       so it is not exercised by the dry-run verify).
+- [x] **`logs [service] [lines]`** — native (`logs.py`); streams one service's or
+      all services' logs. Error branch (unknown service) verified via
+      `scripts/gate/logs_verify.sh`; the `-f` follow paths stream/block so they
+      are exercised by hand.
+- [x] **`shell [service]`** — native (`shell.py`); opens bash/sh in a running
+      container. Both non-interactive error branches (no service under CI,
+      not-running) verified via `scripts/gate/shell_verify.sh`; the interactive
+      `docker exec -it` + no-service prompt are exercised by hand.
 - [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`/`secrets.py`/
       `migrate.py`/`stop.py`); `step()` (the `▸` heading) and `section()` (the box
       banner, byte-width padding to match bash `printf %-48s`) added. The
@@ -75,8 +83,9 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
 Foundation modules (used by the ported verbs; grow as more verbs land):
 
 - [~] `config` — constants the Python side consumes (`config.py`: paths, names,
-      DRY_RUN/VERBOSE flags). Kept identical to `config.sh`; the compose-derived
-      image specs / service arrays are added when a verb needs them.
+      DRY_RUN/VERBOSE/CLEAN_DANGLING/INTERACTIVE flags). Kept identical to
+      `config.sh` (INTERACTIVE mirrors its tty/CI/NONINTERACTIVE gate); the
+      compose-derived image specs / service arrays are added when a verb needs them.
 - [~] `docker` — helpers ported (`docker.py`: `run` dry-run seam,
       `container_name/_running/_exists/_health`, `compose`/`compose_monitoring`).
       Verified live against the running stack (`scripts/gate/docker_verify.sh`,
@@ -91,7 +100,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 Modules still fully in bash:
 
 - [ ] cache · versions · preflight · env · infra · lifecycle ·
-      commands (logs/shell, status, install, start, …)
+      commands (status, backup/restore, doctor, update, install, start, uninstall, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute

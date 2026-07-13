@@ -7,6 +7,7 @@ the still-bash modules; these values are kept identical to it.
 """
 
 import os
+import sys
 from pathlib import Path
 
 # bash SCRIPT_DIR = the setup.sh dir = repo root (this file is scripts/setup/config.py).
@@ -43,3 +44,12 @@ VERBOSE = _truthy(os.environ.get("VERBOSE", ""))
 # `stop --clean`/`--clean-dangling` sets this (config.sh: CLEAN_DANGLING=false
 # default). __main__ flips it when the flag is present, mirroring setup.sh main().
 CLEAN_DANGLING = _truthy(os.environ.get("CLEAN_DANGLING", ""))
+
+# Interactive-prompt gate. config.sh: false if stdin is not a tty, OR CI="true",
+# OR NONINTERACTIVE="true" (the CI/NONINTERACTIVE compares are exact, case-sensitive
+# "true" — NOT the truthy set). Verbs use it to choose prompt-vs-error.
+INTERACTIVE = (
+    sys.stdin.isatty()
+    and os.environ.get("CI", "false") != "true"
+    and os.environ.get("NONINTERACTIVE", "false") != "true"
+)

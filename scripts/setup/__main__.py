@@ -19,9 +19,11 @@ from pathlib import Path
 
 from . import config
 from . import help as help_module
+from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
 from . import secrets as secrets_module
+from . import shell as shell_module
 from . import stop as stop_module
 
 REPO_ROOT = config.REPO_ROOT
@@ -92,6 +94,17 @@ def main(argv: list[str]) -> int:
         if arg1 in ("--clean", "--clean-dangling"):
             config.CLEAN_DANGLING = True
         return stop_module.run()
+    if cmd == "logs":
+        # setup.sh: cmd_logs "$arg1" "${arg2:-100}" (service, lines default 100).
+        pos = _positional(argv)
+        service = pos[1] if len(pos) > 1 else ""
+        lines = pos[2] if len(pos) > 2 else "100"
+        return logs_module.run(service, lines)
+    if cmd == "shell":
+        # setup.sh: cmd_shell "$arg1" (service).
+        pos = _positional(argv)
+        service = pos[1] if len(pos) > 1 else ""
+        return shell_module.run(service)
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)
