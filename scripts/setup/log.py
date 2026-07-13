@@ -16,6 +16,7 @@ Two deliberate scope notes:
 
 import datetime
 import sys
+import threading
 
 # Colors — identical codes to scripts/lib/config.sh.
 _RED = "\033[0;31m"
@@ -42,6 +43,19 @@ def _emit(text: str) -> None:
         buf.flush()
     else:  # stream without a binary buffer (e.g. test capture) — best effort
         sys.stdout.write(text + "\n")
+
+
+def _write_raw(text: str) -> None:
+    """Write without a trailing newline, forced UTF-8 — for the \\r spinner frames
+    (the glyphs are non-ASCII and would crash a cp1254 console; same reason _emit
+    forces UTF-8)."""
+    buf = getattr(sys.stdout, "buffer", None)
+    if buf is not None:
+        buf.write(text.encode("utf-8"))
+        buf.flush()
+    else:
+        sys.stdout.write(text)
+        sys.stdout.flush()
 
 
 def _now() -> str:
@@ -86,6 +100,49 @@ def step(msg: str) -> None:
     # The "[STEP] …" LOG_FILE append is deferred to the full log-module port
     # (needs config's LOG_FILE), exactly like the other file-mirroring above.
     _emit(f"\n{_BOLD}{_CYAN}▸ {msg}{_NC}" if _colors_on() else f"\n▸ {msg}")
+
+
+# ── Spinner (log.sh SPINNER) ──────────────────────────────────────────────
+# bash animates a background subshell printing `\r<frame>  <msg padded to 60>`
+# every 0.1s; spinner_stop kills it and clears the line with `\r\033[K`. Ported
+# with a daemon thread. Spinner output is transient (CR-overwritten) and is
+# normalized away by the gate (`s/.*\r//`), so its bytes are cosmetic — what
+# matters is that it never crashes and leaves a clean line on stop.
+_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+_spinner_thread: "threading.Thread | None" = None
+_spinner_stop: "threading.Event | None" = None
+
+
+def spinner_start(msg: str) -> None:
+    spinner_stop()
+    global _spinner_thread, _spinner_stop
+    stop = threading.Event()
+
+    def _run() -> None:
+        i = 0
+        while not stop.is_set():
+            frame = _SPINNER_FRAMES[i % 10]
+            if _colors_on():
+                _write_raw(f"\r{_CYAN}{frame}{_NC}  {msg:<60}")
+            else:
+                _write_raw(f"\r{frame}  {msg:<60}")
+            stop.wait(0.1)
+            i += 1
+
+    _spinner_stop = stop
+    _spinner_thread = threading.Thread(target=_run, daemon=True)
+    _spinner_thread.start()
+
+
+def spinner_stop() -> None:
+    global _spinner_thread, _spinner_stop
+    if _spinner_thread is not None:
+        if _spinner_stop is not None:
+            _spinner_stop.set()
+        _spinner_thread.join(timeout=1)
+        _spinner_thread = None
+        _spinner_stop = None
+    _write_raw("\r\033[K")
 
 
 def section(title: str) -> None:

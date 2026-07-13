@@ -29,6 +29,15 @@ CACHE_DIR = REPO_ROOT / ".cache"
 TAGS_CACHE_DIR = CACHE_DIR / "tags"
 CACHE_TTL_HOURS = 24
 
+# Wait/poll timeouts in seconds (config.sh TIMEOUTS block).
+TIMEOUT_DB = 60
+TIMEOUT_SERVICES = 90
+TIMEOUT_MONITORING = 120
+TIMEOUT_AI = 120
+TIMEOUT_OLLAMA = 90
+TIMEOUT_PORT = 30
+TIMEOUT_REGISTRY = 8  # per registry HTTP call
+
 # Service naming (config.sh SERVICE DEFINITIONS block).
 CONTAINER_PREFIX = "minder"
 NETWORK_NAME = "docker_minder-network"

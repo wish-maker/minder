@@ -13,7 +13,9 @@ The wait/poll helpers (wait_healthy/wait_port/wait_postgres_ready) need the
 spinner + a live stack and are deferred to a later increment.
 """
 
+import socket
 import subprocess
+import time
 
 from . import config, log
 
@@ -85,6 +87,67 @@ def network_exists(name: str) -> bool:
     except OSError:
         return False
     return name in out.stdout.splitlines()
+
+
+# ── Wait / poll helpers (docker.sh) ───────────────────────────────────────
+# Live polls (not dry-run-gated, read-only). They use the spinner; the spinner
+# output is normalized away by the gate, so what's verified is the final
+# success/warn/error line + return value.
+
+
+def wait_healthy(service: str, timeout: int = config.TIMEOUT_SERVICES) -> bool:
+    """bash wait_healthy: poll container_health every 3s until healthy or timeout."""
+    log.spinner_start(f"Waiting for {service}…")
+    elapsed = 0
+    while elapsed < timeout:
+        if container_health(service) == "healthy":
+            log.spinner_stop()
+            log.success(f"{service} is healthy")
+            return True
+        time.sleep(3)
+        elapsed += 3
+    log.spinner_stop()
+    log.warn(f"{service} not healthy after {timeout}s  (status: {container_health(service)})")
+    return False
+
+
+def wait_port(host: str, port: int, timeout: int = config.TIMEOUT_PORT) -> bool:
+    """bash wait_port: poll a TCP connect every 2s (bash uses >/dev/tcp)."""
+    elapsed = 0
+    while elapsed < timeout:
+        try:
+            with socket.create_connection((host, int(port)), timeout=2):
+                return True
+        except OSError:
+            pass
+        time.sleep(2)
+        elapsed += 2
+    return False
+
+
+def wait_postgres_ready(timeout: int = config.TIMEOUT_DB) -> bool:
+    """bash wait_postgres_ready: poll `pg_isready -U minder` every 2s."""
+    log.spinner_start("Waiting for PostgreSQL…")
+    elapsed = 0
+    while elapsed < timeout:
+        try:
+            result = subprocess.run(
+                ["docker", "exec", container_name("postgres"), "pg_isready", "-U", "minder"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            ready = result.returncode == 0
+        except OSError:
+            ready = False
+        if ready:
+            log.spinner_stop()
+            log.success("PostgreSQL is ready")
+            return True
+        time.sleep(2)
+        elapsed += 2
+    log.spinner_stop()
+    log.error(f"PostgreSQL did not become ready within {timeout}s")
+    return False
 
 
 def compose(*args: object) -> int:

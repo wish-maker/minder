@@ -80,10 +80,12 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       (both branches — the compose calls are dry-run-gated so nothing is removed;
       the typed-DELETE confirmation is exercised by hand).
 - [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`/`secrets.py`/
-      `migrate.py`/`stop.py`); `step()` (the `▸` heading) and `section()` (the box
-      banner, byte-width padding to match bash `printf %-48s`) added. The
-      `logs/*.log` file mirroring + `trap _cleanup EXIT` epilogue are deferred to
-      the full module port (they need `config`'s LOG_FILE/LOGS_DIR)
+      `migrate.py`/`stop.py`); `step()` (the `▸` heading), `section()` (the box
+      banner, byte-width padding to match bash `printf %-48s`), and the `spinner`
+      (`spinner_start`/`spinner_stop`, a daemon-thread animation used by the wait
+      helpers) added. The `logs/*.log` file mirroring + `trap _cleanup EXIT`
+      epilogue + the progress bar are deferred to the full module port (they need
+      `config`'s LOG_FILE/LOGS_DIR).
 
 Foundation modules (used by the ported verbs; grow as more verbs land):
 
@@ -93,9 +95,10 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       compose-derived image specs / service arrays are added when a verb needs them.
 - [~] `docker` — helpers ported (`docker.py`: `run` dry-run seam,
       `container_name/_running/_exists/_health`, `network_exists`,
-      `compose`/`compose_monitoring`).
-      Verified live against the running stack (`scripts/gate/docker_verify.sh`,
-      positive + negative branches). Wait/poll helpers deferred (need the spinner).
+      `compose`/`compose_monitoring`, and the wait/poll helpers
+      `wait_healthy`/`wait_port`/`wait_postgres_ready`).
+      Verified live against the running stack (`scripts/gate/docker_verify.sh` +
+      `scripts/gate/wait_verify.sh`, positive + negative branches).
       NOTE: `run()`'s dry-run print joins its args with NEWLINES, not spaces —
       setup.sh sets `IFS=$'\n\t'` before sourcing, so bash's `$*` in
       `echo "[dry-run] $*"` uses `\n` as the separator. The real installer prints
