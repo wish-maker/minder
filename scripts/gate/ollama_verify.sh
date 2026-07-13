@@ -4,6 +4,7 @@
 # exit code, resulting .env) across cases. Operates on the REAL repo .env, so it
 # backs it up first and ALWAYS restores it. Not a permanent artifact.
 set -u
+PY="${PY:-python}"                     # override e.g. PY=python3 on boxes without `python`
 cd "$(dirname "$0")/../.." || exit 2   # repo root (script lives in scripts/gate/)
 BAK="$(mktemp)"; HAD_ENV=0
 [ -f .env ] && { cp .env "$BAK"; HAD_ENV=1; }
@@ -28,7 +29,7 @@ run_case() {  # $1=name  $2=init-file-content  rest=args
   local bo bx; bo="$(bash setup.sh ollama-mode "$@" 2>&1)"; bx=$?
   local benv; benv="$(cat .env)"
   printf '%s' "$init" > .env
-  local po px; po="$(python -m scripts.setup ollama-mode "$@" 2>&1)"; px=$?
+  local po px; po="$("$PY" -m scripts.setup ollama-mode "$@" 2>&1)"; px=$?
   local penv; penv="$(cat .env)"
 
   local ok=1

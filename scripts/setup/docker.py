@@ -23,7 +23,12 @@ def run(*cmd: object) -> int:
     argv = [str(c) for c in cmd]
     if config.DRY_RUN:
         # bash: echo -e "${DIM}[dry-run] $*${NC}"; return 0
-        line = "[dry-run] " + " ".join(argv)
+        # setup.sh sets IFS=$'\n\t' (line 24) BEFORE sourcing, so `$*` joins the
+        # args with a NEWLINE (IFS's first char), not a space — the real installer
+        # prints each dry-run arg on its own line. Match that byte-for-byte. (The
+        # DIM…NC wraps the whole multi-line block: DIM once at the front, NC once
+        # at the end.)
+        line = "[dry-run] " + "\n".join(argv)
         log._emit(f"{log._DIM}{line}{log._NC}" if log._colors_on() else line)
         return 0
     return subprocess.run(argv).returncode

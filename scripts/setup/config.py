@@ -39,3 +39,7 @@ def _truthy(val: str) -> bool:
 # main()'s flag loop (DRY_RUN=true / VERBOSE=true).
 DRY_RUN = _truthy(os.environ.get("DRY_RUN", ""))
 VERBOSE = _truthy(os.environ.get("VERBOSE", ""))
+
+# `stop --clean`/`--clean-dangling` sets this (config.sh: CLEAN_DANGLING=false
+# default). __main__ flips it when the flag is present, mirroring setup.sh main().
+CLEAN_DANGLING = _truthy(os.environ.get("CLEAN_DANGLING", ""))

@@ -22,6 +22,7 @@ from . import help as help_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
 from . import secrets as secrets_module
+from . import stop as stop_module
 
 REPO_ROOT = config.REPO_ROOT
 SETUP_SH = REPO_ROOT / "setup.sh"
@@ -84,6 +85,13 @@ def main(argv: list[str]) -> int:
         pos = _positional(argv)
         target = pos[1] if len(pos) > 1 else "head"
         return migrate_module.run(target)
+    if cmd == "stop":
+        # setup.sh: --clean/--clean-dangling -> CLEAN_DANGLING=true; then cmd_stop.
+        pos = _positional(argv)
+        arg1 = pos[1] if len(pos) > 1 else ""
+        if arg1 in ("--clean", "--clean-dangling"):
+            config.CLEAN_DANGLING = True
+        return stop_module.run()
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

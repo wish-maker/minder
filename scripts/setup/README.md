@@ -61,11 +61,16 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       arbitrary-target) via `scripts/gate/migrate_verify.sh` — non-mutating on
       an Alembic-less stack (every service takes the skip branch, so the
       `alembic upgrade` call is never reached).
+- [x] **`stop [--clean|--clean-dangling]`** — native (`stop.py`); compose down +
+      network rm, optional dangling-image prune. Verified identical to the bash
+      verb under `DRY_RUN=1` via `scripts/gate/stop_verify.sh` (non-destructive
+      there: the mutating ops are dry-run-gated; the `--clean` prune is not gated
+      so it is not exercised by the dry-run verify).
 - [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`/`secrets.py`/
-      `migrate.py`); `step()` (the `▸` heading) and `section()` (the box banner,
-      byte-width padding to match bash `printf %-48s`) added. The `logs/*.log`
-      file mirroring + `trap _cleanup EXIT` epilogue are deferred to the full
-      module port (they need `config`'s LOG_FILE/LOGS_DIR)
+      `migrate.py`/`stop.py`); `step()` (the `▸` heading) and `section()` (the box
+      banner, byte-width padding to match bash `printf %-48s`) added. The
+      `logs/*.log` file mirroring + `trap _cleanup EXIT` epilogue are deferred to
+      the full module port (they need `config`'s LOG_FILE/LOGS_DIR)
 
 Foundation modules (used by the ported verbs; grow as more verbs land):
 
@@ -76,6 +81,12 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       `container_name/_running/_exists/_health`, `compose`/`compose_monitoring`).
       Verified live against the running stack (`scripts/gate/docker_verify.sh`,
       positive + negative branches). Wait/poll helpers deferred (need the spinner).
+      NOTE: `run()`'s dry-run print joins its args with NEWLINES, not spaces —
+      setup.sh sets `IFS=$'\n\t'` before sourcing, so bash's `$*` in
+      `echo "[dry-run] $*"` uses `\n` as the separator. The real installer prints
+      each dry-run arg on its own line; the port matches that. (`docker_verify.sh`
+      originally sourced bash under the default IFS, which space-joined and masked
+      this — it now sets `IFS=$'\n\t'` to mirror setup.sh.)
 
 Modules still fully in bash:
 
