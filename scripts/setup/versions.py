@@ -356,9 +356,11 @@ def pull_all_images() -> None:
     log.success("Image pull phase complete")
 
 
-def version_drift_report(json_mode: bool = False) -> None:
+def version_drift_report(json_mode: bool = False) -> int:
     """bash version_drift_report (doctor + update --check): resolve each spec
-    without pulling, report which images have a newer compatible tag."""
+    without pulling, report which images have a newer compatible tag. Returns the
+    number of drifted images (doctor counts it toward `issues`; bash re-runs +
+    greps for that — same observable output, drift shown once)."""
     drift_items = []  # (image_base, pinned_tag, resolved_tag, constraint)
     ok_items = []     # (image_base, pinned_tag, constraint)
 
@@ -387,7 +389,7 @@ def version_drift_report(json_mode: bool = False) -> None:
         log._emit("")
         log._emit("  ]")
         log._emit("}")
-        return
+        return len(drift_items)
 
     log._emit("\n" + (f"{log._BOLD}Version Drift Report{log._NC}" if log._colors_on() else "Version Drift Report"))
     if not drift_items:
@@ -410,3 +412,5 @@ def version_drift_report(json_mode: bool = False) -> None:
         log._emit("\n  " + (f"{log._DIM}Up to date:{log._NC}" if log._colors_on() else "Up to date:"))
         for img, cur, con in ok_items:
             log.detail(f"  ✓  {img}:{cur}  ({con})")
+
+    return len(drift_items)

@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from . import config
+from . import doctor as doctor_module
 from . import help as help_module
 from . import logs as logs_module
 from . import migrate as migrate_module
@@ -129,6 +130,9 @@ def main(argv: list[str]) -> int:
         pos = _positional(argv)
         arg1 = pos[1] if len(pos) > 1 else ""
         return update_module.run(arg1)
+    if cmd == "doctor":
+        # setup.sh: cmd_doctor (no args).
+        return doctor_module.run()
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)
