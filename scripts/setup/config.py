@@ -61,6 +61,27 @@ EXPORTER_SERVICES = (
     "blackbox-exporter", "cadvisor", "node-exporter",
 )
 
+# Health endpoints "port[/path]" (config.sh SERVICE_PORTS). Only services with an
+# entry are health-checked. Path defaults to /health when the value is bare port.
+# (openwebui/rabbitmq are Traefik-only → intentionally absent; authelia disabled.)
+SERVICE_PORTS = {
+    "api-gateway": "8000/health",
+    "plugin-registry": "8001/health",
+    "marketplace": "8002/health",
+    "plugin-state-manager": "8003/health",
+    "rag-pipeline": "8004/health",
+    "model-management": "8005/health",
+    "tts-stt": "8006/health",
+    "graph-rag": "8008/health",
+    "prometheus": "9090/-/healthy",
+    "grafana": "3000/api/health",
+    "influxdb": "8086",
+    "traefik": "8081/dashboard/",
+    "minio": "9000/minio/health/live",
+    "jaeger": "16686",
+    "otel-collector": "18888/metrics",
+}
+
 
 def _truthy(val: str) -> bool:
     # bash run() accepts DRY_RUN in {1,true,yes} (case-insensitive).

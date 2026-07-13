@@ -155,10 +155,17 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       `initialize_database` (`psql CREATE DATABASE`) and `initialize_minio`
       (`mc mb` buckets).
 
+- [~] `health` — partial: `run_health_checks` ported (`health.py`) — probes each
+      SERVICE_PORTS endpoint (urllib HTTP, or TCP for influxdb), human + `--json`
+      output. Verified STRUCTURALLY vs health.sh (service set/order/groups/summary)
+      via `scripts/gate/health_verify.sh`, masking the live up/down + URLs + counts
+      like the gate (curl→urllib, results non-deterministic). Deferred:
+      `download_ollama_models` (spinner + `ollama pull`) with cmd_install.
+
 Modules still fully in bash:
 
 - [ ] versions-network-layer · preflight-{prereq,gpu,access} · infra-{db,minio}-init ·
-      lifecycle-wait_for_services ·
+      lifecycle-wait_for_services · health-download_ollama_models ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
