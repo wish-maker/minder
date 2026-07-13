@@ -22,6 +22,7 @@ from . import help as help_module
 from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
+from . import restart as restart_module
 from . import secrets as secrets_module
 from . import shell as shell_module
 from . import start as start_module
@@ -115,6 +116,9 @@ def main(argv: list[str]) -> int:
     if cmd == "start":
         # setup.sh: cmd_start (no args) — full orchestration.
         return start_module.run()
+    if cmd == "restart":
+        # setup.sh: cmd_restart — stop, sleep 3, start.
+        return restart_module.run()
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

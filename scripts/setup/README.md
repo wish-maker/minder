@@ -72,6 +72,9 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       here: the gate's docker shims are bash scripts native-Windows python can't
       exec, and a live run blocks on wait_for_services' no-healthcheck 120s waits;
       on Linux/Pi the shim path works for both.)
+- [x] **`restart`** — native (`restart.py`); `stop` → sleep 3 → `start`, both
+      ported verbs. Verified by call order vs bash cmd_restart
+      (`scripts/gate/restart_cmd_verify.sh`).
 - [x] **`stop [--clean|--clean-dangling]`** — native (`stop.py`); compose down +
       network rm, optional dangling-image prune. Verified identical to the bash
       verb under `DRY_RUN=1` via `scripts/gate/stop_verify.sh` (non-destructive
@@ -179,7 +182,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 Modules still fully in bash:
 
 - [ ] versions-network-layer · infra-{db,minio}-init · health-download_ollama_models ·
-      commands (status, backup/restore, doctor, update, install, restart, …)
+      commands (status, backup/restore, doctor, update, install, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
