@@ -20,10 +20,16 @@ import time
 from . import config, log
 
 
-def run(*cmd: object) -> int:
-    """Mirror docker.sh run(): dry-run prints the command, else executes it."""
+def run(*cmd: object, quiet: bool = False) -> int:
+    """Mirror docker.sh run(): dry-run prints the command, else executes it.
+
+    quiet=True models a caller's `run … &>/dev/null` (e.g. pull_image_with_fallback,
+    backup/restore): under DRY_RUN it suppresses the [dry-run] echo too, and under
+    real mode it discards the command's stdout/stderr."""
     argv = [str(c) for c in cmd]
     if config.DRY_RUN:
+        if quiet:
+            return 0
         # bash: echo -e "${DIM}[dry-run] $*${NC}"; return 0
         # setup.sh sets IFS=$'\n\t' (line 24) BEFORE sourcing, so `$*` joins the
         # args with a NEWLINE (IFS's first char), not a space — the real installer
@@ -33,6 +39,8 @@ def run(*cmd: object) -> int:
         line = "[dry-run] " + "\n".join(argv)
         log._emit(f"{log._DIM}{line}{log._NC}" if log._colors_on() else line)
         return 0
+    if quiet:
+        return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
     return subprocess.run(argv).returncode
 
 
