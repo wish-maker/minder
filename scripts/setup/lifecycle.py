@@ -6,10 +6,9 @@
 compose calls go through docker.compose()/compose_monitoring() (dry-run-gated),
 so start_services is non-destructive under DRY_RUN — which is how it is verified.
 
-Deferred: `wait_for_services` (a thin loop over the already-ported wait_healthy;
-runs live with cmd_start — end-to-end verification is impractical because the
-no-healthcheck services otel-collector/telegraf would each block to the full
-120s monitoring timeout).
+wait_for_services waits each group healthy (a thin loop over the ported
+wait_healthy). Live it would block to the timeouts on no-healthcheck services;
+it is verified under the gate's docker shim (container_health → healthy → instant).
 """
 
 import os
@@ -65,3 +64,17 @@ def start_services() -> None:
     docker.compose_monitoring("up", "-d", *config.EXPORTER_SERVICES)
 
     log.success("All service groups dispatched")
+
+
+def wait_for_services() -> None:
+    """bash wait_for_services: wait each service group healthy (best-effort; the
+    bash `|| true` per svc is mirrored by ignoring wait_healthy's return)."""
+    log.section("⏳  Waiting for Services")
+    for svc in config.CORE_SERVICES:
+        docker.wait_healthy(svc, config.TIMEOUT_SERVICES)
+    for svc in config.API_SERVICES:
+        docker.wait_healthy(svc, config.TIMEOUT_SERVICES)
+    for svc in config.MONITORING_SERVICES:
+        docker.wait_healthy(svc, config.TIMEOUT_MONITORING)
+    for svc in config.AI_SERVICES:
+        docker.wait_healthy(svc, config.TIMEOUT_AI)

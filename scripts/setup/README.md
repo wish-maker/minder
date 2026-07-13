@@ -61,6 +61,17 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       arbitrary-target) via `scripts/gate/migrate_verify.sh` — non-mutating on
       an Alembic-less stack (every service takes the skip branch, so the
       `alembic upgrade` call is never reached).
+- [x] **`start`** — native (`start.py`); the first orchestration verb — calls the
+      ported steps in order: check_prerequisites → prepare_env → validate_gpu →
+      validate_access_mode → validate_ai_compute_mode →
+      validate_compute_resource_profile → create_networks → start_services →
+      wait_for_services → run_health_checks. Pure sequencing, so it is verified by
+      CALL ORDER vs bash cmd_start (`scripts/gate/start_cmd_verify.sh`, which
+      monkeypatches the steps and diffs the order against the bash function body);
+      each step body has its own gate script. (A full bash-vs-python run isn't done
+      here: the gate's docker shims are bash scripts native-Windows python can't
+      exec, and a live run blocks on wait_for_services' no-healthcheck 120s waits;
+      on Linux/Pi the shim path works for both.)
 - [x] **`stop [--clean|--clean-dangling]`** — native (`stop.py`); compose down +
       network rm, optional dangling-image prune. Verified identical to the bash
       verb under `DRY_RUN=1` via `scripts/gate/stop_verify.sh` (non-destructive
@@ -143,15 +154,14 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       validate_access_mode `local` (compares the resulting active traefik-config
       file set — the real side effect — with the files snapshotted + restored)
       and `invalid`.
-- [~] `lifecycle` — partial: `start_services` ported (`lifecycle.py`) — ordered
-      `compose up` groups, dry-run-gated; gates the ollama container on the
-      'internal-ollama' compose profile via OLLAMA_BASE_URL. Verified across both
-      ollama branches (+ resulting COMPOSE_PROFILES) under DRY_RUN via
-      `scripts/gate/lifecycle_verify.sh`. Needed the service-group arrays
-      (config.py) + the ported wait_healthy. Deferred: `wait_for_services` (a thin
-      loop over the verified wait_healthy; runs live with cmd_start — end-to-end
-      verification is impractical, the no-healthcheck services would each block to
-      the 120s monitoring timeout).
+- [x] `lifecycle` — DONE (`lifecycle.py`): `start_services` (ordered `compose up`
+      groups, dry-run-gated; gates the ollama container on the 'internal-ollama'
+      profile via OLLAMA_BASE_URL — verified across both ollama branches +
+      COMPOSE_PROFILES under DRY_RUN via `scripts/gate/lifecycle_verify.sh`) and
+      `wait_for_services` (waits each group healthy — a thin loop over the verified
+      wait_healthy + section; composition-verified, and the `start` orchestration
+      verify confirms it's invoked in order; a live end-to-end run blocks on
+      no-healthcheck 120s timeouts). Needed the service-group arrays (config.py).
 - [~] `infra` — partial: `create_networks` ported (`infra.py`), dry-run-gated like
       `stop`, verified via `scripts/gate/infra_verify.sh`. Uses the new shared
       `docker.network_exists` (which also replaced `stop.py`'s local copy).
@@ -168,9 +178,8 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] versions-network-layer · infra-{db,minio}-init ·
-      lifecycle-wait_for_services · health-download_ollama_models ·
-      commands (status, backup/restore, doctor, update, install, start, …)
+- [ ] versions-network-layer · infra-{db,minio}-init · health-download_ollama_models ·
+      commands (status, backup/restore, doctor, update, install, restart, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
