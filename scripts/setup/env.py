@@ -8,12 +8,35 @@ only by the still-bash start/install verbs and is deferred until those are porte
 — porting it now would be dead code.
 """
 
+import re
 import secrets
+from datetime import datetime, timezone
+from pathlib import Path
 
-from . import config
+from . import config, log
 
 ENV_FILE = config.ENV_FILE
+ENV_EXAMPLE = config.ENV_EXAMPLE
 COMPOSE_ENV_FILE = config.COMPOSE_ENV_FILE
+
+# Authoritative secret-key set → "length[:format]" (env.sh SECRET_SPEC). Smart-fill
+# touches ONLY these keys; every other .env line is left exactly as written.
+SECRET_SPEC = {
+    "POSTGRES_PASSWORD": "32",
+    "REDIS_PASSWORD": "32",
+    "RABBITMQ_PASSWORD": "32",
+    "MINIO_ROOT_PASSWORD": "32",
+    "JWT_SECRET": "64",
+    "NEO4J_AUTH": "16:neo4j/",
+    "INFLUXDB_TOKEN": "40",
+    "AUTHELIA_STORAGE_ENCRYPTION_KEY": "32",
+    "AUTHELIA_JWT_SECRET": "32",
+    "GRAFANA_PASSWORD": "32",
+    "WEBUI_SECRET_KEY": "32",
+}
+
+# Values matching this (case-sensitive substring) are treated as unset placeholders.
+_PLACEHOLDER_RE = re.compile(r"CHANGEME|REPLACE_ME|change-this-to|my-super-secret")
 
 # _sync_compose_env's DO-NOT-EDIT banner (config.sh printf block): "# " + 76 '='.
 _COMPOSE_ENV_BANNER = (
@@ -63,3 +86,175 @@ def sync_compose_env() -> None:
         COMPOSE_ENV_FILE.chmod(0o600)
     except OSError:
         pass
+
+
+def _chmod_600(path: Path) -> None:
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+
+
+def _first_env_value(raw: str, key: str) -> "str | None":
+    """First `key=` line's value in raw .env text, or None if the key is absent
+    (bash: grep ^key= | head -n1 | cut -d= -f2-, with a __MISSING__ sentinel)."""
+    for line in raw.split("\n"):
+        if line.startswith(f"{key}="):
+            return line.split("=", 1)[1]
+    return None
+
+
+def fill_env_secrets() -> None:
+    """bash _fill_env_secrets: generate a secret for each SECRET_SPEC key whose
+    value is MISSING/EMPTY/a placeholder/(for prefixed specs) the bare prefix.
+    Real user values are left untouched. Backs up .env before rewriting. SILENT
+    no-op when nothing needs filling — this is what keeps the gate's start/stop/
+    restart traces unchanged, so it must stay silent."""
+    try:
+        raw = ENV_FILE.read_text(encoding="utf-8")
+    except OSError:
+        raw = ""
+
+    to_fill = []
+    for key, spec in SECRET_SPEC.items():
+        fmt = spec.split(":", 1)[1] if ":" in spec else ""
+        value = _first_env_value(raw, key)
+        if (
+            value is None
+            or value == ""
+            or _PLACEHOLDER_RE.search(value)
+            or (fmt and value == fmt)
+        ):
+            to_fill.append(key)
+
+    if not to_fill:
+        return  # fully populated → silent no-op (gate-critical)
+
+    to_fill.sort()  # deterministic log/apply order (spec iteration order is arbitrary)
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    backup = ENV_FILE.parent / f".env.backup-{ts}"
+    backup.write_bytes(ENV_FILE.read_bytes())
+    log.detail(f"Backed up .env → {backup.name}")
+
+    for key in to_fill:
+        spec = SECRET_SPEC[key]
+        length = int(spec.split(":", 1)[0])
+        fmt = spec.split(":", 1)[1] if ":" in spec else ""
+        new_secret = f"{fmt}{gen_secret(length)}"
+        if re.search(rf"(?m)^{re.escape(key)}=", raw):
+            # sed "s|^key=.*|key=new|" — replace every matching line (function
+            # replacement so hex/prefix is never treated as a backreference).
+            raw = re.sub(rf"(?m)^{re.escape(key)}=.*", lambda _m: f"{key}={new_secret}", raw)
+        else:
+            raw += f"{key}={new_secret}\n"  # bash printf … >> .env (no separator)
+        log.detail(f"✓ Generated secret for {key}")
+
+    with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
+        fh.write(raw)
+    log.success(f"{len(to_fill)} secret(s) generated/healed in .env")
+
+
+# _write_default_env's heredoc body — extracted verbatim from env.sh (unquoted
+# heredoc). {date} ← UTC now; <GEN:N> ← an INDEPENDENT gen_secret(N) each.
+_DEFAULT_ENV_TEMPLATE = """\
+# Minder Platform — Environment Configuration (LEGACY FALLBACK)
+# Generated: {date}
+# ⚠️  This is an INCOMPLETE fallback configuration!
+#     Please restore .env.example from version control
+
+# ── Core ────────────────────────────────────────────────────
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+
+# ── PostgreSQL ───────────────────────────────────────────────
+POSTGRES_USER=minder
+POSTGRES_PASSWORD=<GEN:32>
+POSTGRES_DB=minder
+
+# ── Redis ────────────────────────────────────────────────────
+REDIS_PASSWORD=<GEN:32>
+
+# ── RabbitMQ ─────────────────────────────────────────────────
+RABBITMQ_PASSWORD=<GEN:32>
+
+# ── MinIO ─────────────────────────────────────────────────────
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=<GEN:32>
+
+# ── Auth & Security ──────────────────────────────────────────
+JWT_SECRET=<GEN:64>
+JWT_ALGORITHM=HS256
+JWT_EXPIRATION_MINUTES=60
+
+# ── Neo4j ────────────────────────────────────────────────────
+NEO4J_AUTH=neo4j/<GEN:16>
+
+# ── InfluxDB ─────────────────────────────────────────────────
+INFLUXDB_TOKEN=<GEN:40>
+INFLUXDB_ORG=minder
+INFLUXDB_BUCKET=metrics
+
+# ── Authelia ─────────────────────────────────────────────────
+AUTHELIA_STORAGE_ENCRYPTION_KEY=<GEN:32>
+AUTHELIA_JWT_SECRET=<GEN:32>
+
+# ── Grafana ──────────────────────────────────────────────────
+GRAFANA_ADMIN_USER=admin
+GRAFANA_PASSWORD=<GEN:32>
+
+# ── OpenWebUI ────────────────────────────────────────────────
+WEBUI_SECRET_KEY=<GEN:32>
+WEBUI_AUTH=true
+
+# ── Traefik ───────────────────────────────────────────────────
+ACME_EMAIL=admin@minder.local
+TRAEFIK_TRUSTED_IPS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1/32
+
+# ── Ollama ───────────────────────────────────────────────────
+OLLAMA_AUTOMATIC_PULL=true
+OLLAMA_MODELS=llama3.2,nomic-embed-text
+OLLAMA_LLM_MODEL=llama3.2
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+
+# ── Models ─────────────────────────────────────────────────────
+DEFAULT_BASE_MODEL=llama3.2
+
+# ── TTS/STT ───────────────────────────────────────────────────
+TTS_MODEL=tts_models/multilingual/multi-dataset/xtts_v2
+STT_MODEL=base
+TTS_DEVICE=cpu
+TTS_COMPUTE_TYPE=int8
+"""
+
+
+def write_default_env() -> None:
+    """bash _write_default_env: the incomplete fallback .env, used only when
+    .env.example is missing. Random per-key secrets + a UTC generation date."""
+    log.warn("No .env.example found — using legacy fallback (incomplete)")
+    log.detail("Consider re-cloning repository or restoring .env.example")
+
+    date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    content = _DEFAULT_ENV_TEMPLATE.replace("{date}", date)
+    content = re.sub(r"<GEN:(\d+)>", lambda m: gen_secret(int(m.group(1))), content)
+    with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
+        fh.write(content)
+    log.success("Generated .env with secure random secrets (fallback mode)")
+
+
+def prepare_env() -> None:
+    """bash prepare_env: self-healing provisioning (install/start/restart). Create
+    .env from .env.example (or the fallback), heal missing secrets, chmod 600,
+    mirror to the compose .env. Idempotent + silent when .env is already full."""
+    if not ENV_FILE.exists():
+        ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if ENV_EXAMPLE.is_file():
+            ENV_FILE.write_bytes(ENV_EXAMPLE.read_bytes())
+            log.success("Created .env from .env.example")
+        else:
+            log.info("No .env.example found — generating configuration")
+            write_default_env()
+
+    fill_env_secrets()
+    _chmod_600(ENV_FILE)
+    sync_compose_env()

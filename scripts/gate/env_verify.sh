@@ -36,6 +36,21 @@ bshx() { SCRIPT_DIR="$PWD" bash -c '
 pyix() { "$PY" -c "
 from scripts.setup import env
 $1"; }
+# log-aware bash variant (fill/prepare/write_default emit via log_*). log.sh's EXIT
+# trap noise (spinner \r\033[K + epilogue) is normalized away by lnorm.
+bshl() { SCRIPT_DIR="$PWD" bash -c '
+  SCRIPT_DIR="$PWD"
+  IFS=$'"'"'\n\t'"'"'
+  source scripts/lib/config.sh >/dev/null 2>&1
+  source scripts/lib/log.sh    >/dev/null 2>&1
+  source scripts/lib/env.sh
+  '"$1"; }
+# normalize log output: strip-to-last-CR (spinner), ANSI, timestamps, the random
+# backup filename ts, the _cleanup epilogue, blank lines.
+lnorm() { sed -E -e 's/.*\r//' -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+                 -e 's/[0-9]{2}:[0-9]{2}:[0-9]{2}/TS/g' \
+                 -e 's/\.env\.backup-[0-9]{8}-[0-9]{6}/.env.backup-TS/g' \
+                 -e '/Script exited unexpectedly/d' -e '/Full log:/d' -e '/^[[:space:]]*$/d'; }
 
 FAIL=0
 run_case() {  # $1=name  $2=.env-content  $3=key
@@ -76,6 +91,42 @@ sce_case() {  # $1=name  $2=.env-content
 sce_case "typical"      $'FOO=bar\nOLLAMA_BASE_URL=\nJWT_SECRET=abc123\n'
 sce_case "no trailing newline" 'FOO=bar'
 sce_case "empty file"   ''
+
+# --- fill_env_secrets: SELECTION + log are deterministic (values are random) ---
+# Compare the log output (which keys, sorted, + backup + count) with the backup ts
+# normalized. Reset .env between the two runs (bash mutates it), clean backups.
+fill_case() {  # $1=name  $2=.env-content
+  printf '%s' "$2" > .env
+  local b; b="$(bshl "_fill_env_secrets" 2>&1)"
+  printf '%s' "$2" > .env
+  local p; p="$(pyix "env.fill_env_secrets()" 2>&1)"
+  rm -f .env.backup-*
+  local bn pn; bn="$(printf '%s' "$b" | lnorm)"; pn="$(printf '%s' "$p" | lnorm)"
+  if [ "$bn" = "$pn" ]; then echo "PASS  fill_env_secrets $1"
+  else FAIL=1; echo "FAIL  fill_env_secrets $1"; diff <(printf '%s\n' "$bn") <(printf '%s\n' "$pn") | sed 's/^/    /'; fi
+}
+# POSTGRES_PASSWORD valid → skipped; REDIS placeholder, NEO4J bare-prefix, JWT empty,
+# rest missing → all filled. FOO is non-spec → untouched (+ not logged).
+fill_case "mixed (10 of 11 filled)" $'POSTGRES_PASSWORD=aRealPassword0123456789abcdefXY\nREDIS_PASSWORD=CHANGEME_me\nNEO4J_AUTH=neo4j/\nJWT_SECRET=\nFOO=bar\n'
+# All valid → SILENT no-op (gate-critical: must print nothing).
+FULLENV=$'POSTGRES_PASSWORD=v0000000000000000000000000000001\nREDIS_PASSWORD=v0000000000000000000000000000002\nRABBITMQ_PASSWORD=v0000000000000000000000000000003\nMINIO_ROOT_PASSWORD=v0000000000000000000000000000004\nJWT_SECRET=v0000000000000000000000000000005\nNEO4J_AUTH=neo4j/realsecretvalue\nINFLUXDB_TOKEN=v0000000000000000000000000000007\nAUTHELIA_STORAGE_ENCRYPTION_KEY=v008\nAUTHELIA_JWT_SECRET=v009\nGRAFANA_PASSWORD=v010\nWEBUI_SECRET_KEY=v011\n'
+fill_case "full (silent no-op)" "$FULLENV"
+
+# --- prepare_env: silent no-op on a fully-populated .env (gate-critical) ---
+printf '%s' "$FULLENV" > .env
+b="$(bshl "prepare_env" 2>&1)"; printf '%s' "$FULLENV" > .env; p="$(pyix "env.prepare_env()" 2>&1)"
+rm -f .env.backup-*
+bn="$(printf '%s' "$b" | lnorm)"; pn="$(printf '%s' "$p" | lnorm)"
+if [ "$bn" = "$pn" ] && [ -z "$bn" ]; then echo "PASS  prepare_env full (silent)"
+else FAIL=1; echo "FAIL  prepare_env full (silent)"; diff <(printf '%s\n' "$bn") <(printf '%s\n' "$pn") | sed 's/^/    /'; fi
+
+# --- write_default_env: structure is fixed; date + hex secrets are random ---
+# Mask the Generated date and every 16+ hex run, then byte-compare the .env.
+dnorm() { sed -E -e 's/# Generated: .*/# Generated: DATE/' -e 's/[0-9a-f]{16,}/HEX/g'; }
+rm -f .env; bshl "_write_default_env" >/dev/null 2>&1; b="$(dnorm < .env)"
+rm -f .env; pyix "env.write_default_env()" >/dev/null 2>&1; p="$(dnorm < .env)"
+if [ "$b" = "$p" ]; then echo "PASS  write_default_env (structure)"
+else FAIL=1; echo "FAIL  write_default_env (structure)"; diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | sed 's/^/    /'; fi
 
 echo "----"; [ "$FAIL" = 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit $FAIL

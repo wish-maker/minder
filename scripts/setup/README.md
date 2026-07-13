@@ -105,15 +105,17 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       each dry-run arg on its own line; the port matches that. (`docker_verify.sh`
       originally sourced bash under the default IFS, which space-joined and masked
       this — it now sets `IFS=$'\n\t'` to mirror setup.sh.)
-- [~] `env` — partial: `get()` (bash `_env_get`), `gen_secret`, and
-      `sync_compose_env` (the root→compose `.env` mirror with the DO-NOT-EDIT
-      banner) ported (`env.py`). `get` consolidated the duplicate `_env_get`
-      copies `ollama.py`/`secrets.py` carried; `gen_secret` uses cross-platform
-      `secrets.token_hex` (no openssl); `sync_compose_env` passes the `.env` body
-      through as raw bytes (like `cat`) for byte-identity. Verified via
-      `scripts/gate/env_verify.sh` (get cases + gen_secret format + sync_compose_env
-      byte-compare). Deferred: `prepare_env`/`_fill_env_secrets`/`_write_default_env`
-      (the mutating secret self-heal orchestration) with start/install.
+- [x] `env` — DONE (`env.py`): `get` (bash `_env_get`, consolidated the
+      `ollama.py`/`secrets.py` copies), `gen_secret` (cross-platform
+      `secrets.token_hex`, no openssl), `sync_compose_env` (root→compose `.env`
+      mirror, raw-byte passthrough for byte-identity), `fill_env_secrets` (secret
+      self-heal — SILENT no-op when `.env` is full, the gate-critical property),
+      `write_default_env` (fallback `.env`), and `prepare_env` (the orchestration
+      install/start call). Verified via `scripts/gate/env_verify.sh`:
+      get/gen_secret-format/sync_compose_env-byte, fill selection+log (values are
+      random so the log + selection are compared, backup ts normalized), the
+      prepare_env full-`.env` SILENT no-op, and write_default_env structure
+      (date + hex secrets masked).
 - [x] `cache` — DONE (`cache.py`): `cache_file`/`cache_expired`/`load_cached_tags`/
       `cache_tags` (the tag-cache the version engine reads). Verified vs cache.sh
       across path-mapping / fresh-missing-old expiry / parse / write cases via
