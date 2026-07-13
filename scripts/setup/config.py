@@ -6,6 +6,7 @@ actually consumes lives here yet. The bash `config.sh` stays authoritative for
 the still-bash modules; these values are kept identical to it.
 """
 
+import datetime
 import os
 import sys
 from pathlib import Path
@@ -20,6 +21,11 @@ SCRIPT_NAME = "setup.sh"
 
 # Paths (config.sh PATHS block).
 ENV_FILE = REPO_ROOT / ".env"
+# Audit log path (config.sh: LOGS_DIR / setup-<ts>.log, stamped once at load). The
+# logs/*.log file mirroring itself is deferred; the path is referenced by the
+# success banner + log epilogue.
+LOGS_DIR = REPO_ROOT / "logs"
+LOG_FILE = LOGS_DIR / f"setup-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 COMPOSE_FILE = REPO_ROOT / "docker" / "compose" / "docker-compose.yml"
 COMPOSE_ENV_FILE = REPO_ROOT / "docker" / "compose" / ".env"

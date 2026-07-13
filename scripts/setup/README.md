@@ -118,13 +118,13 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       banner. Verified under `DRY_RUN=1`+`CI` via `scripts/gate/uninstall_verify.sh`
       (both branches — the compose calls are dry-run-gated so nothing is removed;
       the typed-DELETE confirmation is exercised by hand).
-- [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`/`secrets.py`/
-      `migrate.py`/`stop.py`); `step()` (the `▸` heading), `section()` (the box
-      banner, byte-width padding to match bash `printf %-48s`), and the `spinner`
-      (`spinner_start`/`spinner_stop`, a daemon-thread animation used by the wait
-      helpers) added. The `logs/*.log` file mirroring + `trap _cleanup EXIT`
-      epilogue + the progress bar are deferred to the full module port (they need
-      `config`'s LOG_FILE/LOGS_DIR).
+- [~] `log` — stdout formatting ported (`log.py`): info/success/warn/error/detail,
+      `step()` (`▸` heading), `section()` (MAGENTA box, byte-width padding to match
+      bash `printf %-48s`), the `spinner` (daemon-thread animation), and the
+      `progress` bar (`progress_init`/`progress_next`, verified via
+      `scripts/gate/install_deps_verify.sh`). config.LOG_FILE/LOGS_DIR now defined
+      (timestamped). Still deferred: the `logs/*.log` file mirroring + the
+      `trap _cleanup EXIT` epilogue (the actual file writes).
 
 Foundation modules (used by the ported verbs; grow as more verbs land):
 
@@ -212,7 +212,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] health-download_ollama_models · log-progress-bar · help-success-banner ·
+- [ ] health-download_ollama_models ·
       commands (backup/restore, install, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`

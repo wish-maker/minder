@@ -145,6 +145,34 @@ def spinner_stop() -> None:
     _write_raw("\r\033[K")
 
 
+# ── Progress bar (log.sh PROGRESS BAR) ────────────────────────────────────
+_progress_step = 0
+_progress_total = 9
+
+
+def progress_init(total: int) -> None:
+    global _progress_step, _progress_total
+    _progress_total = int(total)
+    _progress_step = 0
+
+
+def progress_next(label: str) -> None:
+    """bash progress_next: blank line, "[step/total] label", then a 20-cell bar +
+    percent. Percent = step*100/total (integer), filled = pct/5 (integer)."""
+    global _progress_step
+    _progress_step += 1
+    pct = _progress_step * 100 // _progress_total
+    filled = pct // 5
+    bar = "█" * filled + "░" * (20 - filled)
+    _emit("")
+    if _colors_on():
+        _emit(f"{_BOLD}[{_progress_step}/{_progress_total}]{_NC} {label}")
+        _emit(f"{_CYAN}{bar}{_NC} {_DIM}{pct}%{_NC}")
+    else:
+        _emit(f"[{_progress_step}/{_progress_total}] {label}")
+        _emit(f"{bar} {pct}%")
+
+
 def section(title: str) -> None:
     # bash section(): blank line, MAGENTA box (top / title / bottom), blank line.
     #   echo ""
