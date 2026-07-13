@@ -194,12 +194,14 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       wait_healthy + section; composition-verified, and the `start` orchestration
       verify confirms it's invoked in order; a live end-to-end run blocks on
       no-healthcheck 120s timeouts). Needed the service-group arrays (config.py).
-- [~] `infra` — partial: `create_networks` ported (`infra.py`), dry-run-gated like
-      `stop`, verified via `scripts/gate/infra_verify.sh`. Uses the new shared
-      `docker.network_exists` (which also replaced `stop.py`'s local copy).
-      Deferred (un-gated mutations + waits, entered only from start/install):
-      `initialize_database` (`psql CREATE DATABASE`) and `initialize_minio`
-      (`mc mb` buckets).
+- [x] `infra` — DONE (`infra.py`): `create_networks` (dry-run-gated, uses the
+      shared `docker.network_exists`), `initialize_database` (aux-DB CREATE), and
+      `initialize_minio` (bucket creation). Verified via `scripts/gate/infra_verify.sh`:
+      create_networks under DRY_RUN; the two init functions live but IDEMPOTENT —
+      the CREATE DATABASE / mc-bucket ops are no-ops when the DB/bucket already
+      exists, so on a fully-provisioned stack they emit "Already exists" for each
+      (mutation-free, confirmed: aux DB count unchanged). The wait spinners + minio
+      `sleep 5` are disabled on both sides.
 
 - [~] `health` — partial: `run_health_checks` ported (`health.py`) — probes each
       SERVICE_PORTS endpoint (urllib HTTP, or TCP for influxdb), human + `--json`
@@ -210,7 +212,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] infra-{db,minio}-init · health-download_ollama_models ·
+- [ ] health-download_ollama_models · log-progress-bar · help-success-banner ·
       commands (backup/restore, install, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`

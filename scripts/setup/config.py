@@ -61,6 +61,9 @@ EXPORTER_SERVICES = (
     "blackbox-exporter", "cadvisor", "node-exporter",
 )
 
+# Auxiliary databases created by initialize_database (infra.sh EXTRA_DATABASES).
+EXTRA_DATABASES = ("minder_marketplace", "tefas_db", "weather_db", "news_db", "crypto_db")
+
 # Per-image version-resolution metadata "stable_prefix|constraint" (config.sh
 # THIRD_PARTY_IMAGE_META). The pinned VERSION lives only in docker-compose.yml;
 # versions.third_party_image_specs() joins each 3rd-party compose image with this.
