@@ -93,6 +93,9 @@ def _truthy(val: str) -> bool:
 # main()'s flag loop (DRY_RUN=true / VERBOSE=true).
 DRY_RUN = _truthy(os.environ.get("DRY_RUN", ""))
 VERBOSE = _truthy(os.environ.get("VERBOSE", ""))
+# Smart version resolution off-switch (config.sh). check_prerequisites also flips
+# this True when curl is unavailable.
+SKIP_VERSION_CHECK = _truthy(os.environ.get("SKIP_VERSION_CHECK", ""))
 
 # `stop --clean`/`--clean-dangling` sets this (config.sh: CLEAN_DANGLING=false
 # default). __main__ flips it when the flag is present, mirroring setup.sh main().

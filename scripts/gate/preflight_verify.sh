@@ -78,5 +78,22 @@ cp_case "enterprise gpu"    $'COMPUTE_RESOURCE_PROFILE=enterprise\n'   true
 cp_case "enterprise no-gpu" $'COMPUTE_RESOURCE_PROFILE=enterprise\n'
 cp_case "invalid"           $'COMPUTE_RESOURCE_PROFILE=bogus\n'
 
+# ---- check_prerequisites (structural: versions/disk/ports vary; openssl/curl
+# presence differs between Git-Bash PATH and native-Windows PATH → masked) ----
+cpnorm() { sed -E -e 's/.*\r//' -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
+                  -e 's/[0-9]{2}:[0-9]{2}:[0-9]{2}/TS/g' \
+                  -e 's/^  Docker [0-9].*/  Docker VER/' \
+                  -e 's/^  Compose [0-9v].*/  Compose VER/' \
+                  -e 's#Compose file: .*#Compose file: COMPOSE#' \
+                  -e 's/[0-9]+GB free/NGB free/g' \
+                  -e '/openssl not found/d' -e '/curl not found/d' \
+                  -e 's/Ports already in use.*/PORTS/' \
+                  -e '/Script exited unexpectedly/d' -e '/Full log:/d' \
+           | sed -e '/^[[:space:]]*$/d'; }
+b="$(bsh 'check_prerequisites' 2>&1)"; p="$(pyi 'preflight.check_prerequisites()' 2>&1)"
+bn="$(printf '%s' "$b" | cpnorm)"; pn="$(printf '%s' "$p" | cpnorm)"
+if [ "$bn" = "$pn" ]; then echo "PASS  check_prerequisites (structural)"
+else FAIL=1; echo "FAIL  check_prerequisites"; diff <(printf '%s\n' "$bn") <(printf '%s\n' "$pn") | sed 's/^/    /'; fi
+
 echo "----"; [ "$FAIL" = 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit $FAIL

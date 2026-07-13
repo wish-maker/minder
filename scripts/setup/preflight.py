@@ -13,8 +13,118 @@ configure_traefik_access_mode (which MOVES traefik dynamic config files).
 """
 
 import os
+import shutil
+import socket
+import subprocess
 
-from . import env, log
+from . import config, env, log
+
+# Host ports check_prerequisites probes for conflicts (config.sh order).
+_PREREQ_PORTS = (
+    5432, 6379, 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8008,
+    8080, 8081, 8086, 9090, 9091, 3000,
+)
+
+
+def _cmd_ok(argv: list) -> bool:
+    """True if the command runs and exits 0 (bash `cmd &>/dev/null`)."""
+    try:
+        return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    except OSError:
+        return False
+
+
+def _capture(argv: list) -> str:
+    try:
+        out = subprocess.run(argv, capture_output=True, text=True)
+    except OSError:
+        return ""
+    return out.stdout if out.returncode == 0 else ""
+
+
+def _free_gb(path: object) -> int:
+    """Free space in GiB (bash `df -BG … | awk NR==2 $4`); 999 if unknown."""
+    try:
+        return shutil.disk_usage(str(path)).free // 1073741824
+    except OSError:
+        return 999
+
+
+def _busy_ports() -> list:
+    """Ports open on 127.0.0.1 that are NOT published by a minder container
+    (bash: >/dev/tcp probe + `docker ps --format {{.Ports}}` grep ":port->")."""
+    try:
+        ps_ports = subprocess.run(
+            ["docker", "ps", "--format", "{{.Ports}}"], capture_output=True, text=True
+        ).stdout
+    except OSError:
+        ps_ports = ""
+    busy = []
+    for port in _PREREQ_PORTS:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1):
+                open_ = True
+        except OSError:
+            open_ = False
+        if open_ and f":{port}->" not in ps_ports:
+            busy.append(str(port))
+    return busy
+
+
+def check_prerequisites() -> None:
+    """bash check_prerequisites: docker/compose/daemon + openssl/curl + compose
+    file + disk + port conflicts. Exits 1 if a hard requirement is missing."""
+    log.step("Checking prerequisites")
+    failed = False
+
+    if shutil.which("docker") is None:
+        log.error("Docker not installed → https://docs.docker.com/get-docker/")
+        failed = True
+    else:
+        # docker --version | awk '{print $3}' | tr -d ','
+        parts = _capture(["docker", "--version"]).split()
+        version = parts[2].rstrip(",") if len(parts) > 2 else ""
+        log.detail(f"Docker {version}")
+
+    if not _cmd_ok(["docker", "compose", "version"]):
+        log.error("Docker Compose v2 not available → https://docs.docker.com/compose/install/")
+        failed = True
+    else:
+        cver = _capture(["docker", "compose", "version", "--short"]).strip() or "v2"
+        log.detail(f"Compose {cver}")
+
+    if not _cmd_ok(["docker", "info"]):
+        log.error("Docker daemon is not running — start Docker Desktop or dockerd")
+        failed = True
+
+    if shutil.which("openssl") is None:
+        log.warn("openssl not found — falling back to /dev/urandom for secret generation")
+
+    if shutil.which("curl") is None:
+        log.warn("curl not found — smart version resolution will be skipped")
+        config.SKIP_VERSION_CHECK = True
+
+    if not config.COMPOSE_FILE.is_file():
+        log.error(f"Compose file not found: {config.COMPOSE_FILE}")
+        failed = True
+    else:
+        log.detail(f"Compose file: {config.COMPOSE_FILE}")
+
+    free_gb = _free_gb(config.SCRIPT_DIR)
+    if free_gb < 10:
+        log.warn(f"Low disk space: {free_gb}GB free (recommend ≥10GB)")
+    else:
+        log.detail(f"Disk space: {free_gb}GB free")
+
+    busy = _busy_ports()
+    if busy:
+        log.warn(f"Ports already in use (may conflict): {' '.join(busy)}")
+
+    if failed:
+        log.error("Prerequisites failed — cannot continue")
+        raise SystemExit(1)
+
+    log.success("All prerequisites satisfied")
 
 
 def validate_ai_compute_mode() -> int:
