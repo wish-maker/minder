@@ -101,10 +101,16 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       each dry-run arg on its own line; the port matches that. (`docker_verify.sh`
       originally sourced bash under the default IFS, which space-joined and masked
       this — it now sets `IFS=$'\n\t'` to mirror setup.sh.)
+- [~] `env` — partial: `get()` (bash `_env_get`) ported (`env.py`), verified
+      across present/absent/empty/`=`-value/duplicate/space cases via
+      `scripts/gate/env_verify.sh`. It consolidated the duplicate `_env_get`
+      copies that `ollama.py`/`secrets.py` carried. The rest of env.sh
+      (prepare_env / secret self-heal / compose-.env mirror / gen_secret) is
+      consumed only by the still-bash start/install verbs — deferred with them.
 
 Modules still fully in bash:
 
-- [ ] cache · versions · preflight · env · infra · lifecycle ·
+- [ ] cache · versions · preflight · infra · lifecycle ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`

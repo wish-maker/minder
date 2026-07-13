@@ -12,7 +12,7 @@ fully verifiable by diffing the resulting .env + stdout against the bash verb.
 
 import re
 
-from . import config, log
+from . import config, env, log
 
 ENV_FILE = config.ENV_FILE
 SCRIPT_NAME = config.SCRIPT_NAME
@@ -22,16 +22,6 @@ _DEFAULT_URL = "http://host.docker.internal:11434"
 _URL_RE = re.compile(r"^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/.*)?$")
 
 _KEY = "OLLAMA_BASE_URL"
-
-
-def _env_get(key: str) -> str:
-    """Mirror: grep -E "^KEY=" .env | cut -d= -f2-  (value after first '=')."""
-    try:
-        text = ENV_FILE.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    out = [line.split("=", 1)[1] for line in text.splitlines() if line.startswith(f"{key}=")]
-    return "\n".join(out)
 
 
 def run(mode: str = "", url: str = "") -> int:
@@ -54,7 +44,7 @@ def run(mode: str = "", url: str = "") -> int:
         log.error(f"No .env at {ENV_FILE} — run ./{SCRIPT_NAME} install first.")
         return 1
 
-    before = _env_get(_KEY)
+    before = env.get(_KEY)
 
     # newline="" so we never translate \n<->\r\n and mangle the file (cross-OS).
     with ENV_FILE.open("r", encoding="utf-8", newline="") as fh:
@@ -72,7 +62,7 @@ def run(mode: str = "", url: str = "") -> int:
     with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
         fh.write(new_raw)
 
-    after = _env_get(_KEY)
+    after = env.get(_KEY)
 
     label = "internal (platform-managed container)" if not new_url else f"external ({new_url})"
     if before == after:

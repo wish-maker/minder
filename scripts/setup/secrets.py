@@ -12,24 +12,10 @@ outside run()), and the SQL role/db are the hardcoded `minder`/`minder`.
 
 import subprocess
 
-from . import config, docker, log
+from . import config, docker, env, log
 
 ENV_FILE = config.ENV_FILE
 SCRIPT_NAME = config.SCRIPT_NAME
-
-
-def _env_get(key: str) -> str:
-    """Mirror env.sh _env_get: grep -E "^KEY=" .env | cut -d= -f2- (value after '=').
-
-    Local copy for now (matching ollama.py); consolidates into the env-module
-    port once env.sh lands.
-    """
-    try:
-        text = ENV_FILE.read_text(encoding="utf-8")
-    except OSError:
-        return ""
-    out = [line.split("=", 1)[1] for line in text.splitlines() if line.startswith(f"{key}=")]
-    return "\n".join(out)
 
 
 def sync_postgres_password() -> int:
@@ -38,7 +24,7 @@ def sync_postgres_password() -> int:
         log.detail(f"Run install first: ./{SCRIPT_NAME}")
         return 1
 
-    new_password = _env_get("POSTGRES_PASSWORD")
+    new_password = env.get("POSTGRES_PASSWORD")
     if not new_password:
         log.error(f"POSTGRES_PASSWORD not set in {ENV_FILE}")
         return 1
