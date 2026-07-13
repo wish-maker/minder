@@ -203,17 +203,18 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       (mutation-free, confirmed: aux DB count unchanged). The wait spinners + minio
       `sleep 5` are disabled on both sides.
 
-- [~] `health` — partial: `run_health_checks` ported (`health.py`) — probes each
-      SERVICE_PORTS endpoint (urllib HTTP, or TCP for influxdb), human + `--json`
-      output. Verified STRUCTURALLY vs health.sh (service set/order/groups/summary)
-      via `scripts/gate/health_verify.sh`, masking the live up/down + URLs + counts
-      like the gate (curl→urllib, results non-deterministic). Deferred:
-      `download_ollama_models` (spinner + `ollama pull`) with cmd_install.
+- [x] `health` — DONE (`health.py`): `run_health_checks` (SERVICE_PORTS probes via
+      urllib/TCP, human + `--json`; verified STRUCTURALLY via
+      `scripts/gate/health_verify.sh`) and `download_ollama_models` (internal:
+      wait for the ollama container + pull each OLLAMA_MODELS entry, dry-run-gated;
+      external: skip). The latter verified via `scripts/gate/ollama_models_verify.sh`
+      (external-skip + internal-pull under DRY_RUN; the live installed-model listing
+      is masked). The model-list log reproduces bash's `${models[*]}` newline-join
+      (IFS=$'\n\t').
 
 Modules still fully in bash:
 
-- [ ] health-download_ollama_models ·
-      commands (backup/restore, install, …)
+- [ ] commands (install, backup/restore) · log-file-mirroring · docker-wait-poll-done
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute

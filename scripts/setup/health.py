@@ -11,11 +11,14 @@ Deferred: download_ollama_models (spinner + `ollama pull` — network + mutating
 entered only from cmd_install).
 """
 
+import os
 import socket
+import subprocess
+import time
 import urllib.request
 from datetime import datetime, timezone
 
-from . import config, docker, log
+from . import config, docker, env, log
 
 
 def _server_ip() -> str:
@@ -148,3 +151,76 @@ def run_health_checks(json_mode: bool = False) -> None:
     else:
         log.warn(f"{ok_count}/{len(results)} endpoints reachable — {warn_count} still starting")
         log.detail(f"Re-check: ./{config.SCRIPT_NAME} status")
+
+
+def download_ollama_models() -> None:
+    """bash download_ollama_models: in internal mode, wait for the platform ollama
+    container, then pull each OLLAMA_MODELS entry (dry-run-gated). External mode
+    (OLLAMA_BASE_URL set) skips — the external host owns its models."""
+    log.section("🤖  AI Model Download")
+
+    ollama_url = os.environ.get("OLLAMA_BASE_URL") or env.get("OLLAMA_BASE_URL")
+    if ollama_url:
+        log.info("🌐 External Ollama mode (OLLAMA_BASE_URL set) — skipping in-container model pull")
+        log.detail("Pull models on the external host, e.g.:  ollama pull llama3.2 && ollama pull nomic-embed-text")
+        return
+
+    ollama = docker.container_name("ollama")
+    log.spinner_start("Waiting for Ollama daemon…")
+    elapsed = 0
+    ready = False
+    while elapsed < config.TIMEOUT_OLLAMA:
+        if _cmd_ok(["docker", "exec", ollama, "ollama", "list"]):
+            log.spinner_stop()
+            log.success("Ollama is ready")
+            ready = True
+            break
+        time.sleep(3)
+        elapsed += 3
+    if not ready:
+        log.spinner_stop()
+        log.warn(f"Ollama did not start within {config.TIMEOUT_OLLAMA}s — skipping model pull")
+        log.detail(f"Pull later:  docker exec {ollama} ollama pull <model>")
+        return
+
+    if (env.get("OLLAMA_AUTOMATIC_PULL") or "true") != "true":
+        log.info("OLLAMA_AUTOMATIC_PULL=false — skipping")
+        return
+
+    model_list = env.get("OLLAMA_MODELS") or "llama3.2,nomic-embed-text"
+    models = model_list.split(",")
+    # bash: log_info "Pulling N model(s): ${models[*]}" — with IFS=$'\n\t' the array
+    # joins on a NEWLINE (IFS's first char), so the names land on separate lines.
+    log.info(f"Pulling {len(models)} model(s): {chr(10).join(models)}")
+    for model in models:
+        model = model.strip()  # xargs trim
+        if not model:
+            continue
+        log.spinner_start(f"Pulling {model}…")
+        # bash: run timeout 300 docker exec … ollama pull … &>/dev/null → quiet.
+        if docker.run("timeout", "300", "docker", "exec", ollama, "ollama", "pull", model, quiet=True) == 0:
+            log.spinner_stop()
+            log.success(model)
+        else:
+            log.spinner_stop()
+            log.warn(f"{model} — failed or timed out")
+
+    # `ollama list | tail -n +2` — skip the header row; the rest is live/non-det.
+    listing = _cap(["docker", "exec", ollama, "ollama", "list"]).splitlines()[1:]
+    log.success(f"{len(listing)} model(s) available")
+    for line in listing:
+        log.detail(line)
+
+
+def _cmd_ok(argv: list) -> bool:
+    try:
+        return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+    except OSError:
+        return False
+
+
+def _cap(argv: list) -> str:
+    try:
+        return subprocess.run(argv, capture_output=True, text=True).stdout
+    except OSError:
+        return ""
