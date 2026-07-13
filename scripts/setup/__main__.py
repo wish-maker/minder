@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import config
 from . import help as help_module
+from . import migrate as migrate_module
 from . import ollama as ollama_module
 from . import secrets as secrets_module
 
@@ -78,6 +79,11 @@ def main(argv: list[str]) -> int:
     if cmd == "sync-postgres-password":
         # setup.sh: sync_postgres_password (no args). Reads/writes .env + docker exec.
         return secrets_module.sync_postgres_password()
+    if cmd == "migrate":
+        # setup.sh: cmd_migrate "${arg1:-head}" (target defaults to head).
+        pos = _positional(argv)
+        target = pos[1] if len(pos) > 1 else "head"
+        return migrate_module.run(target)
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

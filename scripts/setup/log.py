@@ -22,6 +22,7 @@ _RED = "\033[0;31m"
 _GREEN = "\033[0;32m"
 _YELLOW = "\033[1;33m"
 _BLUE = "\033[0;34m"
+_MAGENTA = "\033[0;35m"
 _CYAN = "\033[0;36m"
 _BOLD = "\033[1m"
 _DIM = "\033[2m"
@@ -85,3 +86,27 @@ def step(msg: str) -> None:
     # The "[STEP] …" LOG_FILE append is deferred to the full log-module port
     # (needs config's LOG_FILE), exactly like the other file-mirroring above.
     _emit(f"\n{_BOLD}{_CYAN}▸ {msg}{_NC}" if _colors_on() else f"\n▸ {msg}")
+
+
+def section(title: str) -> None:
+    # bash section(): blank line, MAGENTA box (top / title / bottom), blank line.
+    #   echo ""
+    #   echo -e "┌<50×─>┐"
+    #   printf  "│  %-48s│\n" "$title"   (2 leading spaces + 48-wide left-justified)
+    #   echo -e "└<50×─>┘"
+    #   echo ""
+    bar = "─" * 50
+    if _colors_on():
+        bm, nc = _BOLD + _MAGENTA, _NC
+    else:
+        bm = nc = ""
+    # bash `printf %-48s` pads to a minimum of 48 *bytes* (POSIX byte semantics,
+    # which is what bash uses here) — NOT 48 code points. Emoji/multibyte titles
+    # therefore get fewer trailing spaces than Python's str-width padding would;
+    # match the byte width so the closing │ lands where bash puts it.
+    pad = max(0, 48 - len(title.encode("utf-8")))
+    _emit("")
+    _emit(f"{bm}┌{bar}┐{nc}")
+    _emit(f"{bm}│{nc}  {title}{' ' * pad}{bm}│{nc}")
+    _emit(f"{bm}└{bar}┘{nc}")
+    _emit("")
