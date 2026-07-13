@@ -43,6 +43,24 @@ CONTAINER_PREFIX = "minder"
 NETWORK_NAME = "docker_minder-network"
 MONITORING_NETWORK_NAME = "minder-monitoring"
 
+# Service groups, in startup order (config.sh SERVICE DEFINITIONS block).
+# ollama is intentionally absent — it is gated by the compose 'internal-ollama'
+# profile, activated by start_services only in internal mode (see lifecycle.py).
+SECURITY_SERVICES = ("traefik",)
+CORE_SERVICES = ("postgres", "redis", "qdrant", "neo4j", "rabbitmq", "minio", "schema-registry")
+API_SERVICES = (
+    "api-gateway", "plugin-registry", "marketplace", "plugin-state-manager",
+    "rag-pipeline", "model-management", "graph-rag",
+)
+AI_SERVICES = ("openwebui", "tts-stt")
+MONITORING_SERVICES = (
+    "influxdb", "telegraf", "prometheus", "grafana", "alertmanager", "jaeger", "otel-collector",
+)
+EXPORTER_SERVICES = (
+    "postgres-exporter", "redis-exporter", "rabbitmq-exporter",
+    "blackbox-exporter", "cadvisor", "node-exporter",
+)
+
 
 def _truthy(val: str) -> bool:
     # bash run() accepts DRY_RUN in {1,true,yes} (case-insensitive).

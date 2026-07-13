@@ -134,6 +134,15 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       dependent or mutating, entered only from start/install): `check_prerequisites`,
       `validate_gpu_environment`, `validate_access_mode`/`configure_traefik_access_mode`
       (the latter MOVES traefik dynamic config files).
+- [~] `lifecycle` — partial: `start_services` ported (`lifecycle.py`) — ordered
+      `compose up` groups, dry-run-gated; gates the ollama container on the
+      'internal-ollama' compose profile via OLLAMA_BASE_URL. Verified across both
+      ollama branches (+ resulting COMPOSE_PROFILES) under DRY_RUN via
+      `scripts/gate/lifecycle_verify.sh`. Needed the service-group arrays
+      (config.py) + the ported wait_healthy. Deferred: `wait_for_services` (a thin
+      loop over the verified wait_healthy; runs live with cmd_start — end-to-end
+      verification is impractical, the no-healthcheck services would each block to
+      the 120s monitoring timeout).
 - [~] `infra` — partial: `create_networks` ported (`infra.py`), dry-run-gated like
       `stop`, verified via `scripts/gate/infra_verify.sh`. Uses the new shared
       `docker.network_exists` (which also replaced `stop.py`'s local copy).
@@ -143,8 +152,8 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] lifecycle · versions-network-layer · preflight-{prereq,gpu,access} ·
-      infra-{db,minio}-init ·
+- [ ] versions-network-layer · preflight-{prereq,gpu,access} · infra-{db,minio}-init ·
+      lifecycle-wait_for_services ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
