@@ -110,13 +110,22 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 - [x] `cache` — DONE (`cache.py`): `cache_file`/`cache_expired`/`load_cached_tags`/
       `cache_tags` (the tag-cache the version engine reads). Verified vs cache.sh
       across path-mapping / fresh-missing-old expiry / parse / write cases via
-      `scripts/gate/cache_verify.sh`. Ported ahead of its consumer (`versions`,
-      next) — `cache_tags` takes the timestamp as a param (deterministic) and
-      writes LF (newline="") to stay byte-identical + cross-OS stable.
+      `scripts/gate/cache_verify.sh`. Ported ahead of its consumer (the deferred
+      versions network layer) — `cache_tags` takes the timestamp as a param
+      (deterministic) and writes LF (newline="") to stay byte-identical + cross-OS.
+- [~] `versions` — partial: the PURE deterministic core ported (`versions.py`:
+      `registry_type`/`image_repo`/`strip_v`/`ver_ge`/`tag_satisfies_constraint`/
+      `best_tag`), verified 1:1 vs versions.sh across 33 cases (incl. `sort -V`
+      ordering) via `scripts/gate/versions_verify.sh`. The network + orchestration
+      layer (`*_list_tags` fetches, `resolve_image_tag`/`pull_*`/
+      `version_drift_report`) is deferred — it needs a curl→urllib decision, the
+      spinner, RESOLVED_IMAGE_TAGS + THIRD_PARTY_IMAGE_SPECS, and only the
+      still-bash install/update/doctor verbs enter it. That layer consumes
+      `cache.py`.
 
 Modules still fully in bash:
 
-- [ ] versions · preflight · infra · lifecycle ·
+- [ ] preflight · infra · lifecycle · versions-network-layer ·
       commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
