@@ -72,6 +72,15 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       here: the gate's docker shims are bash scripts native-Windows python can't
       exec, and a live run blocks on wait_for_services' no-healthcheck 120s waits;
       on Linux/Pi the shim path works for both.)
+- [x] **`status [--json]`** — native (`status.py`); `--json` delegates to
+      run_health_checks(json); human mode = section + container-count Summary +
+      `docker ps` + `docker stats` tables + health report. Verified vs cmd_status
+      via `scripts/gate/status_verify.sh`: --json like health, human STRUCTURALLY
+      (counts/statuses/CPU-mem masked; rows reduced to container names; health
+      block masked). NOTE: the port emits clean integer counts — bash's
+      `grep -c … || echo 0` prints "0\n0" for a zero count (grep -c already emits
+      "0" and exits 1, so the `|| echo 0` doubles it), splitting the Summary line;
+      the port fixes that (issue #54).
 - [x] **`restart`** — native (`restart.py`); `stop` → sleep 3 → `start`, both
       ported verbs. Verified by call order vs bash cmd_restart
       (`scripts/gate/restart_cmd_verify.sh`).
@@ -182,7 +191,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 Modules still fully in bash:
 
 - [ ] versions-network-layer · infra-{db,minio}-init · health-download_ollama_models ·
-      commands (status, backup/restore, doctor, update, install, …)
+      commands (backup/restore, doctor, update, install, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute

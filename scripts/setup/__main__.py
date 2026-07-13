@@ -26,6 +26,7 @@ from . import restart as restart_module
 from . import secrets as secrets_module
 from . import shell as shell_module
 from . import start as start_module
+from . import status as status_module
 from . import stop as stop_module
 from . import uninstall as uninstall_module
 
@@ -119,6 +120,9 @@ def main(argv: list[str]) -> int:
     if cmd == "restart":
         # setup.sh: cmd_restart — stop, sleep 3, start.
         return restart_module.run()
+    if cmd == "status":
+        # setup.sh: status --json (or global --json) → json; else human.
+        return status_module.run(json_mode="--json" in argv)
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)
