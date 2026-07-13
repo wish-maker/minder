@@ -25,6 +25,7 @@ from . import ollama as ollama_module
 from . import secrets as secrets_module
 from . import shell as shell_module
 from . import stop as stop_module
+from . import uninstall as uninstall_module
 
 REPO_ROOT = config.REPO_ROOT
 SETUP_SH = REPO_ROOT / "setup.sh"
@@ -105,6 +106,11 @@ def main(argv: list[str]) -> int:
         pos = _positional(argv)
         service = pos[1] if len(pos) > 1 else ""
         return shell_module.run(service)
+    if cmd == "uninstall":
+        # setup.sh: cmd_uninstall "$arg1" (--purge or empty).
+        pos = _positional(argv)
+        arg1 = pos[1] if len(pos) > 1 else ""
+        return uninstall_module.run(arg1)
 
     if not SETUP_SH.exists():
         print(f"error: {SETUP_SH} not found", file=sys.stderr)

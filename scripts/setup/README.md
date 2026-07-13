@@ -74,6 +74,11 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       container. Both non-interactive error branches (no service under CI,
       not-running) verified via `scripts/gate/shell_verify.sh`; the interactive
       `docker exec -it` + no-service prompt are exercised by hand.
+- [x] **`uninstall [--purge]`** — native (`uninstall.py`); compose down (data
+      preserved) or `down -v --remove-orphans` (purge) behind a DESTRUCTIVE
+      banner. Verified under `DRY_RUN=1`+`CI` via `scripts/gate/uninstall_verify.sh`
+      (both branches — the compose calls are dry-run-gated so nothing is removed;
+      the typed-DELETE confirmation is exercised by hand).
 - [~] `log` — stdout formatting ported (`log.py`, used by `ollama.py`/`secrets.py`/
       `migrate.py`/`stop.py`); `step()` (the `▸` heading) and `section()` (the box
       banner, byte-width padding to match bash `printf %-48s`) added. The
@@ -100,7 +105,7 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 Modules still fully in bash:
 
 - [ ] cache · versions · preflight · env · infra · lifecycle ·
-      commands (status, backup/restore, doctor, update, install, start, uninstall, …)
+      commands (status, backup/restore, doctor, update, install, start, …)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
