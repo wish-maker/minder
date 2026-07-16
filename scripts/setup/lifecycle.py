@@ -27,10 +27,14 @@ def start_services() -> None:
     if ollama_url:
         log.info("🌐 External Ollama mode (OLLAMA_BASE_URL set)")
         log.info(f"   OLLAMA_BASE_URL: {ollama_url}")
-        log.info("   Platform-managed ollama container will NOT start (compose 'internal-ollama' profile inactive)")
+        log.info(
+            "   Platform-managed ollama container will NOT start (compose 'internal-ollama' profile inactive)"
+        )
         os.environ.pop("COMPOSE_PROFILES", None)
     else:
-        log.info("🏠 Internal Ollama mode (platform-managed container, default zero-config)")
+        log.info(
+            "🏠 Internal Ollama mode (platform-managed container, default zero-config)"
+        )
         log.info("   OLLAMA_BASE_URL: (empty, using internal minder-ollama container)")
         os.environ["COMPOSE_PROFILES"] = "internal-ollama"
 

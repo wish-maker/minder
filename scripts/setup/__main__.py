@@ -13,8 +13,8 @@ from . import backup as backup_module
 from . import config
 from . import doctor as doctor_module
 from . import help as help_module
-from . import log
 from . import install as install_module
+from . import log
 from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module

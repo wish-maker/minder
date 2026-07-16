@@ -21,15 +21,34 @@ from . import config, env, log
 
 # Host ports check_prerequisites probes for conflicts (config.sh order).
 _PREREQ_PORTS = (
-    5432, 6379, 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8008,
-    8080, 8081, 8086, 9090, 9091, 3000,
+    5432,
+    6379,
+    8000,
+    8001,
+    8002,
+    8003,
+    8004,
+    8005,
+    8006,
+    8008,
+    8080,
+    8081,
+    8086,
+    9090,
+    9091,
+    3000,
 )
 
 
 def _cmd_ok(argv: list) -> bool:
     """True if the command runs and exits 0 (bash `cmd &>/dev/null`)."""
     try:
-        return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        return (
+            subprocess.run(
+                argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+            == 0
+        )
     except OSError:
         return False
 
@@ -87,7 +106,9 @@ def check_prerequisites() -> None:
         log.detail(f"Docker {version}")
 
     if not _cmd_ok(["docker", "compose", "version"]):
-        log.error("Docker Compose v2 not available → https://docs.docker.com/compose/install/")
+        log.error(
+            "Docker Compose v2 not available → https://docs.docker.com/compose/install/"
+        )
         failed = True
     else:
         cver = _capture(["docker", "compose", "version", "--short"]).strip() or "v2"
@@ -98,7 +119,9 @@ def check_prerequisites() -> None:
         failed = True
 
     if shutil.which("openssl") is None:
-        log.warn("openssl not found — falling back to /dev/urandom for secret generation")
+        log.warn(
+            "openssl not found — falling back to /dev/urandom for secret generation"
+        )
 
     if shutil.which("curl") is None:
         log.warn("curl not found — smart version resolution will be skipped")
@@ -134,15 +157,28 @@ def validate_gpu_environment() -> None:
     log.info("Validating GPU environment for AI acceleration...")
 
     if not _cmd_ok(
-        ["docker", "run", "--rm", "--gpus", "all", "nvidia/cuda:11.0-base-ubuntu20.04", "nvidia-smi"]
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--gpus",
+            "all",
+            "nvidia/cuda:11.0-base-ubuntu20.04",
+            "nvidia-smi",
+        ]
     ):
         log.warn("NVIDIA Container Toolkit not found")
         log.detail("GPU acceleration disabled - falling back to CPU mode")
-        log.detail("Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide")
+        log.detail(
+            "Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide"
+        )
         os.environ["GPU_AVAILABLE"] = "false"
         return
 
-    gpu_count = _capture(["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"]).strip() or "0"
+    gpu_count = (
+        _capture(["nvidia-smi", "--query-gpu=count", "--format=csv,noheader"]).strip()
+        or "0"
+    )
     try:
         count_zero = int(gpu_count) == 0
     except ValueError:
@@ -153,9 +189,19 @@ def validate_gpu_environment() -> None:
         return
 
     log.detail(f"GPUs detected: {gpu_count}")
-    gpu_model = (_capture(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]).splitlines() or ["Unknown"])[0]
+    gpu_model = (
+        _capture(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"]
+        ).splitlines()
+        or ["Unknown"]
+    )[0]
     log.detail(f"GPU Model: {gpu_model}")
-    gpu_memory = (_capture(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader"]).splitlines() or ["Unknown"])[0]
+    gpu_memory = (
+        _capture(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader"]
+        ).splitlines()
+        or ["Unknown"]
+    )[0]
     log.detail(f"GPU Memory: {gpu_memory}")
     os.environ["GPU_AVAILABLE"] = "true"
     log.success("GPU validation passed - hardware acceleration enabled")

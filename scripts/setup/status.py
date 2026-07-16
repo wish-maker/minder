@@ -19,7 +19,8 @@ def _count(filter_args: list) -> int:
     try:
         out = subprocess.run(
             ["docker", "ps", *filter_args, "--format", "{{.Names}}"],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         ).stdout
     except OSError:
         return 0
@@ -56,21 +57,32 @@ def run(json_mode: bool = False) -> int:
             f"{log._RED}unhealthy={unhealthy}{log._NC}"
         )
     else:
-        log._emit(f"Summary  total={total}  healthy={healthy}  starting={starting}  unhealthy={unhealthy}")
+        log._emit(
+            f"Summary  total={total}  healthy={healthy}  starting={starting}  unhealthy={unhealthy}"
+        )
     log._emit("")
 
     log._emit(f"{log._BOLD}Containers{log._NC}" if log._colors_on() else "Containers")
     ps_table = _filtered(
-        ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"], "NAMES"
+        ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"],
+        "NAMES",
     )[:30]
     for ln in ps_table:
         log._emit(ln)
     log._emit("")
 
-    log._emit(f"{log._BOLD}Resource Usage{log._NC}" if log._colors_on() else "Resource Usage")
+    log._emit(
+        f"{log._BOLD}Resource Usage{log._NC}" if log._colors_on() else "Resource Usage"
+    )
     stats_table = _filtered(
-        ["docker", "stats", "--no-stream", "--format",
-         "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}"], "NAME",
+        [
+            "docker",
+            "stats",
+            "--no-stream",
+            "--format",
+            "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.NetIO}}",
+        ],
+        "NAME",
     )[:20]
     for ln in stats_table:
         log._emit(ln)

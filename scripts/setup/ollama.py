@@ -31,12 +31,16 @@ def run(mode: str = "", url: str = "") -> int:
         new_url = url or _DEFAULT_URL
         if not _URL_RE.match(new_url):
             log.error(f"Invalid Ollama URL: '{new_url}'")
-            log.detail(f"Expected a full URL, e.g. {_DEFAULT_URL} or http://192.168.1.50:11434")
+            log.detail(
+                f"Expected a full URL, e.g. {_DEFAULT_URL} or http://192.168.1.50:11434"
+            )
             log.detail(".env was NOT changed.")
             return 1
     else:
         log.error(f"Usage: ./{SCRIPT_NAME} ollama-mode internal|external [url]")
-        log.detail("  internal        platform-managed ollama container (OLLAMA_BASE_URL empty)")
+        log.detail(
+            "  internal        platform-managed ollama container (OLLAMA_BASE_URL empty)"
+        )
         log.detail(f"  external [url]  reach ollama at a URL (default {_DEFAULT_URL})")
         return 1
 
@@ -64,11 +68,17 @@ def run(mode: str = "", url: str = "") -> int:
 
     after = env.get(_KEY)
 
-    label = "internal (platform-managed container)" if not new_url else f"external ({new_url})"
+    label = (
+        "internal (platform-managed container)"
+        if not new_url
+        else f"external ({new_url})"
+    )
     if before == after:
         log.info(f"Ollama mode already {label} — .env unchanged.")
     else:
         log.success(f"Ollama mode → {label}")
         log.detail(f"OLLAMA_BASE_URL: '{before}' → '{after}'")
-    log.warn(f"Run  ./{SCRIPT_NAME} restart  to apply (recreates services + re-mirrors .env).")
+    log.warn(
+        f"Run  ./{SCRIPT_NAME} restart  to apply (recreates services + re-mirrors .env)."
+    )
     return 0

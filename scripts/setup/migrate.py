@@ -61,7 +61,9 @@ def run(target: str = "head") -> int:
             else:
                 log.warn(f"{svc} — migration failed (check logs)")
         else:
-            log.detail(f"{svc} — schema self-initialized on startup (no Alembic), skipping")
+            log.detail(
+                f"{svc} — schema self-initialized on startup (no Alembic), skipping"
+            )
 
     log.success("Migration run complete")
     return 0

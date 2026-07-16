@@ -16,8 +16,22 @@ from . import config, log, versions
 
 _PREFIX = config.CONTAINER_PREFIX + "-"
 _DOCTOR_PORTS = (
-    5432, 6379, 8000, 8001, 8002, 8003, 8004, 8005, 8006, 8008,
-    8080, 8081, 8086, 9090, 9091, 3000,
+    5432,
+    6379,
+    8000,
+    8001,
+    8002,
+    8003,
+    8004,
+    8005,
+    8006,
+    8008,
+    8080,
+    8081,
+    8086,
+    9090,
+    9091,
+    3000,
 )
 _WEAK_RE = re.compile(r"^(admin|password|secret|changeme|replace_me|minder)$")
 
@@ -123,7 +137,10 @@ def run() -> int:
     # ── Container Health ──
     log._emit("\n" + _bold("Container Health"))
     unhealthy = [
-        n for n in _cap(["docker", "ps", "--filter", "health=unhealthy", "--format", "{{.Names}}"]).splitlines()
+        n
+        for n in _cap(
+            ["docker", "ps", "--filter", "health=unhealthy", "--format", "{{.Names}}"]
+        ).splitlines()
         if n.startswith(_PREFIX)
     ]
     if unhealthy:
@@ -132,12 +149,24 @@ def run() -> int:
             log.detail(f"  {c}")
         issues += 1
     else:
-        running = sum(1 for n in _cap(["docker", "ps", "--format", "{{.Names}}"]).splitlines() if n.startswith(_PREFIX))
+        running = sum(
+            1
+            for n in _cap(["docker", "ps", "--format", "{{.Names}}"]).splitlines()
+            if n.startswith(_PREFIX)
+        )
         log.detail(f"{running} containers running, none unhealthy ✓")
 
     # ── Docker Volumes ──
     log._emit("\n" + _bold("Docker Volumes"))
-    dangling = len([v for v in _cap(["docker", "volume", "ls", "-q", "--filter", "dangling=true"]).splitlines() if v])
+    dangling = len(
+        [
+            v
+            for v in _cap(
+                ["docker", "volume", "ls", "-q", "--filter", "dangling=true"]
+            ).splitlines()
+            if v
+        ]
+    )
     if dangling > 5:
         log.warn(f"{dangling} dangling volumes (run: docker volume prune)")
     else:

@@ -26,7 +26,9 @@ def _print_running_list_stripped() -> None:
     except OSError:
         out = None
     prefix = f"  {config.CONTAINER_PREFIX}-"
-    matched = [ln for ln in out.stdout.splitlines() if ln.startswith(prefix)] if out else []
+    matched = (
+        [ln for ln in out.stdout.splitlines() if ln.startswith(prefix)] if out else []
+    )
     if matched:
         for ln in matched:
             # sed "s/  minder-/  /" — first-occurrence prefix strip.

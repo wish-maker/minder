@@ -37,7 +37,9 @@ def _print_running_list() -> None:
     except OSError:
         out = None
     prefix = f"  {config.CONTAINER_PREFIX}-"
-    matched = [ln for ln in out.stdout.splitlines() if ln.startswith(prefix)] if out else []
+    matched = (
+        [ln for ln in out.stdout.splitlines() if ln.startswith(prefix)] if out else []
+    )
     if matched:
         for ln in matched:
             log._emit(ln)
@@ -51,7 +53,9 @@ def run(service: str = "", lines: str = "100") -> int:
         if cname in _running_names():
             log.info(f"Streaming {service} logs (Ctrl+C to exit)…")
             # Streaming follow — inherits stdio; not gate-verified (blocks on Ctrl+C).
-            return subprocess.run(["docker", "logs", "-f", "--tail", lines, cname]).returncode
+            return subprocess.run(
+                ["docker", "logs", "-f", "--tail", lines, cname]
+            ).returncode
         log.error(f"No running container: {cname}")
         log.detail("Running containers:")
         _print_running_list()

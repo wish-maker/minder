@@ -6,8 +6,9 @@ already-verified functions; verified by its own output (banner + phase labels +
 success banner) and call order via scripts/gate/install_cmd_verify.sh.
 """
 
-from . import config, env, health, infra, lifecycle, log, migrate, preflight, versions
+from . import config, env, health
 from . import help as help_module
+from . import infra, lifecycle, log, migrate, preflight, versions
 
 
 def _clear() -> None:

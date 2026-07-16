@@ -42,7 +42,9 @@ def _tcp_open(host: str, port: str) -> bool:
 def _http_ok(url: str) -> bool:
     # bash: curl -sf --max-time 3 (fails on HTTP >= 400). urllib stand-in.
     try:
-        with urllib.request.urlopen(url, timeout=3) as resp:  # noqa: S310 (local health URL)
+        with urllib.request.urlopen(
+            url, timeout=3
+        ) as resp:  # noqa: S310 (local health URL)
             return 200 <= resp.status < 300
     except Exception:
         return False
@@ -81,7 +83,9 @@ def run_health_checks(json_mode: bool = False) -> None:
                 results.append((name, "ok", display_url))
                 if not json_mode:
                     if log._colors_on():
-                        log._emit(f"  {log._GREEN}✓{log._NC} {name}  {log._DIM}{display_url}{log._NC}  {log._DIM}(TCP port check){log._NC}")
+                        log._emit(
+                            f"  {log._GREEN}✓{log._NC} {name}  {log._DIM}{display_url}{log._NC}  {log._DIM}(TCP port check){log._NC}"  # noqa: E501
+                        )
                     else:
                         log._emit(f"  ✓ {name}  {display_url}  (TCP port check)")
             else:
@@ -94,7 +98,9 @@ def run_health_checks(json_mode: bool = False) -> None:
             results.append((name, "ok", display_url))
             if not json_mode:
                 if log._colors_on():
-                    log._emit(f"  {log._GREEN}✓{log._NC} {name}  {log._DIM}{display_url}{log._NC}")
+                    log._emit(
+                        f"  {log._GREEN}✓{log._NC} {name}  {log._DIM}{display_url}{log._NC}"
+                    )
                 else:
                     log._emit(f"  ✓ {name}  {display_url}")
         else:
@@ -104,7 +110,9 @@ def run_health_checks(json_mode: bool = False) -> None:
 
     def _warn_line(name: str, url: str) -> None:
         if log._colors_on():
-            log._emit(f"  {log._YELLOW}⚠{log._NC} {name}  {log._DIM}{url}  (not yet reachable){log._NC}")
+            log._emit(
+                f"  {log._YELLOW}⚠{log._NC} {name}  {log._DIM}{url}  (not yet reachable){log._NC}"
+            )
         else:
             log._emit(f"  ⚠ {name}  {url}  (not yet reachable)")
 
@@ -149,7 +157,9 @@ def run_health_checks(json_mode: bool = False) -> None:
     if warn_count == 0:
         log.success(f"{ok_count}/{len(results)} endpoints healthy 🎉")
     else:
-        log.warn(f"{ok_count}/{len(results)} endpoints reachable — {warn_count} still starting")
+        log.warn(
+            f"{ok_count}/{len(results)} endpoints reachable — {warn_count} still starting"
+        )
         log.detail(f"Re-check: ./{config.SCRIPT_NAME} status")
 
 
@@ -161,8 +171,12 @@ def download_ollama_models() -> None:
 
     ollama_url = os.environ.get("OLLAMA_BASE_URL") or env.get("OLLAMA_BASE_URL")
     if ollama_url:
-        log.info("🌐 External Ollama mode (OLLAMA_BASE_URL set) — skipping in-container model pull")
-        log.detail("Pull models on the external host, e.g.:  ollama pull llama3.2 && ollama pull nomic-embed-text")
+        log.info(
+            "🌐 External Ollama mode (OLLAMA_BASE_URL set) — skipping in-container model pull"
+        )
+        log.detail(
+            "Pull models on the external host, e.g.:  ollama pull llama3.2 && ollama pull nomic-embed-text"
+        )
         return
 
     ollama = docker.container_name("ollama")
@@ -179,7 +193,9 @@ def download_ollama_models() -> None:
         elapsed += 3
     if not ready:
         log.spinner_stop()
-        log.warn(f"Ollama did not start within {config.TIMEOUT_OLLAMA}s — skipping model pull")
+        log.warn(
+            f"Ollama did not start within {config.TIMEOUT_OLLAMA}s — skipping model pull"
+        )
         log.detail(f"Pull later:  docker exec {ollama} ollama pull <model>")
         return
 
@@ -198,7 +214,20 @@ def download_ollama_models() -> None:
             continue
         log.spinner_start(f"Pulling {model}…")
         # bash: run timeout 300 docker exec … ollama pull … &>/dev/null → quiet.
-        if docker.run("timeout", "300", "docker", "exec", ollama, "ollama", "pull", model, quiet=True) == 0:
+        if (
+            docker.run(
+                "timeout",
+                "300",
+                "docker",
+                "exec",
+                ollama,
+                "ollama",
+                "pull",
+                model,
+                quiet=True,
+            )
+            == 0
+        ):
             log.spinner_stop()
             log.success(model)
         else:
@@ -214,7 +243,12 @@ def download_ollama_models() -> None:
 
 def _cmd_ok(argv: list) -> bool:
     try:
-        return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+        return (
+            subprocess.run(
+                argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+            == 0
+        )
     except OSError:
         return False
 

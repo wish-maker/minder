@@ -55,7 +55,10 @@ def _dump_to_file(argv: list[str], dest_file: Path) -> bool:
     this directly (no `run` wrapper), so it dumps for real even under DRY_RUN."""
     try:
         with open(dest_file, "wb") as fh:
-            return subprocess.run(argv, stdout=fh, stderr=subprocess.DEVNULL).returncode == 0
+            return (
+                subprocess.run(argv, stdout=fh, stderr=subprocess.DEVNULL).returncode
+                == 0
+            )
     except OSError:
         return False
 
@@ -77,7 +80,10 @@ def _run_to_file(argv: list[str], dest_file: Path) -> bool:
         return True
     try:
         with open(dest_file, "wb") as fh:
-            return subprocess.run(argv, stdout=fh, stderr=subprocess.DEVNULL).returncode == 0
+            return (
+                subprocess.run(argv, stdout=fh, stderr=subprocess.DEVNULL).returncode
+                == 0
+            )
     except OSError:
         return False
 
@@ -118,7 +124,14 @@ def run() -> int:
         log.spinner_start("Dumping PostgreSQL…")
         dump = dest / "postgres.sql"
         ok = _dump_to_file(
-            ["docker", "exec", docker.container_name("postgres"), "pg_dumpall", "-U", "minder"],
+            [
+                "docker",
+                "exec",
+                docker.container_name("postgres"),
+                "pg_dumpall",
+                "-U",
+                "minder",
+            ],
             dump,
         )
         log.spinner_stop()
@@ -134,8 +147,16 @@ def run() -> int:
         log.spinner_start("Dumping Neo4j…")
         neo4j_dump = dest / "neo4j.dump"
         ok = _run_to_file(
-            ["docker", "exec", docker.container_name("neo4j"),
-             "neo4j-admin", "database", "dump", "neo4j", "--to-stdout"],
+            [
+                "docker",
+                "exec",
+                docker.container_name("neo4j"),
+                "neo4j-admin",
+                "database",
+                "dump",
+                "neo4j",
+                "--to-stdout",
+            ],
             neo4j_dump,
         )
         log.spinner_stop()
@@ -155,9 +176,23 @@ def run() -> int:
             # bash: `run docker exec … influx backup … &>/dev/null` → run()'s echo is
             # sent to /dev/null (quiet=True), so only the following `run docker cp`
             # (un-quiet) prints its [dry-run] line to the console.
-            if docker.run("docker", "exec", iname, "influx", "backup", "/tmp/influx-backup",
-                          "--token", influx_token, quiet=True) == 0:
-                docker.run("docker", "cp", f"{iname}:/tmp/influx-backup", f"{dest}/influxdb/")
+            if (
+                docker.run(
+                    "docker",
+                    "exec",
+                    iname,
+                    "influx",
+                    "backup",
+                    "/tmp/influx-backup",
+                    "--token",
+                    influx_token,
+                    quiet=True,
+                )
+                == 0
+            ):
+                docker.run(
+                    "docker", "cp", f"{iname}:/tmp/influx-backup", f"{dest}/influxdb/"
+                )
                 log.spinner_stop()
                 log.success("InfluxDB backed up")
             else:
@@ -175,10 +210,23 @@ def run() -> int:
         qname = docker.container_name("qdrant")
         qdrant_tar = dest / "qdrant.tar.gz"
         if (
-            docker.run("docker", "exec", qname, "tar", "czf",
-                       "/tmp/qdrant-backup.tar.gz", "/qdrant/storage") == 0
-            and docker.run("docker", "cp", f"{qname}:/tmp/qdrant-backup.tar.gz",
-                           f"{dest}/qdrant.tar.gz") == 0
+            docker.run(
+                "docker",
+                "exec",
+                qname,
+                "tar",
+                "czf",
+                "/tmp/qdrant-backup.tar.gz",
+                "/qdrant/storage",
+            )
+            == 0
+            and docker.run(
+                "docker",
+                "cp",
+                f"{qname}:/tmp/qdrant-backup.tar.gz",
+                f"{dest}/qdrant.tar.gz",
+            )
+            == 0
         ):
             log.spinner_stop()
             log.success(f"Qdrant  ({_du_sh(qdrant_tar)})")
@@ -193,10 +241,22 @@ def run() -> int:
         log.spinner_start("Backing up RabbitMQ definitions…")
         rname = docker.container_name("rabbitmq")
         if (
-            docker.run("docker", "exec", rname, "rabbitmqctl",
-                       "export_definitions", "/tmp/rabbitmq-defs.json") == 0
-            and docker.run("docker", "cp", f"{rname}:/tmp/rabbitmq-defs.json",
-                           f"{dest}/rabbitmq-definitions.json") == 0
+            docker.run(
+                "docker",
+                "exec",
+                rname,
+                "rabbitmqctl",
+                "export_definitions",
+                "/tmp/rabbitmq-defs.json",
+            )
+            == 0
+            and docker.run(
+                "docker",
+                "cp",
+                f"{rname}:/tmp/rabbitmq-defs.json",
+                f"{dest}/rabbitmq-definitions.json",
+            )
+            == 0
         ):
             log.spinner_stop()
             log.success("RabbitMQ definitions backed up")

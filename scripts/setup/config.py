@@ -54,22 +54,51 @@ MONITORING_NETWORK_NAME = "minder-monitoring"
 # ollama is intentionally absent — it is gated by the compose 'internal-ollama'
 # profile, activated by start_services only in internal mode (see lifecycle.py).
 SECURITY_SERVICES = ("traefik",)
-CORE_SERVICES = ("postgres", "redis", "qdrant", "neo4j", "rabbitmq", "minio", "schema-registry")
+CORE_SERVICES = (
+    "postgres",
+    "redis",
+    "qdrant",
+    "neo4j",
+    "rabbitmq",
+    "minio",
+    "schema-registry",
+)
 API_SERVICES = (
-    "api-gateway", "plugin-registry", "marketplace", "plugin-state-manager",
-    "rag-pipeline", "model-management", "graph-rag",
+    "api-gateway",
+    "plugin-registry",
+    "marketplace",
+    "plugin-state-manager",
+    "rag-pipeline",
+    "model-management",
+    "graph-rag",
 )
 AI_SERVICES = ("openwebui", "tts-stt")
 MONITORING_SERVICES = (
-    "influxdb", "telegraf", "prometheus", "grafana", "alertmanager", "jaeger", "otel-collector",
+    "influxdb",
+    "telegraf",
+    "prometheus",
+    "grafana",
+    "alertmanager",
+    "jaeger",
+    "otel-collector",
 )
 EXPORTER_SERVICES = (
-    "postgres-exporter", "redis-exporter", "rabbitmq-exporter",
-    "blackbox-exporter", "cadvisor", "node-exporter",
+    "postgres-exporter",
+    "redis-exporter",
+    "rabbitmq-exporter",
+    "blackbox-exporter",
+    "cadvisor",
+    "node-exporter",
 )
 
 # Auxiliary databases created by initialize_database (infra.sh EXTRA_DATABASES).
-EXTRA_DATABASES = ("minder_marketplace", "tefas_db", "weather_db", "news_db", "crypto_db")
+EXTRA_DATABASES = (
+    "minder_marketplace",
+    "tefas_db",
+    "weather_db",
+    "news_db",
+    "crypto_db",
+)
 
 # Per-image version-resolution metadata "stable_prefix|constraint" (config.sh
 # THIRD_PARTY_IMAGE_META). The pinned VERSION lives only in docker-compose.yml;

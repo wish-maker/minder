@@ -29,8 +29,13 @@ def create_networks() -> None:
         log.info(f"Network '{config.MONITORING_NETWORK_NAME}' already exists")
     else:
         docker.run(
-            "docker", "network", "create", config.MONITORING_NETWORK_NAME,
-            "--driver", "bridge", "--attachable",
+            "docker",
+            "network",
+            "create",
+            config.MONITORING_NETWORK_NAME,
+            "--driver",
+            "bridge",
+            "--attachable",
         )
         log.success(f"Network '{config.MONITORING_NETWORK_NAME}' created")
 
@@ -49,10 +54,22 @@ def initialize_database() -> None:
         # NOT dry-run-gated (bash runs the docker exec directly). Idempotent:
         # CREATE succeeds when absent → "Created", fails when present → "Already exists".
         result = subprocess.run(
-            ["docker", "exec", postgres, "psql", "-U", "minder", "-c", f"CREATE DATABASE {db};"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            [
+                "docker",
+                "exec",
+                postgres,
+                "psql",
+                "-U",
+                "minder",
+                "-c",
+                f"CREATE DATABASE {db};",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        log.detail(f"Created: {db}" if result.returncode == 0 else f"Already exists: {db}")
+        log.detail(
+            f"Created: {db}" if result.returncode == 0 else f"Already exists: {db}"
+        )
     log.success("Database initialisation complete")
 
 
@@ -76,40 +93,70 @@ def initialize_minio() -> None:
 
     log.info("Creating MinIO buckets…")
     buckets = (
-        "rag-documents", "tts-artifacts", "fine-tuning-datasets",
-        "model-checkpoints", "plugin-packages", "backup-archives",
+        "rag-documents",
+        "tts-artifacts",
+        "fine-tuning-datasets",
+        "model-checkpoints",
+        "plugin-packages",
+        "backup-archives",
     )
     time.sleep(5)  # bash: give MinIO a moment to be fully ready
 
     minio = docker.container_name("minio")
     # mc already ships in the image; configure the authed 'mydata' alias the loop uses.
     alias = subprocess.run(
-        ["docker", "exec", minio, "mc", "alias", "set", "mydata",
-         "http://localhost:9000", env.get("MINIO_ROOT_USER"), env.get("MINIO_ROOT_PASSWORD")],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        [
+            "docker",
+            "exec",
+            minio,
+            "mc",
+            "alias",
+            "set",
+            "mydata",
+            "http://localhost:9000",
+            env.get("MINIO_ROOT_USER"),
+            env.get("MINIO_ROOT_PASSWORD"),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     if alias.returncode != 0:
         log.warn("Could not configure mc 'mydata' alias — skipping bucket creation")
         return
 
     for bucket in buckets:
-        exists = subprocess.run(
-            ["docker", "exec", minio, "mc", "ls", f"mydata/{bucket}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        ).returncode == 0
+        exists = (
+            subprocess.run(
+                ["docker", "exec", minio, "mc", "ls", f"mydata/{bucket}"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
         if exists:
             log.detail(f"Already exists: {bucket}")
             continue
         made = subprocess.run(
             ["docker", "exec", minio, "mc", "mb", f"mydata/{bucket}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
         if made.returncode == 0:
             log.detail(f"Created: {bucket}")
             if bucket in ("rag-documents", "tts-artifacts", "plugin-packages"):
                 subprocess.run(
-                    ["docker", "exec", minio, "mc", "anonymous", "set", "download", f"mydata/{bucket}"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    [
+                        "docker",
+                        "exec",
+                        minio,
+                        "mc",
+                        "anonymous",
+                        "set",
+                        "download",
+                        f"mydata/{bucket}",
+                    ],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
                 log.detail(f"Set public policy: {bucket}")
         else:

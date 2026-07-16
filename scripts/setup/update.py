@@ -20,8 +20,17 @@ def _rebuild() -> None:
         return
     try:
         out = subprocess.run(
-            ["docker", "compose", "-f", str(config.COMPOSE_FILE), "build", "--pull", "--no-cache"],
-            capture_output=True, text=True,
+            [
+                "docker",
+                "compose",
+                "-f",
+                str(config.COMPOSE_FILE),
+                "build",
+                "--pull",
+                "--no-cache",
+            ],
+            capture_output=True,
+            text=True,
         )
     except OSError:
         return

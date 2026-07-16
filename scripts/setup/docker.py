@@ -40,7 +40,9 @@ def run(*cmd: object, quiet: bool = False) -> int:
         log._emit(f"{log._DIM}{line}{log._NC}" if log._colors_on() else line)
         return 0
     if quiet:
-        return subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+        return subprocess.run(
+            argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        ).returncode
     return subprocess.run(argv).returncode
 
 
@@ -71,7 +73,12 @@ def container_health(service: str) -> str:
     # bash: docker inspect --format='{{.State.Health.Status}}' name 2>/dev/null || echo "n/a"
     try:
         out = subprocess.run(
-            ["docker", "inspect", "--format={{.State.Health.Status}}", container_name(service)],
+            [
+                "docker",
+                "inspect",
+                "--format={{.State.Health.Status}}",
+                container_name(service),
+            ],
             capture_output=True,
             text=True,
         )
@@ -115,7 +122,9 @@ def wait_healthy(service: str, timeout: int = config.TIMEOUT_SERVICES) -> bool:
         time.sleep(3)
         elapsed += 3
     log.spinner_stop()
-    log.warn(f"{service} not healthy after {timeout}s  (status: {container_health(service)})")
+    log.warn(
+        f"{service} not healthy after {timeout}s  (status: {container_health(service)})"
+    )
     return False
 
 
@@ -140,7 +149,14 @@ def wait_postgres_ready(timeout: int = config.TIMEOUT_DB) -> bool:
     while elapsed < timeout:
         try:
             result = subprocess.run(
-                ["docker", "exec", container_name("postgres"), "pg_isready", "-U", "minder"],
+                [
+                    "docker",
+                    "exec",
+                    container_name("postgres"),
+                    "pg_isready",
+                    "-U",
+                    "minder",
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -163,4 +179,6 @@ def compose(*args: object) -> int:
 
 
 def compose_monitoring(*args: object) -> int:
-    return run("docker", "compose", "-f", config.COMPOSE_FILE, "--profile", "monitoring", *args)
+    return run(
+        "docker", "compose", "-f", config.COMPOSE_FILE, "--profile", "monitoring", *args
+    )

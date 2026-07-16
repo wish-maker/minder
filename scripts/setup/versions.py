@@ -152,11 +152,14 @@ def best_tag(tags: str, stable_prefix: str, constraint: str) -> str:
 # gated, LOG_FILE-mirrored — no-ops otherwise). These hit the network, so they are
 # exercised only against real registries (not gate-verified).
 
+
 def _http_get(url: str, headers: "dict | None" = None) -> "str | None":
     """curl -sf --max-time TIMEOUT_REGISTRY: body on 2xx, else None."""
     try:
         req = urllib.request.Request(url, headers=headers or {})
-        with urllib.request.urlopen(req, timeout=config.TIMEOUT_REGISTRY) as resp:  # noqa: S310
+        with urllib.request.urlopen(
+            req, timeout=config.TIMEOUT_REGISTRY
+        ) as resp:  # noqa: S310
             if not (200 <= resp.status < 300):
                 return None
             return resp.read().decode("utf-8", "replace")
@@ -196,7 +199,9 @@ def ghcr_list_tags(repo: str) -> str:
     if cached:
         log.debug(f"ghcr_list_tags: using cached tags for {repo}")
         return cached
-    resp = _http_get(f"https://ghcr.io/v2/{repo}/tags/list", headers={"Accept": "application/json"})
+    resp = _http_get(
+        f"https://ghcr.io/v2/{repo}/tags/list", headers={"Accept": "application/json"}
+    )
     if resp is None:
         log.debug(f"ghcr_list_tags: HTTP request failed for {repo}")
         return ""
@@ -215,7 +220,9 @@ def quay_list_tags(repo: str) -> str:
     if cached:
         log.debug(f"quay_list_tags: using cached tags for {repo}")
         return cached
-    resp = _http_get(f"https://quay.io/api/v1/repository/{repo}/tag/?limit=100&onlyActiveTags=true")
+    resp = _http_get(
+        f"https://quay.io/api/v1/repository/{repo}/tag/?limit=100&onlyActiveTags=true"
+    )
     if resp is None:
         log.debug(f"quay_list_tags: HTTP request failed for {repo}")
         return ""
@@ -241,12 +248,22 @@ def _list_tags(registry: str, repo: str) -> str:
 def _tag_exists(registry: str, repo: str, tag: str, test_ref: str) -> bool:
     # dockerhub: Docker Hub API (avoids pull rate limits); else `docker manifest inspect`.
     if registry == "dockerhub":
-        return _http_get(f"https://registry.hub.docker.com/v2/repositories/{repo}/tags/{tag}") is not None
+        return (
+            _http_get(
+                f"https://registry.hub.docker.com/v2/repositories/{repo}/tags/{tag}"
+            )
+            is not None
+        )
     try:
-        return subprocess.run(
-            ["docker", "manifest", "inspect", test_ref],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5,
-        ).returncode == 0
+        return (
+            subprocess.run(
+                ["docker", "manifest", "inspect", test_ref],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            ).returncode
+            == 0
+        )
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -272,12 +289,14 @@ def resolve_image_tag(spec: str) -> str:
         RESOLVED_IMAGE_TAGS[pinned_ref] = pinned_ref
         return pinned_ref
 
-    image_base = pinned_ref.split(":", 1)[0]    # ${pinned_ref%%:*}
+    image_base = pinned_ref.split(":", 1)[0]  # ${pinned_ref%%:*}
     pinned_tag = pinned_ref.rsplit(":", 1)[-1]  # ${pinned_ref##*:}
     registry = registry_type(pinned_ref)
     repo = image_repo(pinned_ref)
 
-    log.debug(f"Querying {registry} for {repo} (prefix={stable_prefix}, constraint={constraint})")
+    log.debug(
+        f"Querying {registry} for {repo} (prefix={stable_prefix}, constraint={constraint})"
+    )
 
     all_tags = _list_tags(registry, repo)
     if not all_tags:
@@ -313,14 +332,22 @@ def resolve_image_tag(spec: str) -> str:
     if working_tag:
         final_ref = _ref_for(registry, repo, image_base, working_tag)
         if working_tag == pinned_tag:
-            log.detail(f"{image_base}: using pinned {pinned_tag} (no newer working version found)")
+            log.detail(
+                f"{image_base}: using pinned {pinned_tag} (no newer working version found)"
+            )
         else:
-            tail = f"{log._CYAN}{working_tag}{log._NC}" if log._colors_on() else working_tag
+            tail = (
+                f"{log._CYAN}{working_tag}{log._NC}"
+                if log._colors_on()
+                else working_tag
+            )
             log.success(f"{image_base}: {pinned_tag} → {tail}  (latest working)")
         RESOLVED_IMAGE_TAGS[pinned_ref] = final_ref
         return final_ref
 
-    log.warn(f"{image_base}: no working version found — falling back to pinned {pinned_tag}")
+    log.warn(
+        f"{image_base}: no working version found — falling back to pinned {pinned_tag}"
+    )
     RESOLVED_IMAGE_TAGS[pinned_ref] = pinned_ref
     return pinned_ref
 
@@ -343,7 +370,11 @@ def pull_image_with_fallback(spec: str) -> int:
         log.spinner_start(f"Pulling {pinned_ref} (fallback)…")
         if docker.run("docker", "pull", pinned_ref, quiet=True) == 0:
             log.spinner_stop()
-            tail = f"  {log._DIM}(pinned fallback){log._NC}" if log._colors_on() else "  (pinned fallback)"
+            tail = (
+                f"  {log._DIM}(pinned fallback){log._NC}"
+                if log._colors_on()
+                else "  (pinned fallback)"
+            )
             log.success(f"{pinned_ref}{tail}")
             RESOLVED_IMAGE_TAGS[pinned_ref] = pinned_ref
             return 0
@@ -357,7 +388,9 @@ def pull_image_with_fallback(spec: str) -> int:
 def pull_all_images() -> None:
     """bash pull_all_images: pull every third-party image with version resolution."""
     log.section("📦  Pulling Images  (smart version resolution)")
-    log.info("Constraint legend: major=same major OK · minor=same major.minor OK · none=any")
+    log.info(
+        "Constraint legend: major=same major OK · minor=same major.minor OK · none=any"
+    )
     log._emit("")
     for spec in third_party_image_specs():
         pull_image_with_fallback(spec)
@@ -370,7 +403,7 @@ def version_drift_report(json_mode: bool = False) -> int:
     number of drifted images (doctor counts it toward `issues`; bash re-runs +
     greps for that — same observable output, drift shown once)."""
     drift_items = []  # (image_base, pinned_tag, resolved_tag, constraint)
-    ok_items = []     # (image_base, pinned_tag, constraint)
+    ok_items = []  # (image_base, pinned_tag, constraint)
 
     for spec in third_party_image_specs():
         pinned_ref, stable_prefix, constraint = (spec.split("|", 2) + ["", ""])[:3]
@@ -399,25 +432,43 @@ def version_drift_report(json_mode: bool = False) -> int:
         log._emit("}")
         return len(drift_items)
 
-    log._emit("\n" + (f"{log._BOLD}Version Drift Report{log._NC}" if log._colors_on() else "Version Drift Report"))
+    log._emit(
+        "\n"
+        + (
+            f"{log._BOLD}Version Drift Report{log._NC}"
+            if log._colors_on()
+            else "Version Drift Report"
+        )
+    )
     if not drift_items:
         log.success("All images are up to date ✓")
     else:
-        head = f"  {log._YELLOW}{len(drift_items)} update(s) available:{log._NC}\n" if log._colors_on() else f"  {len(drift_items)} update(s) available:\n"
+        head = (
+            f"  {log._YELLOW}{len(drift_items)} update(s) available:{log._NC}\n"
+            if log._colors_on()
+            else f"  {len(drift_items)} update(s) available:\n"
+        )
         log._emit(head)
         log._emit(f"  {'IMAGE':<45}  {'CURRENT':<20}  {'AVAILABLE':<20}  CONSTRAINT")
         log._emit(f"  {'─────':<45}  {'───────':<20}  {'─────────':<20}  ──────────")
         for img, cur, avail, con in drift_items:
             if log._colors_on():
-                log._emit(f"  {log._CYAN}{img:<45}{log._NC}  {log._DIM}{cur:<20}{log._NC}  {log._GREEN}{avail:<20}{log._NC}  {con}")
+                log._emit(
+                    f"  {log._CYAN}{img:<45}{log._NC}  {log._DIM}{cur:<20}{log._NC}  {log._GREEN}{avail:<20}{log._NC}  {con}"  # noqa: E501
+                )
             else:
                 log._emit(f"  {img:<45}  {cur:<20}  {avail:<20}  {con}")
         log._emit("")
         log.detail(f"Apply updates:   ./{config.SCRIPT_NAME} update")
-        log.detail(f"Skip and use pins: SKIP_VERSION_CHECK=1 ./{config.SCRIPT_NAME} update")
+        log.detail(
+            f"Skip and use pins: SKIP_VERSION_CHECK=1 ./{config.SCRIPT_NAME} update"
+        )
 
     if ok_items and config.VERBOSE:
-        log._emit("\n  " + (f"{log._DIM}Up to date:{log._NC}" if log._colors_on() else "Up to date:"))
+        log._emit(
+            "\n  "
+            + (f"{log._DIM}Up to date:{log._NC}" if log._colors_on() else "Up to date:")
+        )
         for img, cur, con in ok_items:
             log.detail(f"  ✓  {img}:{cur}  ({con})")
 

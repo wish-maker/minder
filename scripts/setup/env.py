@@ -58,7 +58,11 @@ def get(key: str) -> str:
         text = ENV_FILE.read_text(encoding="utf-8")
     except OSError:
         return ""
-    out = [line.split("=", 1)[1] for line in text.splitlines() if line.startswith(f"{key}=")]
+    out = [
+        line.split("=", 1)[1]
+        for line in text.splitlines()
+        if line.startswith(f"{key}=")
+    ]
     return "\n".join(out)
 
 
@@ -163,10 +167,16 @@ def fill_env_secrets() -> None:
     live = None if _regen_allowed() else _live_core()
     if live:
         joined = ", ".join(to_fill)
-        log.error(f"Refusing to regenerate .env secrets — a provisioned stack is already running ({live})")
+        log.error(
+            f"Refusing to regenerate .env secrets — a provisioned stack is already running ({live})"
+        )
         log.detail(f"Missing/placeholder secrets: {joined}")
-        log.detail("Regenerating would desync live services (redis/minio re-read their password on recreate).")
-        log.detail("Fix: restore the real secrets into .env, or set MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally.")
+        log.detail(
+            "Regenerating would desync live services (redis/minio re-read their password on recreate)."
+        )
+        log.detail(
+            "Fix: restore the real secrets into .env, or set MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally."
+        )
         raise SystemExit(1)
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -182,7 +192,9 @@ def fill_env_secrets() -> None:
         if re.search(rf"(?m)^{re.escape(key)}=", raw):
             # sed "s|^key=.*|key=new|" — replace every matching line (function
             # replacement so hex/prefix is never treated as a backreference).
-            raw = re.sub(rf"(?m)^{re.escape(key)}=.*", lambda _m: f"{key}={new_secret}", raw)
+            raw = re.sub(
+                rf"(?m)^{re.escape(key)}=.*", lambda _m: f"{key}={new_secret}", raw
+            )
         else:
             raw += f"{key}={new_secret}\n"  # bash printf … >> .env (no separator)
         log.detail(f"✓ Generated secret for {key}")

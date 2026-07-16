@@ -33,11 +33,25 @@ def _restore_postgres(sql_file: Path) -> bool:
     feed the dump on stdin, discard all output; True on exit 0. Bare (un-gated)."""
     try:
         with open(sql_file, "rb") as fh:
-            return subprocess.run(
-                ["docker", "exec", "-i", docker.container_name("postgres"),
-                 "psql", "-U", "minder", "-f", "-"],
-                stdin=fh, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            ).returncode == 0
+            return (
+                subprocess.run(
+                    [
+                        "docker",
+                        "exec",
+                        "-i",
+                        docker.container_name("postgres"),
+                        "psql",
+                        "-U",
+                        "minder",
+                        "-f",
+                        "-",
+                    ],
+                    stdin=fh,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                ).returncode
+                == 0
+            )
     except OSError:
         return False
 
@@ -153,7 +167,9 @@ def run(archive: str = "") -> int:
         log.spinner_start("Restoring PostgreSQL…")
         pgname = docker.container_name("postgres")
         if config.DRY_RUN:
-            docker.run("docker", "exec", "-i", pgname, "psql", "-U", "minder", "-f", "-")
+            docker.run(
+                "docker", "exec", "-i", pgname, "psql", "-U", "minder", "-f", "-"
+            )
             ok = True
         else:
             ok = _restore_postgres(restore_dir / "postgres.sql")
@@ -164,30 +180,64 @@ def run(archive: str = "") -> int:
             log.warn("PostgreSQL restore had errors (partial restore possible)")
 
     # ── Qdrant (#56: copy in AND extract the same /tmp/qdrant.tar.gz) ──────
-    if restore_dir and (restore_dir / "qdrant.tar.gz").is_file() and docker.container_running("qdrant"):
+    if (
+        restore_dir
+        and (restore_dir / "qdrant.tar.gz").is_file()
+        and docker.container_running("qdrant")
+    ):
         log.spinner_start("Restoring Qdrant…")
         qname = docker.container_name("qdrant")
-        docker.run("docker", "cp", str(restore_dir / "qdrant.tar.gz"), f"{qname}:/tmp/qdrant.tar.gz")
-        docker.run("docker", "exec", qname, "tar", "xzf", "/tmp/qdrant.tar.gz", "-C", "/")
+        docker.run(
+            "docker",
+            "cp",
+            str(restore_dir / "qdrant.tar.gz"),
+            f"{qname}:/tmp/qdrant.tar.gz",
+        )
+        docker.run(
+            "docker", "exec", qname, "tar", "xzf", "/tmp/qdrant.tar.gz", "-C", "/"
+        )
         log.spinner_stop()
         log.success("Qdrant restored")
 
     # ── RabbitMQ definitions ──────────────────────────────────────────────
-    if restore_dir and (restore_dir / "rabbitmq-definitions.json").is_file() and docker.container_running("rabbitmq"):
+    if (
+        restore_dir
+        and (restore_dir / "rabbitmq-definitions.json").is_file()
+        and docker.container_running("rabbitmq")
+    ):
         log.spinner_start("Restoring RabbitMQ definitions…")
         rname = docker.container_name("rabbitmq")
-        docker.run("docker", "cp", str(restore_dir / "rabbitmq-definitions.json"),
-                   f"{rname}:/tmp/rabbitmq-defs.json")
+        docker.run(
+            "docker",
+            "cp",
+            str(restore_dir / "rabbitmq-definitions.json"),
+            f"{rname}:/tmp/rabbitmq-defs.json",
+        )
         if config.DRY_RUN:
-            docker.run("docker", "exec", rname, "rabbitmqctl", "import_definitions",
-                       "/tmp/rabbitmq-defs.json")
+            docker.run(
+                "docker",
+                "exec",
+                rname,
+                "rabbitmqctl",
+                "import_definitions",
+                "/tmp/rabbitmq-defs.json",
+            )
             ok = True
         else:
-            ok = _run_bare(
-                ["docker", "exec", rname, "rabbitmqctl", "import_definitions",
-                 "/tmp/rabbitmq-defs.json"],
-                stderr_null=True,
-            ) == 0
+            ok = (
+                _run_bare(
+                    [
+                        "docker",
+                        "exec",
+                        rname,
+                        "rabbitmqctl",
+                        "import_definitions",
+                        "/tmp/rabbitmq-defs.json",
+                    ],
+                    stderr_null=True,
+                )
+                == 0
+            )
         log.spinner_stop()
         if ok:
             log.success("RabbitMQ definitions restored")
