@@ -142,6 +142,12 @@ def detail(msg: str) -> None:
     _emit(f"  {_DIM}{msg}{_NC}" if _colors_on() else f"  {msg}")
 
 
+def bold(text: str) -> str:
+    """A bold-wrapped string (tty-gated) — the shared form of the section sub-headers
+    that doctor/health/status/shell/versions each open-coded."""
+    return f"{_BOLD}{text}{_NC}" if _colors_on() else text
+
+
 def step(msg: str) -> None:
     # bash: echo -e "\n${BOLD}${CYAN}▸ $*${NC}"; echo "[STEP] $*" >> "$LOG_FILE"
     # A blank line precedes the heading; the file line is the literal "[STEP] msg"

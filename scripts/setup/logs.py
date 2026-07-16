@@ -17,17 +17,6 @@ import subprocess
 from . import config, docker, log
 
 
-def _running_names() -> list[str]:
-    """docker ps --format '{{.Names}}' → the running container names."""
-    try:
-        out = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True
-        )
-    except OSError:
-        return []
-    return out.stdout.splitlines()
-
-
 def _print_running_list() -> None:
     # bash: docker ps --format '  {{.Names}}' | grep "^  ${PREFIX}-" || echo "  (none)"
     try:
@@ -50,7 +39,7 @@ def _print_running_list() -> None:
 def run(service: str = "", lines: str = "100") -> int:
     if service:
         cname = docker.container_name(service)
-        if cname in _running_names():
+        if cname in docker.running_names():
             log.info(f"Streaming {service} logs (Ctrl+C to exit)…")
             # Streaming follow — inherits stdio; not gate-verified (blocks on Ctrl+C).
             return subprocess.run(

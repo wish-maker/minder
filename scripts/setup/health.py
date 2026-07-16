@@ -13,7 +13,6 @@ entered only from cmd_install).
 
 import os
 import socket
-import subprocess
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -31,14 +30,6 @@ def _server_ip() -> str:
     return ip or "localhost"
 
 
-def _tcp_open(host: str, port: str) -> bool:
-    try:
-        with socket.create_connection((host, int(port)), timeout=2):
-            return True
-    except OSError:
-        return False
-
-
 def _http_ok(url: str) -> bool:
     # bash: curl -sf --max-time 3 (fails on HTTP >= 400). urllib stand-in.
     try:
@@ -48,10 +39,6 @@ def _http_ok(url: str) -> bool:
             return 200 <= resp.status < 300
     except Exception:
         return False
-
-
-def _bold(text: str) -> str:
-    return f"{log._BOLD}{text}{log._NC}" if log._colors_on() else text
 
 
 def run_health_checks(json_mode: bool = False) -> None:
@@ -79,7 +66,7 @@ def run_health_checks(json_mode: bool = False) -> None:
 
         # InfluxDB v3 needs auth for HTTP endpoints → a plain TCP port check.
         if name == "influxdb":
-            if _tcp_open("127.0.0.1", port):
+            if docker.tcp_open("127.0.0.1", port):
                 results.append((name, "ok", display_url))
                 if not json_mode:
                     if log._colors_on():
@@ -118,19 +105,19 @@ def run_health_checks(json_mode: bool = False) -> None:
 
     if not json_mode:
         log.section("🔍  Health Check")
-        log._emit(_bold("Core APIs"))
+        log._emit(log.bold("Core APIs"))
     for svc in config.API_SERVICES:
         if svc in config.SERVICE_PORTS:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
 
     if not json_mode:
-        log._emit("\n" + _bold("Monitoring"))
+        log._emit("\n" + log.bold("Monitoring"))
     for svc in ("prometheus", "grafana", "influxdb", "traefik", "rabbitmq"):
         if svc in config.SERVICE_PORTS:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
 
     if not json_mode:
-        log._emit("\n" + _bold("AI Services"))
+        log._emit("\n" + log.bold("AI Services"))
     # NOTE: the service key is "tts-stt" (SERVICE_PORTS + AI_SERVICES); the bash
     # original looped "tts-stt-service" (a stale name) so it never matched → tts-stt
     # was silently never health-checked. Fixed here + in the bash reference.
@@ -187,7 +174,7 @@ def download_ollama_models() -> None:
     elapsed = 0
     ready = False
     while elapsed < config.TIMEOUT_OLLAMA:
-        if _cmd_ok(["docker", "exec", ollama, "ollama", "list"]):
+        if docker.cmd_ok(["docker", "exec", ollama, "ollama", "list"]):
             log.spinner_stop()
             log.success("Ollama is ready")
             ready = True
@@ -238,26 +225,9 @@ def download_ollama_models() -> None:
             log.warn(f"{model} — failed or timed out")
 
     # `ollama list | tail -n +2` — skip the header row; the rest is live/non-det.
-    listing = _cap(["docker", "exec", ollama, "ollama", "list"]).splitlines()[1:]
+    listing = docker.capture(["docker", "exec", ollama, "ollama", "list"]).splitlines()[
+        1:
+    ]
     log.success(f"{len(listing)} model(s) available")
     for line in listing:
         log.detail(line)
-
-
-def _cmd_ok(argv: list) -> bool:
-    try:
-        return (
-            subprocess.run(
-                argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            ).returncode
-            == 0
-        )
-    except OSError:
-        return False
-
-
-def _cap(argv: list) -> str:
-    try:
-        return subprocess.run(argv, capture_output=True, text=True).stdout
-    except OSError:
-        return ""

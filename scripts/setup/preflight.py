@@ -14,10 +14,9 @@ configuration, and export the derived vars that docker compose consumes.
 
 import os
 import shutil
-import socket
 import subprocess
 
-from . import config, env, log
+from . import config, docker, env, log
 
 # Host ports check_prerequisites probes for conflicts (config.sh order).
 _PREREQ_PORTS = (
@@ -38,19 +37,6 @@ _PREREQ_PORTS = (
     9091,
     3000,
 )
-
-
-def _cmd_ok(argv: list) -> bool:
-    """True if the command runs and exits 0 (bash `cmd &>/dev/null`)."""
-    try:
-        return (
-            subprocess.run(
-                argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            ).returncode
-            == 0
-        )
-    except OSError:
-        return False
 
 
 def _capture(argv: list) -> str:
@@ -80,12 +66,10 @@ def _busy_ports() -> list:
         ps_ports = ""
     busy = []
     for port in _PREREQ_PORTS:
-        try:
-            with socket.create_connection(("127.0.0.1", port), timeout=1):
-                open_ = True
-        except OSError:
-            open_ = False
-        if open_ and f":{port}->" not in ps_ports:
+        if (
+            docker.tcp_open("127.0.0.1", port, timeout=1)
+            and f":{port}->" not in ps_ports
+        ):
             busy.append(str(port))
     return busy
 
@@ -105,7 +89,7 @@ def check_prerequisites() -> None:
         version = parts[2].rstrip(",") if len(parts) > 2 else ""
         log.detail(f"Docker {version}")
 
-    if not _cmd_ok(["docker", "compose", "version"]):
+    if not docker.cmd_ok(["docker", "compose", "version"]):
         log.error(
             "Docker Compose v2 not available → https://docs.docker.com/compose/install/"
         )
@@ -114,7 +98,7 @@ def check_prerequisites() -> None:
         cver = _capture(["docker", "compose", "version", "--short"]).strip() or "v2"
         log.detail(f"Compose {cver}")
 
-    if not _cmd_ok(["docker", "info"]):
+    if not docker.cmd_ok(["docker", "info"]):
         log.error("Docker daemon is not running — start Docker Desktop or dockerd")
         failed = True
 
@@ -156,7 +140,7 @@ def validate_gpu_environment() -> None:
     GPU_AVAILABLE=false, else record the detected GPU and set GPU_AVAILABLE=true."""
     log.info("Validating GPU environment for AI acceleration...")
 
-    if not _cmd_ok(
+    if not docker.cmd_ok(
         [
             "docker",
             "run",

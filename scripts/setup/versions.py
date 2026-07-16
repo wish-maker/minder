@@ -432,14 +432,7 @@ def version_drift_report(json_mode: bool = False) -> int:
         log._emit("}")
         return len(drift_items)
 
-    log._emit(
-        "\n"
-        + (
-            f"{log._BOLD}Version Drift Report{log._NC}"
-            if log._colors_on()
-            else "Version Drift Report"
-        )
-    )
+    log._emit("\n" + log.bold("Version Drift Report"))
     if not drift_items:
         log.success("All images are up to date ✓")
     else:

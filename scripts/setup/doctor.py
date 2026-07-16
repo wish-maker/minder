@@ -9,10 +9,8 @@ STRUCTURALLY (sections + labels + check set), masking the values + the issue cou
 import os
 import re
 import shutil
-import socket
-import subprocess
 
-from . import config, log, versions
+from . import config, docker, log, versions
 
 _PREFIX = config.CONTAINER_PREFIX + "-"
 _DOCTOR_PORTS = (
@@ -36,36 +34,18 @@ _DOCTOR_PORTS = (
 _WEAK_RE = re.compile(r"^(admin|password|secret|changeme|replace_me|minder)$")
 
 
-def _bold(text: str) -> str:
-    return f"{log._BOLD}{text}{log._NC}" if log._colors_on() else text
-
-
-def _cap(argv: list) -> str:
-    try:
-        out = subprocess.run(argv, capture_output=True, text=True)
-    except OSError:
-        return ""
-    return out.stdout
-
-
-def _tcp_open(port: int) -> bool:
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=1):
-            return True
-    except OSError:
-        return False
-
-
 def run() -> int:
     log.section("🩺  System Diagnostics")
     issues = 0
 
     # ── Docker ──
-    log._emit(_bold("Docker"))
-    log.detail(f"Version: {_cap(['docker', '--version']).strip()}")
-    compose_v = _cap(["docker", "compose", "version", "--short"]).strip() or "n/a"
+    log._emit(log.bold("Docker"))
+    log.detail(f"Version: {docker.capture(['docker', '--version']).strip()}")
+    compose_v = (
+        docker.capture(["docker", "compose", "version", "--short"]).strip() or "n/a"
+    )
     log.detail(f"Compose: {compose_v}")
-    mem_raw = _cap(["docker", "info", "--format", "{{.MemTotal}}"]).strip()
+    mem_raw = docker.capture(["docker", "info", "--format", "{{.MemTotal}}"]).strip()
     try:
         mem_gb = int(mem_raw) // 1073741824
     except ValueError:
@@ -77,7 +57,7 @@ def run() -> int:
         log.detail(f"Docker RAM: {mem_gb}GB ✓")
 
     # ── Disk ──
-    log._emit("\n" + _bold("Disk"))
+    log._emit("\n" + log.bold("Disk"))
     try:
         free_gb = shutil.disk_usage(str(config.SCRIPT_DIR)).free // 1073741824
     except OSError:
@@ -89,7 +69,7 @@ def run() -> int:
         log.detail(f"Free space: {free_gb}GB ✓")
 
     # ── Environment (.env) ──
-    log._emit("\n" + _bold("Environment (.env)"))
+    log._emit("\n" + log.bold("Environment (.env)"))
     if not config.ENV_FILE.is_file():
         log.warn(".env not found — run install first")
         issues += 1
@@ -122,10 +102,10 @@ def run() -> int:
             log.detail("No obvious weak secrets ✓")
 
     # ── Port Availability ──
-    log._emit("\n" + _bold("Port Availability"))
-    ps_ports = _cap(["docker", "ps", "--format", "{{.Ports}}"])
+    log._emit("\n" + log.bold("Port Availability"))
+    ps_ports = docker.capture(["docker", "ps", "--format", "{{.Ports}}"])
     for port in _DOCTOR_PORTS:
-        if _tcp_open(port):
+        if docker.tcp_open("127.0.0.1", port, timeout=1):
             if f":{port}->" in ps_ports:
                 log.detail(f":{port} — in use by Minder ✓")
             else:
@@ -135,10 +115,10 @@ def run() -> int:
             log.detail(f":{port} — free ✓")
 
     # ── Container Health ──
-    log._emit("\n" + _bold("Container Health"))
+    log._emit("\n" + log.bold("Container Health"))
     unhealthy = [
         n
-        for n in _cap(
+        for n in docker.capture(
             ["docker", "ps", "--filter", "health=unhealthy", "--format", "{{.Names}}"]
         ).splitlines()
         if n.startswith(_PREFIX)
@@ -151,17 +131,19 @@ def run() -> int:
     else:
         running = sum(
             1
-            for n in _cap(["docker", "ps", "--format", "{{.Names}}"]).splitlines()
+            for n in docker.capture(
+                ["docker", "ps", "--format", "{{.Names}}"]
+            ).splitlines()
             if n.startswith(_PREFIX)
         )
         log.detail(f"{running} containers running, none unhealthy ✓")
 
     # ── Docker Volumes ──
-    log._emit("\n" + _bold("Docker Volumes"))
+    log._emit("\n" + log.bold("Docker Volumes"))
     dangling = len(
         [
             v
-            for v in _cap(
+            for v in docker.capture(
                 ["docker", "volume", "ls", "-q", "--filter", "dangling=true"]
             ).splitlines()
             if v
@@ -173,7 +155,7 @@ def run() -> int:
         log.detail(f"Dangling volumes: {dangling} ✓")
 
     # ── Image Version Drift ──
-    log._emit("\n" + _bold("Image Version Drift"))
+    log._emit("\n" + log.bold("Image Version Drift"))
     if config.SKIP_VERSION_CHECK:
         log.warn("Version check skipped (curl unavailable or SKIP_VERSION_CHECK=1)")
     else:

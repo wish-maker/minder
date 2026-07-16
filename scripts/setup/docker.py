@@ -60,8 +60,67 @@ def _names(*, all_containers: bool = False) -> list[str]:
     return out.stdout.splitlines()
 
 
+def running_names() -> list[str]:
+    """Running container names (`docker ps --format {{.Names}}`) — the shared query
+    the status/logs/shell verbs use instead of each re-spawning `docker ps`."""
+    return _names()
+
+
 def container_running(service: str) -> bool:
     return container_name(service) in _names()
+
+
+def capture(argv: list) -> str:
+    """Run argv and return its stdout (text), or "" on OSError. Ungated read-only
+    capture (bash `$(cmd)`), shared by doctor/health/preflight/status/versions."""
+    try:
+        return subprocess.run(argv, capture_output=True, text=True).stdout
+    except OSError:
+        return ""
+
+
+def cmd_ok(argv: list) -> bool:
+    """True iff argv runs and exits 0 (bash `cmd &>/dev/null`); False on OSError.
+    Shared by health/preflight for probe commands."""
+    try:
+        return (
+            subprocess.run(
+                argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            ).returncode
+            == 0
+        )
+    except OSError:
+        return False
+
+
+def tcp_open(host: str, port: "int | str", timeout: float = 2) -> bool:
+    """True if a TCP connect to host:port succeeds within `timeout`s. Shared by the
+    health/doctor port probes (bash `>/dev/tcp/host/port`)."""
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def has_healthcheck(service: str) -> bool:
+    """True if the container defines a Docker healthcheck. Used to avoid waiting the
+    full timeout on no-healthcheck-by-design services (otel-collector, exporters) —
+    polling their health is futile (it stays 'n/a' forever)."""
+    try:
+        out = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "--format={{if .State.Health}}yes{{end}}",
+                container_name(service),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+    return out.returncode == 0 and out.stdout.strip() == "yes"
 
 
 def container_exists(service: str) -> bool:
@@ -110,7 +169,14 @@ def network_exists(name: str) -> bool:
 
 
 def wait_healthy(service: str, timeout: int = config.TIMEOUT_SERVICES) -> bool:
-    """bash wait_healthy: poll container_health every 3s until healthy or timeout."""
+    """bash wait_healthy: poll container_health every 3s until healthy or timeout.
+
+    The spinner shows elapsed/timeout so a multi-minute wait reads as progress, not
+    a hang. Improvement over the bash reference (product-only; the gate's docker
+    shim reports everything healthy so the first poll always wins and the new
+    no-healthcheck branch is never reached under the gate): if a container has NO
+    healthcheck, its status is 'n/a' forever, so waiting the full timeout is
+    pointless — detect that and stop immediately instead of burning the timeout."""
     log.spinner_start(f"Waiting for {service}…")
     elapsed = 0
     while elapsed < timeout:
@@ -118,8 +184,13 @@ def wait_healthy(service: str, timeout: int = config.TIMEOUT_SERVICES) -> bool:
             log.spinner_stop()
             log.success(f"{service} is healthy")
             return True
+        if not has_healthcheck(service):
+            log.spinner_stop()
+            log.detail(f"{service} — no healthcheck defined, not waiting")
+            return True
         time.sleep(3)
         elapsed += 3
+        log.spinner_start(f"Waiting for {service}…  ({elapsed}s/{timeout}s)")
     log.spinner_stop()
     log.warn(
         f"{service} not healthy after {timeout}s  (status: {container_health(service)})"

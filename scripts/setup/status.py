@@ -62,7 +62,7 @@ def run(json_mode: bool = False) -> int:
         )
     log._emit("")
 
-    log._emit(f"{log._BOLD}Containers{log._NC}" if log._colors_on() else "Containers")
+    log._emit(log.bold("Containers"))
     ps_table = _filtered(
         ["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"],
         "NAMES",
@@ -71,9 +71,7 @@ def run(json_mode: bool = False) -> int:
         log._emit(ln)
     log._emit("")
 
-    log._emit(
-        f"{log._BOLD}Resource Usage{log._NC}" if log._colors_on() else "Resource Usage"
-    )
+    log._emit(log.bold("Resource Usage"))
     stats_table = _filtered(
         [
             "docker",

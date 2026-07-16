@@ -57,14 +57,7 @@ def run(service: str = "") -> int:
             return 1
 
     cname = docker.container_name(service)
-    try:
-        ps = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True
-        )
-        running = ps.stdout.splitlines()
-    except OSError:
-        running = []
-    if cname not in running:
+    if cname not in docker.running_names():
         log.error(f"Container not running: {cname}")
         return 1
 
