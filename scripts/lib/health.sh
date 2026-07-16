@@ -100,6 +100,7 @@ run_health_checks() {
         echo ""
         echo "  ]"
         echo "}"
+        HEALTH_WARN_COUNT=$warn_count   # expose for cmd_install (return stays 0 → set -e safe)
         return
     fi
 
@@ -110,6 +111,7 @@ run_health_checks() {
         log_warn "${ok_count}/${#results[@]} endpoints reachable — ${warn_count} still starting"
         log_detail "Re-check: ./${SCRIPT_NAME} status"
     fi
+    HEALTH_WARN_COUNT=$warn_count   # expose for cmd_install (return stays 0 → set -e safe)
 }
 
 # ─────────────────────────────────────────────────────────────

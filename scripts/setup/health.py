@@ -41,7 +41,7 @@ def _http_ok(url: str) -> bool:
         return False
 
 
-def run_health_checks(json_mode: bool = False) -> None:
+def run_health_checks(json_mode: bool = False) -> int:
     results: "list[tuple[str, str, str]]" = []  # (name, status, url-or-msg)
     server_ip = _server_ip()
 
@@ -141,7 +141,7 @@ def run_health_checks(json_mode: bool = False) -> None:
             log._emit(f'    {{"name":"{name}","status":"{status}","url":"{url}"}}{sep}')
         log._emit("  ]")
         log._emit("}")
-        return
+        return warn_count
 
     log._emit("")
     if warn_count == 0:
@@ -151,6 +151,7 @@ def run_health_checks(json_mode: bool = False) -> None:
             f"{ok_count}/{len(results)} endpoints reachable — {warn_count} still starting"
         )
         log.detail(f"Re-check: ./{config.SCRIPT_NAME} status")
+    return warn_count
 
 
 def download_ollama_models() -> None:

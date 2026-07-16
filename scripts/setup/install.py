@@ -58,7 +58,17 @@ def run() -> int:
     log.progress_next("Running migrations")
     migrate.run("head")
     log.progress_next("Health checks")
-    health.run_health_checks()
+    warns = health.run_health_checks()
+
+    # Don't let the celebratory banner imply "all good" when it isn't: if the final
+    # health pass had unreachable endpoints, say so first (the banner's URLs are
+    # still useful). Gate-safe: under the docker shim everything is healthy → warns=0.
+    if warns:
+        log.warn(
+            f"Install finished, but {warns} endpoint(s) are not yet healthy — "
+            "the platform may not be fully ready."
+        )
+        log.detail(f"Re-check with: ./{config.SCRIPT_NAME} status")
 
     help_module.print_success_banner()
     return 0

@@ -108,11 +108,14 @@ ${BOLD}CONFIGURATION MANAGEMENT${NC}
                              remote host; default http://host.docker.internal:11434). Flips
                              .env only and prints a "run restart to apply" hint — no restart.
 
-${BOLD}FLAGS${NC}
-    DRY_RUN=1               Preview commands without executing
-    VERBOSE=1               Enable debug-level output
-    NONINTERACTIVE=1        Disable interactive prompts (for CI)
-    SKIP_VERSION_CHECK=1    Use exact pinned versions, skip registry queries
+${BOLD}FLAGS${NC}  (pass as a --flag, or set the env var)
+    --dry-run / DRY_RUN=1                Preview commands without executing
+    --verbose / VERBOSE=1                Enable debug-level output
+    --json                               Machine-readable output (for status)
+    --skip-version-check / SKIP_VERSION_CHECK=1
+                                         Use exact pinned versions, skip registries
+    --version / -V                       Print version and exit
+    NONINTERACTIVE=1                     Disable interactive prompts (CI; env only)
 
 ${BOLD}EXAMPLES${NC}
     ./${SCRIPT_NAME}                                # Fresh install
