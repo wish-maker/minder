@@ -72,7 +72,9 @@ run_health_checks() {
     done
 
     [[ "$json_mode" == false ]] && echo -e "\n${BOLD}AI Services${NC}"
-    for svc in openwebui tts-stt-service; do
+    # "tts-stt" is the SERVICE_PORTS/AI_SERVICES key; "tts-stt-service" (a stale
+    # name) never matched, so tts-stt was silently never health-checked. Fixed.
+    for svc in openwebui tts-stt; do
         [[ -v "SERVICE_PORTS[$svc]" ]] && _check_endpoint "$svc" "${SERVICE_PORTS[$svc]}"
     done
 

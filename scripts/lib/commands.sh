@@ -687,7 +687,7 @@ cmd_install() {
         echo -e "${YELLOW}  ⚠  DRY RUN MODE — no changes will be made${NC}\n"
     fi
 
-    progress_init 10   # one extra step for image resolution
+    progress_init 11   # 11 phases below → the bar ends at a clean [11/11] 100%
 
     progress_next "Checking prerequisites";    check_prerequisites
     progress_next "Setting up environment";    prepare_env

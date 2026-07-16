@@ -131,7 +131,10 @@ def run_health_checks(json_mode: bool = False) -> None:
 
     if not json_mode:
         log._emit("\n" + _bold("AI Services"))
-    for svc in ("openwebui", "tts-stt-service"):
+    # NOTE: the service key is "tts-stt" (SERVICE_PORTS + AI_SERVICES); the bash
+    # original looped "tts-stt-service" (a stale name) so it never matched → tts-stt
+    # was silently never health-checked. Fixed here + in the bash reference.
+    for svc in ("openwebui", "tts-stt"):
         if svc in config.SERVICE_PORTS:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
 

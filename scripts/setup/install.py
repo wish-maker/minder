@@ -35,7 +35,7 @@ def run() -> int:
     if config.DRY_RUN:
         log._emit(f"{y}  ⚠  DRY RUN MODE — no changes will be made{nc}\n")
 
-    log.progress_init(10)  # one extra step vs the 11 phases → last reads [11/10]
+    log.progress_init(11)  # 11 phases below → the bar ends at a clean [11/11] 100%
 
     log.progress_next("Checking prerequisites")
     preflight.check_prerequisites()
