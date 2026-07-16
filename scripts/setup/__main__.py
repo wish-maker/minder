@@ -17,6 +17,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from . import backup as backup_module
 from . import config
 from . import doctor as doctor_module
 from . import help as help_module
@@ -25,6 +26,7 @@ from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
 from . import restart as restart_module
+from . import restore as restore_module
 from . import secrets as secrets_module
 from . import shell as shell_module
 from . import start as start_module
@@ -131,6 +133,14 @@ def main(argv: list[str]) -> int:
         pos = _positional(argv)
         arg1 = pos[1] if len(pos) > 1 else ""
         return update_module.run(arg1)
+    if cmd == "backup":
+        # setup.sh: cmd_backup (no args).
+        return backup_module.run()
+    if cmd == "restore":
+        # setup.sh: cmd_restore "$arg1" (optional archive path).
+        pos = _positional(argv)
+        archive = pos[1] if len(pos) > 1 else ""
+        return restore_module.run(archive)
     if cmd == "doctor":
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()

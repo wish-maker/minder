@@ -127,6 +127,26 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       banner. Verified under `DRY_RUN=1`+`CI` via `scripts/gate/uninstall_verify.sh`
       (both branches — the compose calls are dry-run-gated so nothing is removed;
       the typed-DELETE confirmation is exercised by hand).
+- [x] **`backup`** — native (`backup.py`); full platform backup
+      (.env + Postgres/Neo4j/InfluxDB/Qdrant/RabbitMQ) → `backups/minder-<ts>.tar.gz`
+      + keep-last-7 prune. Faithful to which steps go through the dry-run seam:
+      Neo4j/InfluxDB/Qdrant/RabbitMQ are `run`-gated, while `mkdir`/`.env` cp/the
+      `pg_dumpall`/the final `tar` are bare (un-gated → run for real even under
+      DRY_RUN, exactly like bash). Read-only w.r.t. the platform. Verified under
+      `DRY_RUN=1` against the live stack via `scripts/gate/backup_verify.sh`
+      (function-level with the spinner stubbed — the infra_verify pattern — so the
+      async spinner frames don't interleave; backups/ is stashed aside so the run
+      starts empty + prune-safe, then the gate's archives are removed and the
+      original restored).
+- [x] **`restore [archive]`** — native (`restore.py`); restore from a
+      `backups/minder-<ts>.tar.gz` (interactive picker when no arg). Verified vs
+      the bash verb via `scripts/gate/restore_verify.sh` on the NON-DESTRUCTIVE
+      early exits only (no-backups / no-archive-arg / file-not-found), because
+      cmd_restore's actual restore steps are BARE (un-gated) `docker`/`cp` that
+      OVERWRITE live data even under DRY_RUN — a bash wart carried over faithfully
+      (candidate issue), so the real restore is exercised by hand on a throwaway
+      stack. Preserves the bash Qdrant filename-mismatch quirk verbatim (copies
+      `qdrant.tar.gz` in but extracts `qdrant-backup.tar.gz`).
 - [~] `log` — stdout formatting ported (`log.py`): info/success/warn/error/detail,
       `step()` (`▸` heading), `section()` (MAGENTA box, byte-width padding to match
       bash `printf %-48s`), the `spinner` (daemon-thread animation), and the
@@ -223,7 +243,8 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] commands (backup/restore) · log-file-mirroring
+- [ ] log-file-mirroring (the `logs/setup-<ts>.log` append + the `trap _cleanup
+      EXIT` epilogue — the actual file writes; stdout formatting is already ported)
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
