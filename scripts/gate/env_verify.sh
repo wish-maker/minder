@@ -6,6 +6,9 @@
 set -u
 PY="${PY:-python}"                     # override e.g. PY=python3 on boxes without `python`
 cd "$(dirname "$0")/../.." || exit 2   # repo root (script lives in scripts/gate/)
+# The fill/prepare tests below exercise the fill LOGIC, not the #57 live-stack guard,
+# so allow regeneration globally; the dedicated guard test re-enables it (empty var).
+export MINDER_ALLOW_SECRET_REGEN=1
 CENV="docker/compose/.env"
 BAK="$(mktemp)"; HAD_ENV=0; CBAK="$(mktemp)"; HAD_CENV=0
 [ -f .env ] && { cp .env "$BAK"; HAD_ENV=1; }
@@ -43,6 +46,7 @@ bshl() { SCRIPT_DIR="$PWD" bash -c '
   IFS=$'"'"'\n\t'"'"'
   source scripts/lib/config.sh >/dev/null 2>&1
   source scripts/lib/log.sh    >/dev/null 2>&1
+  source scripts/lib/docker.sh >/dev/null 2>&1
   source scripts/lib/env.sh
   '"$1"; }
 # normalize log output: strip-to-last-CR (spinner), ANSI, timestamps, the random
@@ -111,6 +115,27 @@ fill_case "mixed (10 of 11 filled)" $'POSTGRES_PASSWORD=aRealPassword0123456789a
 # All valid → SILENT no-op (gate-critical: must print nothing).
 FULLENV=$'POSTGRES_PASSWORD=v0000000000000000000000000000001\nREDIS_PASSWORD=v0000000000000000000000000000002\nRABBITMQ_PASSWORD=v0000000000000000000000000000003\nMINIO_ROOT_PASSWORD=v0000000000000000000000000000004\nJWT_SECRET=v0000000000000000000000000000005\nNEO4J_AUTH=neo4j/realsecretvalue\nINFLUXDB_TOKEN=v0000000000000000000000000000007\nAUTHELIA_STORAGE_ENCRYPTION_KEY=v008\nAUTHELIA_JWT_SECRET=v009\nGRAFANA_PASSWORD=v010\nWEBUI_SECRET_KEY=v011\n'
 fill_case "full (silent no-op)" "$FULLENV"
+
+# --- #57 guard: refuse secret regen on a running stack (override CLEARED) ---
+# Only meaningful when a stateful core is live; otherwise the guard can't fire → SKIP.
+# .env has placeholders → both impls must log_error + exit 1 and leave .env UNMUTATED.
+if SCRIPT_DIR="$PWD" bash -c 'source scripts/lib/config.sh >/dev/null 2>&1; source scripts/lib/docker.sh >/dev/null 2>&1; container_running postgres' 2>/dev/null; then
+  GP=$'POSTGRES_PASSWORD=\nREDIS_PASSWORD=CHANGEME\nFOO=bar\n'
+  GPEXP="$(printf '%s' "$GP")"   # $()-stripped form, so the "unmutated" compare is apples-to-apples
+  printf '%s' "$GP" > .env
+  gb="$(MINDER_ALLOW_SECRET_REGEN= bshl "_fill_env_secrets" 2>&1)"; gbx=$?; gbmut="$(cat .env)"
+  printf '%s' "$GP" > .env
+  gp="$(MINDER_ALLOW_SECRET_REGEN= pyix "env.fill_env_secrets()" 2>&1)"; gpx=$?; gpmut="$(cat .env)"
+  rm -f .env.backup-*
+  gbn="$(printf '%s' "$gb" | lnorm)"; gpn="$(printf '%s' "$gp" | lnorm)"
+  ok=1
+  { [ "$gbx" = 1 ] && [ "$gpx" = 1 ]; } || { ok=0; echo "  exit: bash=$gbx python=$gpx (want 1/1)"; }
+  [ "$gbn" = "$gpn" ] || { ok=0; echo "  msg DIFFERS:"; diff <(printf '%s\n' "$gbn") <(printf '%s\n' "$gpn")|sed 's/^/    /'; }
+  { [ "$gbmut" = "$GPEXP" ] && [ "$gpmut" = "$GPEXP" ]; } || { ok=0; echo "  .env was MUTATED by an abort (must stay untouched)"; }
+  [ "$ok" = 1 ] && echo "PASS  #57 guard aborts on live stack (exit 1, .env untouched)" || { FAIL=1; echo "FAIL  #57 guard"; }
+else
+  echo "SKIP  #57 guard (no stateful core running to trigger it)"
+fi
 
 # --- prepare_env: silent no-op on a fully-populated .env (gate-critical) ---
 printf '%s' "$FULLENV" > .env

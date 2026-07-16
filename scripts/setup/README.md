@@ -195,7 +195,12 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       get/gen_secret-format/sync_compose_env-byte, fill selection+log (values are
       random so the log + selection are compared, backup ts normalized), the
       prepare_env full-`.env` SILENT no-op, and write_default_env structure
-      (date + hex secrets masked).
+      (date + hex secrets masked). `fill_env_secrets` also carries the **#57 guard**:
+      it refuses to auto-(re)generate secrets while a provisioned stack is running
+      (that would desync live redis/minio), aborting exit 1 unless
+      `MINDER_ALLOW_SECRET_REGEN=1` — verified for exit/message parity + `.env`
+      left untouched (the guard only fires when secrets genuinely need filling, so
+      healthy full-`.env` start/restart is unaffected).
 - [x] `cache` — DONE (`cache.py`): `cache_file`/`cache_expired`/`load_cached_tags`/
       `cache_tags` (the tag-cache the version engine reads). Verified vs cache.sh
       across path-mapping / fresh-missing-old expiry / parse / write cases via

@@ -167,6 +167,28 @@ _fill_env_secrets() {
     # deterministic log/apply order (assoc-array iteration order is unspecified)
     mapfile -t to_fill < <(printf '%s\n' "${to_fill[@]}" | sort)
 
+    # #57: refuse to auto-(re)generate secrets while a provisioned stack is running —
+    # doing so would mirror new secrets into docker/compose/.env and let start_services
+    # recreate the stateful cores, desyncing live services (redis/minio re-read their
+    # password on recreate). Only reached when secrets ACTUALLY need filling; the
+    # normal full-.env path returned above. Override: MINDER_ALLOW_SECRET_REGEN=1.
+    local _live=""
+    case "${MINDER_ALLOW_SECRET_REGEN,,}" in
+        1|true|yes) : ;;
+        *) local _svc
+           for _svc in postgres redis neo4j rabbitmq minio; do
+               container_running "$_svc" && { _live="$_svc"; break; }
+           done ;;
+    esac
+    if [[ -n "$_live" ]]; then
+        local _joined; _joined="$(printf '%s, ' "${to_fill[@]}")"; _joined="${_joined%, }"
+        log_error "Refusing to regenerate .env secrets — a provisioned stack is already running (${_live})"
+        log_detail "Missing/placeholder secrets: ${_joined}"
+        log_detail "Regenerating would desync live services (redis/minio re-read their password on recreate)."
+        log_detail "Fix: restore the real secrets into .env, or set MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally."
+        exit 1
+    fi
+
     # back up the source-of-truth BEFORE rewriting it
     local ts backup
     ts="$(date -u '+%Y%m%d-%H%M%S')"

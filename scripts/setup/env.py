@@ -1,19 +1,19 @@
 """.env helpers — ported from scripts/lib/env.sh (#7, Stage 2).
 
-Only `get()` (bash `_env_get`) is ported so far: it is the one piece of env.sh
-with live Python consumers (ollama.py, secrets.py), so consolidating it here
-removes the duplicate copies those modules carried. The rest of env.sh
-(prepare_env / secret self-heal / compose-.env mirror / gen_secret) is consumed
-only by the still-bash start/install verbs and is deferred until those are ported
-— porting it now would be dead code.
+`get()` (bash `_env_get`), `gen_secret`, `sync_compose_env`, `fill_env_secrets`,
+`write_default_env`, and the `prepare_env` orchestration are all ported (consumed
+by the native install/start verbs). fill_env_secrets carries the #57 guard:
+it refuses to auto-(re)generate secrets while a provisioned stack is running
+(that would desync live services), unless MINDER_ALLOW_SECRET_REGEN=1.
 """
 
+import os
 import re
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config, log
+from . import config, docker, log
 
 ENV_FILE = config.ENV_FILE
 ENV_EXAMPLE = config.ENV_EXAMPLE
@@ -95,6 +95,28 @@ def _chmod_600(path: Path) -> None:
         pass
 
 
+# #57: stateful cores whose credentials would desync if secrets are regenerated
+# while they are running. redis/minio re-read their password on recreate; postgres/
+# neo4j/rabbitmq keep the volume password (recreate ignores the env), so a client
+# that gets the freshly-generated secret can no longer authenticate.
+_STATEFUL_CORES = ("postgres", "redis", "neo4j", "rabbitmq", "minio")
+
+
+def _regen_allowed() -> bool:
+    """MINDER_ALLOW_SECRET_REGEN=1|true|yes → explicit opt-in to rotate secrets on a
+    live stack (same truthy set as DRY_RUN)."""
+    return config._truthy(os.environ.get("MINDER_ALLOW_SECRET_REGEN", ""))
+
+
+def _live_core() -> "str | None":
+    """First running stateful-core service (short name), or None — the signal that
+    the stack is already provisioned and secret regeneration would desync it."""
+    for svc in _STATEFUL_CORES:
+        if docker.container_running(svc):
+            return svc
+    return None
+
+
 def _first_env_value(raw: str, key: str) -> "str | None":
     """First `key=` line's value in raw .env text, or None if the key is absent
     (bash: grep ^key= | head -n1 | cut -d= -f2-, with a __MISSING__ sentinel)."""
@@ -131,6 +153,21 @@ def fill_env_secrets() -> None:
         return  # fully populated → silent no-op (gate-critical)
 
     to_fill.sort()  # deterministic log/apply order (spec iteration order is arbitrary)
+
+    # #57: refuse to auto-(re)generate secrets while a provisioned stack is running —
+    # doing so would mirror new secrets into docker/compose/.env and let start_services
+    # recreate the stateful cores, desyncing live services (redis/minio re-read their
+    # password on recreate). Only reached when secrets ACTUALLY need filling; the
+    # normal full-.env path returned above untouched, so healthy start/restart is
+    # unaffected. Override with MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally.
+    live = None if _regen_allowed() else _live_core()
+    if live:
+        joined = ", ".join(to_fill)
+        log.error(f"Refusing to regenerate .env secrets — a provisioned stack is already running ({live})")
+        log.detail(f"Missing/placeholder secrets: {joined}")
+        log.detail("Regenerating would desync live services (redis/minio re-read their password on recreate).")
+        log.detail("Fix: restore the real secrets into .env, or set MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally.")
+        raise SystemExit(1)
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     backup = ENV_FILE.parent / f".env.backup-{ts}"
