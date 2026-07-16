@@ -21,6 +21,7 @@ from . import backup as backup_module
 from . import config
 from . import doctor as doctor_module
 from . import help as help_module
+from . import log
 from . import install as install_module
 from . import logs as logs_module
 from . import migrate as migrate_module
@@ -37,6 +38,11 @@ from . import update as update_module
 
 REPO_ROOT = config.REPO_ROOT
 SETUP_SH = REPO_ROOT / "setup.sh"
+
+# Set when main() hands off to the bash setup.sh delegate: bash sources log.sh and
+# runs its OWN `trap _cleanup EXIT`, so the Python cleanup epilogue must NOT also
+# fire for that path (it would double-print). Native verbs leave this False.
+_delegated = False
 
 # Global flags setup.sh's main() strips before picking the command (keep in sync).
 _GLOBAL_FLAGS = {"--dry-run", "--verbose", "--json", "--skip-version-check"}
@@ -162,6 +168,9 @@ def main(argv: list[str]) -> int:
         return 127
 
     # Delegate to bash setup.sh from the repo root, forwarding all args + env.
+    # bash runs its own EXIT trap → suppress the Python epilogue for this path.
+    global _delegated
+    _delegated = True
     proc = subprocess.run(
         [bash, str(SETUP_SH), *argv],
         cwd=str(REPO_ROOT),
@@ -170,5 +179,24 @@ def main(argv: list[str]) -> int:
     return proc.returncode
 
 
+def _entry(argv: list[str]) -> int:
+    """Run main() with the ported log.sh `trap _cleanup EXIT` epilogue: on a
+    non-zero exit (native verbs only — the bash delegate runs its own trap) print
+    the "unexpected exit" message + log pointer, and always clear a live spinner."""
+    try:
+        code = main(argv)
+    except SystemExit:
+        raise
+    except BaseException:
+        # A crash in a native path: emit the non-zero epilogue (mirrors bash's trap
+        # firing with a non-zero $?), then re-raise so the traceback still surfaces.
+        if not _delegated:
+            log.cleanup(1)
+        raise
+    if not _delegated:
+        log.cleanup(code)
+    return code
+
+
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(_entry(sys.argv[1:]))

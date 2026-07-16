@@ -147,13 +147,21 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       (candidate issue), so the real restore is exercised by hand on a throwaway
       stack. Preserves the bash Qdrant filename-mismatch quirk verbatim (copies
       `qdrant.tar.gz` in but extracts `qdrant-backup.tar.gz`).
-- [~] `log` — stdout formatting ported (`log.py`): info/success/warn/error/detail,
-      `step()` (`▸` heading), `section()` (MAGENTA box, byte-width padding to match
-      bash `printf %-48s`), the `spinner` (daemon-thread animation), and the
+- [x] `log` — DONE (`log.py`): stdout formatting (info/success/warn/error/detail/
+      `debug`, `step()` `▸` heading, `section()` MAGENTA box with byte-width padding
+      to match bash `printf %-48s`), the `spinner` (daemon-thread animation), the
       `progress` bar (`progress_init`/`progress_next`, verified via
-      `scripts/gate/install_deps_verify.sh`). config.LOG_FILE/LOGS_DIR now defined
-      (timestamped). Still deferred: the `logs/*.log` file mirroring + the
-      `trap _cleanup EXIT` epilogue (the actual file writes).
+      `scripts/gate/install_deps_verify.sh`), AND now the `logs/setup-<ts>.log`
+      file-mirroring + the `_cleanup` epilogue: `_log`/`log_step` append a plain
+      `[ts] [LEVEL] msg` / `[STEP] msg` line (ANSI-stripped, `log_detail` writes
+      nothing), `LOGS_DIR` is created at import (bash `mkdir -p` at source), and
+      `cleanup(exit_code)` (wired in `__main__` for native verbs — NOT the bash
+      delegate, which runs its own trap) prints the "unexpected exit" epilogue on a
+      non-zero exit. `debug()` is VERBOSE-gated + LOG_FILE-only; its call sites in
+      `cache`/`versions` are now wired. Verified via `scripts/gate/log_file_verify.sh`
+      (file contents byte-identical after ts-mask; cleanup epilogue with path masked
+      — each side truncates its LOG_FILE first since bash + python stamp the same
+      second-granularity filename and would otherwise collide in append mode).
 
 Foundation modules (used by the ported verbs; grow as more verbs land):
 
@@ -243,8 +251,9 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- [ ] log-file-mirroring (the `logs/setup-<ts>.log` append + the `trap _cleanup
-      EXIT` epilogue — the actual file writes; stdout formatting is already ported)
+- (none) — every `scripts/lib/*.sh` module now has a native Python counterpart.
+  `python -m scripts.setup <verb>` handles the entire verb surface directly; the
+  bash `setup.sh` delegate remains only as an unknown-command fallback.
 
 Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
 after normalizing OS/runtime noise — the wall-clock timestamp, the absolute

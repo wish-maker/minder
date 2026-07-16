@@ -148,8 +148,8 @@ def best_tag(tags: str, stable_prefix: str, constraint: str) -> str:
 
 
 # ── Registry tag queries (curl → urllib) + on-disk cache ──────────────────────
-# The log_debug lines in the bash originals are VERBOSE-gated + go to the LOG_FILE;
-# deferred with the rest of log file-mirroring. These hit the network, so they are
+# The log_debug lines from the bash originals are ported as log.debug() (VERBOSE-
+# gated, LOG_FILE-mirrored — no-ops otherwise). These hit the network, so they are
 # exercised only against real registries (not gate-verified).
 
 def _http_get(url: str, headers: "dict | None" = None) -> "str | None":
@@ -177,10 +177,12 @@ def dockerhub_list_tags(repo: str) -> str:
     cf = cache.cache_file("dockerhub", repo)
     cached = cache.load_cached_tags(cf)
     if cached:
+        log.debug(f"dockerhub_list_tags: using cached tags for {repo}")
         return cached
     url = f"https://hub.docker.com/v2/repositories/{repo}/tags?page_size=100&ordering=last_updated"
     resp = _http_get(url)
     if resp is None:
+        log.debug(f"dockerhub_list_tags: HTTP request failed for {repo}")
         return ""
     tags = "\n".join(_extract_name_values(resp))
     if tags:
@@ -192,9 +194,11 @@ def ghcr_list_tags(repo: str) -> str:
     cf = cache.cache_file("ghcr", repo)
     cached = cache.load_cached_tags(cf)
     if cached:
+        log.debug(f"ghcr_list_tags: using cached tags for {repo}")
         return cached
     resp = _http_get(f"https://ghcr.io/v2/{repo}/tags/list", headers={"Accept": "application/json"})
     if resp is None:
+        log.debug(f"ghcr_list_tags: HTTP request failed for {repo}")
         return ""
     # bash: grep -oE '"[^"]+"' | sed 's/"//g' | grep -v '^tags$|^name$|^{$|^}$'
     # The grep -v pattern is BRE (| literal), so it matches nothing and filters
@@ -209,9 +213,11 @@ def quay_list_tags(repo: str) -> str:
     cf = cache.cache_file("quay", repo)
     cached = cache.load_cached_tags(cf)
     if cached:
+        log.debug(f"quay_list_tags: using cached tags for {repo}")
         return cached
     resp = _http_get(f"https://quay.io/api/v1/repository/{repo}/tag/?limit=100&onlyActiveTags=true")
     if resp is None:
+        log.debug(f"quay_list_tags: HTTP request failed for {repo}")
         return ""
     tags = "\n".join(_extract_name_values(resp))
     if tags:
@@ -270,6 +276,8 @@ def resolve_image_tag(spec: str) -> str:
     pinned_tag = pinned_ref.rsplit(":", 1)[-1]  # ${pinned_ref##*:}
     registry = registry_type(pinned_ref)
     repo = image_repo(pinned_ref)
+
+    log.debug(f"Querying {registry} for {repo} (prefix={stable_prefix}, constraint={constraint})")
 
     all_tags = _list_tags(registry, repo)
     if not all_tags:

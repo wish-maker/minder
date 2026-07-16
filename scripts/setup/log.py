@@ -4,19 +4,25 @@ Mirrors the stdout formatting of bash `log_info/success/warn/error/detail`
 byte-for-byte (icon + dim timestamp + two spaces + message; colors gated on a
 real terminal exactly like bash's `[[ -t 1 ]]`).
 
-Two deliberate scope notes:
-- bash `_log` also appends a plain line to `logs/setup-<ts>.log`. That file
-  mirroring belongs to the full `log` module port (it needs LOG_FILE / LOGS_DIR
-  from the `config` module); it is NOT reproduced here. The user-facing stdout —
-  what the port is verified against — is identical.
+The `logs/setup-<ts>.log` file mirroring is now ported too: `_log` (and
+`log_step`) append a plain `[ts] [LEVEL] message` line to `config.LOG_FILE`,
+ANSI-stripped, exactly like bash; `LOGS_DIR` is created at import (bash `mkdir -p`
+at source time). The append is best-effort (`>> … 2>/dev/null || true`). The
+`_cleanup` EXIT-trap epilogue is ported as `cleanup(exit_code)` (wired in
+`__main__`), not an implicit trap — Python has no source-time trap install.
+
+One deliberate note:
 - Output is written as UTF-8 unconditionally. The icons (ℹ ✓ ⚠ ✗) and message
   glyphs (→, —) crash on Windows consoles whose default codec (e.g. cp1254)
   cannot encode them — the exact cross-OS trap this port exists to remove.
 """
 
 import datetime
+import re
 import sys
 import threading
+
+from . import config
 
 # Colors — identical codes to scripts/lib/config.sh.
 _RED = "\033[0;31m"
@@ -62,7 +68,34 @@ def _now() -> str:
     return datetime.datetime.now().strftime("%H:%M:%S")
 
 
-def _line(icon: str, head_color: str, msg_color: str, msg: str) -> str:
+# ── LOG_FILE mirroring (log.sh `mkdir -p "$LOGS_DIR"` + `_log` file append) ──
+# bash sources log.sh which unconditionally `mkdir -p "$LOGS_DIR"`; do the same at
+# import so the append below always has a destination. Best-effort — never raises.
+try:
+    config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    # bash: plain="$(echo -e "$msg" | sed 's/\x1b\[[0-9;]*m//g')" — the file line is
+    # color-free regardless of whether the caller wrapped the message in a color.
+    return _ANSI_RE.sub("", text)
+
+
+def _append_file(line: str) -> None:
+    # bash: echo "..." >> "$LOG_FILE" 2>/dev/null || true — append + swallow errors.
+    # newline="\n" forces LF (no Windows \n→\r\n translation) to stay byte-faithful.
+    try:
+        with open(config.LOG_FILE, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(line + "\n")
+    except OSError:
+        pass
+
+
+def _line(icon: str, head_color: str, msg_color: str, msg: str, ts: str) -> str:
     # bash: echo -e "${color}${icon}${NC} ${DIM}${ts}${NC}  ${msg}"
     # where success/warn/error pre-wrap msg in the same color; info leaves it plain.
     if _colors_on():
@@ -71,35 +104,64 @@ def _line(icon: str, head_color: str, msg_color: str, msg: str) -> str:
     else:
         head = dim = nc = ""
         body = msg
-    return f"{head}{icon}{nc} {dim}{_now()}{nc}  {body}"
+    return f"{head}{icon}{nc} {dim}{ts}{nc}  {body}"
+
+
+def _log(level: str, icon: str, head_color: str, msg_color: str, msg: str) -> None:
+    # bash _log: one `ts` shared between the stdout line and the file line.
+    ts = _now()
+    _emit(_line(icon, head_color, msg_color, msg, ts))
+    _append_file(f"[{ts}] [{level}] {_strip_ansi(msg)}")
 
 
 def info(msg: str) -> None:
-    _emit(_line("ℹ", _BLUE, "", msg))
+    _log("INFO", "ℹ", _BLUE, "", msg)
 
 
 def success(msg: str) -> None:
-    _emit(_line("✓", _GREEN, _GREEN, msg))
+    _log("OK", "✓", _GREEN, _GREEN, msg)
 
 
 def warn(msg: str) -> None:
-    _emit(_line("⚠", _YELLOW, _YELLOW, msg))
+    _log("WARN", "⚠", _YELLOW, _YELLOW, msg)
 
 
 def error(msg: str) -> None:
-    _emit(_line("✗", _RED, _RED, msg))
+    _log("ERROR", "✗", _RED, _RED, msg)
+
+
+def debug(msg: str) -> None:
+    # bash: log_debug() { [[ "$VERBOSE" == "true" ]] && _log "DEBUG" "·" "${DIM}" "$@" || true; }
+    # VERBOSE-gated; icon "·", DIM head, message unwrapped. No-op when VERBOSE is off.
+    if config.VERBOSE:
+        _log("DEBUG", "·", _DIM, "", msg)
 
 
 def detail(msg: str) -> None:
-    # bash: echo -e "  ${DIM}$*${NC}"
+    # bash: echo -e "  ${DIM}$*${NC}" — NO LOG_FILE append (matches log_detail).
     _emit(f"  {_DIM}{msg}{_NC}" if _colors_on() else f"  {msg}")
 
 
 def step(msg: str) -> None:
-    # bash: echo -e "\n${BOLD}${CYAN}▸ $*${NC}" (a blank line precedes the heading).
-    # The "[STEP] …" LOG_FILE append is deferred to the full log-module port
-    # (needs config's LOG_FILE), exactly like the other file-mirroring above.
+    # bash: echo -e "\n${BOLD}${CYAN}▸ $*${NC}"; echo "[STEP] $*" >> "$LOG_FILE"
+    # A blank line precedes the heading; the file line is the literal "[STEP] msg"
+    # (no ts/level brackets — unlike _log).
     _emit(f"\n{_BOLD}{_CYAN}▸ {msg}{_NC}" if _colors_on() else f"\n▸ {msg}")
+    _append_file(f"[STEP] {msg}")
+
+
+def cleanup(exit_code: int) -> None:
+    # bash `_cleanup` (trap on EXIT): stop any running spinner, then on a non-zero
+    # exit print the "unexpected exit" epilogue + the log-file pointer. Ported as an
+    # explicit call (wired in __main__) — Python installs no source-time EXIT trap.
+    spinner_stop()
+    if exit_code != 0:
+        if _colors_on():
+            _emit(f"\n{_RED}✗ Script exited unexpectedly (code {exit_code}){_NC}")
+            _emit(f"{_DIM}Full log: {config.LOG_FILE}{_NC}")
+        else:
+            _emit(f"\n✗ Script exited unexpectedly (code {exit_code})")
+            _emit(f"Full log: {config.LOG_FILE}")
 
 
 # ── Spinner (log.sh SPINNER) ──────────────────────────────────────────────

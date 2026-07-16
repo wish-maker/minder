@@ -8,15 +8,15 @@ On-disk cache of registry tag lists (`.cache/<registry>/<repo>.json`) with a
 Faithful to cache.sh: `cache_file` maps `/` → `--` in the repo name; expiry is
 mtime-vs-TTL (missing file = expired); `load_cached_tags` reproduces the
 tr/grep/sed parse of the `"tags": [...]` block; `cache_tags` writes the same
-JSON shape. (The `log_debug` line in `_cache_tags` is VERBOSE-gated + goes to the
-LOG_FILE; deferred with the rest of the log file-mirroring.)
+JSON shape and emits the trailing `log_debug "Cached tags to …"` (VERBOSE-gated,
+LOG_FILE-mirrored) now that the log module ports file-mirroring.
 """
 
 import re
 import time
 from pathlib import Path
 
-from . import config
+from . import config, log
 
 
 def cache_file(registry: str, repo: str) -> Path:
@@ -86,3 +86,4 @@ def cache_tags(path: Path, tags: str, timestamp: str) -> None:
     # file byte-identical + cross-OS stable, same reason ollama.py opens .env raw).
     with path.open("w", encoding="utf-8", newline="") as fh:
         fh.write(content)
+    log.debug(f"Cached tags to {path}")  # VERBOSE-gated, LOG_FILE only
