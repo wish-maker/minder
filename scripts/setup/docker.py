@@ -252,3 +252,20 @@ def compose_monitoring(*args: object) -> int:
     return run(
         "docker", "compose", "-f", config.COMPOSE_FILE, "--profile", "monitoring", *args
     )
+
+
+def compose_all(*args: object) -> int:
+    """Teardown compose: activate ALL profiles so `down` also removes profiled
+    containers (e.g. the internal-ollama container). #58 — with only the monitoring
+    profile, `down` leaves the internal ollama container running."""
+    return run(
+        "docker",
+        "compose",
+        "-f",
+        config.COMPOSE_FILE,
+        "--profile",
+        "monitoring",
+        "--profile",
+        "internal-ollama",
+        *args,
+    )

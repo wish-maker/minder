@@ -131,6 +131,8 @@ def run(archive: str = "") -> int:
         if sys.stdin.readline().rstrip("\n").lower() != "y":
             log.info("Restore cancelled.")
             return 0
+    else:
+        log.warn("NONINTERACTIVE — skipping confirmation, proceeding")
 
     tmp_dir = Path(tempfile.mkdtemp())
     log.spinner_start("Extracting archive…")

@@ -20,7 +20,7 @@ from . import config, docker, log
 def run() -> int:
     log.step("Stopping all services")
 
-    docker.compose_monitoring("down")
+    docker.compose_all("down")
 
     if docker.network_exists(config.NETWORK_NAME):
         # bash: run docker network rm NAME && log_success || log_warn

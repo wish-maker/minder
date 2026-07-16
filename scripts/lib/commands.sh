@@ -257,6 +257,8 @@ cmd_restore() {
         printf "Continue? [y/N] "
         read -r confirm
         [[ "${confirm,,}" != "y" ]] && { log_info "Restore cancelled."; return 0; }
+    else
+        log_warn "NONINTERACTIVE — skipping confirmation, proceeding"
     fi
 
     local tmp_dir; tmp_dir="$(mktemp -d)"
@@ -531,7 +533,7 @@ cmd_status() {
 cmd_stop() {
     log_step "Stopping all services"
 
-    compose_monitoring down
+    compose_all down
 
     if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
         run docker network rm "$NETWORK_NAME" 2>/dev/null \
@@ -599,14 +601,16 @@ cmd_uninstall() {
             printf "Type ${BOLD}DELETE${NC} to confirm: "
             read -r confirm
             [[ "$confirm" != "DELETE" ]] && { log_info "Uninstall cancelled."; return 0; }
+        else
+            log_warn "NONINTERACTIVE — skipping DELETE confirmation, proceeding"
         fi
 
         log_warn "Removing all services, networks, and volumes…"
-        compose_monitoring down -v --remove-orphans
+        compose_all down -v --remove-orphans
         log_success "Full uninstall complete"
     else
         log_info "Stopping services (data volumes are preserved)"
-        compose_monitoring down
+        compose_all down
         log_success "Services stopped — data preserved"
         log_detail "To also delete data: ./${SCRIPT_NAME} uninstall --purge"
     fi

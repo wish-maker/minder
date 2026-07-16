@@ -48,13 +48,15 @@ def run(purge_arg: str = "") -> int:
             if sys.stdin.readline().rstrip("\n") != "DELETE":
                 log.info("Uninstall cancelled.")
                 return 0
+        else:
+            log.warn("NONINTERACTIVE — skipping DELETE confirmation, proceeding")
 
         log.warn("Removing all services, networks, and volumes…")
-        docker.compose_monitoring("down", "-v", "--remove-orphans")
+        docker.compose_all("down", "-v", "--remove-orphans")
         log.success("Full uninstall complete")
     else:
         log.info("Stopping services (data volumes are preserved)")
-        docker.compose_monitoring("down")
+        docker.compose_all("down")
         log.success("Services stopped — data preserved")
         log.detail(f"To also delete data: ./{SCRIPT_NAME} uninstall --purge")
     return 0

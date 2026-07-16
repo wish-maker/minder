@@ -33,6 +33,13 @@ compose_monitoring() {
     run docker compose -f "$COMPOSE_FILE" --profile monitoring "$@"
 }
 
+# Teardown compose: activate ALL profiles so `down` also removes profiled
+# containers (e.g. the internal-ollama container). #58 — with only --profile
+# monitoring, `down` leaves the internal ollama container running.
+compose_all() {
+    run docker compose -f "$COMPOSE_FILE" --profile monitoring --profile internal-ollama "$@"
+}
+
 container_name() { echo "${CONTAINER_PREFIX}-${1}"; }
 
 container_running() {
