@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot verification: does `python -m scripts.setup shell …` behave identically
-# to `bash setup.sh shell …`?  Compares the two non-interactive error branches
+# to `bash setup.bash.sh shell …`?  Compares the two non-interactive error branches
 # (no service given under CI=true; container-not-running). The interactive
 # `docker exec -it` happy path and the no-service prompt are exercised by hand,
 # not here. Read-only. CI=true forces INTERACTIVE=false on both sides.
@@ -16,7 +16,7 @@ norm() { sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r//g' \
 FAIL=0
 run_case() {  # $1=name  rest=args
   local name="$1"; shift
-  local bo bx; bo="$(env CI=true bash setup.sh shell "$@" 2>&1)"; bx=$?
+  local bo bx; bo="$(env CI=true bash setup.bash.sh shell "$@" 2>&1)"; bx=$?
   local po px; po="$(env CI=true "$PY" -m scripts.setup shell "$@" 2>&1)"; px=$?
   local ok=1
   [ "$bx" = "$px" ] || { ok=0; echo "  exit: bash=$bx python=$px"; }

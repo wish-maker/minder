@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot verification: does `python -m scripts.setup migrate [target]` behave
-# identically to `bash setup.sh migrate [target]`?  Compares (normalized stdout,
+# identically to `bash setup.bash.sh migrate [target]`?  Compares (normalized stdout,
 # exit code) against the live stack.
 #
 # SAFETY / NON-MUTATING: the migration services ship no Alembic (they self-init
@@ -24,7 +24,7 @@ norm() { sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r//g' \
 FAIL=0
 run_case() {  # $@ = args to migrate
   local name="$*"; [ -n "$name" ] || name="(default head)"
-  local bo bx; bo="$(bash setup.sh migrate "$@" 2>&1)"; bx=$?
+  local bo bx; bo="$(bash setup.bash.sh migrate "$@" 2>&1)"; bx=$?
   local po px; po="$("$PY" -m scripts.setup migrate "$@" 2>&1)"; px=$?
 
   local ok=1

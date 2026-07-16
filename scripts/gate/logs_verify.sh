@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot verification: does `python -m scripts.setup logs …` behave identically
-# to `bash setup.sh logs …`?  Only the "unknown service" error branch is compared
+# to `bash setup.bash.sh logs …`?  Only the "unknown service" error branch is compared
 # — the follow paths (`docker logs -f` / `compose logs -f`) stream and block, so
 # they are exercised by hand, not here. Read-only.
 set -u
@@ -17,7 +17,7 @@ norm() { sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r//g' \
 FAIL=0
 run_case() {  # $@ = args to logs
   local name="$*"
-  local bo bx; bo="$(env CI=true bash setup.sh logs "$@" 2>&1)"; bx=$?
+  local bo bx; bo="$(env CI=true bash setup.bash.sh logs "$@" 2>&1)"; bx=$?
   local po px; po="$(env CI=true "$PY" -m scripts.setup logs "$@" 2>&1)"; px=$?
   local ok=1
   [ "$bx" = "$px" ] || { ok=0; echo "  exit: bash=$bx python=$px"; }

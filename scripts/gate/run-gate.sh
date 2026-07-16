@@ -153,7 +153,7 @@ capture() {
             echo "############################## VERB: ${v} ##############################"
             ( cd "$REPO" && timeout 60 env PATH="${SHIM}:${PATH}" \
                 CI=true NONINTERACTIVE=true SKIP_VERSION_CHECK=true DRY_RUN=1 \
-                ./setup.sh ${v} 2>&1 ) | sed -E -f "$SED_TMP"
+                bash setup.bash.sh ${v} 2>&1 ) | sed -E -f "$SED_TMP"
             echo "############################## END: ${v} ##############################"
             echo
         done

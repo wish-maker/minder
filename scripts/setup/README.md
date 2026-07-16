@@ -5,21 +5,23 @@ assumptions). To install cleanly across **Linux / macOS / Windows** we port the
 installer to Python — one interpreter, one CLI — instead of maintaining a
 parallel bash + PowerShell pair (double the maintenance + drift).
 
-**Strategy: strangler-fig.**
-- `python -m scripts.setup <verb> [flags]` is the entrypoint seam
-  (`scripts/setup/__main__.py`). Today it delegates to bash `setup.sh`.
-- Port each `scripts/lib/<module>.sh` to a Python module here, one at a time.
-- When enough modules are Python, the delegate shrinks and finally the bash
-  entrypoint is retired — at which point bash is no longer required.
+**Strategy: strangler-fig — COMPLETE.**
+- `python -m scripts.setup <verb> [flags]` (`scripts/setup/__main__.py`) is the
+  implementation. Every verb is native Python; there is no bash delegate.
+- `setup.sh` is now a thin shim that execs `python -m scripts.setup "$@"`, so
+  `bash setup.sh <verb>` works unchanged.
+- The original bash entrypoint is preserved verbatim as `setup.bash.sh` and lives
+  on ONLY as the behavior-gate parity reference (not in the runtime path). The
+  `scripts/lib/*.sh` modules likewise remain solely as that reference.
 
 ## The behaviour contract — the gate
 
-`setup.sh`'s dry-run behaviour is pinned by `scripts/gate/`. A ported module must
-not change the golden trace:
+The bash reference's dry-run behaviour (now `setup.bash.sh`) is pinned by
+`scripts/gate/`. It captured the golden trace before the port and still guards
+against drift between the Python impl and the frozen bash spec:
 
 ```bash
-scripts/gate/run-gate.sh baseline   # once: capture current bash behaviour
-# ... port a module ...
+scripts/gate/run-gate.sh baseline   # once: capture setup.bash.sh's behaviour
 scripts/gate/run-gate.sh compare     # MUST be identical to baseline (exit 0)
 scripts/gate/run-gate.sh selfdiff    # MUST be EMPTY (determinism)
 ```
@@ -42,9 +44,10 @@ consumers are ported too).
 
 ## Status
 
-Ported verbs run natively in Python (no bash); everything else still delegates.
+Every verb runs natively in Python (no bash). `setup.sh` is a shim → `python -m
+scripts.setup`; unknown commands error + print help natively (no delegate).
 
-- [x] entrypoint seam (`python -m scripts.setup` → delegates to bash)
+- [x] entrypoint (`python -m scripts.setup`; `setup.sh` shim execs it — inversion done)
 - [x] **`help` / `-h` / `--help`** — native (`help.py`); content byte-identical
       to `bash setup.sh --help`
 - [x] **`ollama-mode internal|external [url]`** — native (`ollama.py`); flips
@@ -260,12 +263,13 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
 
 Modules still fully in bash:
 
-- (none) — every `scripts/lib/*.sh` module now has a native Python counterpart.
-  `python -m scripts.setup <verb>` handles the entire verb surface directly; the
-  bash `setup.sh` delegate remains only as an unknown-command fallback.
+- (none) — every `scripts/lib/*.sh` module has a native Python counterpart, and
+  `setup.sh` is now a shim over `python -m scripts.setup` (entrypoint inversion
+  complete). The bash reference (`setup.bash.sh` + `scripts/lib/*.sh`) is retained
+  solely as the behavior-gate parity reference, not in the runtime path.
 
-Verb verification: a ported verb's own output must match `bash setup.sh <verb>`
-after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
+Verb verification: a ported verb's own output must match `bash setup.bash.sh <verb>`
+(the frozen bash reference) after normalizing OS/runtime noise — the wall-clock timestamp, the absolute
 `.env` path (OS-specific by design), ANSI/CR, and setup.sh's global
 `trap _cleanup EXIT` epilogue (log module, not the verb). See
 `scripts/gate/ollama_verify.sh` for the pattern.

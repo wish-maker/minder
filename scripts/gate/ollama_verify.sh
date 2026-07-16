@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot verification: does `python -m scripts.setup ollama-mode ...` behave
-# identically to `bash setup.sh ollama-mode ...`?  Compares (normalized stdout,
+# identically to `bash setup.bash.sh ollama-mode ...`?  Compares (normalized stdout,
 # exit code, resulting .env) across cases. Operates on the REAL repo .env, so it
 # backs it up first and ALWAYS restores it. Not a permanent artifact.
 set -u
@@ -26,7 +26,7 @@ FAIL=0
 run_case() {  # $1=name  $2=init-file-content  rest=args
   local name="$1" init="$2"; shift 2
   printf '%s' "$init" > .env
-  local bo bx; bo="$(bash setup.sh ollama-mode "$@" 2>&1)"; bx=$?
+  local bo bx; bo="$(bash setup.bash.sh ollama-mode "$@" 2>&1)"; bx=$?
   local benv; benv="$(cat .env)"
   printf '%s' "$init" > .env
   local po px; po="$("$PY" -m scripts.setup ollama-mode "$@" 2>&1)"; px=$?

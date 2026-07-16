@@ -63,7 +63,8 @@ Minder isn't just another AI toolset — it's your **complete private AI infrast
 git clone git@github.com:wish-maker/minder.git
 cd minder
 
-# 2️⃣ Run the setup script
+# 2️⃣ Run the setup script  (setup.sh is a thin shim over `python -m scripts.setup`;
+#     the setup CLI is native Python — needs Python 3, no bash required)
 bash setup.sh start
 
 # 3️⃣ Access your AI platform

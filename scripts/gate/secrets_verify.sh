@@ -34,7 +34,7 @@ FAIL=0
 run_case() {  # $1=name  $2=init-file-content-or-__NOENV__
   local name="$1" init="$2"
   if [ "$init" = "__NOENV__" ]; then rm -f .env; else printf '%s' "$init" > .env; fi
-  local bo bx; bo="$(bash setup.sh sync-postgres-password 2>&1)"; bx=$?
+  local bo bx; bo="$(bash setup.bash.sh sync-postgres-password 2>&1)"; bx=$?
   if [ "$init" = "__NOENV__" ]; then rm -f .env; else printf '%s' "$init" > .env; fi
   local po px; po="$("$PY" -m scripts.setup sync-postgres-password 2>&1)"; px=$?
 

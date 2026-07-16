@@ -22,7 +22,7 @@ norm() { sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r//g' \
          | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba}'; }
 
 FAIL=0
-bo="$(env DRY_RUN=1 SKIP_VERSION_CHECK=true CI=true NONINTERACTIVE=true bash setup.sh stop 2>&1)"; bx=$?
+bo="$(env DRY_RUN=1 SKIP_VERSION_CHECK=true CI=true NONINTERACTIVE=true bash setup.bash.sh stop 2>&1)"; bx=$?
 po="$(env DRY_RUN=1 SKIP_VERSION_CHECK=true CI=true NONINTERACTIVE=true "$PY" -m scripts.setup stop 2>&1)"; px=$?
 
 ok=1

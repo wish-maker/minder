@@ -18,7 +18,7 @@ jnorm() { sed -E -e 's/.*\r//' -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
                  -e 's/"status":"[^"]*"/"status":"S"/g' -e 's/"url":"[^"]*"/"url":"U"/g' \
                  -e 's/"ok": [0-9]+/"ok": N/' -e 's/"warn": [0-9]+/"warn": N/' \
                  -e '/Script exited unexpectedly/d' -e '/Full log:/d'; }
-bj="$(env CI=true bash setup.sh status --json 2>&1 | jnorm)"
+bj="$(env CI=true bash setup.bash.sh status --json 2>&1 | jnorm)"
 pj="$(env CI=true "$PY" -m scripts.setup status --json 2>&1 | jnorm)"
 if [ "$bj" = "$pj" ]; then echo "PASS  status --json"
 else FAIL=1; echo "FAIL  status --json"; diff <(printf '%s\n' "$bj") <(printf '%s\n' "$pj") | sed 's/^/    /'; fi
@@ -41,7 +41,7 @@ snorm() { sed -E -e 's/.*\r//' -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
                  -e 's/^  [^ ]+ ([^ ]+)  HEALTHRESULT.*/  MARK \1/' \
                  -e '/Script exited unexpectedly/d' -e '/Full log:/d' \
           | sed -e '/^[[:space:]]*$/d'; }
-bh="$(env CI=true bash setup.sh status 2>&1 | snorm)"
+bh="$(env CI=true bash setup.bash.sh status 2>&1 | snorm)"
 ph="$(env CI=true "$PY" -m scripts.setup status 2>&1 | snorm)"
 if [ "$bh" = "$ph" ]; then echo "PASS  status (human, structural)"
 else FAIL=1; echo "FAIL  status (human)"; diff <(printf '%s\n' "$bh") <(printf '%s\n' "$ph") | sed 's/^/    /'; fi

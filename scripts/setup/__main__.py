@@ -1,21 +1,13 @@
-"""Entrypoint seam for the Stage 2 bash->Python port (#7).
+"""Entrypoint for the Minder setup CLI — native Python (Stage 2 #7 complete).
 
-`python -m scripts.setup <verb> [flags]` — today a thin strangler-fig seam that
-delegates to the existing bash `setup.sh`, so behaviour is identical while
-modules are ported behind it one at a time. As `scripts/lib/*.sh` modules move
-to Python (verified against scripts/gate/), their logic will be handled here
-directly instead of by the bash delegate.
-
-Cross-platform note: this delegate still requires bash (the modules are still
-bash today). The cross-OS payoff arrives as modules are ported and the delegate
-shrinks; the seam exists now so that port can happen incrementally.
+`python -m scripts.setup <verb> [flags]` is the implementation; `setup.sh` is a
+thin shim that execs this. Every verb is handled natively here — there is no bash
+delegate (the original bash lives on only as the behavior-gate reference,
+setup.bash.sh). An unknown command errors + prints help, mirroring the bash
+`main()` `*)` case.
 """
 
-import os
-import shutil
-import subprocess
 import sys
-from pathlib import Path
 
 from . import backup as backup_module
 from . import config
@@ -36,14 +28,6 @@ from . import stop as stop_module
 from . import uninstall as uninstall_module
 from . import update as update_module
 
-REPO_ROOT = config.REPO_ROOT
-SETUP_SH = REPO_ROOT / "setup.sh"
-
-# Set when main() hands off to the bash setup.sh delegate: bash sources log.sh and
-# runs its OWN `trap _cleanup EXIT`, so the Python cleanup epilogue must NOT also
-# fire for that path (it would double-print). Native verbs leave this False.
-_delegated = False
-
 # Global flags setup.sh's main() strips before picking the command (keep in sync).
 _GLOBAL_FLAGS = {"--dry-run", "--verbose", "--json", "--skip-version-check"}
 _HELP_VERBS = {"-h", "--help", "help"}
@@ -60,20 +44,6 @@ def _command(argv: list[str]) -> str:
     return positional[0] if positional else "install"
 
 
-def _find_bash() -> str | None:
-    """Locate a bash interpreter (PATH, then common Windows Git-Bash locations)."""
-    found = shutil.which("bash")
-    if found:
-        return found
-    for candidate in (
-        r"C:\Program Files\Git\bin\bash.exe",
-        r"C:\Program Files\Git\usr\bin\bash.exe",
-    ):
-        if Path(candidate).exists():
-            return candidate
-    return None
-
-
 def main(argv: list[str]) -> int:
     # Mirror setup.sh main()'s flag loop: --dry-run/--verbose set the globals the
     # ported modules (docker.run) read. The env-var form is already applied in config.
@@ -82,8 +52,6 @@ def main(argv: list[str]) -> int:
     if "--verbose" in argv:
         config.VERBOSE = True
 
-    # Ported verbs run natively in Python (no bash needed) — the cross-platform
-    # steps of the strangler-fig port (#7). Everything else still delegates.
     cmd = _command(argv)
     if cmd in _HELP_VERBS:
         help_module.print_help()
@@ -154,47 +122,26 @@ def main(argv: list[str]) -> int:
         # setup.sh: default command (no verb) → cmd_install.
         return install_module.run()
 
-    if not SETUP_SH.exists():
-        print(f"error: {SETUP_SH} not found", file=sys.stderr)
-        return 1
-
-    bash = _find_bash()
-    if bash is None:
-        print(
-            "error: bash not found. The installer is still bash-backed during the "
-            "Stage 2 port (#7); install Git Bash or run on Linux/macOS.",
-            file=sys.stderr,
-        )
-        return 127
-
-    # Delegate to bash setup.sh from the repo root, forwarding all args + env.
-    # bash runs its own EXIT trap → suppress the Python epilogue for this path.
-    global _delegated
-    _delegated = True
-    proc = subprocess.run(
-        [bash, str(SETUP_SH), *argv],
-        cwd=str(REPO_ROOT),
-        env=os.environ.copy(),
-    )
-    return proc.returncode
+    # Unknown command — mirrors setup.sh main()'s `*)` case: error, help, exit 1.
+    log.error(f"Unknown command: {cmd}")
+    help_module.print_help()
+    return 1
 
 
 def _entry(argv: list[str]) -> int:
     """Run main() with the ported log.sh `trap _cleanup EXIT` epilogue: on a
-    non-zero exit (native verbs only — the bash delegate runs its own trap) print
-    the "unexpected exit" message + log pointer, and always clear a live spinner."""
+    non-zero exit print the "unexpected exit" message + log pointer, and always
+    clear a live spinner. Explicit SystemExit (e.g. the #57 secret guard) is
+    re-raised untouched — like bash `exit N` short-circuiting past the trap's
+    message when it already logged its own error."""
     try:
         code = main(argv)
     except SystemExit:
         raise
     except BaseException:
-        # A crash in a native path: emit the non-zero epilogue (mirrors bash's trap
-        # firing with a non-zero $?), then re-raise so the traceback still surfaces.
-        if not _delegated:
-            log.cleanup(1)
+        log.cleanup(1)
         raise
-    if not _delegated:
-        log.cleanup(code)
+    log.cleanup(code)
     return code
 
 

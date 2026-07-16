@@ -1,13 +1,14 @@
 # setup.sh behavior gate
 
-A dry-run **golden-trace regression harness** for `setup.sh`. It captures a
-normalized trace of `setup.sh`'s CLI behavior and lets you prove a change is
-**behavior-preserving** — built to verify the Stage 2 bash→Python port (each
-ported module must produce the same trace behind the same CLI).
+A dry-run **golden-trace regression harness** for the bash reference, `setup.bash.sh`
+(the original `setup.sh` implementation, preserved verbatim after #7 made `setup.sh`
+a thin Python shim). It captures a normalized trace of the reference's CLI behavior
+and lets you prove a change is **behavior-preserving**. Built to verify the Stage 2
+bash→Python port; now it keeps the Python impl honest against the frozen bash spec.
 
 ## How it works
 
-For each core verb it runs `setup.sh` under:
+For each core verb it runs `setup.bash.sh` under:
 - a **PATH shim** (`shim/`) that shadows the real `docker`, `curl`, `wget`, `sleep`
   binaries with deterministic stubs (instant sleep; fixed health/registry reads) —
   so the trace never depends on the live stack, network, or wall-clock;

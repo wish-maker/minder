@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot verification: does `python -m scripts.setup uninstall [--purge]` behave
-# identically to `bash setup.sh uninstall [--purge]`?  Compares (normalized
+# identically to `bash setup.bash.sh uninstall [--purge]`?  Compares (normalized
 # stdout, exit code) under DRY_RUN=1 + CI=true.
 #
 # SAFETY / NON-DESTRUCTIVE: run under DRY_RUN=1, so the compose calls (down /
@@ -23,7 +23,7 @@ norm() { sed -E -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/\r//g' \
 FAIL=0
 run_case() {  # $1=name  rest=args
   local name="$1"; shift
-  local bo bx; bo="$(env DRY_RUN=1 CI=true SKIP_VERSION_CHECK=true NONINTERACTIVE=true bash setup.sh uninstall "$@" 2>&1)"; bx=$?
+  local bo bx; bo="$(env DRY_RUN=1 CI=true SKIP_VERSION_CHECK=true NONINTERACTIVE=true bash setup.bash.sh uninstall "$@" 2>&1)"; bx=$?
   local po px; po="$(env DRY_RUN=1 CI=true SKIP_VERSION_CHECK=true NONINTERACTIVE=true "$PY" -m scripts.setup uninstall "$@" 2>&1)"; px=$?
   local ok=1
   [ "$bx" = "$px" ] || { ok=0; echo "  exit: bash=$bx python=$px"; }

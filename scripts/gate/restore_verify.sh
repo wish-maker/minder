@@ -49,7 +49,7 @@ anorm() { sed -E -e 's/.*\r//' -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
 acase() {  # $1 = name; rest = args to restore
   local name="$1"; shift
   local bo bx po px
-  bo="$(env CI=true NONINTERACTIVE=true SKIP_VERSION_CHECK=true bash setup.sh restore "$@" 2>&1)"; bx=$?
+  bo="$(env CI=true NONINTERACTIVE=true SKIP_VERSION_CHECK=true bash setup.bash.sh restore "$@" 2>&1)"; bx=$?
   po="$(env CI=true NONINTERACTIVE=true SKIP_VERSION_CHECK=true "$PY" -m scripts.setup restore "$@" 2>&1)"; px=$?
   local ok=1
   [ "$bx" = "$px" ] || { ok=0; echo "  exit: bash=$bx python=$px"; }
