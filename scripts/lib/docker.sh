@@ -15,6 +15,12 @@ run() {
     "$@"
 }
 
+# Predicate form of run()'s DRY_RUN check — for mutations that run() can't wrap
+# (stdin redirects, result checks, native file ops). Same truthy set as run().
+_is_dry_run() {
+    case "${DRY_RUN,,}" in 1|true|yes) return 0 ;; *) return 1 ;; esac
+}
+
 # ─────────────────────────────────────────────────────────────
 # DOCKER HELPERS
 # ─────────────────────────────────────────────────────────────

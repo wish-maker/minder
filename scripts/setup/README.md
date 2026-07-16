@@ -138,15 +138,19 @@ Ported verbs run natively in Python (no bash); everything else still delegates.
       async spinner frames don't interleave; backups/ is stashed aside so the run
       starts empty + prune-safe, then the gate's archives are removed and the
       original restored).
-- [x] **`restore [archive]`** — native (`restore.py`); restore from a
-      `backups/minder-<ts>.tar.gz` (interactive picker when no arg). Verified vs
-      the bash verb via `scripts/gate/restore_verify.sh` on the NON-DESTRUCTIVE
-      early exits only (no-backups / no-archive-arg / file-not-found), because
-      cmd_restore's actual restore steps are BARE (un-gated) `docker`/`cp` that
-      OVERWRITE live data even under DRY_RUN — a bash wart carried over faithfully
-      (candidate issue), so the real restore is exercised by hand on a throwaway
-      stack. Preserves the bash Qdrant filename-mismatch quirk verbatim (copies
-      `qdrant.tar.gz` in but extracts `qdrant-backup.tar.gz`).
+- [x] **`restore [archive]`** — native (`restore.py`); restore .env + Postgres +
+      Qdrant + RabbitMQ from a `backups/minder-<ts>.tar.gz` (interactive picker when
+      no arg). The restore steps are now DRY_RUN-gated (#55 fixed, in bash + port):
+      docker steps via `run`/`docker.run` (echo-only), the .env cp / psql / rabbitmq
+      steps behind an explicit DRY_RUN branch (the seam can't carry their stdin
+      redirect / result check); the archive extraction stays un-gated (read-only
+      temp dir → a dry-run preview is still informative). Qdrant copy-in + extract
+      now target the same `/tmp/qdrant.tar.gz` (#56 fixed — was extracting a
+      stale/absent `qdrant-backup.tar.gz`). Verified via `scripts/gate/restore_verify.sh`:
+      the three non-destructive early exits at CLI level, PLUS a full DRY_RUN restore
+      of a crafted archive at the FUNCTION level (spinner stubbed — the backup_verify
+      pattern; safe on the live stack because every mutating step is now echo-only).
+      The real (non-dry) restore is still exercised by hand on a throwaway stack.
 - [x] `log` — DONE (`log.py`): stdout formatting (info/success/warn/error/detail/
       `debug`, `step()` `▸` heading, `section()` MAGENTA box with byte-width padding
       to match bash `printf %-48s`), the `spinner` (daemon-thread animation), the

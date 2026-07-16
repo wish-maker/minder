@@ -265,44 +265,67 @@ cmd_restore() {
     spinner_stop
     local restore_dir; restore_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)"
 
+    # #55: the steps below MUTATE live data, so they are DRY_RUN-gated — docker
+    # steps via run() (echo-only under dry-run); the .env copy and the psql/rabbitmq
+    # pipelines via _is_dry_run (run() can't carry their stdin redirect / result
+    # check). The extraction above is read-only (temp dir) → always runs, keeping a
+    # dry-run preview informative.
     if [[ -f "${restore_dir}/env.backup" ]]; then
-        cp "${restore_dir}/env.backup" "$ENV_FILE"
-        chmod 600 "$ENV_FILE"
+        if _is_dry_run; then
+            run cp "${restore_dir}/env.backup" "$ENV_FILE"
+            run chmod 600 "$ENV_FILE"
+        else
+            cp "${restore_dir}/env.backup" "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+        fi
         log_success ".env restored"
     fi
 
     if ! container_running postgres; then
         compose up -d postgres
-        wait_postgres_ready
+        _is_dry_run || wait_postgres_ready
     fi
 
     if [[ -f "${restore_dir}/postgres.sql" ]]; then
         spinner_start "Restoring PostgreSQL…"
-        if docker exec -i "$(container_name postgres)" \
-               psql -U minder -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
-            spinner_stop; log_success "PostgreSQL restored"
-        else
-            spinner_stop; log_warn "PostgreSQL restore had errors (partial restore possible)"
+        local pg_cname; pg_cname="$(container_name postgres)"
+        local pg_ok=1
+        if _is_dry_run; then
+            run docker exec -i "$pg_cname" psql -U minder -f -
+        elif ! docker exec -i "$pg_cname" \
+                 psql -U minder -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
+            pg_ok=0
         fi
+        spinner_stop
+        (( pg_ok )) && log_success "PostgreSQL restored" \
+                    || log_warn "PostgreSQL restore had errors (partial restore possible)"
     fi
 
     if [[ -f "${restore_dir}/qdrant.tar.gz" ]] && container_running qdrant; then
         spinner_start "Restoring Qdrant…"
-        docker cp "${restore_dir}/qdrant.tar.gz" "$(container_name qdrant):/tmp/"
-        docker exec "$(container_name qdrant)" \
-            tar xzf /tmp/qdrant-backup.tar.gz -C / 2>/dev/null
+        local q_cname; q_cname="$(container_name qdrant)"
+        # #56: copy in AND extract the SAME /tmp/qdrant.tar.gz. Was: extract
+        # /tmp/qdrant-backup.tar.gz — a stale/absent name that never matched the
+        # just-copied file, so the restore silently did nothing.
+        run docker cp "${restore_dir}/qdrant.tar.gz" "${q_cname}:/tmp/qdrant.tar.gz"
+        run docker exec "$q_cname" tar xzf /tmp/qdrant.tar.gz -C /
         spinner_stop; log_success "Qdrant restored"
     fi
 
     if [[ -f "${restore_dir}/rabbitmq-definitions.json" ]] && container_running rabbitmq; then
         spinner_start "Restoring RabbitMQ definitions…"
-        docker cp "${restore_dir}/rabbitmq-definitions.json" "$(container_name rabbitmq):/tmp/rabbitmq-defs.json"
-        if docker exec "$(container_name rabbitmq)" \
-               rabbitmqctl import_definitions /tmp/rabbitmq-defs.json 2>/dev/null; then
-            spinner_stop; log_success "RabbitMQ definitions restored"
-        else
-            spinner_stop; log_warn "RabbitMQ definitions restore had errors"
+        local r_cname; r_cname="$(container_name rabbitmq)"
+        run docker cp "${restore_dir}/rabbitmq-definitions.json" "${r_cname}:/tmp/rabbitmq-defs.json"
+        local rmq_ok=1
+        if _is_dry_run; then
+            run docker exec "$r_cname" rabbitmqctl import_definitions /tmp/rabbitmq-defs.json
+        elif ! docker exec "$r_cname" \
+                 rabbitmqctl import_definitions /tmp/rabbitmq-defs.json 2>/dev/null; then
+            rmq_ok=0
         fi
+        spinner_stop
+        (( rmq_ok )) && log_success "RabbitMQ definitions restored" \
+                     || log_warn "RabbitMQ definitions restore had errors"
     fi
 
     rm -rf "$tmp_dir"
