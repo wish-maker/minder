@@ -9,8 +9,7 @@ docker verb builds on. Faithful to the bash originals:
   container_exists()  exact-name match in `docker ps -a`
   compose()/…         `docker compose -f <file> …` via run()
 
-The wait/poll helpers (wait_healthy/wait_port/wait_postgres_ready) need the
-spinner + a live stack and are deferred to a later increment.
+The wait/poll helpers (wait_healthy/wait_port/wait_postgres_ready) are also here.
 """
 
 import socket

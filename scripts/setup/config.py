@@ -1,9 +1,8 @@
 """Configuration constants — ported from scripts/lib/config.sh (#7, Stage 2).
 
-The Python side's single source of truth for paths, names, and flags. Grows
-incrementally as verbs are ported (strangler-fig): only what a ported module
-actually consumes lives here yet. The bash `config.sh` stays authoritative for
-the still-bash modules; these values are kept identical to it.
+The Python side's single source of truth for paths, names, and flags — the
+counterpart to scripts/lib/config.sh, kept identical to it (config.sh is now the
+frozen behavior-gate reference).
 """
 
 import datetime

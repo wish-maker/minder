@@ -1,15 +1,15 @@
 """Preflight validation — ported from scripts/lib/preflight.sh (#7, Stage 2).
 
-Ports the two PURE, deterministic Phase-4 config validators — they read a mode
-from `.env` (via env.get), print the resolved configuration, and export the
-derived vars that docker compose consumes:
+The prerequisite + Phase-4 validation steps the install/start verbs run first:
+  check_prerequisites            docker/compose/daemon + openssl/curl + disk + ports
+  validate_gpu_environment       NVIDIA Container Toolkit probe → GPU_AVAILABLE
+  validate_access_mode           local/vpn/public → TRAEFIK_ACCESS_MODE + dynamic cfg
+  configure_traefik_access_mode  enable the matching access-mode-<mode>.yml
+  validate_ai_compute_mode       internal/external/hybrid → AI_* env
+  validate_compute_resource_profile  low/medium/high/enterprise → CPU/MEM limits
 
-    validate_ai_compute_mode · validate_compute_resource_profile
-
-Deferred (environment-dependent or mutating, and only entered from the still-bash
-start/install verbs): check_prerequisites (docker/disk/port probes),
-validate_gpu_environment (`docker run --gpus`), and validate_access_mode /
-configure_traefik_access_mode (which MOVES traefik dynamic config files).
+The validators read a mode from `.env` (via env.get), print the resolved
+configuration, and export the derived vars that docker compose consumes.
 """
 
 import os

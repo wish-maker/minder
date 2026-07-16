@@ -7,7 +7,7 @@ they are value-masked exactly like the gate's normalize.sed — what's verified 
 the STRUCTURE (which services, in which groups, in order). curl is replaced by
 urllib (cross-platform); reachability is what matters and it's masked anyway.
 
-Deferred: download_ollama_models (spinner + `ollama pull` — network + mutating,
+Also here: download_ollama_models (spinner + `ollama pull` — network + mutating,
 entered only from cmd_install).
 """
 

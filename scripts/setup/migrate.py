@@ -53,9 +53,10 @@ def run(target: str = "head") -> int:
         cname = docker.container_name(svc)
         if _has_alembic(cname):
             log.info(f"Running migrations in {svc}…")
-            # NOTE: the bash `| tee -a "$LOG_FILE"` mirror is deferred to the full
-            # log-module port (like the rest of the file mirroring); docker.run()
-            # streams the alembic output to the console (tee's console half).
+            # NOTE: bash `| tee -a "$LOG_FILE"` mirrors the alembic OUTPUT to the log
+            # file too. log.py's file-mirror only captures log.* messages, not raw
+            # subprocess streams, so docker.run() streams alembic to the console only
+            # (the console half of tee) — a deliberate, minor fidelity gap.
             if docker.run("docker", "exec", cname, "alembic", "upgrade", target) == 0:
                 log.success(f"{svc} — migrations applied")
             else:

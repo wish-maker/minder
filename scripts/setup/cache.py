@@ -1,9 +1,7 @@
 """Tag cache — ported from scripts/lib/cache.sh (#7, Stage 2).
 
 On-disk cache of registry tag lists (`.cache/<registry>/<repo>.json`) with a
-24h TTL, used by the version-resolution engine. Ported ahead of its consumer
-(`versions`, still bash) as the next foundation module in dependency order —
-`versions` calls these directly, so it lands next.
+24h TTL, used by the version-resolution engine (`versions.py` calls these).
 
 Faithful to cache.sh: `cache_file` maps `/` → `--` in the repo name; expiry is
 mtime-vs-TTL (missing file = expired); `load_cached_tags` reproduces the
