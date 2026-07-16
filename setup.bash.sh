@@ -97,6 +97,7 @@ main() {
         ollama-mode) cmd_ollama_mode "$arg1" "$arg2" ;;
         sync-postgres-password) sync_postgres_password ;;
         uninstall)  cmd_uninstall "$arg1" ;;
+        -V|--version|version) echo "${SCRIPT_NAME} ${SCRIPT_VERSION}" ;;
         -h|--help|help) show_help ;;
         *)
             log_error "Unknown command: ${cmd}"

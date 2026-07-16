@@ -15,9 +15,16 @@ def run() -> int:
     preflight.check_prerequisites()
     env.prepare_env()
     preflight.validate_gpu_environment()
-    preflight.validate_access_mode()
-    preflight.validate_ai_compute_mode()
-    preflight.validate_compute_resource_profile()
+    # bash cmd_start runs under `set -e`: a validator returning 1 (invalid
+    # ACCESS_MODE / AI_COMPUTE_MODE / COMPUTE_RESOURCE_PROFILE, or external AI mode
+    # with no URL) aborts before the stack comes up. Mirror that — don't boot a
+    # half-configured stack after a config error was logged.
+    if (
+        preflight.validate_access_mode() != 0
+        or preflight.validate_ai_compute_mode() != 0
+        or preflight.validate_compute_resource_profile() != 0
+    ):
+        return 1
     infra.create_networks()
     lifecycle.start_services()
     lifecycle.wait_for_services()

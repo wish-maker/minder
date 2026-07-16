@@ -31,6 +31,7 @@ from . import update as update_module
 # Global flags setup.sh's main() strips before picking the command (keep in sync).
 _GLOBAL_FLAGS = {"--dry-run", "--verbose", "--json", "--skip-version-check"}
 _HELP_VERBS = {"-h", "--help", "help"}
+_VERSION_VERBS = {"-V", "--version", "version"}
 
 
 def _positional(argv: list[str]) -> list[str]:
@@ -53,6 +54,9 @@ def main(argv: list[str]) -> int:
         config.VERBOSE = True
 
     cmd = _command(argv)
+    if cmd in _VERSION_VERBS or "--version" in argv or "-V" in argv:
+        log._emit(f"{config.SCRIPT_NAME} {config.SCRIPT_VERSION}")
+        return 0
     if cmd in _HELP_VERBS:
         help_module.print_help()
         return 0
@@ -129,14 +133,16 @@ def main(argv: list[str]) -> int:
 
 
 def _entry(argv: list[str]) -> int:
-    """Run main() with the ported log.sh `trap _cleanup EXIT` epilogue: on a
-    non-zero exit print the "unexpected exit" message + log pointer, and always
-    clear a live spinner. Explicit SystemExit (e.g. the #57 secret guard) is
-    re-raised untouched — like bash `exit N` short-circuiting past the trap's
-    message when it already logged its own error."""
+    """Run main() with the ported log.sh `trap _cleanup EXIT` epilogue: clear a live
+    spinner and, on a non-zero exit, print the "unexpected exit" message + log
+    pointer. bash installs `trap _cleanup EXIT`, which fires on EVERY termination —
+    including the explicit `exit 1` paths (check_prerequisites, initialize_*, the
+    #57 secret guard) — so an explicit SystemExit must get the epilogue too."""
     try:
         code = main(argv)
-    except SystemExit:
+    except SystemExit as exc:
+        rc = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+        log.cleanup(rc)
         raise
     except BaseException:
         log.cleanup(1)
