@@ -28,15 +28,18 @@ This directory contains all documentation for the Minder platform.
 - [Production Deployment](deployment/production.md) - Production deployment
 - [Hardware Optimization](deployment/hardware-optimization.md) - Performance
 - [Monitoring](deployment/monitoring.md) - Monitoring setup
+- [Docker Upgrade Runbook](deployment/docker-upgrade-runbook.md) - Image version upgrades
+- [Infrastructure Backup Strategy](deployment/infrastructure-backup-strategy.md) - Backup & restore
 
 ### 🔧 Operations (`operations/`)
 - [Service Access Guide](operations/service-access.md) - Daily operations and service access
 - [Security Architecture](operations/security-architecture.md) - Security model
 - [PostgreSQL Migration Guide](operations/POSTGRESQL_MIGRATION_GUIDE.md) - Database migrations
 
-### 🔒 Security (`guides/`)
+### 🔒 Security & Guides (`guides/`)
 - [Authentication](guides/authentication.md) - Authelia SSO
 - [Security Setup](guides/security-setup.md) - Security best practices
+- [Performance Tuning](guides/performance.md) - Performance guidance
 
 ### 🐛 Troubleshooting (`troubleshooting/`)
 - [Common Issues](troubleshooting/common-issues.md) - Common problems
@@ -77,5 +80,5 @@ This directory contains all documentation for the Minder platform.
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-07-17
 **Language:** English
