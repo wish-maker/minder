@@ -435,6 +435,13 @@ services:
     image: minder/plugin-registry:1.0.0
     container_name: minder-plugin-registry
     restart: on-failure
+    # The telegraf plugin's restart fallback talks to docker.sock, but the
+    # container runs as non-root (appuser). Add the socket's group so it has
+    # access. Docker Desktop's socket is root:root → gid 0 (the default);
+    # on the Pi it's root:docker → set DOCKER_GID to the docker group's gid
+    # (getent group docker | cut -d: -f3). Same host-specific gid as #11.
+    group_add:
+    - ${DOCKER_GID:-0}
     environment:
     - POSTGRES_HOST=postgres
     - POSTGRES_PORT=5432
@@ -453,11 +460,22 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     - MARKETPLACE_URL=http://minder-marketplace:8002
+    # Telegraf plugin (src/plugins/telegraf): manages the telegraf config + reload.
+    - TELEGRAF_CONFIG_PATH=/app/telegraf-config/telegraf.conf
+    - TELEGRAF_CONTAINER=minder-telegraf
     env_file:
     - .env
     volumes:
     - ../../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
+    # Writable mount of the SAME telegraf.conf the telegraf container reads (:ro
+    # there). The telegraf plugin rewrites this in-place; telegraf watch_config
+    # (poll) picks it up — no restart needed on the happy path.
+    - ../services/telegraf/telegraf.conf:/app/telegraf-config/telegraf.conf:rw
+    # docker.sock for the telegraf plugin's RESTART fallback (used only if a
+    # config-reload doesn't take). Restart goes through the docker API over this
+    # socket. Security surface — scoped to the telegraf plugin's fallback path.
+    - /var/run/docker.sock:/var/run/docker.sock:rw
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "8001:8001"
@@ -669,6 +687,10 @@ services:
     command:
     - --config
     - /etc/telegraf/telegraf.conf
+    # Watch the (bind-mounted) config and reload on change. "poll" re-stats the
+    # file periodically — reliable across bind mounts (inotify is flaky there).
+    # This is what lets the `telegraf` plugin apply config edits WITHOUT a restart.
+    - --watch-config=poll
     healthcheck:
       test:
       - CMD

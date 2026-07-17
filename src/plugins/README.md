@@ -2,8 +2,12 @@
 
 First-party plugins live here, one directory per plugin. They are **fixed handlers
 that ship in the repo** — not user-uploaded code (the platform runs no arbitrary
-uploaded code by design). `network/` is the reference implementation; copy it as
+uploaded code by design). `telegraf/` is the reference implementation; copy it as
 the template for new plugins.
+
+Name a plugin for its **responsibility**: `telegraf` manages the telegraf config +
+reload; a future `network` plugin would do network discovery (scan IPs) and feed
+targets into `telegraf`'s managed region. Don't conflate the two.
 
 ## How they load
 
@@ -51,7 +55,11 @@ calls `.isoformat()` on it).
 
 ## Status
 
-- `network/` — TCP-connect latency to public endpoints (stdlib only, no secrets).
-  Reference/template. **Implemented.**
-- crypto / weather / news / tefas — aspirational (issue #34); not yet implemented.
-  Do not add them to `default_plugins.yml` until their modules exist here.
+- `telegraf/` — manages the telegraf config's "managed region" and reloads telegraf
+  (watch-config `poll`, with a docker-restart fallback). Reference/template.
+  **Implemented.** Needs the plugin-registry wiring in `docker-compose.yml`:
+  `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`, and
+  `/var/run/docker.sock` (restart fallback only).
+- network (discovery), crypto / weather / news / tefas — aspirational (issue #34);
+  not yet implemented. Do not add them to `default_plugins.yml` until their modules
+  exist here.
