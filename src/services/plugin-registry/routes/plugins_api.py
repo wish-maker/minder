@@ -290,7 +290,7 @@ def build_plugins_router(
             raise HTTPException(
                 status_code=404, detail=f"Plugin '{plugin_name}' is not running"
             )
-        allowed = getattr(instance, "ACTIONS", frozenset())
+        allowed: "frozenset[str]" = getattr(instance, "ACTIONS", frozenset())
         method = getattr(instance, action, None)
         if action not in allowed or not callable(method):
             raise HTTPException(
