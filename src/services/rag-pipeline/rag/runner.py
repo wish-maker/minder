@@ -192,10 +192,19 @@ async def run_query(
         effective_method,
     )
 
+    # Confidence = mean retrieval similarity of the sources actually used (Qdrant
+    # cosine score from retrieve_relevant_documents), not a hardcoded constant.
+    scores = [
+        s["score"]
+        for s in context_result.get("sources", [])
+        if isinstance(s.get("score"), (int, float))
+    ]
+    confidence = round(sum(scores) / len(scores), 3) if scores else 0.0
+
     return {
         "answer": answer_text,
         "sources": context_result["sources"],
-        "confidence": 0.85,  # TODO: derive from retrieval scores
+        "confidence": confidence,
         "model_used": model_used,
         "tokens_used": tokens_used,
         "method": effective_method,
