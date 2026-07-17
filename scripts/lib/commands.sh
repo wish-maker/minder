@@ -631,7 +631,11 @@ cmd_logs() {
         else
             log_error "No running container: ${cname}"
             log_detail "Running containers:"
-            docker ps --format '  {{.Names}}' | grep "^  ${CONTAINER_PREFIX}-" || echo "  (none)"
+            # #52: indent AFTER filtering — some Docker builds strip a --format
+            # leading-space literal, so don't depend on it in the grep.
+            local _running
+            _running="$(docker ps --format '{{.Names}}' 2>/dev/null | grep "^${CONTAINER_PREFIX}-" | sed 's/^/  /')"
+            [[ -n "$_running" ]] && printf '%s\n' "$_running" || echo "  (none)"
             return 1
         fi
     else
@@ -649,8 +653,11 @@ cmd_shell() {
 
     if [[ -z "$service" ]]; then
         echo -e "${BOLD}Running containers:${NC}"
-        docker ps --format '  {{.Names}}' | grep "^  ${CONTAINER_PREFIX}-" \
-            | sed "s/  ${CONTAINER_PREFIX}-/  /" || echo "  (none)"
+        # #52: filter first (no dependency on a --format leading-space literal),
+        # then strip the prefix and indent.
+        local _running
+        _running="$(docker ps --format '{{.Names}}' 2>/dev/null | grep "^${CONTAINER_PREFIX}-" | sed "s/^${CONTAINER_PREFIX}-/  /")"
+        [[ -n "$_running" ]] && printf '%s\n' "$_running" || echo "  (none)"
         echo ""
         if [[ "$INTERACTIVE" == "true" ]]; then
             printf "Container name (without '${CONTAINER_PREFIX}-'): "

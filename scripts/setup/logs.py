@@ -5,11 +5,10 @@ services' logs (`compose logs -f`). Streaming is interactive/blocking, so only
 the "unknown service" error branch is gate-verified (scripts/gate/logs_verify.sh);
 the follow paths are ported faithfully but exercised by hand.
 
-Quirk reproduced (NOT a port bug): the "Running containers:" hint runs
-`docker ps --format '  {{.Names}}' | grep '^  minder-'`. Some Docker builds
-(e.g. Docker Desktop) drop the format's leading spaces, so the grep matches
-nothing and the list prints "(none)" even with containers up. The port replicates
-the exact command + match, so it prints whatever bash prints on the same Docker.
+The "Running containers:" hint indents AFTER filtering (#52): some Docker builds
+(e.g. Docker Desktop) drop a `--format` leading-space literal, so we match on the
+bare `minder-` prefix and add the indent ourselves — kept byte-identical to the
+bash reference (scripts/lib/commands.sh cmd_logs).
 """
 
 import subprocess
@@ -18,16 +17,19 @@ from . import config, docker, log
 
 
 def _print_running_list() -> None:
-    # bash: docker ps --format '  {{.Names}}' | grep "^  ${PREFIX}-" || echo "  (none)"
+    # bash: docker ps --format '{{.Names}}' | grep "^${PREFIX}-" | sed 's/^/  /'
+    #       ; else echo "  (none)"
     try:
         out = subprocess.run(
-            ["docker", "ps", "--format", "  {{.Names}}"], capture_output=True, text=True
+            ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True
         )
     except OSError:
         out = None
-    prefix = f"  {config.CONTAINER_PREFIX}-"
+    prefix = f"{config.CONTAINER_PREFIX}-"
     matched = (
-        [ln for ln in out.stdout.splitlines() if ln.startswith(prefix)] if out else []
+        ["  " + ln for ln in out.stdout.splitlines() if ln.startswith(prefix)]
+        if out
+        else []
     )
     if matched:
         for ln in matched:

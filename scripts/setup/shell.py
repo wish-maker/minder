@@ -5,7 +5,8 @@ present, else sh). The interactive `docker exec -it` and the no-service prompt
 are exercised by hand; the two error branches (no service in non-interactive
 mode, container-not-running) are gate-verified (scripts/gate/shell_verify.sh).
 
-Same "(none)" Docker-format quirk as `logs` — see logs.py; reproduced faithfully.
+Same "(none)" hint as `logs` — indents AFTER filtering (#52) so it doesn't depend
+on a `--format` leading-space literal; kept byte-identical to the bash reference.
 """
 
 import subprocess
@@ -17,22 +18,22 @@ SCRIPT_NAME = config.SCRIPT_NAME
 
 
 def _print_running_list_stripped() -> None:
-    # bash: docker ps --format '  {{.Names}}' | grep "^  ${PREFIX}-" \
-    #         | sed "s/  ${PREFIX}-/  /" || echo "  (none)"
+    # bash: docker ps --format '{{.Names}}' | grep "^${PREFIX}-" \
+    #         | sed "s/^${PREFIX}-/  /" ; else echo "  (none)"
     try:
         out = subprocess.run(
-            ["docker", "ps", "--format", "  {{.Names}}"], capture_output=True, text=True
+            ["docker", "ps", "--format", "{{.Names}}"], capture_output=True, text=True
         )
     except OSError:
         out = None
-    prefix = f"  {config.CONTAINER_PREFIX}-"
+    prefix = f"{config.CONTAINER_PREFIX}-"
     matched = (
         [ln for ln in out.stdout.splitlines() if ln.startswith(prefix)] if out else []
     )
     if matched:
         for ln in matched:
-            # sed "s/  minder-/  /" — first-occurrence prefix strip.
-            log._emit(ln.replace(prefix, "  ", 1))
+            # strip the prefix, indent with two spaces (sed "s/^minder-/  /").
+            log._emit("  " + ln[len(prefix) :])
     else:
         log._emit("  (none)")
 
