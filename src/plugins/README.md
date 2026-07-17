@@ -99,10 +99,14 @@ separately, not wired here.
   **Implemented.** Needs the plugin-registry wiring in `docker-compose.yml`:
   `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`, and
   `/var/run/docker.sock` (restart fallback only).
-- `network/` — stdlib TCP-connect host discovery; emits telegraf `net_response`
-  input config for the live hosts (compose with `telegraf`: GET network `/analysis`
-  → POST its `telegraf_config` to telegraf's `set_managed_region`). **Implemented.**
-  Config via `NETWORK_SCAN_TARGETS`/`NETWORK_SCAN_PORT`/`NETWORK_SCAN_MAX_HOSTS`
-  (empty targets by default → scans nothing).
+- `network/` (v2) — host/service/SNMP discovery: **nmap** connect scan (`-sT -sV`,
+  no root) for open ports + service/product/version, and **SNMP OID lookup** (system
+  group via `snmpget`) for SNMP hosts; falls back to a stdlib TCP probe if nmap is
+  absent. Emits telegraf inputs (`net_response` per port + `[[inputs.snmp]]` per SNMP
+  host) — compose with `telegraf`: GET network `/analysis` → POST its
+  `telegraf_config` to telegraf's `set_managed_region`. **Implemented.** Config:
+  `NETWORK_SCAN_TARGETS` (empty → scans nothing), `NETWORK_SCAN_PORTS`,
+  `NETWORK_SCAN_MAX_HOSTS`, `NETWORK_SNMP_ENABLED`, `NETWORK_SNMP_COMMUNITY`.
+  Needs `nmap` + `snmp` in the plugin-registry image (in the Dockerfile).
 - crypto / weather / news / tefas — aspirational (issue #34); not yet implemented.
   Do not add them to `default_plugins.yml` until their modules exist here.
