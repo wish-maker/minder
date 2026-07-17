@@ -138,42 +138,30 @@ Your complete AI platform is now running with:
 
 ### 📚 **"I want to chat with my documents privately"**
 ```bash
-# Upload PDF, DOCX, TXT files
-curl -X POST http://localhost:8004/documents \
+# Create a knowledge base, then upload documents into it
+curl -X POST http://localhost:8004/knowledge-base \
+  -H "Content-Type: application/json" -d '{"name":"My Docs"}'
+curl -X POST http://localhost:8004/knowledge-base/<kb_id>/upload \
   -F "file=@report.pdf"
 
-# Chat with your documents
-curl -X POST http://localhost:11434/api/chat \
-  -d '{"model":"llama3.2","prompt":"What are the key findings?"}'
-```
-
-### 🔍 **"I need semantic search for my knowledge base"**
-```bash
-# Ingest documents
-curl -X POST http://localhost:8004/knowledge-base \
-  -H "Content-Type: application/json" \
-  -d '{"name": "My Docs", "description": "Technical docs"}'
-
-# Semantic search
-curl -X POST http://localhost:8004/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How to optimize performance?", "top_k": 5}'
+# Then query it through the RAG pipeline — see the interactive API docs
+# at http://localhost:8004/docs for the exact request shape.
 ```
 
 ### 🤖 **"I want to run custom AI models locally"**
 ```bash
-# List available models
-curl http://localhost:11434/api/tags
+# Ollama is internal-only (:11434 is NOT host-exposed). Manage models
+# from inside the container:
+docker exec minder-ollama ollama list
+docker exec -it minder-ollama ollama run mistral
 
-# Run any model
-curl -X POST http://localhost:11434/api/generate \
-  -d '{"model":"mistral","prompt":"Explain quantum computing"}'
+# Or chat through OpenWebUI (served via Traefik).
 ```
 
 ### 📊 **"I need to monitor my AI system"**
 ```bash
 # Access comprehensive dashboards
-# Grafana: http://localhost:3000 (admin/admin)
+# Grafana: http://localhost:3000 (user "admin"; password = GRAFANA_PASSWORD in .env)
 # Prometheus: http://localhost:9090
 # Jaeger (tracing): http://localhost:16686
 ```
@@ -284,9 +272,9 @@ Prometheus/Grafana/Jaeger stack. Key tuning levers:
 
 ### 🎯 **Current Status**
 
-**Deploy-Ready Services (Proven):**
+**Deploy-Ready Services (Proven on the dev host; ARM Pi validation tracked in #8):**
 - ✅ Clean install recovery: `docker compose down -v → bash setup.sh start` → all services healthy
-- ✅ All 7 core APIs: JWT auth, persistence, end-to-end functionality proven
+- ✅ All 8 core APIs: JWT auth, persistence, end-to-end functionality proven
 - ✅ 28/31 containers healthy (3 no-healthcheck: redis-exporter, rabbitmq-exporter, otel-collector)
 - ✅ 11/11 endpoints reachable (api-gateway + monitoring + AI services)
 
@@ -331,7 +319,7 @@ docker compose --file docker/compose/docker-compose.yml up -d --scale api-gatewa
 ### 📊 **Monitoring Dashboards**
 
 **Access comprehensive monitoring:**
-- **Grafana**: http://localhost:3000 (admin/admin)
+- **Grafana**: http://localhost:3000 (user `admin`; password = `GRAFANA_PASSWORD` in `.env`)
   - System overview
   - Service metrics
   - Performance monitoring
@@ -432,14 +420,14 @@ minder/
 ├── .github/              # GitHub workflows & templates
 ├── .claude/              # Claude Code configuration
 ├── docker/               # All Docker configurations
-│   ├── compose/         # docker-compose files
-│   ├── services/        # Service configurations
-│   ├── scripts/         # Docker utility scripts
-│   └── templates/       # Docker compose templates
+│   ├── compose/         # docker-compose files (hand-maintained source of truth)
+│   └── services/        # Per-service mounted config (postgres, grafana, traefik, …)
 ├── src/                  # Source code
-│   ├── config/          # Centralized configuration
+│   ├── core/            # Shared core config
 │   ├── services/        # Microservices (api-gateway, rag-pipeline, etc.)
-│   └── shared/          # Shared libraries and utilities
+│   ├── shared/          # Shared libraries and utilities
+│   ├── plugins/         # Plugin implementations (none ship yet)
+│   └── requirements/    # Per-service Python dependency sets
 ├── scripts/              # Setup and utility scripts
 │   ├── setup/          # Native-Python setup CLI (python -m scripts.setup)
 │   ├── lib/            # Bash reference modules (behavior-gate parity only)
