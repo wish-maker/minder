@@ -50,6 +50,10 @@ _DOCKER_TIMEOUT = 10.0  # local unix socket → responds fast; don't stall the l
 class TelegrafPlugin:
     """Manages the telegraf config's managed region and reloads telegraf."""
 
+    # Methods invokable via POST /v1/plugins/telegraf/actions/<name> (JWT-gated).
+    # Whitelist only — nothing else on the instance is reachable over HTTP.
+    ACTIONS = frozenset({"set_managed_region", "clear_managed_region", "reload"})
+
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
         self.config_path = os.environ.get("TELEGRAF_CONFIG_PATH", _DEFAULT_CONFIG_PATH)

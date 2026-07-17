@@ -63,3 +63,11 @@ class Plugin(Protocol):
 
     async def shutdown(self) -> None:
         ...
+
+
+# Optional: a plugin MAY expose write/execute actions over HTTP by declaring a
+# class attribute ``ACTIONS`` — a frozenset of method names invokable via
+# ``POST /v1/plugins/<name>/actions/<method>`` (JWT-gated; the JSON body is passed
+# as kwargs). Only names in ACTIONS are reachable — nothing else on the instance.
+# Reads use /collect (collect_data) + /analysis (analyze); ACTIONS is for state
+# changes (e.g. the telegraf plugin's set_managed_region / reload).

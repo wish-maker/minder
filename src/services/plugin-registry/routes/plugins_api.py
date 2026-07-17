@@ -7,6 +7,7 @@ by startup/webhook-registration, so they stay in main. validate_manifest, auth d
 PluginInfo are imported directly (no request state). Mirrors routes/services.py.
 """
 
+import inspect
 import json
 from datetime import datetime, timezone
 
@@ -267,5 +268,60 @@ def build_plugins_router(
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "note": "Collection runs in background. Check /health endpoint for results.",
         }
+
+    @router.post("/v1/plugins/{plugin_name}/actions/{action}")
+    @enforce_rate_limit(max_requests=20, window_minutes=1)
+    async def invoke_plugin_action(
+        plugin_name: str,
+        action: str,
+        request: Request,
+        current_user: dict = Depends(get_current_user),
+    ):
+        """Invoke a WHITELISTED action on a running plugin (the write/execute path).
+
+        Only methods a plugin explicitly exposes via its ``ACTIONS`` set are callable
+        — no arbitrary method access. A JSON-object body is passed as keyword args.
+        Reads still use /collect + /analysis; this is for state-changing actions such
+        as the telegraf plugin's config management.
+        """
+        plugin = plugins_db.get(plugin_name)
+        instance = plugin_instances.get(plugin_name)
+        if not plugin or instance is None:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' is not running"
+            )
+        allowed = getattr(instance, "ACTIONS", frozenset())
+        method = getattr(instance, action, None)
+        if action not in allowed or not callable(method):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Plugin '{plugin_name}' exposes no action '{action}'",
+            )
+        raw = await request.body()
+        kwargs = {}
+        if raw:
+            try:
+                kwargs = json.loads(raw)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Body must be JSON")
+            if not isinstance(kwargs, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Body must be a JSON object of method keyword args",
+                )
+        try:
+            result = method(**kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+        except (ValueError, TypeError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Action {plugin_name}.{action} failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Action failed: {e}")
+        logger.info(
+            f"Action '{action}' invoked on plugin {plugin_name} | "
+            f"User: {current_user.get('username', 'unknown')}"
+        )
+        return {"plugin": plugin_name, "action": action, "result": result}
 
     return router
