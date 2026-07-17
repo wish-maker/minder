@@ -38,10 +38,17 @@ class MyPlugin:
     async def shutdown(self) -> None: ...                  # teardown hook
 ```
 
-`register()` returns an object with these attributes (a dataclass is fine — see
-`network/__init__.py`): `name, version, description, author, dependencies,
-capabilities, data_sources, databases, registered_at` (a `datetime` — the loader
-calls `.isoformat()` on it).
+`register()` returns a `PluginMetadata` — import the shared one, don't redefine it:
+
+```python
+from plugins._contract import PluginMetadata   # name/version/description/author/
+                                                # dependencies/capabilities/
+                                                # data_sources/databases/registered_at
+```
+
+`plugins._contract` also exposes a `Plugin` `Protocol` documenting the full lifecycle
+(type-check against it if you like; plugins are duck-typed so inheriting is optional).
+It's a module, not a plugin dir, so the loader never tries to load it.
 
 ### Gotchas (verified live)
 

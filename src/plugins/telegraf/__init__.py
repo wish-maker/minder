@@ -6,11 +6,10 @@ configuration** and get telegraf to run with the new config. It owns a delimited
 that region IN-PLACE, so the rest of the hand-maintained config is never touched.
 
 Reload strategy — BOTH, per design:
-  1. **watch-config** (happy path): telegraf runs with ``[agent] watch_config="poll"``,
-     so writing the file in-place is enough — telegraf re-reads it, no restart.
+  1. **watch-config** (happy path): telegraf runs with ``--watch-config=poll``, so
+     writing the file in-place is enough — telegraf re-reads it, no restart.
   2. **restart fallback**: ``reload(force_restart=True)`` restarts the telegraf
-     container via the Docker Engine API over the mounted docker socket — for when
-     a config reload doesn't take.
+     container via the Docker Engine API over the mounted docker socket.
 
 This plugin does NOT do network discovery — that is a separate `network` plugin's
 job, which would feed discovered targets into this plugin's managed region.
@@ -19,21 +18,25 @@ Wiring (docker-compose.yml, plugin-registry service):
   - ``TELEGRAF_CONFIG_PATH`` — writable bind mount of the same telegraf.conf the
     telegraf container reads (``:ro`` there).
   - ``TELEGRAF_CONTAINER`` — container name for the restart fallback.
-  - ``/var/run/docker.sock`` — mounted for the restart fallback only.
+  - ``/var/run/docker.sock`` + ``group_add`` — for the restart fallback only.
 
 Note: telegraf.conf is git-tracked; the managed region ships EMPTY. When the plugin
-writes inputs into it at runtime the tracked file shows a diff — that is expected
-(the committed state is the empty region).
+writes inputs into it at runtime the tracked file shows a diff — that is expected.
 """
 
+import logging
 import os
-from dataclasses import dataclass, field
+import tomllib
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import httpx
 
+from plugins._contract import PluginMetadata
+
 __all__ = ["TelegrafPlugin"]
+
+logger = logging.getLogger("minder.plugin.telegraf")
 
 _MARKER_START = "# >>> minder telegraf-plugin managed >>>"
 _MARKER_END = "# <<< minder telegraf-plugin managed <<<"
@@ -41,19 +44,7 @@ _MARKER_END = "# <<< minder telegraf-plugin managed <<<"
 _DEFAULT_CONFIG_PATH = "/app/telegraf-config/telegraf.conf"
 _DEFAULT_CONTAINER = "minder-telegraf"
 _DOCKER_SOCK = "/var/run/docker.sock"
-
-
-@dataclass
-class PluginMetadata:
-    name: str
-    version: str
-    description: str
-    author: str
-    dependencies: List[str] = field(default_factory=list)
-    capabilities: List[str] = field(default_factory=list)
-    data_sources: List[str] = field(default_factory=list)
-    databases: List[str] = field(default_factory=list)
-    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+_DOCKER_TIMEOUT = 10.0  # local unix socket → responds fast; don't stall the loop
 
 
 class TelegrafPlugin:
@@ -112,7 +103,9 @@ class TelegrafPlugin:
 
     def _write_inplace(self, text: str) -> None:
         # Truncate + write the SAME inode — critical so the telegraf bind mount
-        # keeps seeing the file (a write-rename would break the single-file mount).
+        # keeps seeing the file (a write-rename would break the single-file mount,
+        # so an atomic temp+rename is deliberately NOT used here). Callers validate
+        # the content first (see set_managed_region), so we never write garbage.
         with open(self.config_path, "r+", encoding="utf-8") as f:
             f.seek(0)
             f.write(text)
@@ -123,35 +116,52 @@ class TelegrafPlugin:
             text = self._read()
         except OSError:
             return False
-        return _MARKER_START in text and _MARKER_END in text
+        return text.count(_MARKER_START) == 1 and text.count(_MARKER_END) == 1
 
-    def _managed_body(self) -> str:
-        text = self._read()
+    def _split_on_markers(self, text: str) -> "tuple[str, str, str]":
+        """Return (head_incl_start, body, tail_incl_end); raises if the markers are
+        missing, duplicated, or out of order."""
+        if text.count(_MARKER_START) != 1 or text.count(_MARKER_END) != 1:
+            raise RuntimeError("telegraf config must have exactly one managed region")
         start = text.index(_MARKER_START) + len(_MARKER_START)
         end = text.index(_MARKER_END)
-        return text[start:end]
+        if start > end:
+            raise RuntimeError("telegraf managed-region markers are out of order")
+        return text[:start], text[start:end], text[end:]
 
     def list_managed_inputs(self) -> List[str]:
         """Names of `[[inputs.X]]` blocks currently in the managed region."""
-        if not self._markers_present():
+        try:
+            _, body, _ = self._split_on_markers(self._read())
+        except (OSError, RuntimeError):
             return []
         names = []
-        for line in self._managed_body().splitlines():
+        for line in body.splitlines():
             s = line.strip()
             if s.startswith("[[inputs.") and s.endswith("]]"):
                 names.append(s[len("[[inputs.") : -2])
         return names
 
     async def set_managed_region(self, body: str, reload: bool = True) -> Dict:
-        """Replace everything between the markers with ``body`` (in-place write)."""
-        text = self._read()
-        if _MARKER_START not in text or _MARKER_END not in text:
-            raise RuntimeError("managed-region markers missing from telegraf config")
-        head = text[: text.index(_MARKER_START) + len(_MARKER_START)]
-        tail = text[text.index(_MARKER_END) :]
+        """Replace everything between the markers with ``body`` (validated, in-place).
+
+        ``body`` is validated as TOML before it is written, so a malformed input can
+        never reach telegraf and crash-loop it.
+        """
         body = body.strip("\n")
+        if body:
+            try:
+                tomllib.loads(body)
+            except tomllib.TOMLDecodeError as e:
+                raise ValueError(f"managed region body is not valid TOML: {e}") from e
+        head, _, tail = self._split_on_markers(self._read())
         new_text = head + "\n" + (body + "\n" if body else "") + tail
         self._write_inplace(new_text)
+        logger.info(
+            "telegraf managed region updated (%d bytes, %d input(s))",
+            len(new_text),
+            len(self.list_managed_inputs()),
+        )
         result: Dict = {"written": True, "bytes": len(new_text)}
         if reload:
             result["reload"] = await self.reload()
@@ -164,9 +174,10 @@ class TelegrafPlugin:
     async def reload(self, force_restart: bool = False) -> Dict:
         """Get telegraf onto the new config.
 
-        The in-place write already triggers telegraf's watch_config=poll reload;
-        that is the happy path and needs nothing here. Pass force_restart=True to
-        restart the container instead (fallback for when a reload doesn't take).
+        The in-place write already triggers telegraf's ``--watch-config=poll``
+        reload; that is the happy path and needs nothing here. Pass
+        ``force_restart=True`` to restart the container (fallback for when a reload
+        doesn't take).
         """
         if force_restart:
             restarted = await self._restart_container()
@@ -177,7 +188,7 @@ class TelegrafPlugin:
     def _docker_client(self) -> httpx.AsyncClient:
         transport = httpx.AsyncHTTPTransport(uds=_DOCKER_SOCK)
         return httpx.AsyncClient(
-            transport=transport, base_url="http://docker", timeout=30.0
+            transport=transport, base_url="http://docker", timeout=_DOCKER_TIMEOUT
         )
 
     async def _container_running(self) -> Optional[bool]:
@@ -185,15 +196,25 @@ class TelegrafPlugin:
             async with self._docker_client() as client:
                 r = await client.get(f"/containers/{self.container}/json")
                 if r.status_code != 200:
+                    logger.warning(
+                        "docker inspect %s → HTTP %s", self.container, r.status_code
+                    )
                     return None
                 return bool(r.json().get("State", {}).get("Running"))
-        except Exception:
+        except Exception as e:  # socket missing/denied, timeout, decode, …
+            logger.warning("docker.sock inspect failed: %s: %s", type(e).__name__, e)
             return None
 
     async def _restart_container(self) -> bool:
         try:
             async with self._docker_client() as client:
                 r = await client.post(f"/containers/{self.container}/restart?t=10")
-                return r.status_code in (204, 200)
-        except Exception:
+                if r.status_code in (204, 200):
+                    return True
+                logger.warning(
+                    "docker restart %s → HTTP %s", self.container, r.status_code
+                )
+                return False
+        except Exception as e:
+            logger.warning("docker.sock restart failed: %s: %s", type(e).__name__, e)
             return False
