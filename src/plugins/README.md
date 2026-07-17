@@ -80,6 +80,18 @@ curl -X POST http://localhost:8001/v1/plugins/telegraf/actions/set_managed_regio
 - The manual `POST /v1/plugins/<name>/collect` endpoint requires a Bearer JWT; the
   hourly `collect_data` loop runs unauthenticated inside the service.
 
+## Known limitation — module plugins don't expose AI/function-calling tools
+
+The loader treats a plugin dir as **either** manifest-based **or** module-based —
+a `manifest.{json,yml,yaml}` takes precedence over `__init__.py` (see
+`plugin_loader.load_plugins_from_disk`). So a module plugin (like `telegraf`)
+**cannot also ship a manifest** to appear in `GET /v1/plugins/ai/tools` without the
+loader instantiating it as a manifest plugin and never creating the class instance.
+Module plugins are therefore invoked via the `actions` endpoint above, not via the
+AI-tool aggregation. Exposing module-plugin actions as AI tools needs a loader
+change (load the manifest for tools AND the module for the instance) — tracked
+separately, not wired here.
+
 ## Status
 
 - `telegraf/` — manages the telegraf config's "managed region" and reloads telegraf

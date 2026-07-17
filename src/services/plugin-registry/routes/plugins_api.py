@@ -309,12 +309,22 @@ def build_plugins_router(
                     status_code=400,
                     detail="Body must be a JSON object of method keyword args",
                 )
+        # Arg-binding errors are the caller's fault (400); a failure from RUNNING
+        # the method is server-side (500). Plugins raise ValueError for invalid
+        # input (documented convention) → 400. This avoids masking a genuine bug
+        # (a TypeError inside the method) as a 400.
+        try:
+            inspect.signature(method).bind(**kwargs)
+        except TypeError as e:
+            raise HTTPException(status_code=400, detail=f"bad arguments: {e}")
         try:
             result = method(**kwargs)
             if inspect.isawaitable(result):
                 result = await result
-        except (ValueError, TypeError) as e:
+        except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Action {plugin_name}.{action} failed: {e}")
             raise HTTPException(status_code=500, detail=f"Action failed: {e}")

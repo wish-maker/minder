@@ -24,6 +24,7 @@ Note: telegraf.conf is git-tracked; the managed region ships EMPTY. When the plu
 writes inputs into it at runtime the tracked file shows a diff — that is expected.
 """
 
+import asyncio
 import logging
 import os
 import tomllib
@@ -59,6 +60,9 @@ class TelegrafPlugin:
         self.config_path = os.environ.get("TELEGRAF_CONFIG_PATH", _DEFAULT_CONFIG_PATH)
         self.container = os.environ.get("TELEGRAF_CONTAINER", _DEFAULT_CONTAINER)
         self.status = "registered"
+        # Serialise config read+write+reload so concurrent action calls can't
+        # interleave and corrupt the in-place write.
+        self._lock = asyncio.Lock()
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     async def register(self) -> PluginMetadata:
@@ -158,17 +162,18 @@ class TelegrafPlugin:
                 tomllib.loads(body)
             except tomllib.TOMLDecodeError as e:
                 raise ValueError(f"managed region body is not valid TOML: {e}") from e
-        head, _, tail = self._split_on_markers(self._read())
-        new_text = head + "\n" + (body + "\n" if body else "") + tail
-        self._write_inplace(new_text)
+        async with self._lock:
+            head, _, tail = self._split_on_markers(self._read())
+            new_text = head + "\n" + (body + "\n" if body else "") + tail
+            self._write_inplace(new_text)
+            result: Dict = {"written": True, "bytes": len(new_text)}
+            if reload:
+                result["reload"] = await self.reload()
         logger.info(
             "telegraf managed region updated (%d bytes, %d input(s))",
             len(new_text),
             len(self.list_managed_inputs()),
         )
-        result: Dict = {"written": True, "bytes": len(new_text)}
-        if reload:
-            result["reload"] = await self.reload()
         return result
 
     async def clear_managed_region(self, reload: bool = True) -> Dict:
