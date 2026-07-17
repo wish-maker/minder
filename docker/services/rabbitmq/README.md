@@ -26,14 +26,18 @@ Main RabbitMQ configuration file with:
 - Performance tuning
 - Default queue type (quorum for durability)
 
-### definitions.json
+### definitions.json — not shipped
 
-Pre-configured RabbitMQ objects:
-- **Users**: minder (administrator)
-- **Exchanges**: plugin.tasks (direct), minder.events (topic)
-- **Queues**: plugin.{crypto,network,news,tefas,weather} + DLQs
-- **Bindings**: Plugin-specific routing keys
-- **Policies**: Max length (10K), DLQ expiry (7 days)
+There is **no** bundled `definitions.json`. RabbitMQ is provisioned via env
+(`RABBITMQ_DEFAULT_USER`/`PASS`) plus topology the services declare at runtime;
+`rabbitmq.conf` carries no `load_definitions` directive.
+
+The previously-tracked export was removed under #27 — it was stale (v3.13, no
+`password_hash`, so loading it would clobber the default-user credential) and
+referenced plugin queues (`plugin.{crypto,network,news,tefas,weather}`) for
+plugins that don't exist yet (#34). If declarative definitions are ever needed,
+export a fresh one from a running broker (see [Export Definitions](#export-definitions)
+below) and wire a `load_definitions` directive.
 
 ---
 
