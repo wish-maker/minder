@@ -8,8 +8,13 @@ monitored:
   Discovery
     - nmap connect scan (``-sT -sV`` — no root) → open ports + service/version;
       stdlib TCP-connect fallback if nmap is absent.
-    - SNMP (UDP) for every live host: system group (``snmpget``) + interface table
-      (``snmpwalk`` ifDescr/ifOperStatus). Non-SNMP hosts fast-skip.
+    - SNMP (UDP, **v2c or v3** — net-snmp CLI, no extra Python lib) for every live
+      host (non-SNMP hosts fast-skip after one timed-out get), gathered concurrently:
+        · system group (sysDescr/sysObjectID/sysUpTime/sysContact/sysName/sysLocation),
+        · rich interface table (ifDescr/ifType/ifSpeed/ifPhysAddress-MAC/ifOperStatus/
+          ifAlias) via snmpbulkwalk,
+        · Host-Resources MIB (uptime / memory / per-CPU load / storage table),
+        · ARP / neighbour table (ipNetToMediaPhysAddress → IP↔MAC).
 
   Fan-out (each sink is independently toggled + fails soft — a down backend never
   breaks the cycle):
@@ -33,7 +38,10 @@ Config (env on plugin-registry):
   NETWORK_SCAN_MAX_HOSTS  cap on expanded hosts (default 256).
   NETWORK_SCAN_INTERVAL   autonomous reconcile interval, seconds (default 3600).
   NETWORK_AUTO_APPLY      "1"/"0" — auto-write telegraf on each cycle (default "1").
-  NETWORK_SNMP_ENABLED / NETWORK_SNMP_COMMUNITY
+  NETWORK_SNMP_ENABLED / NETWORK_SNMP_COMMUNITY (v2c)
+  NETWORK_SNMP_VERSION    "2c" (default) or "3".
+  NETWORK_SNMP_V3_USER / _LEVEL (noAuthNoPriv|authNoPriv|authPriv) /
+  _AUTH_PROTO (SHA|MD5) / _AUTH_PASS / _PRIV_PROTO (AES|DES) / _PRIV_PASS.
   NETWORK_SINK_TELEGRAF / _POSTGRES / _NEO4J / _RABBITMQ  ("1"/"0", default "1").
 
 Only scan networks you are authorised to (your own infra).
@@ -69,8 +77,23 @@ _SNMP_SYSTEM_OIDS = {
     "sysLocation": "1.3.6.1.2.1.1.6.0",
 }
 _IF_DESCR_OID = "1.3.6.1.2.1.2.2.1.2"
+_IF_TYPE_OID = "1.3.6.1.2.1.2.2.1.3"
+_IF_SPEED_OID = "1.3.6.1.2.1.2.2.1.5"
+_IF_MAC_OID = "1.3.6.1.2.1.2.2.1.6"
 _IF_OPERSTATUS_OID = "1.3.6.1.2.1.2.2.1.8"
+_IF_ALIAS_OID = "1.3.6.1.2.1.31.1.1.1.18"  # ifXTable ifAlias
 _IF_OPER = {"1": "up", "2": "down", "3": "testing"}
+
+# Host Resources MIB (device health / inventory).
+_HR_UPTIME_OID = "1.3.6.1.2.1.25.1.1.0"
+_HR_MEMSIZE_OID = "1.3.6.1.2.1.25.2.2.0"
+_HR_PROC_LOAD_OID = "1.3.6.1.2.1.25.3.3.1.2"  # per-processor load %
+_HR_STOR_DESCR_OID = "1.3.6.1.2.1.25.2.3.1.3"
+_HR_STOR_SIZE_OID = "1.3.6.1.2.1.25.2.3.1.5"  # in allocation units
+_HR_STOR_USED_OID = "1.3.6.1.2.1.25.2.3.1.6"
+
+# ARP / neighbor table: ipNetToMediaPhysAddress (index = ifIndex.a.b.c.d → MAC).
+_ARP_MAC_OID = "1.3.6.1.2.1.4.22.1.2"
 
 
 # ── pure helpers (unit-tested without any subprocess/backend) ─────────────────
@@ -153,6 +176,20 @@ def _parse_snmpwalk(text: str, base_oid: str) -> Dict[str, str]:
     return result
 
 
+def _parse_arp(raw: Dict[str, str]) -> Dict[str, str]:
+    """Turn a parsed ipNetToMediaPhysAddress walk ({index: mac}) into {ip: mac}.
+    The OID index is ``<ifIndex>.<a>.<b>.<c>.<d>``; value is the MAC (e.g.
+    ``0:1a:2b:3c:4d:5e`` or ``1a 2b 3c ...``)."""
+    out: Dict[str, str] = {}
+    for index, mac in raw.items():
+        parts = index.split(".")
+        if len(parts) < 5:
+            continue
+        ip = ".".join(parts[-4:])
+        out[ip] = mac.replace(" ", ":").strip(":").lower()
+    return out
+
+
 def _telegraf_config(hosts: List[Dict], snmp_community: str) -> str:
     blocks: List[str] = []
     for h in hosts:
@@ -217,7 +254,15 @@ class NetworkPlugin:
         self.interval = int(os.environ.get("NETWORK_SCAN_INTERVAL", "3600"))
         self.auto_apply = os.environ.get("NETWORK_AUTO_APPLY", "1") == "1"
         self.snmp_enabled = os.environ.get("NETWORK_SNMP_ENABLED", "1") == "1"
+        self.snmp_version = os.environ.get("NETWORK_SNMP_VERSION", "2c")  # "2c" | "3"
         self.snmp_community = os.environ.get("NETWORK_SNMP_COMMUNITY", "public")
+        # SNMPv3 (used when NETWORK_SNMP_VERSION=3):
+        self.snmp_v3_user = os.environ.get("NETWORK_SNMP_V3_USER", "")
+        self.snmp_v3_level = os.environ.get("NETWORK_SNMP_V3_LEVEL", "authPriv")
+        self.snmp_v3_auth_proto = os.environ.get("NETWORK_SNMP_V3_AUTH_PROTO", "SHA")
+        self.snmp_v3_auth_pass = os.environ.get("NETWORK_SNMP_V3_AUTH_PASS", "")
+        self.snmp_v3_priv_proto = os.environ.get("NETWORK_SNMP_V3_PRIV_PROTO", "AES")
+        self.snmp_v3_priv_pass = os.environ.get("NETWORK_SNMP_V3_PRIV_PASS", "")
         self.sink_telegraf = os.environ.get("NETWORK_SINK_TELEGRAF", "1") == "1"
         self.sink_postgres = os.environ.get("NETWORK_SINK_POSTGRES", "1") == "1"
         self.sink_neo4j = os.environ.get("NETWORK_SINK_NEO4J", "1") == "1"
@@ -350,13 +395,22 @@ class NetworkPlugin:
 
         return list(await asyncio.gather(*[_probe(h) for h in hosts]))
 
-    # ── SNMP ─────────────────────────────────────────────────────────────────
+    # ── SNMP (v2c / v3; system + rich interfaces + host-resources + ARP) ──────
+    def _snmp_base_args(self) -> List[str]:
+        """Version-specific snmp CLI args (before the -O flags / host / oid)."""
+        if self.snmp_version == "3":
+            args = ["-v3", "-u", self.snmp_v3_user, "-l", self.snmp_v3_level]
+            if self.snmp_v3_level in ("authNoPriv", "authPriv"):
+                args += ["-a", self.snmp_v3_auth_proto, "-A", self.snmp_v3_auth_pass]
+            if self.snmp_v3_level == "authPriv":
+                args += ["-x", self.snmp_v3_priv_proto, "-X", self.snmp_v3_priv_pass]
+            return args
+        return ["-v2c", "-c", self.snmp_community]
+
     async def _snmp_get(self, host: str, oid: str) -> Optional[str]:
         rc, out = await self._run(
             "snmpget",
-            "-v2c",
-            "-c",
-            self.snmp_community,
+            *self._snmp_base_args(),
             "-Ovq",
             "-t",
             _SNMP_TIMEOUT,
@@ -371,63 +425,98 @@ class NetworkPlugin:
             return val
         return None
 
+    async def _snmp_walk(self, host: str, oid: str) -> Dict[str, str]:
+        """snmpbulkwalk (fast) of a table column → {index: value}."""
+        rc, out = await self._run(
+            "snmpbulkwalk",
+            *self._snmp_base_args(),
+            "-Oqn",
+            "-t",
+            _SNMP_TIMEOUT,
+            "-r",
+            "0",
+            host,
+            oid,
+            timeout=20.0,
+        )
+        return _parse_snmpwalk(out, oid) if rc == 0 else {}
+
     async def _snmp_interfaces(self, host: str) -> List[Dict]:
-        rc_d, descrs = await self._run(
-            "snmpwalk",
-            "-v2c",
-            "-c",
-            self.snmp_community,
-            "-Oqn",
-            "-t",
-            _SNMP_TIMEOUT,
-            "-r",
-            "0",
-            host,
-            _IF_DESCR_OID,
-            timeout=15.0,
+        descr, itype, speed, mac, oper, alias = await asyncio.gather(
+            self._snmp_walk(host, _IF_DESCR_OID),
+            self._snmp_walk(host, _IF_TYPE_OID),
+            self._snmp_walk(host, _IF_SPEED_OID),
+            self._snmp_walk(host, _IF_MAC_OID),
+            self._snmp_walk(host, _IF_OPERSTATUS_OID),
+            self._snmp_walk(host, _IF_ALIAS_OID),
         )
-        if rc_d != 0:
-            return []
-        _, opers = await self._run(
-            "snmpwalk",
-            "-v2c",
-            "-c",
-            self.snmp_community,
-            "-Oqn",
-            "-t",
-            _SNMP_TIMEOUT,
-            "-r",
-            "0",
-            host,
-            _IF_OPERSTATUS_OID,
-            timeout=15.0,
+        result = []
+        for idx in sorted(descr, key=lambda k: int(k) if k.isdigit() else 0):
+            result.append(
+                {
+                    "index": idx,
+                    "descr": descr.get(idx, ""),
+                    "type": itype.get(idx, ""),
+                    "speed_bps": speed.get(idx, ""),
+                    "mac": mac.get(idx, "").replace(" ", ":").strip(":").lower(),
+                    "oper_status": _IF_OPER.get(oper.get(idx, ""), oper.get(idx, "")),
+                    "alias": alias.get(idx, ""),
+                }
+            )
+        return result
+
+    async def _snmp_host_resources(self, host: str) -> Dict:
+        uptime, memsize, procs, s_descr, s_size, s_used = await asyncio.gather(
+            self._snmp_get(host, _HR_UPTIME_OID),
+            self._snmp_get(host, _HR_MEMSIZE_OID),
+            self._snmp_walk(host, _HR_PROC_LOAD_OID),
+            self._snmp_walk(host, _HR_STOR_DESCR_OID),
+            self._snmp_walk(host, _HR_STOR_SIZE_OID),
+            self._snmp_walk(host, _HR_STOR_USED_OID),
         )
-        descr_map = _parse_snmpwalk(descrs, _IF_DESCR_OID)
-        oper_map = _parse_snmpwalk(opers, _IF_OPERSTATUS_OID)
-        return [
-            {
-                "index": idx,
-                "descr": descr,
-                "oper_status": _IF_OPER.get(
-                    oper_map.get(idx, ""), oper_map.get(idx, "")
-                ),
-            }
-            for idx, descr in sorted(
-                descr_map.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 0
+        storage = [
+            {"descr": d, "size": s_size.get(i, ""), "used": s_used.get(i, "")}
+            for i, d in sorted(
+                s_descr.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 0
             )
         ]
+        hr: Dict = {}
+        if uptime:
+            hr["uptime"] = uptime
+        if memsize:
+            hr["memory_kb"] = memsize
+        if procs:
+            hr["processor_load"] = list(procs.values())
+        if storage:
+            hr["storage"] = storage
+        return hr
+
+    async def _snmp_arp(self, host: str) -> Dict[str, str]:
+        return _parse_arp(await self._snmp_walk(host, _ARP_MAC_OID))
 
     async def _snmp_lookup(self, host: str) -> Dict:
+        """Fast-skip non-SNMP hosts (one timed-out sysDescr get); else gather the
+        system group, rich interface table, host-resources and ARP concurrently."""
         descr = await self._snmp_get(host, _SNMP_SYSTEM_OIDS["sysDescr"])
         if descr is None:
             return {}
         other = [k for k in _SNMP_SYSTEM_OIDS if k != "sysDescr"]
-        vals = await asyncio.gather(
-            *[self._snmp_get(host, _SNMP_SYSTEM_OIDS[k]) for k in other]
+        sys_vals, interfaces, host_res, arp = await asyncio.gather(
+            asyncio.gather(
+                *[self._snmp_get(host, _SNMP_SYSTEM_OIDS[k]) for k in other]
+            ),
+            self._snmp_interfaces(host),
+            self._snmp_host_resources(host),
+            self._snmp_arp(host),
         )
         system = {"sysDescr": descr}
-        system.update({k: v for k, v in zip(other, vals) if v is not None})
-        return {"system": system, "interfaces": await self._snmp_interfaces(host)}
+        system.update({k: v for k, v in zip(other, sys_vals) if v is not None})
+        result: Dict = {"system": system, "interfaces": interfaces}
+        if host_res:
+            result["host_resources"] = host_res
+        if arp:
+            result["arp"] = arp
+        return result
 
     # ── discovery orchestration ──────────────────────────────────────────────
     async def collect_data(self) -> Dict:

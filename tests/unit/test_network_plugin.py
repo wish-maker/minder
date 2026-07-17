@@ -8,9 +8,14 @@ import asyncio
 
 import plugins.network as netmod
 from plugins.network import (
+    _ARP_MAC_OID,
+    _IF_DESCR_OID,
+    _IF_MAC_OID,
+    _IF_OPERSTATUS_OID,
     NetworkPlugin,
     _diff_hosts,
     _expand_targets,
+    _parse_arp,
     _parse_nmap_xml,
     _parse_snmpwalk,
     _telegraf_config,
@@ -149,7 +154,44 @@ def test_parse_snmpwalk():
     assert _parse_snmpwalk(out, "1.3.6.1.2.1.2.2.1.2") == {"1": "lo", "2": "eth0"}
 
 
-def test_snmp_lookup_system_and_interfaces(monkeypatch):
+def test_snmp_base_args_v2c_and_v3(monkeypatch):
+    assert NetworkPlugin({})._snmp_base_args()[:2] == ["-v2c", "-c"]
+    for k, v in {
+        "NETWORK_SNMP_VERSION": "3",
+        "NETWORK_SNMP_V3_USER": "admin",
+        "NETWORK_SNMP_V3_LEVEL": "authPriv",
+        "NETWORK_SNMP_V3_AUTH_PROTO": "SHA",
+        "NETWORK_SNMP_V3_AUTH_PASS": "authpw",
+        "NETWORK_SNMP_V3_PRIV_PROTO": "AES",
+        "NETWORK_SNMP_V3_PRIV_PASS": "privpw",
+    }.items():
+        monkeypatch.setenv(k, v)
+    assert NetworkPlugin({})._snmp_base_args() == [
+        "-v3",
+        "-u",
+        "admin",
+        "-l",
+        "authPriv",
+        "-a",
+        "SHA",
+        "-A",
+        "authpw",
+        "-x",
+        "AES",
+        "-X",
+        "privpw",
+    ]
+
+
+def test_parse_arp():
+    raw = {"2.10.0.0.9": "0:aa:bb:cc:dd:ee", "3.192.168.1.1": "11 22 33 44 55 66"}
+    assert _parse_arp(raw) == {
+        "10.0.0.9": "0:aa:bb:cc:dd:ee",
+        "192.168.1.1": "11:22:33:44:55:66",
+    }
+
+
+def test_snmp_lookup_comprehensive(monkeypatch):
     pl = NetworkPlugin({})
 
     async def fake_run(*cmd, timeout=60.0):
@@ -158,21 +200,29 @@ def test_snmp_lookup_system_and_interfaces(monkeypatch):
             m = {
                 "1.3.6.1.2.1.1.1.0": "Linux router 5.10",  # sysDescr
                 "1.3.6.1.2.1.1.5.0": "router-01",  # sysName
+                "1.3.6.1.2.1.25.2.2.0": "2048000",  # hrMemorySize
             }
             return (0, m[oid] + "\n") if oid in m else (1, "")
-        if tool == "snmpwalk" and oid == "1.3.6.1.2.1.2.2.1.2":  # ifDescr
-            return 0, ".1.3.6.1.2.1.2.2.1.2.1 lo\n.1.3.6.1.2.1.2.2.1.2.2 eth0\n"
-        if tool == "snmpwalk" and oid == "1.3.6.1.2.1.2.2.1.8":  # ifOperStatus
-            return 0, ".1.3.6.1.2.1.2.2.1.8.1 1\n.1.3.6.1.2.1.2.2.1.8.2 1\n"
+        if tool == "snmpbulkwalk":
+            if oid == _IF_DESCR_OID:
+                return 0, ".1.3.6.1.2.1.2.2.1.2.1 lo\n.1.3.6.1.2.1.2.2.1.2.2 eth0\n"
+            if oid == _IF_OPERSTATUS_OID:
+                return 0, ".1.3.6.1.2.1.2.2.1.8.1 1\n.1.3.6.1.2.1.2.2.1.8.2 1\n"
+            if oid == _IF_MAC_OID:
+                return 0, ".1.3.6.1.2.1.2.2.1.6.2 0:1a:2b:3c:4d:5e\n"
+            if oid == _ARP_MAC_OID:
+                return 0, ".1.3.6.1.2.1.4.22.1.2.2.10.0.0.9 0:aa:bb:cc:dd:ee\n"
+            return 0, ""  # other columns empty
         return 1, ""
 
     monkeypatch.setattr(pl, "_run", fake_run)
     snmp = asyncio.run(pl._snmp_lookup("10.0.0.5"))
-    assert snmp["system"]["sysDescr"] == "Linux router 5.10"
     assert snmp["system"]["sysName"] == "router-01"
-    assert "sysContact" not in snmp["system"]  # unreachable → skipped
-    assert [i["descr"] for i in snmp["interfaces"]] == ["lo", "eth0"]
-    assert snmp["interfaces"][1]["oper_status"] == "up"
+    ifaces = {i["descr"]: i for i in snmp["interfaces"]}
+    assert ifaces["eth0"]["oper_status"] == "up"
+    assert ifaces["eth0"]["mac"] == "0:1a:2b:3c:4d:5e"
+    assert snmp["host_resources"]["memory_kb"] == "2048000"
+    assert snmp["arp"] == {"10.0.0.9": "0:aa:bb:cc:dd:ee"}
 
 
 def test_snmp_lookup_skips_non_snmp_host(monkeypatch):
