@@ -7,11 +7,15 @@ WORKDIR /app
 ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Install system dependencies
+# nmap: host/port/service discovery for the network plugin (connect scan -sT, no
+#       root needed). snmp: net-snmp CLI (snmpget) for SNMP OID lookup.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     postgresql-client \
     gcc \
     python3-dev \
+    nmap \
+    snmp \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
