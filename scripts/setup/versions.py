@@ -115,6 +115,15 @@ def ver_ge(a: str, b: str) -> bool:
     return _version_key(strip_v(a)) >= _version_key(strip_v(b))
 
 
+def _tag_variant(tag: str) -> str:
+    """The non-numeric suffix after the version part of a tag: '3.10.1-core'→'core',
+    'v1.18.2'→'', 'v1-unprivileged'→'unprivileged'. Used to keep an image on its own
+    edition/flavour track when picking an upgrade (#12) — never switch core↔enterprise
+    or add a rolling -distroless/-unprivileged variant."""
+    m = re.match(r"^[0-9]+(?:\.[0-9]+)*-(.+)$", strip_v(tag))
+    return m.group(1) if m else ""
+
+
 def tag_satisfies_constraint(tag: str, stable_prefix: str, constraint: str) -> bool:
     """bash _tag_satisfies_constraint: reject non-numeric / pre-release tags, then
     match on major / major.minor / anything, per the constraint."""
@@ -321,6 +330,14 @@ def resolve_image_tag(spec: str) -> str:
         if not tag or tag in tried:
             continue
         if not tag_satisfies_constraint(tag, stable_prefix, constraint):
+            continue
+        # #12: stay on the pinned edition/flavour and never downgrade. Without this,
+        # "latest working" picks rolling variant tags (v3-distroless, v1-unprivileged),
+        # edition swaps (3.10.1-core → 3.10.3-enterprise) or lower majors
+        # (neo4j 2026.x → 5.26, grafana 13 → 11).
+        if _tag_variant(tag) != _tag_variant(pinned_tag):
+            continue
+        if not ver_ge(tag, pinned_tag):
             continue
         tried.add(tag)
         test_ref = _ref_for(registry, repo, image_base, tag)
