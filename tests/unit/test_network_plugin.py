@@ -5,6 +5,7 @@ plus orchestration with mocked subprocess/backends so no real nmap/snmp/network 
 """
 
 import asyncio
+import time
 
 import plugins.network as netmod
 from plugins.network import (
@@ -282,7 +283,7 @@ def test_reconcile_fans_out_to_all_enabled_sinks(monkeypatch):
             "ports": [{"port": 80, "protocol": "tcp"}],
         }
     ]
-    monkeypatch.setattr(pl, "collect_data", _canned_collect(pl, hosts))
+    monkeypatch.setattr(pl, "_discover", _canned_collect(pl, hosts))
     calls = []
 
     async def s_tg(live):
@@ -305,9 +306,55 @@ def test_reconcile_fans_out_to_all_enabled_sinks(monkeypatch):
     monkeypatch.setattr(pl, "_sink_postgres", s_pg)
     monkeypatch.setattr(pl, "_sink_neo4j", s_neo)
     monkeypatch.setattr(pl, "_sink_rabbitmq", s_rmq)
+    pl._prev = {"9.9.9.9": {"ports": [], "snmp": False}}  # not the first cycle
     r = asyncio.run(pl.reconcile())
     assert set(calls) == {"telegraf", "postgres", "neo4j", "rabbitmq"}
     assert r["changes"]["new"] == ["10.0.0.5"] and r["live"] == 1
+
+
+def test_reconcile_first_cycle_suppresses_change_events(monkeypatch):
+    monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.5")
+    pl = NetworkPlugin({})
+    hosts = [{"host": "10.0.0.5", "state": "up", "ports": [{"port": 80}]}]
+    monkeypatch.setattr(pl, "_discover", _canned_collect(pl, hosts))
+    called = []
+
+    async def s_rmq(ch):
+        called.append("rabbitmq")
+        return {"status": "ok"}
+
+    async def s_pg(live, ch):
+        called.append("postgres")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(pl, "_sink_rabbitmq", s_rmq)
+    monkeypatch.setattr(pl, "_sink_postgres", s_pg)
+    monkeypatch.setattr(pl, "_sink_neo4j", lambda live: _ok())
+    # first cycle (empty _prev): rabbitmq events suppressed, inventory still written
+    r = asyncio.run(pl.reconcile())
+    assert "rabbitmq" not in called and "postgres" in called
+    assert r["changes"]["new"] == ["10.0.0.5"]  # still reported in the result
+
+
+async def _ok():
+    return {"status": "ok"}
+
+
+def test_collect_data_freshness_guard(monkeypatch):
+    monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.5")
+    pl = NetworkPlugin({})
+    calls = []
+
+    async def fake_discover():
+        calls.append(1)
+        pl._last = {"hosts": [], "method": "nmap", "scanned": 0}
+        pl._last_scan_monotonic = time.monotonic()
+        return pl._last
+
+    monkeypatch.setattr(pl, "_discover", fake_discover)
+    asyncio.run(pl.collect_data())  # first call → scans
+    asyncio.run(pl.collect_data())  # within interval → cached, no re-scan
+    assert len(calls) == 1
 
 
 def test_configured_cidrs():
@@ -343,7 +390,7 @@ def test_reconcile_auto_expand(monkeypatch):
         "ports": [{"port": 161, "protocol": "tcp"}],
         "snmp": {"arp": {"10.0.0.5": "m1", "10.0.0.9": "m2", "192.168.1.1": "m3"}},
     }
-    monkeypatch.setattr(pl, "collect_data", _canned_collect(pl, [host]))
+    monkeypatch.setattr(pl, "_discover", _canned_collect(pl, [host]))
     r = asyncio.run(pl.reconcile())
     # only the in-CIDR, not-already-scanned neighbour is folded into scope
     assert r["expanded_added"] == ["10.0.0.5"]
@@ -361,7 +408,7 @@ def test_reconcile_auto_apply_off_and_sinks_off(monkeypatch):
         monkeypatch.setenv(var, "0")
     pl = NetworkPlugin({})
     hosts = [{"host": "10.0.0.5", "state": "up", "ports": []}]
-    monkeypatch.setattr(pl, "collect_data", _canned_collect(pl, hosts))
+    monkeypatch.setattr(pl, "_discover", _canned_collect(pl, hosts))
     called = []
 
     async def s_tg(live):

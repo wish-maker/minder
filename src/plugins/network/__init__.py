@@ -59,6 +59,7 @@ import json
 import logging
 import os
 import shutil
+import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -142,6 +143,9 @@ class NetworkPlugin:
         self._last: Dict = {}
         self._prev: Dict[str, Dict] = {}
         self._expanded: set = set()  # ARP-discovered IPs auto-added to the scan scope
+        self._last_scan_monotonic = (
+            0.0  # freshness guard for the registry's hourly call
+        )
         self._applied_cfg = ""
         self._lock = asyncio.Lock()
         self._task: Optional[asyncio.Task] = None
@@ -411,7 +415,9 @@ class NetworkPlugin:
             return f"{self.targets},{extra}" if self.targets.strip() else extra
         return self.targets
 
-    async def collect_data(self) -> Dict:
+    async def _discover(self) -> Dict:
+        """The raw scan (nmap + SNMP) → self._last. NOT locked itself; callers hold
+        self._lock so a scan never overlaps another scan or a reconcile."""
         hosts = _expand_targets(self._effective_targets(), self.max_hosts)
         if not hosts:
             self._last = {
@@ -421,6 +427,7 @@ class NetworkPlugin:
                 "scanned": 0,
                 "hosts": [],
             }
+            self._last_scan_monotonic = time.monotonic()
             return self._last
 
         use_nmap = shutil.which("nmap") is not None
@@ -448,11 +455,25 @@ class NetworkPlugin:
             "scanned": len(discovered),
             "hosts": discovered,
         }
+        self._last_scan_monotonic = time.monotonic()
         return self._last
 
+    async def collect_data(self) -> Dict:
+        """Registry-driven (hourly) + /collect. Returns the last scan if the
+        autonomous loop refreshed it within the interval — so the registry's call
+        doesn't double-scan the network or race the loop. Use `scan` to force one."""
+        if (
+            self._last
+            and (time.monotonic() - self._last_scan_monotonic) < self.interval
+        ):
+            return self._last
+        async with self._lock:
+            return await self._discover()
+
     async def scan(self) -> Dict:
-        """Action: discover only (no fan-out)."""
-        return await self.collect_data()
+        """Action: force a fresh discover-only scan (no fan-out)."""
+        async with self._lock:
+            return await self._discover()
 
     # ── the autonomous reconcile: discover → detect change → fan out ──────────
     async def reconcile(self) -> Dict:
@@ -460,11 +481,15 @@ class NetworkPlugin:
         sink. Serialised so the loop, the registry's hourly call and a manual
         trigger can't overlap."""
         async with self._lock:
-            data = await self.collect_data()
+            data = await self._discover()
             live = [
                 h for h in data["hosts"] if h.get("state") == "up" or h.get("ports")
             ]
             curr = _summarize(live)
+            # First cycle after (re)start: _prev is empty, so every host would look
+            # "new". Establish a baseline WITHOUT flooding change events; still write
+            # the inventory/graph/monitoring sinks.
+            first_cycle = not self._prev
             changes = _diff_hosts(self._prev, curr)
 
             # Self-expanding discovery: fold ARP neighbours found inside a configured
@@ -487,7 +512,7 @@ class NetworkPlugin:
                 sinks["postgres"] = await self._sink_postgres(live, changes)
             if self.sink_neo4j:
                 sinks["neo4j"] = await self._sink_neo4j(live)
-            if self.sink_rabbitmq:
+            if self.sink_rabbitmq and not first_cycle:
                 sinks["rabbitmq"] = await self._sink_rabbitmq(changes)
 
             self._prev = curr
