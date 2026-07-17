@@ -7,6 +7,8 @@ created lazily and lives here (it is the only reassigned piece of shared state);
 the in-memory caches live in ``core.state``.
 """
 
+import json
+
 import asyncpg
 from core.state import logger, plugins_db
 from models import PluginInfo
@@ -15,6 +17,21 @@ from config import settings
 
 # Global connection pool (lazily created by get_postgres_connection)
 postgres_pool = None
+
+
+def _json_list(val) -> list:
+    """Decode a list column that comes back as a JSON string (JSONB/TEXT via
+    asyncpg), an already-decoded list, or NULL. Returns [] on anything unusable so
+    a persisted plugin never fails to reload over a bad/empty value (#59)."""
+    if not val:
+        return []
+    if isinstance(val, list):
+        return val
+    try:
+        parsed = json.loads(val)
+    except (ValueError, TypeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
 
 
 async def get_postgres_connection():
@@ -87,8 +104,8 @@ async def load_plugins_from_database():
 
         query = """
             SELECT name, version, description, author, status, enabled,
-                   capabilities, data_sources, databases, health_status,
-                   last_health_check, registered_at
+                   dependencies, capabilities, data_sources, databases,
+                   health_status, last_health_check, registered_at
             FROM plugins
             ORDER BY name
         """
@@ -103,9 +120,10 @@ async def load_plugins_from_database():
                 author=row["author"],
                 status=row["status"],
                 enabled=row["enabled"],
-                capabilities=row["capabilities"] or [],
-                data_sources=row["data_sources"] or [],
-                databases=row["databases"] or [],
+                dependencies=_json_list(row["dependencies"]),
+                capabilities=_json_list(row["capabilities"]),
+                data_sources=_json_list(row["data_sources"]),
+                databases=_json_list(row["databases"]),
                 registered_at=(
                     row["registered_at"].isoformat() if row["registered_at"] else None
                 ),
