@@ -463,14 +463,22 @@ services:
     # Telegraf plugin (src/plugins/telegraf): manages the telegraf config + reload.
     - TELEGRAF_CONFIG_PATH=/app/telegraf-config/telegraf.conf
     - TELEGRAF_CONTAINER=minder-telegraf
-    # Network plugin (src/plugins/network): nmap + SNMP host/service discovery.
-    # Empty targets by default → scans nothing until an operator opts in (only scan
-    # your own infra). Needs nmap + snmp in the image (see the Dockerfile).
+    # Network plugin (src/plugins/network): autonomous nmap + SNMP discovery that
+    # fans findings into telegraf/postgres/neo4j/rabbitmq. Empty targets by default
+    # → scans nothing until an operator opts in (only scan your own infra). Needs
+    # nmap + snmp in the image (see the Dockerfile); PG/Neo4j/RabbitMQ creds come
+    # from the shared .env (POSTGRES_*, NEO4J_AUTH, RABBITMQ_PASSWORD).
     - NETWORK_SCAN_TARGETS=${NETWORK_SCAN_TARGETS:-}
     - NETWORK_SCAN_PORTS=${NETWORK_SCAN_PORTS:-22,80,161,443,8080}
     - NETWORK_SCAN_MAX_HOSTS=${NETWORK_SCAN_MAX_HOSTS:-256}
+    - NETWORK_SCAN_INTERVAL=${NETWORK_SCAN_INTERVAL:-3600}
+    - NETWORK_AUTO_APPLY=${NETWORK_AUTO_APPLY:-1}
     - NETWORK_SNMP_ENABLED=${NETWORK_SNMP_ENABLED:-1}
     - NETWORK_SNMP_COMMUNITY=${NETWORK_SNMP_COMMUNITY:-public}
+    - NETWORK_SINK_TELEGRAF=${NETWORK_SINK_TELEGRAF:-1}
+    - NETWORK_SINK_POSTGRES=${NETWORK_SINK_POSTGRES:-1}
+    - NETWORK_SINK_NEO4J=${NETWORK_SINK_NEO4J:-1}
+    - NETWORK_SINK_RABBITMQ=${NETWORK_SINK_RABBITMQ:-1}
     env_file:
     - .env
     volumes:

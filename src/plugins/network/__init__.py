@@ -1,38 +1,54 @@
-"""Network discovery plugin (first-party module plugin).
+"""Network discovery & inventory plugin (first-party module plugin).
 
-Comprehensive host + service + SNMP discovery of the configured targets:
-  - host discovery + port/service/version detection via **nmap** (connect scan
-    ``-sT`` — no root; XML parsed with the stdlib). Falls back to a stdlib
-    TCP-connect probe if nmap isn't installed;
-  - **SNMP discovery** for every live host (SNMP is UDP, so it isn't inferred from
-    the TCP port scan — each host is probed and non-SNMP hosts fast-skip after one
-    timed-out sysDescr get): the system group (sysDescr / sysName / sysUpTime / …)
-    via ``snmpget`` and the interface table (ifDescr + ifOperStatus) via ``snmpwalk``;
-  - emits ready-to-use telegraf inputs (``net_response`` per open TCP port,
-    ``snmp`` per SNMP-capable host).
+Not a passive scanner — an autonomous **discover → reconcile → act** loop. On a
+configurable interval it discovers the configured targets and fans the findings out
+across the platform, so newly-found devices are automatically inventoried and
+monitored:
 
-Decoupled from the telegraf plugin — it only discovers + reports; the composition
-is caller-driven: GET this plugin's /analysis → POST the ``telegraf_config`` to
-``/v1/plugins/telegraf/actions/set_managed_region``.
+  Discovery
+    - nmap connect scan (``-sT -sV`` — no root) → open ports + service/version;
+      stdlib TCP-connect fallback if nmap is absent.
+    - SNMP (UDP) for every live host: system group (``snmpget``) + interface table
+      (``snmpwalk`` ifDescr/ifOperStatus). Non-SNMP hosts fast-skip.
+
+  Fan-out (each sink is independently toggled + fails soft — a down backend never
+  breaks the cycle):
+    - **telegraf**  → the telegraf plugin's managed region (net_response per port +
+                      snmp per SNMP host) so telegraf monitors them → InfluxDB/Grafana.
+                      Only when NETWORK_AUTO_APPLY=1 (the safety switch) and only on
+                      change (no reload churn).
+    - **postgres**  → a `network_inventory` table (ip/hostname/os/ports/snmp/status/
+                      first_seen/last_seen) — the structured device inventory.
+    - **neo4j**     → a topology graph (Host / Service / Interface nodes + RUNS /
+                      HAS_INTERFACE) via the HTTP transactional Cypher API.
+    - **rabbitmq**  → change events (`network.host.new` / `.down` / `.changed`) on the
+                      amq.topic exchange, via the management API.
+
+Uses only deps already in the plugin-registry image (httpx + asyncpg); Neo4j and
+RabbitMQ are reached over HTTP, no extra drivers.
 
 Config (env on plugin-registry):
-  NETWORK_SCAN_TARGETS    comma-separated hosts and/or CIDRs. EMPTY default →
-                          scans nothing until an operator opts in (safe).
+  NETWORK_SCAN_TARGETS    hosts/CIDRs, comma-sep. EMPTY default → scans nothing.
   NETWORK_SCAN_PORTS      nmap port spec (default "22,80,161,443,8080").
-  NETWORK_SCAN_MAX_HOSTS  cap on the expanded host count (default 256).
-  NETWORK_SNMP_ENABLED    "1"/"0" (default "1"; skipped anyway if snmpget absent).
-  NETWORK_SNMP_COMMUNITY  SNMP v2c community string (default "public").
+  NETWORK_SCAN_MAX_HOSTS  cap on expanded hosts (default 256).
+  NETWORK_SCAN_INTERVAL   autonomous reconcile interval, seconds (default 3600).
+  NETWORK_AUTO_APPLY      "1"/"0" — auto-write telegraf on each cycle (default "1").
+  NETWORK_SNMP_ENABLED / NETWORK_SNMP_COMMUNITY
+  NETWORK_SINK_TELEGRAF / _POSTGRES / _NEO4J / _RABBITMQ  ("1"/"0", default "1").
 
 Only scan networks you are authorised to (your own infra).
 """
 
 import asyncio
 import ipaddress
+import json
 import os
 import shutil
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from xml.etree import ElementTree
+
+import httpx
 
 from plugins._contract import PluginMetadata
 
@@ -41,10 +57,9 @@ __all__ = ["NetworkPlugin"]
 _CONNECT_TIMEOUT = 2.0
 _MAX_CONCURRENCY = 64
 _NMAP_HOST_TIMEOUT = "30s"
-_SNMP_TIMEOUT = "2"  # seconds per snmp op
+_SNMP_TIMEOUT = "2"
 _SNMP_MAX_CONCURRENCY = 16
 
-# System-group OIDs (name → oid) fetched from SNMP-capable hosts.
 _SNMP_SYSTEM_OIDS = {
     "sysDescr": "1.3.6.1.2.1.1.1.0",
     "sysObjectID": "1.3.6.1.2.1.1.2.0",
@@ -53,16 +68,13 @@ _SNMP_SYSTEM_OIDS = {
     "sysName": "1.3.6.1.2.1.1.5.0",
     "sysLocation": "1.3.6.1.2.1.1.6.0",
 }
-# Interface-table columns walked from SNMP-capable hosts.
 _IF_DESCR_OID = "1.3.6.1.2.1.2.2.1.2"
 _IF_OPERSTATUS_OID = "1.3.6.1.2.1.2.2.1.8"
 _IF_OPER = {"1": "up", "2": "down", "3": "testing"}
 
 
-# ── pure helpers (unit-tested without any subprocess) ─────────────────────────
+# ── pure helpers (unit-tested without any subprocess/backend) ─────────────────
 def _expand_targets(spec: str, max_hosts: int) -> List[str]:
-    """Expand a comma-separated hosts/CIDRs spec into individual host strings,
-    capped at ``max_hosts``. A bare IP/hostname passes through; a CIDR expands."""
     hosts: List[str] = []
     for raw in spec.split(","):
         item = raw.strip()
@@ -71,7 +83,7 @@ def _expand_targets(spec: str, max_hosts: int) -> List[str]:
         try:
             net = ipaddress.ip_network(item, strict=False)
         except ValueError:
-            hosts.append(item)  # hostname (not an IP/CIDR)
+            hosts.append(item)
             if len(hosts) >= max_hosts:
                 return hosts[:max_hosts]
             continue
@@ -88,7 +100,6 @@ def _expand_targets(spec: str, max_hosts: int) -> List[str]:
 
 
 def _parse_nmap_xml(xml_text: str) -> List[Dict]:
-    """Parse ``nmap -oX`` output into [{host, hostname, state, ports:[...]}]."""
     hosts: List[Dict] = []
     try:
         root = ElementTree.fromstring(xml_text)
@@ -128,9 +139,6 @@ def _parse_nmap_xml(xml_text: str) -> List[Dict]:
 
 
 def _parse_snmpwalk(text: str, base_oid: str) -> Dict[str, str]:
-    """Parse ``snmpwalk -Oqn`` output (numeric-OID, quiet) into {index: value},
-    where index is the OID suffix after ``base_oid``. Lines look like
-    ``.1.3.6.1.2.1.2.2.1.2.2 eth0``."""
     result: Dict[str, str] = {}
     prefix = base_oid if base_oid.startswith(".") else "." + base_oid
     for line in text.splitlines():
@@ -146,8 +154,6 @@ def _parse_snmpwalk(text: str, base_oid: str) -> Dict[str, str]:
 
 
 def _telegraf_config(hosts: List[Dict], snmp_community: str) -> str:
-    """Render telegraf inputs for discovered hosts: net_response per open TCP port,
-    and an snmp input for each SNMP-capable host."""
     blocks: List[str] = []
     for h in hosts:
         addr = h.get("host", "")
@@ -176,36 +182,82 @@ def _telegraf_config(hosts: List[Dict], snmp_community: str) -> str:
     return "\n".join(blocks)
 
 
-class NetworkPlugin:
-    """nmap + SNMP host/service discovery with a stdlib fallback."""
+def _summarize(hosts: List[Dict]) -> Dict[str, Dict]:
+    """{ip: {ports:[sorted], snmp:bool}} — the shape change detection compares."""
+    out: Dict[str, Dict] = {}
+    for h in hosts:
+        ip = h.get("host", "")
+        if not ip:
+            continue
+        out[ip] = {
+            "ports": sorted(p["port"] for p in h.get("ports", [])),
+            "snmp": bool(h.get("snmp")),
+        }
+    return out
 
-    # Read-only discovery: `scan` runs a scan and returns the result synchronously.
-    ACTIONS = frozenset({"scan"})
+
+def _diff_hosts(prev: Dict[str, Dict], curr: Dict[str, Dict]) -> Dict[str, List[str]]:
+    """Change events between two summaries: new / down / changed host IPs."""
+    new = [ip for ip in curr if ip not in prev]
+    down = [ip for ip in prev if ip not in curr]
+    changed = [ip for ip in curr if ip in prev and curr[ip] != prev[ip]]
+    return {"new": new, "down": down, "changed": changed}
+
+
+class NetworkPlugin:
+    """Autonomous nmap+SNMP discovery that fans findings into telegraf/PG/Neo4j/RabbitMQ."""
+
+    ACTIONS = frozenset({"scan", "reconcile"})
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
         self.targets = os.environ.get("NETWORK_SCAN_TARGETS", "")
         self.ports = os.environ.get("NETWORK_SCAN_PORTS", "22,80,161,443,8080")
         self.max_hosts = int(os.environ.get("NETWORK_SCAN_MAX_HOSTS", "256"))
+        self.interval = int(os.environ.get("NETWORK_SCAN_INTERVAL", "3600"))
+        self.auto_apply = os.environ.get("NETWORK_AUTO_APPLY", "1") == "1"
         self.snmp_enabled = os.environ.get("NETWORK_SNMP_ENABLED", "1") == "1"
         self.snmp_community = os.environ.get("NETWORK_SNMP_COMMUNITY", "public")
+        self.sink_telegraf = os.environ.get("NETWORK_SINK_TELEGRAF", "1") == "1"
+        self.sink_postgres = os.environ.get("NETWORK_SINK_POSTGRES", "1") == "1"
+        self.sink_neo4j = os.environ.get("NETWORK_SINK_NEO4J", "1") == "1"
+        self.sink_rabbitmq = os.environ.get("NETWORK_SINK_RABBITMQ", "1") == "1"
         self.status = "registered"
         self._last: Dict = {}
+        self._prev: Dict[str, Dict] = {}
+        self._applied_cfg = ""
+        self._lock = asyncio.Lock()
+        self._task: Optional[asyncio.Task] = None
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     async def register(self) -> PluginMetadata:
         return PluginMetadata(
             name="network",
-            version="2.1.0",
-            description="nmap + SNMP (system + interfaces) discovery; emits telegraf inputs.",
+            version="1.0.0",
+            description="Autonomous nmap+SNMP discovery; inventories & monitors found hosts.",
             author="Minder <core@minder.local>",
-            capabilities=["collect", "analyze", "discovery", "snmp"],
+            capabilities=["collect", "analyze", "discovery", "snmp", "inventory"],
             data_sources=["nmap", "snmp"],
-            databases=["influxdb"],
+            databases=["postgres", "neo4j", "influxdb", "rabbitmq"],
         )
 
     async def initialize(self) -> None:
         self.status = "ready"
+        # Start the autonomous reconcile loop (only when there is a running loop —
+        # i.e. inside the registry, not in a bare unit-test construction).
+        if self._task is None and self.interval > 0:
+            try:
+                self._task = asyncio.get_running_loop().create_task(self._loop())
+            except RuntimeError:
+                self._task = None
+
+    async def _loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.interval)
+            try:
+                await self.reconcile()
+            except Exception:  # a bad cycle must never kill the loop
+                pass
 
     async def health_check(self) -> Dict:
         return {
@@ -213,16 +265,21 @@ class NetworkPlugin:
             "targets_configured": bool(self.targets.strip()),
             "nmap": shutil.which("nmap") is not None,
             "snmp": shutil.which("snmpget") is not None,
+            "auto_apply": self.auto_apply,
+            "interval_s": self.interval,
         }
+
+    async def shutdown(self) -> None:
+        self.status = "shutdown"
+        if self._task is not None:
+            self._task.cancel()
+            self._task = None
 
     # ── subprocess helper ────────────────────────────────────────────────────
     async def _run(self, *cmd: str, timeout: float = 60.0) -> "tuple[int, str]":
-        """Run a command; return (returncode, stdout). Empty on failure/missing."""
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
+                *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
             )
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             return proc.returncode or 0, out.decode("utf-8", "replace")
@@ -248,8 +305,6 @@ class NetworkPlugin:
         return _parse_nmap_xml(out) if rc == 0 else []
 
     async def _tcp_fallback(self, hosts: List[str]) -> List[Dict]:
-        """Degraded discovery when nmap is unavailable: stdlib TCP connect to the
-        first port in the spec."""
         try:
             port = int(self.ports.split(",")[0])
         except (ValueError, IndexError):
@@ -363,8 +418,6 @@ class NetworkPlugin:
         ]
 
     async def _snmp_lookup(self, host: str) -> Dict:
-        """Fetch SNMP system group + interfaces for a host. Fast-skips non-SNMP
-        hosts after a single timed-out sysDescr get. Empty dict if not SNMP."""
         descr = await self._snmp_get(host, _SNMP_SYSTEM_OIDS["sysDescr"])
         if descr is None:
             return {}
@@ -374,10 +427,9 @@ class NetworkPlugin:
         )
         system = {"sysDescr": descr}
         system.update({k: v for k, v in zip(other, vals) if v is not None})
-        interfaces = await self._snmp_interfaces(host)
-        return {"system": system, "interfaces": interfaces}
+        return {"system": system, "interfaces": await self._snmp_interfaces(host)}
 
-    # ── orchestration ────────────────────────────────────────────────────────
+    # ── discovery orchestration ──────────────────────────────────────────────
     async def collect_data(self) -> Dict:
         hosts = _expand_targets(self.targets, self.max_hosts)
         if not hosts:
@@ -396,9 +448,6 @@ class NetworkPlugin:
             if use_nmap
             else await self._tcp_fallback(hosts)
         )
-
-        # SNMP is UDP — not inferable from the TCP scan, so probe every live host
-        # (non-SNMP hosts fast-skip after one timed-out sysDescr get).
         if self.snmp_enabled and shutil.which("snmpget") is not None:
             live = [h for h in discovered if h.get("state") == "up" or h.get("ports")]
             sem = asyncio.Semaphore(_SNMP_MAX_CONCURRENCY)
@@ -421,9 +470,193 @@ class NetworkPlugin:
         return self._last
 
     async def scan(self) -> Dict:
-        """Action: run a scan now and return the result synchronously."""
+        """Action: discover only (no fan-out)."""
         return await self.collect_data()
 
+    # ── the autonomous reconcile: discover → detect change → fan out ──────────
+    async def reconcile(self) -> Dict:
+        """Action: full cycle — discover, detect changes, write to every enabled
+        sink. Serialised so the loop, the registry's hourly call and a manual
+        trigger can't overlap."""
+        async with self._lock:
+            data = await self.collect_data()
+            live = [
+                h for h in data["hosts"] if h.get("state") == "up" or h.get("ports")
+            ]
+            curr = _summarize(live)
+            changes = _diff_hosts(self._prev, curr)
+
+            sinks: Dict[str, Dict] = {}
+            if self.sink_telegraf and self.auto_apply:
+                sinks["telegraf"] = await self._sink_telegraf(live)
+            if self.sink_postgres:
+                sinks["postgres"] = await self._sink_postgres(live, changes)
+            if self.sink_neo4j:
+                sinks["neo4j"] = await self._sink_neo4j(live)
+            if self.sink_rabbitmq:
+                sinks["rabbitmq"] = await self._sink_rabbitmq(changes)
+
+            self._prev = curr
+            return {
+                "timestamp": data["timestamp"],
+                "method": data["method"],
+                "live": len(live),
+                "changes": changes,
+                "sinks": sinks,
+            }
+
+    # ── sinks (each fails soft — a down backend never breaks the cycle) ───────
+    async def _sink_telegraf(self, live: List[Dict]) -> Dict:
+        try:
+            from core.state import plugin_instances  # registry-only, lazy
+        except ImportError:
+            return {"status": "unavailable"}
+        tg = plugin_instances.get("telegraf")
+        if tg is None:
+            return {"status": "telegraf-not-loaded"}
+        cfg = _telegraf_config(live, self.snmp_community)
+        if cfg == self._applied_cfg:
+            return {"status": "unchanged"}
+        try:
+            await tg.set_managed_region(cfg, reload=True)
+            self._applied_cfg = cfg
+            return {"status": "applied", "bytes": len(cfg)}
+        except Exception as e:
+            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+
+    async def _sink_postgres(self, live: List[Dict], changes: Dict) -> Dict:
+        try:
+            import asyncpg
+        except ImportError:
+            return {"status": "unavailable"}
+        try:
+            conn = await asyncpg.connect(
+                host=os.environ.get("POSTGRES_HOST", "postgres"),
+                port=int(os.environ.get("POSTGRES_PORT", "5432")),
+                user=os.environ.get("POSTGRES_USER", "minder"),
+                password=os.environ.get("POSTGRES_PASSWORD", ""),
+                database=os.environ.get("POSTGRES_DB", "minder"),
+                timeout=8,
+            )
+        except Exception as e:
+            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+        try:
+            await conn.execute(
+                """CREATE TABLE IF NOT EXISTS network_inventory (
+                    ip TEXT PRIMARY KEY, hostname TEXT, os TEXT,
+                    ports JSONB, snmp JSONB, status TEXT DEFAULT 'up',
+                    first_seen TIMESTAMPTZ DEFAULT NOW(),
+                    last_seen TIMESTAMPTZ DEFAULT NOW())"""
+            )
+            for h in live:
+                os_str = h.get("snmp", {}).get("system", {}).get("sysDescr", "")
+                await conn.execute(
+                    """INSERT INTO network_inventory
+                         (ip, hostname, os, ports, snmp, status, last_seen)
+                       VALUES ($1,$2,$3,$4,$5,'up',NOW())
+                       ON CONFLICT (ip) DO UPDATE SET
+                         hostname=$2, os=$3, ports=$4, snmp=$5,
+                         status='up', last_seen=NOW()""",
+                    h.get("host", ""),
+                    h.get("hostname", ""),
+                    os_str,
+                    json.dumps(h.get("ports", [])),
+                    json.dumps(h.get("snmp", {})),
+                )
+            for ip in changes.get("down", []):
+                await conn.execute(
+                    "UPDATE network_inventory SET status='down' WHERE ip=$1", ip
+                )
+            return {
+                "status": "ok",
+                "upserted": len(live),
+                "marked_down": len(changes.get("down", [])),
+            }
+        except Exception as e:
+            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+        finally:
+            await conn.close()
+
+    async def _sink_neo4j(self, live: List[Dict]) -> Dict:
+        auth = os.environ.get("NEO4J_AUTH", "")
+        if "/" not in auth:
+            return {"status": "no-auth"}
+        user, pw = auth.split("/", 1)
+        url = os.environ.get("NEO4J_HTTP", "http://neo4j:7474") + "/db/neo4j/tx/commit"
+        payload = [
+            {
+                "host": h.get("host", ""),
+                "hostname": h.get("hostname", ""),
+                "os": h.get("snmp", {}).get("system", {}).get("sysDescr", ""),
+                "ports": [p["port"] for p in h.get("ports", [])],
+                "ifaces": [i["descr"] for i in h.get("snmp", {}).get("interfaces", [])],
+            }
+            for h in live
+            if h.get("host")
+        ]
+        statement = (
+            "UNWIND $hosts AS h "
+            "MERGE (host:Host {ip: h.host}) "
+            "SET host.hostname=h.hostname, host.os=h.os, host.last_seen=timestamp() "
+            "FOREACH (p IN h.ports | "
+            "  MERGE (s:Service {key: h.host + ':' + toString(p)}) SET s.port=p "
+            "  MERGE (host)-[:RUNS]->(s)) "
+            "FOREACH (nm IN h.ifaces | "
+            "  MERGE (i:Interface {key: h.host + ':' + nm}) SET i.descr=nm "
+            "  MERGE (host)-[:HAS_INTERFACE]->(i))"
+        )
+        try:
+            async with httpx.AsyncClient(timeout=12) as c:
+                r = await c.post(
+                    url,
+                    auth=(user, pw),
+                    json={
+                        "statements": [
+                            {"statement": statement, "parameters": {"hosts": payload}}
+                        ]
+                    },
+                )
+            errs = (
+                r.json().get("errors", []) if r.status_code == 200 else [r.status_code]
+            )
+            return {
+                "status": "ok" if not errs else "error",
+                "hosts": len(payload),
+                "errors": errs,
+            }
+        except Exception as e:
+            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+
+    async def _sink_rabbitmq(self, changes: Dict) -> Dict:
+        events = [
+            (f"network.host.{kind}", ip)
+            for kind in ("new", "down", "changed")
+            for ip in changes.get(kind, [])
+        ]
+        if not events:
+            return {"status": "no-events"}
+        user = os.environ.get("NETWORK_RABBITMQ_USER", "minder")
+        pw = os.environ.get("RABBITMQ_PASSWORD", "")
+        base = os.environ.get("NETWORK_RABBITMQ_URL", "http://rabbitmq:15672")
+        url = base + "/api/exchanges/%2f/amq.topic/publish"
+        published = 0
+        try:
+            async with httpx.AsyncClient(timeout=8) as c:
+                for routing_key, ip in events:
+                    body = {
+                        "properties": {},
+                        "routing_key": routing_key,
+                        "payload": json.dumps({"ip": ip, "event": routing_key}),
+                        "payload_encoding": "string",
+                    }
+                    r = await c.post(url, auth=(user, pw), json=body)
+                    if r.status_code == 200 and r.json().get("routed"):
+                        published += 1
+            return {"status": "ok", "events": len(events), "published": published}
+        except Exception as e:
+            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+
+    # ── analysis (read-only view) ─────────────────────────────────────────────
     async def analyze(self) -> Dict:
         hosts = self._last.get("hosts", [])
         live = [h for h in hosts if h.get("state") == "up" or h.get("ports")]
@@ -436,9 +669,5 @@ class NetworkPlugin:
                 h.get("host"): [p["port"] for p in h.get("ports", [])] for h in live
             },
             "snmp": {h["host"]: h["snmp"] for h in live if h.get("snmp")},
-            # ready to POST to /v1/plugins/telegraf/actions/set_managed_region
             "telegraf_config": _telegraf_config(live, self.snmp_community),
         }
-
-    async def shutdown(self) -> None:
-        self.status = "shutdown"

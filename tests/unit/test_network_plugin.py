@@ -9,6 +9,7 @@ import asyncio
 import plugins.network as netmod
 from plugins.network import (
     NetworkPlugin,
+    _diff_hosts,
     _expand_targets,
     _parse_nmap_xml,
     _parse_snmpwalk,
@@ -91,7 +92,7 @@ def test_register_and_health(monkeypatch):
     monkeypatch.setenv("NETWORK_SCAN_TARGETS", "1.1.1.1")
     pl = NetworkPlugin({})
     md = asyncio.run(pl.register())
-    assert md.name == "network" and md.version == "2.1.0"
+    assert md.name == "network" and md.version == "1.0.0"
     h = asyncio.run(pl.health_check())
     assert h["healthy"] is True and h["targets_configured"] is True
     assert "nmap" in h and "snmp" in h
@@ -189,3 +190,92 @@ def test_empty_targets_scans_nothing(monkeypatch):
     pl = NetworkPlugin({})
     result = asyncio.run(pl.collect_data())
     assert result["scanned"] == 0 and result["method"] == "none"
+
+
+# ── change detection + autonomous reconcile fan-out ──────────────────────────
+def test_diff_hosts():
+    prev = {"a": {"ports": [22], "snmp": False}, "b": {"ports": [80], "snmp": False}}
+    curr = {
+        "a": {"ports": [22, 443], "snmp": False},
+        "c": {"ports": [80], "snmp": False},
+    }
+    d = _diff_hosts(prev, curr)
+    assert d["new"] == ["c"]
+    assert d["down"] == ["b"]
+    assert d["changed"] == ["a"]
+
+
+def _canned_collect(pl, hosts):
+    async def fake_collect():
+        pl._last = {
+            "timestamp": "t",
+            "targets": "x",
+            "method": "nmap",
+            "scanned": len(hosts),
+            "hosts": hosts,
+        }
+        return pl._last
+
+    return fake_collect
+
+
+def test_reconcile_fans_out_to_all_enabled_sinks(monkeypatch):
+    monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.5")
+    pl = NetworkPlugin({})
+    hosts = [
+        {
+            "host": "10.0.0.5",
+            "hostname": "",
+            "state": "up",
+            "ports": [{"port": 80, "protocol": "tcp"}],
+        }
+    ]
+    monkeypatch.setattr(pl, "collect_data", _canned_collect(pl, hosts))
+    calls = []
+
+    async def s_tg(live):
+        calls.append("telegraf")
+        return {"status": "applied"}
+
+    async def s_pg(live, ch):
+        calls.append("postgres")
+        return {"status": "ok"}
+
+    async def s_neo(live):
+        calls.append("neo4j")
+        return {"status": "ok"}
+
+    async def s_rmq(ch):
+        calls.append("rabbitmq")
+        return {"status": "ok"}
+
+    monkeypatch.setattr(pl, "_sink_telegraf", s_tg)
+    monkeypatch.setattr(pl, "_sink_postgres", s_pg)
+    monkeypatch.setattr(pl, "_sink_neo4j", s_neo)
+    monkeypatch.setattr(pl, "_sink_rabbitmq", s_rmq)
+    r = asyncio.run(pl.reconcile())
+    assert set(calls) == {"telegraf", "postgres", "neo4j", "rabbitmq"}
+    assert r["changes"]["new"] == ["10.0.0.5"] and r["live"] == 1
+
+
+def test_reconcile_auto_apply_off_and_sinks_off(monkeypatch):
+    for var in (
+        "NETWORK_AUTO_APPLY",
+        "NETWORK_SINK_POSTGRES",
+        "NETWORK_SINK_NEO4J",
+        "NETWORK_SINK_RABBITMQ",
+    ):
+        monkeypatch.setenv(var, "0")
+    pl = NetworkPlugin({})
+    hosts = [{"host": "10.0.0.5", "state": "up", "ports": []}]
+    monkeypatch.setattr(pl, "collect_data", _canned_collect(pl, hosts))
+    called = []
+
+    async def s_tg(live):
+        called.append("telegraf")
+        return {}
+
+    monkeypatch.setattr(pl, "_sink_telegraf", s_tg)
+    r = asyncio.run(pl.reconcile())
+    assert called == []  # AUTO_APPLY=0 → telegraf skipped; other sinks off
+    assert r["sinks"] == {}
