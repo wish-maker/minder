@@ -38,6 +38,8 @@ Config (env on plugin-registry):
   NETWORK_SCAN_MAX_HOSTS  cap on expanded hosts (default 256).
   NETWORK_SCAN_INTERVAL   autonomous reconcile interval, seconds (default 3600).
   NETWORK_AUTO_APPLY      "1"/"0" — auto-write telegraf on each cycle (default "1").
+  NETWORK_AUTO_EXPAND     "1"/"0" — fold ARP neighbours into scope (default "0").
+  NETWORK_EXPAND_CIDRS    CIDRs auto-expansion is allowed within (the boundary).
   NETWORK_SNMP_ENABLED / NETWORK_SNMP_COMMUNITY (v2c)
   NETWORK_SNMP_VERSION    "2c" (default) or "3".
   NETWORK_SNMP_V3_USER / _LEVEL (noAuthNoPriv|authNoPriv|authPriv) /
@@ -80,8 +82,10 @@ from .helpers import (  # noqa: F401 (re-exported for the plugin + its tests)
     _IF_SPEED_OID,
     _IF_TYPE_OID,
     _SNMP_SYSTEM_OIDS,
+    _configured_cidrs,
     _diff_hosts,
     _expand_targets,
+    _extract_neighbor_ips,
     _normalize_mac,
     _parse_arp,
     _parse_nmap_xml,
@@ -114,6 +118,12 @@ class NetworkPlugin:
         self.max_hosts = int(os.environ.get("NETWORK_SCAN_MAX_HOSTS", "256"))
         self.interval = int(os.environ.get("NETWORK_SCAN_INTERVAL", "3600"))
         self.auto_apply = os.environ.get("NETWORK_AUTO_APPLY", "1") == "1"
+        # Self-expanding discovery: add ARP neighbours found inside an explicitly
+        # authorised range to the scan scope. Opt-in (off by default) + bounded to
+        # NETWORK_EXPAND_CIDRS (the operator's authorisation boundary) — it widens
+        # what gets scanned, so both the toggle and the range are deliberate.
+        self.auto_expand = os.environ.get("NETWORK_AUTO_EXPAND", "0") == "1"
+        self.expand_cidrs = os.environ.get("NETWORK_EXPAND_CIDRS", "")
         self.snmp_enabled = os.environ.get("NETWORK_SNMP_ENABLED", "1") == "1"
         self.snmp_version = os.environ.get("NETWORK_SNMP_VERSION", "2c")  # "2c" | "3"
         self.snmp_community = os.environ.get("NETWORK_SNMP_COMMUNITY", "public")
@@ -131,6 +141,7 @@ class NetworkPlugin:
         self.status = "registered"
         self._last: Dict = {}
         self._prev: Dict[str, Dict] = {}
+        self._expanded: set = set()  # ARP-discovered IPs auto-added to the scan scope
         self._applied_cfg = ""
         self._lock = asyncio.Lock()
         self._task: Optional[asyncio.Task] = None
@@ -393,8 +404,15 @@ class NetworkPlugin:
         return result
 
     # ── discovery orchestration ──────────────────────────────────────────────
+    def _effective_targets(self) -> str:
+        """Configured targets plus any ARP-discovered IPs auto-added to scope."""
+        if self._expanded:
+            extra = ",".join(sorted(self._expanded))
+            return f"{self.targets},{extra}" if self.targets.strip() else extra
+        return self.targets
+
     async def collect_data(self) -> Dict:
-        hosts = _expand_targets(self.targets, self.max_hosts)
+        hosts = _expand_targets(self._effective_targets(), self.max_hosts)
         if not hosts:
             self._last = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -449,6 +467,19 @@ class NetworkPlugin:
             curr = _summarize(live)
             changes = _diff_hosts(self._prev, curr)
 
+            # Self-expanding discovery: fold ARP neighbours found inside a configured
+            # CIDR into the scan scope for subsequent cycles (bounded by max_hosts).
+            expanded_added: List[str] = []
+            if self.auto_expand:
+                cidrs = _configured_cidrs(self.expand_cidrs)
+                already = set(
+                    _expand_targets(self._effective_targets(), self.max_hosts)
+                )
+                for ip in _extract_neighbor_ips(data["hosts"], cidrs):
+                    if ip not in already and len(self._expanded) < self.max_hosts:
+                        self._expanded.add(ip)
+                        expanded_added.append(ip)
+
             sinks: Dict[str, Dict] = {}
             if self.sink_telegraf and self.auto_apply:
                 sinks["telegraf"] = await self._sink_telegraf(live)
@@ -465,6 +496,8 @@ class NetworkPlugin:
                 "method": data["method"],
                 "live": len(live),
                 "changes": changes,
+                "expanded_added": expanded_added,
+                "expanded_total": len(self._expanded),
                 "sinks": sinks,
             }
 

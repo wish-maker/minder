@@ -197,3 +197,43 @@ def _diff_hosts(prev: Dict[str, Dict], curr: Dict[str, Dict]) -> Dict[str, List[
     down = [ip for ip in prev if ip not in curr]
     changed = [ip for ip in curr if ip in prev and curr[ip] != prev[ip]]
     return {"new": new, "down": down, "changed": changed}
+
+
+def _configured_cidrs(spec: str) -> List[str]:
+    """The CIDR entries (num_addresses > 1) from a targets spec — the ranges the
+    operator authorised, used to bound auto-expansion."""
+    out: List[str] = []
+    for raw in spec.split(","):
+        item = raw.strip()
+        if not item:
+            continue
+        try:
+            net = ipaddress.ip_network(item, strict=False)
+        except ValueError:
+            continue
+        if net.num_addresses > 1:
+            out.append(item)
+    return out
+
+
+def _extract_neighbor_ips(hosts: List[Dict], cidrs: List[str]) -> List[str]:
+    """ARP-neighbour IPs (from each host's snmp.arp) that fall INSIDE one of
+    ``cidrs`` — safe auto-expansion candidates (never outside authorised ranges)."""
+    nets = []
+    for c in cidrs:
+        try:
+            nets.append(ipaddress.ip_network(c, strict=False))
+        except ValueError:
+            continue
+    if not nets:
+        return []
+    found = set()
+    for h in hosts:
+        for ip in h.get("snmp", {}).get("arp", {}):
+            try:
+                addr = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if any(addr in n for n in nets):
+                found.add(ip)
+    return sorted(found)

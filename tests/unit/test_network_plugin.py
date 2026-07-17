@@ -13,8 +13,10 @@ from plugins.network import (
     _IF_MAC_OID,
     _IF_OPERSTATUS_OID,
     NetworkPlugin,
+    _configured_cidrs,
     _diff_hosts,
     _expand_targets,
+    _extract_neighbor_ips,
     _parse_arp,
     _parse_nmap_xml,
     _parse_snmpwalk,
@@ -306,6 +308,47 @@ def test_reconcile_fans_out_to_all_enabled_sinks(monkeypatch):
     r = asyncio.run(pl.reconcile())
     assert set(calls) == {"telegraf", "postgres", "neo4j", "rabbitmq"}
     assert r["changes"]["new"] == ["10.0.0.5"] and r["live"] == 1
+
+
+def test_configured_cidrs():
+    assert _configured_cidrs("10.0.0.0/24, 1.2.3.4 , bad, 192.168.0.0/16") == [
+        "10.0.0.0/24",
+        "192.168.0.0/16",
+    ]
+
+
+def test_extract_neighbor_ips_in_cidr_only():
+    hosts = [
+        {"snmp": {"arp": {"10.0.0.5": "m1", "10.0.0.9": "m2", "192.168.1.1": "m3"}}}
+    ]
+    assert _extract_neighbor_ips(hosts, ["10.0.0.0/29"]) == ["10.0.0.5"]
+    assert _extract_neighbor_ips(hosts, []) == []
+
+
+def test_reconcile_auto_expand(monkeypatch):
+    monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.1")
+    monkeypatch.setenv("NETWORK_AUTO_EXPAND", "1")
+    monkeypatch.setenv("NETWORK_EXPAND_CIDRS", "10.0.0.0/29")
+    for s in (
+        "NETWORK_AUTO_APPLY",
+        "NETWORK_SINK_POSTGRES",
+        "NETWORK_SINK_NEO4J",
+        "NETWORK_SINK_RABBITMQ",
+    ):
+        monkeypatch.setenv(s, "0")
+    pl = NetworkPlugin({})
+    host = {
+        "host": "10.0.0.1",
+        "state": "up",
+        "ports": [{"port": 161, "protocol": "tcp"}],
+        "snmp": {"arp": {"10.0.0.5": "m1", "10.0.0.9": "m2", "192.168.1.1": "m3"}},
+    }
+    monkeypatch.setattr(pl, "collect_data", _canned_collect(pl, [host]))
+    r = asyncio.run(pl.reconcile())
+    # only the in-CIDR, not-already-scanned neighbour is folded into scope
+    assert r["expanded_added"] == ["10.0.0.5"]
+    assert pl._expanded == {"10.0.0.5"}
+    assert "10.0.0.5" in pl._effective_targets()
 
 
 def test_reconcile_auto_apply_off_and_sinks_off(monkeypatch):
