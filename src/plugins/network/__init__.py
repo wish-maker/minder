@@ -4,8 +4,10 @@ Comprehensive host + service + SNMP discovery of the configured targets:
   - host discovery + port/service/version detection via **nmap** (connect scan
     ``-sT`` — no root; XML parsed with the stdlib). Falls back to a stdlib
     TCP-connect probe if nmap isn't installed;
-  - **SNMP OID lookup** of the system group (sysDescr / sysName / sysUpTime / …)
-    via net-snmp's ``snmpget`` for hosts that answer on 161;
+  - **SNMP discovery** for every live host (SNMP is UDP, so it isn't inferred from
+    the TCP port scan — each host is probed and non-SNMP hosts fast-skip after one
+    timed-out sysDescr get): the system group (sysDescr / sysName / sysUpTime / …)
+    via ``snmpget`` and the interface table (ifDescr + ifOperStatus) via ``snmpwalk``;
   - emits ready-to-use telegraf inputs (``net_response`` per open TCP port,
     ``snmp`` per SNMP-capable host).
 
@@ -39,7 +41,8 @@ __all__ = ["NetworkPlugin"]
 _CONNECT_TIMEOUT = 2.0
 _MAX_CONCURRENCY = 64
 _NMAP_HOST_TIMEOUT = "30s"
-_SNMP_TIMEOUT = "2"  # seconds per snmpget
+_SNMP_TIMEOUT = "2"  # seconds per snmp op
+_SNMP_MAX_CONCURRENCY = 16
 
 # System-group OIDs (name → oid) fetched from SNMP-capable hosts.
 _SNMP_SYSTEM_OIDS = {
@@ -50,6 +53,10 @@ _SNMP_SYSTEM_OIDS = {
     "sysName": "1.3.6.1.2.1.1.5.0",
     "sysLocation": "1.3.6.1.2.1.1.6.0",
 }
+# Interface-table columns walked from SNMP-capable hosts.
+_IF_DESCR_OID = "1.3.6.1.2.1.2.2.1.2"
+_IF_OPERSTATUS_OID = "1.3.6.1.2.1.2.2.1.8"
+_IF_OPER = {"1": "up", "2": "down", "3": "testing"}
 
 
 # ── pure helpers (unit-tested without any subprocess) ─────────────────────────
@@ -120,6 +127,24 @@ def _parse_nmap_xml(xml_text: str) -> List[Dict]:
     return hosts
 
 
+def _parse_snmpwalk(text: str, base_oid: str) -> Dict[str, str]:
+    """Parse ``snmpwalk -Oqn`` output (numeric-OID, quiet) into {index: value},
+    where index is the OID suffix after ``base_oid``. Lines look like
+    ``.1.3.6.1.2.1.2.2.1.2.2 eth0``."""
+    result: Dict[str, str] = {}
+    prefix = base_oid if base_oid.startswith(".") else "." + base_oid
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(" ", 1)
+        oid = parts[0]
+        value = parts[1].strip().strip('"') if len(parts) > 1 else ""
+        if oid.startswith(prefix + "."):
+            result[oid[len(prefix) + 1 :]] = value
+    return result
+
+
 def _telegraf_config(hosts: List[Dict], snmp_community: str) -> str:
     """Render telegraf inputs for discovered hosts: net_response per open TCP port,
     and an snmp input for each SNMP-capable host."""
@@ -171,8 +196,8 @@ class NetworkPlugin:
     async def register(self) -> PluginMetadata:
         return PluginMetadata(
             name="network",
-            version="2.0.0",
-            description="nmap + SNMP host/service discovery; emits telegraf inputs.",
+            version="2.1.0",
+            description="nmap + SNMP (system + interfaces) discovery; emits telegraf inputs.",
             author="Minder <core@minder.local>",
             capabilities=["collect", "analyze", "discovery", "snmp"],
             data_sources=["nmap", "snmp"],
@@ -270,28 +295,87 @@ class NetworkPlugin:
 
         return list(await asyncio.gather(*[_probe(h) for h in hosts]))
 
-    async def _snmp_lookup(self, host: str) -> Dict:
-        """Fetch the SNMP system group for a host (empty dict if unreachable)."""
-        result: Dict = {}
-        for name, oid in _SNMP_SYSTEM_OIDS.items():
-            rc, out = await self._run(
-                "snmpget",
-                "-v2c",
-                "-c",
-                self.snmp_community,
-                "-Ovq",
-                "-t",
-                _SNMP_TIMEOUT,
-                "-r",
-                "0",
-                host,
-                oid,
-                timeout=8.0,
+    # ── SNMP ─────────────────────────────────────────────────────────────────
+    async def _snmp_get(self, host: str, oid: str) -> Optional[str]:
+        rc, out = await self._run(
+            "snmpget",
+            "-v2c",
+            "-c",
+            self.snmp_community,
+            "-Ovq",
+            "-t",
+            _SNMP_TIMEOUT,
+            "-r",
+            "0",
+            host,
+            oid,
+            timeout=8.0,
+        )
+        val = out.strip().strip('"')
+        if rc == 0 and val and "No Such" not in val and "No more" not in val:
+            return val
+        return None
+
+    async def _snmp_interfaces(self, host: str) -> List[Dict]:
+        rc_d, descrs = await self._run(
+            "snmpwalk",
+            "-v2c",
+            "-c",
+            self.snmp_community,
+            "-Oqn",
+            "-t",
+            _SNMP_TIMEOUT,
+            "-r",
+            "0",
+            host,
+            _IF_DESCR_OID,
+            timeout=15.0,
+        )
+        if rc_d != 0:
+            return []
+        _, opers = await self._run(
+            "snmpwalk",
+            "-v2c",
+            "-c",
+            self.snmp_community,
+            "-Oqn",
+            "-t",
+            _SNMP_TIMEOUT,
+            "-r",
+            "0",
+            host,
+            _IF_OPERSTATUS_OID,
+            timeout=15.0,
+        )
+        descr_map = _parse_snmpwalk(descrs, _IF_DESCR_OID)
+        oper_map = _parse_snmpwalk(opers, _IF_OPERSTATUS_OID)
+        return [
+            {
+                "index": idx,
+                "descr": descr,
+                "oper_status": _IF_OPER.get(
+                    oper_map.get(idx, ""), oper_map.get(idx, "")
+                ),
+            }
+            for idx, descr in sorted(
+                descr_map.items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 0
             )
-            val = out.strip().strip('"')
-            if rc == 0 and val and "No Such" not in val:
-                result[name] = val
-        return result
+        ]
+
+    async def _snmp_lookup(self, host: str) -> Dict:
+        """Fetch SNMP system group + interfaces for a host. Fast-skips non-SNMP
+        hosts after a single timed-out sysDescr get. Empty dict if not SNMP."""
+        descr = await self._snmp_get(host, _SNMP_SYSTEM_OIDS["sysDescr"])
+        if descr is None:
+            return {}
+        other = [k for k in _SNMP_SYSTEM_OIDS if k != "sysDescr"]
+        vals = await asyncio.gather(
+            *[self._snmp_get(host, _SNMP_SYSTEM_OIDS[k]) for k in other]
+        )
+        system = {"sysDescr": descr}
+        system.update({k: v for k, v in zip(other, vals) if v is not None})
+        interfaces = await self._snmp_interfaces(host)
+        return {"system": system, "interfaces": interfaces}
 
     # ── orchestration ────────────────────────────────────────────────────────
     async def collect_data(self) -> Dict:
@@ -313,14 +397,19 @@ class NetworkPlugin:
             else await self._tcp_fallback(hosts)
         )
 
-        snmp_capable = self.snmp_enabled and shutil.which("snmpget") is not None
-        for h in discovered:
-            addr = h.get("host", "")
-            has_161 = any(p.get("port") == 161 for p in h.get("ports", []))
-            if snmp_capable and addr and (has_161 or not h.get("ports")):
-                snmp = await self._snmp_lookup(addr)
+        # SNMP is UDP — not inferable from the TCP scan, so probe every live host
+        # (non-SNMP hosts fast-skip after one timed-out sysDescr get).
+        if self.snmp_enabled and shutil.which("snmpget") is not None:
+            live = [h for h in discovered if h.get("state") == "up" or h.get("ports")]
+            sem = asyncio.Semaphore(_SNMP_MAX_CONCURRENCY)
+
+            async def _snmp(h: Dict) -> None:
+                async with sem:
+                    snmp = await self._snmp_lookup(h.get("host", ""))
                 if snmp:
                     h["snmp"] = snmp
+
+            await asyncio.gather(*[_snmp(h) for h in live])
 
         self._last = {
             "timestamp": datetime.now(timezone.utc).isoformat(),

@@ -11,6 +11,7 @@ from plugins.network import (
     NetworkPlugin,
     _expand_targets,
     _parse_nmap_xml,
+    _parse_snmpwalk,
     _telegraf_config,
 )
 
@@ -90,7 +91,7 @@ def test_register_and_health(monkeypatch):
     monkeypatch.setenv("NETWORK_SCAN_TARGETS", "1.1.1.1")
     pl = NetworkPlugin({})
     md = asyncio.run(pl.register())
-    assert md.name == "network" and md.version == "2.0.0"
+    assert md.name == "network" and md.version == "2.1.0"
     h = asyncio.run(pl.health_check())
     assert h["healthy"] is True and h["targets_configured"] is True
     assert "nmap" in h and "snmp" in h
@@ -142,23 +143,45 @@ def test_scan_tcp_fallback_when_no_nmap(monkeypatch):
     assert result["method"] == "tcp-fallback" and result["scanned"] == 1
 
 
-def test_snmp_lookup_parses_snmpget(monkeypatch):
-    monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.5")
+def test_parse_snmpwalk():
+    out = ".1.3.6.1.2.1.2.2.1.2.1 lo\n.1.3.6.1.2.1.2.2.1.2.2 eth0\n"
+    assert _parse_snmpwalk(out, "1.3.6.1.2.1.2.2.1.2") == {"1": "lo", "2": "eth0"}
+
+
+def test_snmp_lookup_system_and_interfaces(monkeypatch):
     pl = NetworkPlugin({})
 
     async def fake_run(*cmd, timeout=60.0):
-        oid = cmd[-1]
-        if oid == "1.3.6.1.2.1.1.5.0":  # sysName
-            return 0, "router-01\n"
-        if oid == "1.3.6.1.2.1.1.1.0":  # sysDescr
-            return 0, "Linux router 5.10\n"
-        return 1, ""  # others unreachable
+        tool, oid = cmd[0], cmd[-1]
+        if tool == "snmpget":
+            m = {
+                "1.3.6.1.2.1.1.1.0": "Linux router 5.10",  # sysDescr
+                "1.3.6.1.2.1.1.5.0": "router-01",  # sysName
+            }
+            return (0, m[oid] + "\n") if oid in m else (1, "")
+        if tool == "snmpwalk" and oid == "1.3.6.1.2.1.2.2.1.2":  # ifDescr
+            return 0, ".1.3.6.1.2.1.2.2.1.2.1 lo\n.1.3.6.1.2.1.2.2.1.2.2 eth0\n"
+        if tool == "snmpwalk" and oid == "1.3.6.1.2.1.2.2.1.8":  # ifOperStatus
+            return 0, ".1.3.6.1.2.1.2.2.1.8.1 1\n.1.3.6.1.2.1.2.2.1.8.2 1\n"
+        return 1, ""
 
     monkeypatch.setattr(pl, "_run", fake_run)
     snmp = asyncio.run(pl._snmp_lookup("10.0.0.5"))
-    assert snmp["sysName"] == "router-01"
-    assert snmp["sysDescr"] == "Linux router 5.10"
-    assert "sysContact" not in snmp  # rc=1 → skipped
+    assert snmp["system"]["sysDescr"] == "Linux router 5.10"
+    assert snmp["system"]["sysName"] == "router-01"
+    assert "sysContact" not in snmp["system"]  # unreachable → skipped
+    assert [i["descr"] for i in snmp["interfaces"]] == ["lo", "eth0"]
+    assert snmp["interfaces"][1]["oper_status"] == "up"
+
+
+def test_snmp_lookup_skips_non_snmp_host(monkeypatch):
+    pl = NetworkPlugin({})
+
+    async def fake_run(*cmd, timeout=60.0):
+        return 1, ""  # nothing responds → fast skip
+
+    monkeypatch.setattr(pl, "_run", fake_run)
+    assert asyncio.run(pl._snmp_lookup("10.0.0.9")) == {}
 
 
 def test_empty_targets_scans_nothing(monkeypatch):
