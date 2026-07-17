@@ -99,6 +99,10 @@ separately, not wired here.
   **Implemented.** Needs the plugin-registry wiring in `docker-compose.yml`:
   `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`, and
   `/var/run/docker.sock` (restart fallback only).
-- network (discovery), crypto / weather / news / tefas — aspirational (issue #34);
-  not yet implemented. Do not add them to `default_plugins.yml` until their modules
-  exist here.
+- `network/` — stdlib TCP-connect host discovery; emits telegraf `net_response`
+  input config for the live hosts (compose with `telegraf`: GET network `/analysis`
+  → POST its `telegraf_config` to telegraf's `set_managed_region`). **Implemented.**
+  Config via `NETWORK_SCAN_TARGETS`/`NETWORK_SCAN_PORT`/`NETWORK_SCAN_MAX_HOSTS`
+  (empty targets by default → scans nothing).
+- crypto / weather / news / tefas — aspirational (issue #34); not yet implemented.
+  Do not add them to `default_plugins.yml` until their modules exist here.

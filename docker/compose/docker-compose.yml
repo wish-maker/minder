@@ -463,6 +463,11 @@ services:
     # Telegraf plugin (src/plugins/telegraf): manages the telegraf config + reload.
     - TELEGRAF_CONFIG_PATH=/app/telegraf-config/telegraf.conf
     - TELEGRAF_CONTAINER=minder-telegraf
+    # Network plugin (src/plugins/network): TCP host discovery. Empty targets by
+    # default → scans nothing until an operator opts in (only scan your own infra).
+    - NETWORK_SCAN_TARGETS=${NETWORK_SCAN_TARGETS:-}
+    - NETWORK_SCAN_PORT=${NETWORK_SCAN_PORT:-80}
+    - NETWORK_SCAN_MAX_HOSTS=${NETWORK_SCAN_MAX_HOSTS:-256}
     env_file:
     - .env
     volumes:
