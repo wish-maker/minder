@@ -312,6 +312,27 @@ def test_reconcile_fans_out_to_all_enabled_sinks(monkeypatch):
     assert r["changes"]["new"] == ["10.0.0.5"] and r["live"] == 1
 
 
+def test_expanded_eviction_after_misses(monkeypatch):
+    monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.1")
+    monkeypatch.setenv("NETWORK_EXPAND_MISS_LIMIT", "2")
+    for s in (
+        "NETWORK_AUTO_APPLY",
+        "NETWORK_SINK_POSTGRES",
+        "NETWORK_SINK_NEO4J",
+        "NETWORK_SINK_RABBITMQ",
+    ):
+        monkeypatch.setenv(s, "0")
+    pl = NetworkPlugin({})
+    pl._expanded = {"10.0.0.9"}
+    pl._prev = {"10.0.0.1": {"ports": [], "snmp": False}}  # not first cycle
+    host = {"host": "10.0.0.1", "state": "up", "ports": []}  # 10.0.0.9 never live
+    monkeypatch.setattr(pl, "_discover", _canned_collect(pl, [host]))
+    r1 = asyncio.run(pl.reconcile())
+    assert r1["expanded_evicted"] == [] and pl._expanded == {"10.0.0.9"}  # 1 miss
+    r2 = asyncio.run(pl.reconcile())
+    assert r2["expanded_evicted"] == ["10.0.0.9"] and pl._expanded == set()  # evicted
+
+
 def test_reconcile_first_cycle_suppresses_change_events(monkeypatch):
     monkeypatch.setenv("NETWORK_SCAN_TARGETS", "10.0.0.5")
     pl = NetworkPlugin({})

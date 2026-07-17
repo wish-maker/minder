@@ -23,9 +23,15 @@ monitored:
                       Only when NETWORK_AUTO_APPLY=1 (the safety switch) and only on
                       change (no reload churn).
     - **postgres**  → a `network_inventory` table (ip/hostname/os/ports/snmp/status/
-                      first_seen/last_seen) — the structured device inventory.
+                      first_seen/last_seen) — the structured device inventory. Each
+                      cycle reconciles the WHOLE table to the scan (not-live → down)
+                      and purges rows down beyond NETWORK_STALE_RETENTION_DAYS.
     - **neo4j**     → a topology graph (Host / Service / Interface nodes + RUNS /
-                      HAS_INTERFACE) via the HTTP transactional Cypher API.
+                      HAS_INTERFACE) via the HTTP transactional Cypher API. Also
+                      prunes Hosts not seen within the retention window + orphaned
+                      Service/Interface nodes, so the graph reflects reality. NOTE:
+                      the network plugin OWNS the topology graph + the telegraf
+                      managed region — don't hand-edit those (they're overwritten).
     - **rabbitmq**  → change events (`network.host.new` / `.down` / `.changed`) on the
                       amq.topic exchange, via the management API.
 
@@ -125,6 +131,12 @@ class NetworkPlugin:
         # what gets scanned, so both the toggle and the range are deliberate.
         self.auto_expand = os.environ.get("NETWORK_AUTO_EXPAND", "0") == "1"
         self.expand_cidrs = os.environ.get("NETWORK_EXPAND_CIDRS", "")
+        # How many consecutive cycles an expanded IP may be unreachable before it is
+        # evicted from scope; how long down inventory/graph state is kept before prune.
+        self.expand_miss_limit = int(os.environ.get("NETWORK_EXPAND_MISS_LIMIT", "3"))
+        self.stale_retention_days = int(
+            os.environ.get("NETWORK_STALE_RETENTION_DAYS", "30")
+        )
         self.snmp_enabled = os.environ.get("NETWORK_SNMP_ENABLED", "1") == "1"
         self.snmp_version = os.environ.get("NETWORK_SNMP_VERSION", "2c")  # "2c" | "3"
         self.snmp_community = os.environ.get("NETWORK_SNMP_COMMUNITY", "public")
@@ -143,6 +155,7 @@ class NetworkPlugin:
         self._last: Dict = {}
         self._prev: Dict[str, Dict] = {}
         self._expanded: set = set()  # ARP-discovered IPs auto-added to the scan scope
+        self._expanded_miss: Dict[str, int] = {}  # consecutive misses per expanded IP
         self._last_scan_monotonic = (
             0.0  # freshness guard for the registry's hourly call
         )
@@ -505,6 +518,19 @@ class NetworkPlugin:
                         self._expanded.add(ip)
                         expanded_added.append(ip)
 
+            # Evict expanded IPs unreachable for `expand_miss_limit` cycles so the
+            # scope doesn't fill with stale ARP entries over time.
+            expanded_evicted: List[str] = []
+            for ip in list(self._expanded):
+                if ip in curr:
+                    self._expanded_miss.pop(ip, None)
+                else:
+                    self._expanded_miss[ip] = self._expanded_miss.get(ip, 0) + 1
+                    if self._expanded_miss[ip] >= self.expand_miss_limit:
+                        self._expanded.discard(ip)
+                        self._expanded_miss.pop(ip, None)
+                        expanded_evicted.append(ip)
+
             sinks: Dict[str, Dict] = {}
             if self.sink_telegraf and self.auto_apply:
                 sinks["telegraf"] = await self._sink_telegraf(live)
@@ -522,6 +548,7 @@ class NetworkPlugin:
                 "live": len(live),
                 "changes": changes,
                 "expanded_added": expanded_added,
+                "expanded_evicted": expanded_evicted,
                 "expanded_total": len(self._expanded),
                 "sinks": sinks,
             }
@@ -584,14 +611,25 @@ class NetworkPlugin:
                     json.dumps(h.get("ports", [])),
                     json.dumps(h.get("snmp", {})),
                 )
-            for ip in changes.get("down", []):
-                await conn.execute(
-                    "UPDATE network_inventory SET status='down' WHERE ip=$1", ip
-                )
+            # Reconcile the whole inventory to this scan: anything not currently live
+            # is 'down' (catches hosts that vanished across a restart, not just the
+            # diff). Then purge rows down beyond the retention window.
+            live_ips = [h.get("host", "") for h in live if h.get("host")]
+            down = await conn.execute(
+                "UPDATE network_inventory SET status='down' "
+                "WHERE NOT (ip = ANY($1::text[])) AND status <> 'down'",
+                live_ips,
+            )
+            purged = await conn.execute(
+                "DELETE FROM network_inventory WHERE status='down' "
+                "AND last_seen < NOW() - make_interval(days => $1)",
+                self.stale_retention_days,
+            )
             return {
                 "status": "ok",
                 "upserted": len(live),
-                "marked_down": len(changes.get("down", [])),
+                "marked_down": int(down.split()[-1]) if down else 0,
+                "purged": int(purged.split()[-1]) if purged else 0,
             }
         except Exception as e:
             return {"status": "error", "error": f"{type(e).__name__}: {e}"}
@@ -626,13 +664,30 @@ class NetworkPlugin:
             "  MERGE (i:Interface {key: h.host + ':' + nm}) SET i.descr=nm "
             "  MERGE (host)-[:HAS_INTERFACE]->(i))"
         )
+        # Prune stale topology: Hosts not seen within the retention window (and then
+        # any Service/Interface left orphaned) — so the graph reflects reality.
+        retention_ms = self.stale_retention_days * 86400 * 1000
+        prune = [
+            {
+                "statement": "MATCH (h:Host) WHERE h.last_seen < timestamp() - "
+                "$ms DETACH DELETE h",
+                "parameters": {"ms": retention_ms},
+            },
+            {
+                "statement": "MATCH (s:Service) WHERE NOT EXISTS { (s)<-[:RUNS]-() } DELETE s"
+            },
+            {
+                "statement": "MATCH (i:Interface) WHERE NOT EXISTS { (i)<-[:HAS_INTERFACE]-() } DELETE i"
+            },
+        ]
         try:
             async with httpx.AsyncClient(timeout=12, auth=(user, pw)) as c:
                 r = await c.post(
                     url,
                     json={
                         "statements": [
-                            {"statement": statement, "parameters": {"hosts": payload}}
+                            {"statement": statement, "parameters": {"hosts": payload}},
+                            *prune,
                         ]
                     },
                 )
