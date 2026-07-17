@@ -12,7 +12,7 @@ therefore lives in `core.database`, which owns it.
 """
 
 import logging
-from typing import Dict
+from typing import Any, Dict
 
 import redis
 from models import PluginInfo, ServiceRegistration
@@ -26,7 +26,7 @@ logger = logging.getLogger("minder.plugin-registry")
 # ============================================================================
 
 plugins_db: Dict[str, PluginInfo] = {}  # name -> PluginInfo
-plugin_instances: Dict[str, any] = {}  # name -> live plugin instance
+plugin_instances: Dict[str, Any] = {}  # name -> live plugin instance
 services_db: Dict[str, ServiceRegistration] = {}  # name -> ServiceRegistration
 webhook_routes: Dict[str, str] = {}  # /webhook/<path> -> plugin_name
 plugin_manifests: Dict[str, Dict] = {}  # plugin_name -> manifest
