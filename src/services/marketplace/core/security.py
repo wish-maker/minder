@@ -27,8 +27,9 @@ class LicenseGenerator:
         nonce = os.urandom(8).hex()
         payload = f"{user_id}:{plugin_id}:{tier}:{timestamp}:{nonce}"
 
-        # 2. Generate HMAC signature
-        secret = settings.LICENSE_SECRET
+        # 2. Generate HMAC signature (LICENSE_SECRET, or JWT_SECRET as fallback —
+        #    no weak hardcoded default; see config.LICENSE_SECRET).
+        secret = settings.LICENSE_SECRET or settings.JWT_SECRET
         signature = hmac.new(
             secret.encode(), payload.encode(), hashlib.sha256
         ).hexdigest()

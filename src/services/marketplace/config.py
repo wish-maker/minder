@@ -45,8 +45,10 @@ class MarketplaceSettings(BaseSettings):
             raise ValueError("REDIS_PASSWORD must be set via environment variable")
         return v
 
-    # Security
-    LICENSE_SECRET: str = "dev_license_secret_change_me_in_production"
+    # Security — HMAC secret for license-key generation. Falls back to JWT_SECRET
+    # (a required, auto-generated secret) when unset, so there is no weak hardcoded
+    # default. Set explicitly only to decouple license keys from JWT_SECRET.
+    LICENSE_SECRET: Optional[str] = None
     JWT_SECRET: str  # Required: must be set via environment variable
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRATION_MINUTES: int = 60

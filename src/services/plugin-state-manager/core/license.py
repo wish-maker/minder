@@ -4,6 +4,7 @@ License validation logic
 """
 
 import logging
+import os
 from typing import Optional
 
 import asyncpg
@@ -56,8 +57,11 @@ async def validate_tool_access(
         tool = tools[0]
         required_tier = tool.get("required_tier", "community")
 
-    # Get user's subscription tier
-    # For now, default to community tier (TODO: integrate with actual user system)
+    # Get user's subscription tier.
+    # No user/subscription system exists yet (#47), so every caller is treated as
+    # the lowest real tier ("community"). This is FAIL CLOSED: pro/enterprise
+    # tools are denied to everyone until a real per-user tier lookup is wired in.
+    # `user_id` / `conn` are accepted now for a forward-compatible signature.
     user_tier = "community"
 
     # Define tier hierarchy
@@ -136,12 +140,32 @@ async def check_plugin_license(
             "message": f"License key required for {required_tier.value} tier",
         }
 
-    # TODO: Implement actual license key validation
-    # For now, accept any non-empty key
+    # Paid-tier plugins require a *validated* license key. A real license /
+    # subscription store does not exist yet (#47), so we FAIL CLOSED instead of
+    # the old "accept any non-empty key" bypass (which let any string unlock
+    # pro/enterprise plugins). No paid plugins ship today, so this is inert in
+    # practice — it only removes the bypass. A documented dev override exists for
+    # local testing of the paid path.
+    if os.getenv("MINDER_ALLOW_UNVALIDATED_LICENSES") == "1":
+        logger.warning(
+            "MINDER_ALLOW_UNVALIDATED_LICENSES=1 — accepting UNVALIDATED license "
+            "key for %s (%s tier). DEV ONLY; never set this in production.",
+            plugin_name,
+            required_tier.value,
+        )
+        return {
+            "valid": True,
+            "tier": required_tier.value,
+            "message": "License accepted via dev override (unvalidated)",
+        }
+
     return {
-        "valid": True,
+        "valid": False,
         "tier": required_tier.value,
-        "message": "License key validated",
+        "message": (
+            f"License validation for the {required_tier.value} tier is not yet "
+            "implemented; rejecting by default (#47)."
+        ),
     }
 
 

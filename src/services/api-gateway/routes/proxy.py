@@ -60,6 +60,24 @@ async def proxy_request(service_url: str, path: str, request: Request):
         raise HTTPException(status_code=500, detail="Internal proxy error")
 
 
+def _require_jwt_for_writes(request: Request) -> None:
+    """Require a valid JWT for mutating methods; reads pass through.
+
+    Applied uniformly to every proxied service so writes to rag-pipeline and
+    model-management (ingest, model pull/delete, …) can no longer be made
+    unauthenticated — closing the gap where only /v1/plugins/* was guarded
+    (#47). GET stays open for now; tightening reads is a separate policy call.
+    """
+    if request.method not in ("POST", "PUT", "DELETE", "PATCH"):
+        return
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token = auth_header.split(" ")[1]
+    # verify_jwt_token raises HTTPException(401) on an invalid/expired token.
+    request.state.user = verify_jwt_token(token)
+
+
 # ============================================================================
 # Plugin Registry
 # ============================================================================
@@ -80,20 +98,7 @@ async def proxy_to_plugin_registry(path: str, request: Request):
     Proxy all /v1/plugins/* requests to Plugin Registry service
     Authentication required for POST/PUT/DELETE/PATCH methods
     """
-    # Require authentication for write operations
-    if request.method in ["POST", "PUT", "DELETE", "PATCH"]:
-        auth_header = request.headers.get("Authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Authentication required")
-
-        token = auth_header.split(" ")[1]
-        try:
-            payload = verify_jwt_token(token)
-            # Add user info to headers for downstream services
-            request.state.user = payload
-        except HTTPException:
-            raise
-
+    _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY.get("plugin_registry")
     return await proxy_request(service_url, f"v1/plugins/{path}", request)
 
@@ -107,7 +112,8 @@ async def proxy_to_plugin_registry(path: str, request: Request):
     "/v1/rag/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
 )
 async def proxy_to_rag_pipeline(path: str, request: Request):
-    """Proxy all /v1/rag/* requests to RAG Pipeline service"""
+    """Proxy all /v1/rag/* requests to RAG Pipeline service (writes require JWT)."""
+    _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY.get("rag_pipeline")
     return await proxy_request(service_url, path, request)
 
@@ -121,6 +127,7 @@ async def proxy_to_rag_pipeline(path: str, request: Request):
     "/v1/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
 )
 async def proxy_to_model_management(path: str, request: Request):
-    """Proxy all /v1/models/* requests to Model Management service"""
+    """Proxy all /v1/models/* requests to Model Management service (writes require JWT)."""
+    _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY.get("model_management")
     return await proxy_request(service_url, path, request)
