@@ -23,7 +23,9 @@ core startup group). All run healthy; only 3 carry no healthcheck by design
 
 Minder is a local AI orchestration platform providing JWT-authenticated APIs, RAG pipelines
 (Standard + Conversational; HyDE/Self-RAG exist as unwired modules — #45), a knowledge-graph service, a manifest-based plugin system, and a
-full observability stack. All services run in Docker and are provisioned by a single `setup.sh`.
+full observability stack. All services run in Docker and are provisioned by a single `setup.sh`
+entrypoint — a thin shim over the native-Python setup CLI (`python -m scripts.setup`; the
+original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 
 ### System Capabilities
 

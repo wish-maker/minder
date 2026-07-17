@@ -9,7 +9,7 @@
 Your complete private AI infrastructure in a single command
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-24.0+-blue.svg)](https://www.docker.com/)
 [![Stars](https://img.shields.io/github/stars/wish-maker/minder?style=social)](https://github.com/wish-maker/minder)
 
@@ -53,6 +53,7 @@ Minder isn't just another AI toolset — it's your **complete private AI infrast
 
 ### 📋 **Prerequisites**
 - Docker & Docker Compose
+- Python 3.11+ (the `setup.sh` CLI is native Python; `setup.sh` is a thin shim, no bash needed)
 - 4GB+ RAM recommended
 - 64GB+ free storage space
 
@@ -216,7 +217,7 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 #### **Local LLM Inference**
 - **10+ Models Supported**: Llama 3.2, Mistral, Qwen2.5, and more
 - **GPU Acceleration**: Automatic NVIDIA GPU detection and usage
-- **Model Management**: Easy download, switch, and fine-tune models
+- **Model Management**: Download, switch, and test-prompt local models via `model-management` (:8005)
 - **Zero Configuration**: Works out of the box
 
 #### **RAG Pipeline**
@@ -232,11 +233,11 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 
 ### 🔌 **Plugin System**
 
-#### **Dynamic Architecture**
-- **Hot Reload**: Add/remove plugins without restart
-- **Lifecycle Management**: `REGISTERED → INSTALLED → ACTIVE → SUSPENDED`
-- **Hook System**: `on_register`, `on_install`, `on_activate`, `on_error`
-- **Marketplace**: Discover and share community plugins
+#### **Manifest-Based Architecture**
+- **No arbitrary code**: plugins declare identity, capabilities, and storage needs in a manifest — new actions are fixed handlers, not uploaded code (by design)
+- **Lifecycle (code reality)**: `register → initialize → health_check (60s loop) → collect_data (hourly/manual) → analyze → shutdown`; status is one of `registered / enabled / disabled / error`
+- **AI tools**: plugins can register as Ollama function-calling tools (`name, description, input_schema, endpoint`)
+- **Marketplace**: catalog with license tiers and a Neo4j dependency graph (`marketplace` :8002)
 
 #### **Multi-Database Support**
 - **PostgreSQL**: Structured data and user management
@@ -440,7 +441,9 @@ minder/
 │   ├── services/        # Microservices (api-gateway, rag-pipeline, etc.)
 │   └── shared/          # Shared libraries and utilities
 ├── scripts/              # Setup and utility scripts
-│   └── setup/          # Setup templates and configuration
+│   ├── setup/          # Native-Python setup CLI (python -m scripts.setup)
+│   ├── lib/            # Bash reference modules (behavior-gate parity only)
+│   └── gate/           # Behavior gate (verifies python ↔ bash-reference parity)
 ├── docs/                 # Documentation
 │   ├── images/          # Logo and assets
 │   ├── api/            # API documentation
@@ -454,7 +457,8 @@ minder/
 ├── LICENSE
 ├── CONTRIBUTING.md
 ├── README.md
-└── setup.sh             # Main setup script
+├── setup.sh             # Entrypoint — thin shim → `python -m scripts.setup`
+└── setup.bash.sh        # Frozen bash reference (behavior-gate parity only)
 ```
 
 ### 🎯 **Key Standards**

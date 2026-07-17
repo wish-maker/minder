@@ -10,13 +10,17 @@ docker compose version
 
 # Verify Docker is running
 docker ps
+
+# Verify Python 3.11+ (the setup CLI is native Python; setup.sh is a thin shim)
+python3 --version
 ```
 
 ### Installation
 
 #### Option 1: Automated (Recommended)
 
-The `setup.sh` script provides complete lifecycle management:
+`setup.sh` (a thin shim over the native-Python `python -m scripts.setup`) provides
+complete lifecycle management:
 
 ```bash
 # Clone and setup
@@ -79,7 +83,7 @@ bash setup.sh status
 
 ### Lifecycle Management
 
-The `setup.sh` script provides comprehensive enterprise-grade management:
+The `setup.sh` entrypoint (thin shim → `python -m scripts.setup`) provides comprehensive enterprise-grade management:
 
 ```bash
 # Installation & lifecycle
@@ -105,7 +109,9 @@ bash setup.sh restore [archive]     # Restore from backup
 
 # Updates & uninstall
 bash setup.sh update                # Update images + rebuild + restart
-bash setup.sh uninstall             # Remove the platform
+bash setup.sh update --check        # Report version drift only — no changes applied
+bash setup.sh uninstall             # Stop the platform, PRESERVE data volumes
+bash setup.sh uninstall --purge     # Stop AND DELETE all data volumes (irreversible)
 ```
 
 ### First Steps

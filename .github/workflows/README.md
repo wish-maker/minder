@@ -13,11 +13,12 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 ### 1. Quality Gate — `quality.yml`
 **Triggers:** push & PR to `main`/`develop`, manual dispatch.
 **Jobs (all parallel — the fast gate):**
-- Python lint: Black, isort, Flake8, MyPy (on `src/`).
+- Python lint: Black, isort, Flake8, MyPy (on `src/` **and** `scripts/setup/` — the
+  native-Python setup CLI).
 - Shell lint: `bash -n` + `shellcheck --shell=bash --severity=error` (**blocking**)
-  on `setup.sh` + all `scripts/lib/*.sh`; full-severity shellcheck is informational
-  (`continue-on-error`). The file list is a glob, so new modules are covered
-  automatically.
+  on `setup.sh` (the thin shim) + `setup.bash.sh` (the frozen bash reference) + all
+  `scripts/lib/*.sh`; full-severity shellcheck is informational (`continue-on-error`).
+  The file list is a glob, so new modules are covered automatically.
 - Hadolint on `src/services/*/Dockerfile`.
 - Light security scans: Bandit (`-r src/ src/services/ src/plugins/ tests/ -ll`),
   Safety, TruffleHog (secret scan), pip-licenses.
@@ -55,12 +56,13 @@ tracking **issue** — it does not open PRs or modify files.
 
 ```bash
 # Shell (matches the Quality Gate workflow)
-bash -n setup.sh scripts/lib/*.sh
-shellcheck --shell=bash --severity=error setup.sh scripts/lib/*.sh
+bash -n setup.sh setup.bash.sh scripts/lib/*.sh
+shellcheck --shell=bash --severity=error setup.sh setup.bash.sh scripts/lib/*.sh
 
 # Python (matches the Quality Gate + CI workflows)
-black --check src/services/ src/core/
-flake8 src/services/ src/core/ --max-line-length=120
+black --check src/services/ src/core/ scripts/setup/
+flake8 src/services/ src/core/ scripts/setup/ --max-line-length=120
+mypy src/services/ scripts/setup/ --ignore-missing-imports
 pytest tests/ -v --cov=src
 ```
 

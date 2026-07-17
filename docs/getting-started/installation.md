@@ -6,6 +6,7 @@
 
 - **Docker** 20.10+
 - **Docker Compose** 2.20+
+- **Python** 3.11+ — the `setup.sh` CLI is now native Python (`python -m scripts.setup`); `setup.sh` is a thin shim that execs it. No bash dependency in the setup path (works on Linux/macOS/Windows).
 - **Git** (for development)
 
 ### System Requirements
@@ -20,7 +21,11 @@
 
 ### Method 1: Automated Setup (Recommended)
 
-The `setup.sh` script provides complete lifecycle management for the Minder platform.
+The `setup.sh` entrypoint provides complete lifecycle management for the Minder
+platform. (It is a thin shim over the native-Python setup CLI, `python -m
+scripts.setup`; `bash setup.sh <verb>` works exactly as shown below. The original
+bash implementation is preserved as `setup.bash.sh`, used only as the behavior-gate
+reference.)
 
 ```bash
 # Clone the repository
@@ -101,7 +106,7 @@ docker exec minder-ollama ollama list
 
 ## Lifecycle Management
 
-The `setup.sh` script provides comprehensive enterprise lifecycle management capabilities:
+The `setup.sh` entrypoint (thin shim → `python -m scripts.setup`) provides comprehensive enterprise lifecycle management capabilities:
 
 ### Available Commands
 
@@ -109,8 +114,14 @@ The full command set is:
 
 ```
 install | start | stop | restart | status | logs | shell | migrate |
-backup | restore | doctor | update | ollama-mode | sync-postgres-password | uninstall
+backup | restore | doctor | update | ollama-mode | sync-postgres-password | uninstall |
+version | help
 ```
+
+Global flags (pass as `--flag` or set the env var): `--dry-run`/`DRY_RUN=1`,
+`--verbose`/`VERBOSE=1`, `--json` (status), `--skip-version-check`/`SKIP_VERSION_CHECK=1`,
+`NONINTERACTIVE=1`. Run `bash setup.sh --help` for the full reference, or
+`bash setup.sh version` for the version.
 
 ```bash
 # Installation & service management
@@ -136,8 +147,10 @@ bash setup.sh backup                 # Full backup (Postgres, Neo4j, InfluxDB, Q
 bash setup.sh restore <archive>      # Restore from backup
 
 # Updates & uninstall
-bash setup.sh update                 # Update Docker images
-bash setup.sh uninstall              # Remove the platform
+bash setup.sh update                 # Update Docker images (rebuild + rolling restart)
+bash setup.sh update --check         # Report version drift only — no changes applied
+bash setup.sh uninstall              # Stop the platform, PRESERVE data volumes
+bash setup.sh uninstall --purge      # Stop AND DELETE all data volumes (irreversible)
 ```
 
 ### Service Status

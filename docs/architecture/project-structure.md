@@ -1,6 +1,6 @@
 # Minder Platform - Project Structure Guide
 
-> **Last Updated:** 2026-07-10
+> **Last Updated:** 2026-07-16
 
 ## Directory Layout
 
@@ -9,7 +9,8 @@ minder/                              # Project root
 ├── README.md                        # Main project documentation
 ├── CONTRIBUTING.md                  # Contribution guidelines
 ├── LICENSE                          # License
-├── setup.sh                         # Automated setup / lifecycle script ⭐
+├── setup.sh                         # Entrypoint ⭐ — thin shim → `python -m scripts.setup`
+├── setup.bash.sh                    # Frozen bash reference (behavior-gate parity only)
 ├── .env.example                     # Environment template (tracked)
 ├── .env                             # Single source of truth (gitignored; you edit this)
 ├── pyproject.toml                   # Python tooling config (black/isort/mypy/pytest)
@@ -67,8 +68,9 @@ minder/                              # Project root
 │   └── fixtures/                    # Test data
 │
 └── scripts/                         # Setup & utility scripts
-    ├── lib/                         # setup.sh modules (commands, docker, env, versions, ...)
-    ├── gate/                        # behavior gate for setup.sh refactors
+    ├── setup/                       # ⭐ Native-Python setup CLI (python -m scripts.setup)
+    ├── lib/                         # Bash reference modules (behavior-gate parity only)
+    ├── gate/                        # Behavior gate — verifies python ↔ bash-reference parity
     ├── health-check.sh              # Health monitoring ⭐
     ├── rolling-update.sh            # Rolling updates
     └── validate-installation.sh    # Install validation

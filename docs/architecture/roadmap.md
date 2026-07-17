@@ -69,9 +69,13 @@ wiring them in (plus further retrieval-quality work) is tracked on the backlog.
 Authelia is currently disabled. Whether to finish wiring it (DB auto-init + NTP) or drop it is an
 open decision on the tracker.
 
-### 4. Setup / Tooling Modularization
-`setup.sh` has been split into `scripts/lib/` modules with a behavior gate under `scripts/gate/`.
-Ongoing work includes deriving image versions from the compose file and evaluating a Python port.
+### 4. Setup / Tooling — Python port (DONE)
+`setup.sh` was split into `scripts/lib/` bash modules (Stage 1), then **fully ported to
+native Python** under `scripts/setup/` (Stage 2, issue #7 — closed). `setup.sh` is now a
+thin shim that execs `python -m scripts.setup`; the original bash lives on as
+`setup.bash.sh` + `scripts/lib/*.sh`, used only as the parity reference for the behavior
+gate (`scripts/gate/`). No bash dependency remains in the setup path (Linux/macOS/Windows).
+Remaining tooling work: deriving image versions from the compose file (issue #12).
 
 ### 5. CI Quality Gates
 CI is consolidated into a fast quality gate, a test workflow, a deep security workflow, and a

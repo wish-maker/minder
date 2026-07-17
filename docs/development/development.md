@@ -15,7 +15,8 @@ app** — the web UI is **OpenWebUI**.
 
 - **Docker** and **Docker Compose v2** — container runtime and orchestration
 - **Git** — version control
-- **Python 3.11 / 3.12** — only needed if running a service or tests outside Docker
+- **Python 3.11+** — required: the `setup.sh` CLI is native Python (`python -m scripts.setup`;
+  `setup.sh` is a thin shim). Also used for running a service or tests outside Docker.
 - An editor of your choice (VS Code, PyCharm, etc.)
 
 ### Recommended Tools

@@ -45,7 +45,7 @@ dump/restore rather than an in-place volume swap).
 
 ```bash
 # See installed vs. pinned vs. latest (drift report)
-bash versions.sh   # or: scripts/lib/versions.sh, per repo layout
+bash setup.sh update --check   # native-Python version engine (scripts/setup/versions.py)
 
 # Snapshot current image tags for rollback reference
 grep -nE '^\s*image:' docker/compose/docker-compose.yml

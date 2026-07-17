@@ -18,12 +18,12 @@ into a container.
 `docker-compose.yml` is the **hand-maintained source of truth** — edit it directly,
 including image tags. Config-file *mounts* should point at `../services/<name>/…`.
 
-> **Note:** image **versions** here are the single source of truth. `versions.sh`
-> (image pulling + the `doctor` / `update --check` drift report) reads them straight from
-> this file's `image:` lines — `THIRD_PARTY_IMAGE_META` in `scripts/lib/config.sh` now
-> holds only per-image resolution *metadata* (stable-track prefix + update constraint),
-> not versions. So a version bump is a **one-file edit here**, with no second place to
-> keep in sync (#12).
+> **Note:** image **versions** here are the single source of truth. The setup CLI's
+> version engine (`scripts/setup/versions.py` — image pulling + the `doctor` /
+> `update --check` drift report) reads them straight from this file's `image:` lines —
+> `THIRD_PARTY_IMAGE_META` in `scripts/setup/config.py` now holds only per-image
+> resolution *metadata* (stable-track prefix + update constraint), not versions. So a
+> version bump is a **one-file edit here**, with no second place to keep in sync (#12).
 
 ## The compose/ vs services/ split
 
