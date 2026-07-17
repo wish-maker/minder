@@ -50,6 +50,26 @@ from plugins._contract import PluginMetadata   # name/version/description/author
 (type-check against it if you like; plugins are duck-typed so inheriting is optional).
 It's a module, not a plugin dir, so the loader never tries to load it.
 
+### Invoking plugin actions (writes)
+
+Reads use `POST /v1/plugins/<name>/collect` (→ `collect_data`) and
+`GET /v1/plugins/<name>/analysis` (→ `analyze`). For **state-changing** actions,
+a plugin declares a class-level `ACTIONS` frozenset of method names and they become
+callable over HTTP:
+
+```
+POST /v1/plugins/<name>/actions/<method>   (JWT required; JSON body → method kwargs)
+```
+
+Only names in `ACTIONS` are reachable — nothing else on the instance. Example
+(telegraf: `ACTIONS = {set_managed_region, clear_managed_region, reload}`):
+
+```bash
+curl -X POST http://localhost:8001/v1/plugins/telegraf/actions/set_managed_region \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"body": "[[inputs.internal]]\n  collect_memstats = false"}'
+```
+
 ### Gotchas (verified live)
 
 - **`health_check()` must return `{"healthy": <bool>}`.** The monitoring loop reads
