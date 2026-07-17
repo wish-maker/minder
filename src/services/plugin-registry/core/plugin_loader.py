@@ -148,15 +148,16 @@ async def load_plugin_from_module(plugin_dir: Path):
                     break
 
         if not plugin_class:
-            # Fallback: search for BaseModule subclass
-            from src.core.interface import BaseModule
-
+            # Fallback: find a class exposing the plugin lifecycle. Plugins are
+            # duck-typed (register/initialize/…) — there is no shared BaseModule
+            # base class, so match on the lifecycle entry method defined on a
+            # class that lives in this module (not an imported one).
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
                 if (
                     isinstance(attr, type)
-                    and issubclass(attr, BaseModule)
-                    and attr != BaseModule
+                    and hasattr(attr, "register")
+                    and attr.__module__ == module.__name__
                 ):
                     plugin_class = attr
                     break

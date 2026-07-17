@@ -157,9 +157,7 @@ def build_plugins_router(
             raise HTTPException(status_code=404, detail="Plugin not found")
         plugin.status = "enabled"
         if plugin_name in plugin_instances:
-            from src.core.interface import ModuleStatus
-
-            plugin_instances[plugin_name].status = ModuleStatus.READY
+            plugin_instances[plugin_name].status = "ready"
         await update_plugin_in_database(plugin_name, status="enabled", enabled=True)
         return {"message": f"Plugin {plugin_name} enabled"}
 
@@ -173,9 +171,7 @@ def build_plugins_router(
             raise HTTPException(status_code=404, detail="Plugin not found")
         plugin.status = "disabled"
         if plugin_name in plugin_instances:
-            from src.core.interface import ModuleStatus
-
-            plugin_instances[plugin_name].status = ModuleStatus.REGISTERED
+            plugin_instances[plugin_name].status = "registered"
         await update_plugin_in_database(plugin_name, status="disabled", enabled=False)
         return {"message": f"Plugin {plugin_name} disabled"}
 
