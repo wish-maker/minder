@@ -45,200 +45,61 @@ Config (env on plugin-registry):
   NETWORK_SINK_TELEGRAF / _POSTGRES / _NEO4J / _RABBITMQ  ("1"/"0", default "1").
 
 Only scan networks you are authorised to (your own infra).
+
+SECURITY: SNMP v3 auth/priv passphrases are passed to the net-snmp CLI on argv
+(visible via ps / /proc within this container, which already holds them as env). Sink
+credentials go over HTTP client auth, not URLs; sink error logs record the exception
+TYPE only, never the message, to avoid leaking secrets.
 """
 
 import asyncio
-import ipaddress
 import json
+import logging
 import os
 import shutil
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
-from xml.etree import ElementTree
 
 import httpx
 
 from plugins._contract import PluginMetadata
 
+from .helpers import (  # noqa: F401 (re-exported for the plugin + its tests)
+    _ARP_MAC_OID,
+    _HR_MEMSIZE_OID,
+    _HR_PROC_LOAD_OID,
+    _HR_STOR_DESCR_OID,
+    _HR_STOR_SIZE_OID,
+    _HR_STOR_USED_OID,
+    _HR_UPTIME_OID,
+    _IF_ALIAS_OID,
+    _IF_DESCR_OID,
+    _IF_MAC_OID,
+    _IF_OPER,
+    _IF_OPERSTATUS_OID,
+    _IF_SPEED_OID,
+    _IF_TYPE_OID,
+    _SNMP_SYSTEM_OIDS,
+    _diff_hosts,
+    _expand_targets,
+    _normalize_mac,
+    _parse_arp,
+    _parse_nmap_xml,
+    _parse_snmpwalk,
+    _summarize,
+    _telegraf_config,
+)
+
 __all__ = ["NetworkPlugin"]
+
+logger = logging.getLogger("minder.plugin.network")
 
 _CONNECT_TIMEOUT = 2.0
 _MAX_CONCURRENCY = 64
 _NMAP_HOST_TIMEOUT = "30s"
+_NMAP_MAX_TIMEOUT = 1800  # cap the whole-scan timeout (s) regardless of host count
 _SNMP_TIMEOUT = "2"
 _SNMP_MAX_CONCURRENCY = 16
-
-_SNMP_SYSTEM_OIDS = {
-    "sysDescr": "1.3.6.1.2.1.1.1.0",
-    "sysObjectID": "1.3.6.1.2.1.1.2.0",
-    "sysUpTime": "1.3.6.1.2.1.1.3.0",
-    "sysContact": "1.3.6.1.2.1.1.4.0",
-    "sysName": "1.3.6.1.2.1.1.5.0",
-    "sysLocation": "1.3.6.1.2.1.1.6.0",
-}
-_IF_DESCR_OID = "1.3.6.1.2.1.2.2.1.2"
-_IF_TYPE_OID = "1.3.6.1.2.1.2.2.1.3"
-_IF_SPEED_OID = "1.3.6.1.2.1.2.2.1.5"
-_IF_MAC_OID = "1.3.6.1.2.1.2.2.1.6"
-_IF_OPERSTATUS_OID = "1.3.6.1.2.1.2.2.1.8"
-_IF_ALIAS_OID = "1.3.6.1.2.1.31.1.1.1.18"  # ifXTable ifAlias
-_IF_OPER = {"1": "up", "2": "down", "3": "testing"}
-
-# Host Resources MIB (device health / inventory).
-_HR_UPTIME_OID = "1.3.6.1.2.1.25.1.1.0"
-_HR_MEMSIZE_OID = "1.3.6.1.2.1.25.2.2.0"
-_HR_PROC_LOAD_OID = "1.3.6.1.2.1.25.3.3.1.2"  # per-processor load %
-_HR_STOR_DESCR_OID = "1.3.6.1.2.1.25.2.3.1.3"
-_HR_STOR_SIZE_OID = "1.3.6.1.2.1.25.2.3.1.5"  # in allocation units
-_HR_STOR_USED_OID = "1.3.6.1.2.1.25.2.3.1.6"
-
-# ARP / neighbor table: ipNetToMediaPhysAddress (index = ifIndex.a.b.c.d → MAC).
-_ARP_MAC_OID = "1.3.6.1.2.1.4.22.1.2"
-
-
-# ── pure helpers (unit-tested without any subprocess/backend) ─────────────────
-def _expand_targets(spec: str, max_hosts: int) -> List[str]:
-    hosts: List[str] = []
-    for raw in spec.split(","):
-        item = raw.strip()
-        if not item:
-            continue
-        try:
-            net = ipaddress.ip_network(item, strict=False)
-        except ValueError:
-            hosts.append(item)
-            if len(hosts) >= max_hosts:
-                return hosts[:max_hosts]
-            continue
-        if net.num_addresses == 1:
-            hosts.append(str(net.network_address))
-        else:
-            for ip in net.hosts():
-                hosts.append(str(ip))
-                if len(hosts) >= max_hosts:
-                    return hosts[:max_hosts]
-        if len(hosts) >= max_hosts:
-            return hosts[:max_hosts]
-    return hosts[:max_hosts]
-
-
-def _parse_nmap_xml(xml_text: str) -> List[Dict]:
-    hosts: List[Dict] = []
-    try:
-        root = ElementTree.fromstring(xml_text)
-    except ElementTree.ParseError:
-        return hosts
-    for host_el in root.findall("host"):
-        status = host_el.find("status")
-        state = status.get("state") if status is not None else "unknown"
-        addr = ""
-        for a in host_el.findall("address"):
-            if a.get("addrtype") in ("ipv4", "ipv6"):
-                addr = a.get("addr", "")
-                break
-        hostname = ""
-        hn = host_el.find("hostnames/hostname")
-        if hn is not None:
-            hostname = hn.get("name", "")
-        ports = []
-        for p in host_el.findall("ports/port"):
-            pstate = p.find("state")
-            if pstate is None or pstate.get("state") != "open":
-                continue
-            svc = p.find("service")
-            ports.append(
-                {
-                    "port": int(p.get("portid", "0")),
-                    "protocol": p.get("protocol", "tcp"),
-                    "service": svc.get("name", "") if svc is not None else "",
-                    "product": svc.get("product", "") if svc is not None else "",
-                    "version": svc.get("version", "") if svc is not None else "",
-                }
-            )
-        hosts.append(
-            {"host": addr, "hostname": hostname, "state": state, "ports": ports}
-        )
-    return hosts
-
-
-def _parse_snmpwalk(text: str, base_oid: str) -> Dict[str, str]:
-    result: Dict[str, str] = {}
-    prefix = base_oid if base_oid.startswith(".") else "." + base_oid
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split(" ", 1)
-        oid = parts[0]
-        value = parts[1].strip().strip('"') if len(parts) > 1 else ""
-        if oid.startswith(prefix + "."):
-            result[oid[len(prefix) + 1 :]] = value
-    return result
-
-
-def _parse_arp(raw: Dict[str, str]) -> Dict[str, str]:
-    """Turn a parsed ipNetToMediaPhysAddress walk ({index: mac}) into {ip: mac}.
-    The OID index is ``<ifIndex>.<a>.<b>.<c>.<d>``; value is the MAC (e.g.
-    ``0:1a:2b:3c:4d:5e`` or ``1a 2b 3c ...``)."""
-    out: Dict[str, str] = {}
-    for index, mac in raw.items():
-        parts = index.split(".")
-        if len(parts) < 5:
-            continue
-        ip = ".".join(parts[-4:])
-        out[ip] = mac.replace(" ", ":").strip(":").lower()
-    return out
-
-
-def _telegraf_config(hosts: List[Dict], snmp_community: str) -> str:
-    blocks: List[str] = []
-    for h in hosts:
-        addr = h.get("host", "")
-        for p in h.get("ports", []):
-            if p.get("protocol", "tcp") != "tcp":
-                continue
-            blocks.append(
-                "[[inputs.net_response]]\n"
-                '  protocol = "tcp"\n'
-                f'  address = "{addr}:{p["port"]}"\n'
-                '  timeout = "5s"'
-            )
-        if h.get("snmp"):
-            fields = "\n".join(
-                "  [[inputs.snmp.field]]\n"
-                f'    name = "{name}"\n'
-                f'    oid = "{oid}"'
-                for name, oid in _SNMP_SYSTEM_OIDS.items()
-            )
-            blocks.append(
-                "[[inputs.snmp]]\n"
-                f'  agents = ["udp://{addr}:161"]\n'
-                "  version = 2\n"
-                f'  community = "{snmp_community}"\n' + fields
-            )
-    return "\n".join(blocks)
-
-
-def _summarize(hosts: List[Dict]) -> Dict[str, Dict]:
-    """{ip: {ports:[sorted], snmp:bool}} — the shape change detection compares."""
-    out: Dict[str, Dict] = {}
-    for h in hosts:
-        ip = h.get("host", "")
-        if not ip:
-            continue
-        out[ip] = {
-            "ports": sorted(p["port"] for p in h.get("ports", [])),
-            "snmp": bool(h.get("snmp")),
-        }
-    return out
-
-
-def _diff_hosts(prev: Dict[str, Dict], curr: Dict[str, Dict]) -> Dict[str, List[str]]:
-    """Change events between two summaries: new / down / changed host IPs."""
-    new = [ip for ip in curr if ip not in prev]
-    down = [ip for ip in prev if ip not in curr]
-    changed = [ip for ip in curr if ip in prev and curr[ip] != prev[ip]]
-    return {"new": new, "down": down, "changed": changed}
 
 
 class NetworkPlugin:
@@ -300,9 +161,18 @@ class NetworkPlugin:
         while True:
             await asyncio.sleep(self.interval)
             try:
-                await self.reconcile()
+                result = await self.reconcile()
+                errs = {
+                    k: v
+                    for k, v in result.get("sinks", {}).items()
+                    if v.get("status") in ("error", "partial")
+                }
+                if errs:
+                    logger.warning("network reconcile sink issues: %s", errs)
+            except asyncio.CancelledError:  # shutdown → let it propagate
+                raise
             except Exception:  # a bad cycle must never kill the loop
-                pass
+                logger.exception("network autonomous reconcile cycle failed")
 
     async def health_check(self) -> Dict:
         return {
@@ -318,6 +188,10 @@ class NetworkPlugin:
         self.status = "shutdown"
         if self._task is not None:
             self._task.cancel()
+            try:
+                await self._task
+            except (asyncio.CancelledError, Exception):
+                pass
             self._task = None
 
     # ── subprocess helper ────────────────────────────────────────────────────
@@ -345,7 +219,7 @@ class NetworkPlugin:
             "-oX",
             "-",
             *hosts,
-            timeout=len(hosts) * 45 + 30,
+            timeout=min(len(hosts) * 30 + 30, _NMAP_MAX_TIMEOUT),
         )
         return _parse_nmap_xml(out) if rc == 0 else []
 
@@ -458,7 +332,7 @@ class NetworkPlugin:
                     "descr": descr.get(idx, ""),
                     "type": itype.get(idx, ""),
                     "speed_bps": speed.get(idx, ""),
-                    "mac": mac.get(idx, "").replace(" ", ":").strip(":").lower(),
+                    "mac": _normalize_mac(mac.get(idx, "")),
                     "oper_status": _IF_OPER.get(oper.get(idx, ""), oper.get(idx, "")),
                     "alias": alias.get(idx, ""),
                 }
@@ -695,25 +569,39 @@ class NetworkPlugin:
             "  MERGE (host)-[:HAS_INTERFACE]->(i))"
         )
         try:
-            async with httpx.AsyncClient(timeout=12) as c:
+            async with httpx.AsyncClient(timeout=12, auth=(user, pw)) as c:
                 r = await c.post(
                     url,
-                    auth=(user, pw),
                     json={
                         "statements": [
                             {"statement": statement, "parameters": {"hosts": payload}}
                         ]
                     },
                 )
-            errs = (
-                r.json().get("errors", []) if r.status_code == 200 else [r.status_code]
-            )
+            if r.status_code != 200:
+                logger.warning("network neo4j sink HTTP %s", r.status_code)
+                return {
+                    "status": "error",
+                    "http_status": r.status_code,
+                    "hosts": len(payload),
+                }
+            try:
+                errs = r.json().get("errors", [])
+            except ValueError:
+                return {
+                    "status": "error",
+                    "error": "non-JSON response",
+                    "hosts": len(payload),
+                }
+            if errs:
+                logger.warning("network neo4j cypher errors: %s", errs)
             return {
                 "status": "ok" if not errs else "error",
                 "hosts": len(payload),
                 "errors": errs,
             }
-        except Exception as e:
+        except Exception as e:  # log the TYPE only — the message may carry creds
+            logger.warning("network neo4j sink failed: %s", type(e).__name__)
             return {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
     async def _sink_rabbitmq(self, changes: Dict) -> Dict:
@@ -728,9 +616,11 @@ class NetworkPlugin:
         pw = os.environ.get("RABBITMQ_PASSWORD", "")
         base = os.environ.get("NETWORK_RABBITMQ_URL", "http://rabbitmq:15672")
         url = base + "/api/exchanges/%2f/amq.topic/publish"
-        published = 0
+        sent = 0  # accepted by the exchange (HTTP 200)
+        routed = 0  # actually delivered to a bound queue (a consumer exists)
+        errors = 0  # HTTP-level failures
         try:
-            async with httpx.AsyncClient(timeout=8) as c:
+            async with httpx.AsyncClient(timeout=8, auth=(user, pw)) as c:
                 for routing_key, ip in events:
                     body = {
                         "properties": {},
@@ -738,11 +628,31 @@ class NetworkPlugin:
                         "payload": json.dumps({"ip": ip, "event": routing_key}),
                         "payload_encoding": "string",
                     }
-                    r = await c.post(url, auth=(user, pw), json=body)
-                    if r.status_code == 200 and r.json().get("routed"):
-                        published += 1
-            return {"status": "ok", "events": len(events), "published": published}
-        except Exception as e:
+                    r = await c.post(url, json=body)
+                    if r.status_code != 200:
+                        errors += 1
+                        continue
+                    sent += 1
+                    try:
+                        if r.json().get("routed"):
+                            routed += 1
+                    except ValueError:
+                        pass
+            if errors:
+                logger.warning(
+                    "network rabbitmq: %d/%d publishes failed (HTTP)",
+                    errors,
+                    len(events),
+                )
+            return {
+                "status": "ok" if errors == 0 else "partial",
+                "events": len(events),
+                "sent": sent,
+                "routed": routed,
+                "errors": errors,
+            }
+        except Exception as e:  # log the TYPE only — the message may carry creds
+            logger.warning("network rabbitmq sink failed: %s", type(e).__name__)
             return {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
     # ── analysis (read-only view) ─────────────────────────────────────────────
