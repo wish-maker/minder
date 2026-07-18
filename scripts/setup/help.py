@@ -1,6 +1,6 @@
 """Help text for the Minder setup CLI — ported from scripts/lib/help.sh
-show_help() (#7, Stage 2). Was byte-faithful to the bash heredoc; the PLUGINS
-section below is a deliberate post-port addition (the `plugin` verb has no bash
+show_help() (#7, Stage 2). Was byte-faithful to the bash heredoc; the BUNDLES
+section below is a deliberate post-port addition (the `bundle` verb has no bash
 equivalent — the frozen setup.bash.sh reference does not list it).
 """
 
@@ -58,17 +58,16 @@ _HELP_TEMPLATE = """
                              remote host; default http://host.docker.internal:11434). Flips
                              .env only and prints a "run restart to apply" hint — no restart.
 
-{bold}PLUGINS{nc}
-    plugin status            Show each plugin's enable-state + its dependency
-                             containers and who else uses them (the consumer graph)
-    plugin enable <name>     Enable the plugin + bring its dependency services up
-    plugin disable <name> [--stop-orphans]
-                             Disable it; report dependencies now used by nothing
-                             else. --stop-orphans also stops them (influxdb stays —
-                             Grafana uses it; telegraf stops). (plugins: telegraf)
-    plugin reconcile [--stop-orphans]
+{bold}BUNDLES{nc}  (capability groups of services — see docs/architecture/bundles.md)
+    bundle status            Show each bundle's enable-state + its services and
+                             which enabled bundles claim them (the claim graph)
+    bundle enable <name>     Enable the bundle + bring its services up
+    bundle disable <name> [--stop-orphans]
+                             Disable it; report services now claimed by no enabled
+                             bundle (orphans). --stop-orphans also stops them.
+    bundle reconcile [--stop-orphans]
                              Converge the live stack to the enable-state
-    (state lives in plugins.state.json — secret-free; start honours it)
+    (state lives in bundles.state.json — secret-free; start honours it. bundles: monitoring)
 
 {bold}FLAGS{nc}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing

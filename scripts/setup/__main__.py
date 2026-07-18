@@ -10,6 +10,7 @@ setup.bash.sh). An unknown command errors + prints help, mirroring the bash
 import sys
 
 from . import backup as backup_module
+from . import bundles as bundles_module
 from . import config
 from . import doctor as doctor_module
 from . import help as help_module
@@ -18,7 +19,6 @@ from . import log
 from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
-from . import plugins as plugins_module
 from . import restart as restart_module
 from . import restore as restore_module
 from . import secrets as secrets_module
@@ -123,14 +123,14 @@ def main(argv: list[str]) -> int:
     if cmd == "doctor":
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()
-    if cmd == "plugin":
-        # Post-port verb (no bash equivalent): plugin enable|disable <name>
+    if cmd == "bundle":
+        # Post-port verb (no bash equivalent): bundle enable|disable <name>
         # [--stop-orphans] | status | reconcile [--stop-orphans].
         stop_orphans = "--stop-orphans" in argv
         pos = [a for a in _positional(argv) if a != "--stop-orphans"]
         action = pos[1] if len(pos) > 1 else ""
         name = pos[2] if len(pos) > 2 else ""
-        return plugins_module.run(action, name, stop_orphans=stop_orphans)
+        return bundles_module.run(action, name, stop_orphans=stop_orphans)
     if cmd == "install":
         # setup.sh: default command (no verb) → cmd_install.
         return install_module.run()

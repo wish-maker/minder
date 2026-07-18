@@ -71,17 +71,15 @@ runtime — never hand-edit inside the markers.
   `clear_managed_region`, `reload`.
 - **Compose wiring**: `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`,
   and `/var/run/docker.sock` (restart fallback only).
-- **Container lifecycle**: `./setup.sh plugin enable telegraf` brings its dependency services up
-  (reusing any already running); `plugin disable telegraf` detects which deps are now **orphaned**
-  — used by no other enabled plugin and no core service — and reports them, stopping them only on
-  `--stop-orphans`. The refcount is derived from a consumer graph: `influxdb` has a standing core
-  consumer (`grafana` reads it as a datasource — an edge compose `depends_on` doesn't capture), so
-  disabling telegraf leaves influxdb up and offers to stop only telegraf itself. Enable-state lives
-  in `plugins.state.json` (a dedicated, **secret-free** file — not `.env` — so the network-facing
-  registry can safely share it) and `start` honours it; `plugin status` shows the graph + live
-  drift; `plugin reconcile [--stop-orphans]` converges the stack. Every action funnels through
-  `docker compose` — compose stays the single source of truth. (API support is planned — the same
-  secret-free state file + shared refcount logic are what let the registry expose it over HTTP.)
+- **Container lifecycle**: telegraf belongs to the **`monitoring` bundle** — the whole
+  observability stack is enabled/disabled together via `./setup.sh bundle enable|disable
+  monitoring [--stop-orphans]`. Enable-state lives in `bundles.state.json` (a dedicated,
+  **secret-free** file — not `.env` — so the network-facing registry can safely share it) and
+  `start` honours it. A service stays up while ≥1 enabled bundle claims it; disabling a bundle
+  reports its now-orphaned services and stops them only on `--stop-orphans`. Every action funnels
+  through `docker compose` — compose stays the single source of truth. See the full model,
+  vocabulary, and roadmap in **[bundles.md](bundles.md)** (registry-API + capacity-aware inference
+  routing are planned there).
 
 ### `network` — nmap + SNMP discovery (v2)
 

@@ -14,7 +14,7 @@ it is verified under the gate's docker shim (container_health → healthy → in
 import os
 import time
 
-from . import config, docker, env, log, plugins
+from . import bundles, config, docker, env, log
 
 
 def start_services() -> None:
@@ -55,17 +55,16 @@ def start_services() -> None:
     time.sleep(5)
 
     log.info("⑤ Monitoring stack…")
-    # telegraf is gated by the `telegraf` plugin's enable-state (default enabled →
-    # identical to the historical `up -d influxdb telegraf`, keeping the gate
-    # byte-identical). influxdb always starts: it is a shared datastore (Grafana +
-    # any plugin that writes it), not telegraf-owned. See scripts/setup/plugins.py.
-    if plugins.is_enabled("telegraf"):
+    # The whole observability stack is the `monitoring` bundle (influxdb/telegraf/
+    # prometheus/grafana/alertmanager/jaeger/otel + exporters in ⑦). Gated on its
+    # enable-state; default enabled → identical to the historical commands, keeping
+    # the setup gate byte-identical. See scripts/setup/bundles.py + bundles.md.
+    if bundles.is_enabled("monitoring"):
         docker.compose("up", "-d", "influxdb", "telegraf")
+        docker.compose_monitoring("up", "-d", "prometheus", "grafana", "alertmanager")
+        docker.compose("up", "-d", *config.MONITORING_SERVICES)
     else:
-        docker.compose("up", "-d", "influxdb")
-        log.detail("telegraf plugin disabled (plugins.state.json) — skipped")
-    docker.compose_monitoring("up", "-d", "prometheus", "grafana", "alertmanager")
-    docker.compose("up", "-d", *config.MONITORING_SERVICES)
+        log.detail("monitoring bundle disabled (bundles.state.json) — skipped")
     time.sleep(5)
 
     log.info("⑥ AI enhancement services…")
@@ -73,7 +72,10 @@ def start_services() -> None:
     time.sleep(5)
 
     log.info("⑦ Metrics exporters…")
-    docker.compose_monitoring("up", "-d", *config.EXPORTER_SERVICES)
+    if bundles.is_enabled("monitoring"):
+        docker.compose_monitoring("up", "-d", *config.EXPORTER_SERVICES)
+    else:
+        log.detail("monitoring bundle disabled — exporters skipped")
 
     log.success("All service groups dispatched")
 

@@ -29,11 +29,12 @@ BACKUP_DIR = REPO_ROOT / "backups"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 COMPOSE_FILE = REPO_ROOT / "docker" / "compose" / "docker-compose.yml"
 COMPOSE_ENV_FILE = REPO_ROOT / "docker" / "compose" / ".env"
-# Plugin enable-state — a dedicated, SECRET-FREE JSON file (unlike .env, which
+# Bundle enable-state — a dedicated, SECRET-FREE JSON file (unlike .env, which
 # carries DB passwords/JWT). Kept separate precisely so the network-facing
 # plugin-registry can safely mount just this when the API lands. Absent file/key →
-# enabled, so the default start path + setup gate stay byte-identical.
-PLUGINS_STATE = REPO_ROOT / "plugins.state.json"
+# enabled, so the default start path + setup gate stay byte-identical. See
+# docs/architecture/bundles.md.
+BUNDLES_STATE = REPO_ROOT / "bundles.state.json"
 
 # Tag cache (config.sh PATHS block). CACHE_TTL_HOURS: tag lists expire after 24h.
 CACHE_DIR = REPO_ROOT / ".cache"
