@@ -62,6 +62,16 @@ BUNDLES: dict[str, dict[str, tuple[str, ...]]] = {
 # The always-on kernel bundle — never disabled, always a claimant.
 CORE_BUNDLE = "core"
 
+# Optional bundles (everything but core) and install profiles = the optional
+# bundles a fresh install turns ON. `standard` (the default) is the AI experience;
+# `minimal` is core-only (bring your own services); `full` is everything.
+_OPTIONAL_BUNDLES = ("monitoring", "inference", "rag", "graph-rag", "chat", "voice")
+PROFILES: dict[str, tuple[str, ...]] = {
+    "minimal": (),
+    "standard": ("inference", "rag", "chat"),
+    "full": _OPTIONAL_BUNDLES,
+}
+
 _ACTIONS = ("enable", "disable", "status", "reconcile")
 
 
@@ -125,6 +135,22 @@ def _set_enabled(name: str, on: bool) -> None:
     STATE_FILE.write_text(
         json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+
+
+def seed_profile(name: str) -> bool:
+    """For a FRESH install, seed bundles.state.json from a profile — record each
+    optional bundle's enabled state (core is always on). Returns False (a no-op) if
+    the state file already exists (never clobber a user's choices on re-install) or
+    under DRY_RUN. Silent so install_cmd_verify stays byte-identical; the resulting
+    set is visible via `bundle status`."""
+    if config.DRY_RUN or STATE_FILE.exists():
+        return False
+    on = set(PROFILES.get(name, PROFILES["standard"]))
+    state = {b: {"enabled": b in on} for b in _OPTIONAL_BUNDLES}
+    STATE_FILE.write_text(
+        json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return True
 
 
 def enable(name: str) -> int:

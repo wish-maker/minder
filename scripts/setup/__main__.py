@@ -132,8 +132,18 @@ def main(argv: list[str]) -> int:
         name = pos[2] if len(pos) > 2 else ""
         return bundles_module.run(action, name, stop_orphans=stop_orphans)
     if cmd == "install":
-        # setup.sh: default command (no verb) → cmd_install.
-        return install_module.run()
+        # setup.sh: default command (no verb) → cmd_install. Optional
+        # `--profile minimal|standard|full` seeds the initial bundle set.
+        profile = "standard"
+        if "--profile" in argv:
+            i = argv.index("--profile")
+            if i + 1 < len(argv):
+                profile = argv[i + 1]
+        if profile not in bundles_module.PROFILES:
+            log.error(f"Unknown install profile: '{profile}'")
+            log.detail(f"  Profiles: {', '.join(bundles_module.PROFILES)}")
+            return 1
+        return install_module.run(profile)
 
     # Unknown command — mirrors setup.sh main()'s `*)` case: error, help, exit 1.
     log.error(f"Unknown command: {cmd}")

@@ -8,9 +8,9 @@
 
 # Environment Files
 .env
-# Plugin enable-state (user's choice of which plugins are on) — runtime state,
-# managed by `setup.sh plugin`; not committed. Secret-free by design.
-plugins.state.json
+# Bundle enable-state (user's choice of which bundles are on) — runtime state,
+# managed by `setup.sh bundle`; not committed. Secret-free by design.
+bundles.state.json
 .env.local
 .env.*.local
 .env.development.local

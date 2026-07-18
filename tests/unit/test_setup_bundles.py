@@ -151,6 +151,45 @@ def test_core_bundle_cannot_be_disabled(statefile):
     assert bundles.run("disable", "core") == 1
 
 
+# ── install profiles (seed_profile) ────────────────────────────────────────
+def test_seed_profile_standard_enables_ai_disables_ops(statefile):
+    assert bundles.seed_profile("standard") is True
+    data = json.loads(statefile.read_text())
+    assert (
+        data["inference"]["enabled"]
+        and data["rag"]["enabled"]
+        and data["chat"]["enabled"]
+    )
+    assert not data["monitoring"]["enabled"]
+    assert not data["graph-rag"]["enabled"] and not data["voice"]["enabled"]
+
+
+def test_seed_profile_minimal_disables_all_optional(statefile):
+    assert bundles.seed_profile("minimal") is True
+    data = json.loads(statefile.read_text())
+    assert all(not v["enabled"] for v in data.values())
+
+
+def test_seed_profile_full_enables_all_optional(statefile):
+    assert bundles.seed_profile("full") is True
+    data = json.loads(statefile.read_text())
+    assert all(v["enabled"] for v in data.values())
+
+
+def test_seed_profile_skips_when_state_exists(statefile):
+    statefile.write_text(
+        json.dumps({"monitoring": {"enabled": True}}), encoding="utf-8"
+    )
+    assert bundles.seed_profile("minimal") is False  # never clobber user choices
+    assert json.loads(statefile.read_text())["monitoring"]["enabled"] is True
+
+
+def test_seed_profile_dry_run_no_write(statefile, monkeypatch):
+    monkeypatch.setattr(bundles.config, "DRY_RUN", True)
+    assert bundles.seed_profile("standard") is False
+    assert not statefile.exists()
+
+
 # ── dispatch guards ────────────────────────────────────────────────────────
 def test_run_rejects_unknown_action(statefile):
     assert bundles.run("frobnicate", "monitoring") == 1

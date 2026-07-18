@@ -16,6 +16,9 @@ _HELP_TEMPLATE = """
 
 {bold}INSTALL & LIFECYCLE{nc}
     (none)                  Full install: prereqs → env → network → DB → services → health
+    install [--profile P]   P = minimal (core only) | standard (default: core+inference
+                            +rag+chat) | full (everything incl. monitoring). Seeds the
+                            initial bundles; change later with `bundle enable/disable`.
     start                   Start all services
     stop [--clean]          Stop services; --clean prunes dangling images
     restart                 Stop then start
