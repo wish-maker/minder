@@ -497,10 +497,11 @@ services:
     volumes:
     - ../../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
-    # Writable mount of the SAME telegraf.conf the telegraf container reads (:ro
-    # there). The telegraf plugin rewrites this in-place; telegraf watch_config
-    # (poll) picks it up — no restart needed on the happy path.
-    - ../services/telegraf/telegraf.conf:/app/telegraf-config/telegraf.conf:rw
+    # Writable mount of the SAME runtime telegraf.conf the telegraf container reads
+    # (:ro there). This is the gitignored RUNTIME copy seeded from the tracked
+    # template by setup.sh (sync_telegraf_config) — the plugin rewrites it in-place
+    # without dirtying the repo; telegraf watch_config (poll) picks it up.
+    - ../services/telegraf/telegraf.runtime.conf:/app/telegraf-config/telegraf.conf:rw
     # docker.sock for the telegraf plugin's RESTART fallback (used only if a
     # config-reload doesn't take). Restart goes through the docker API over this
     # socket. Security surface — scoped to the telegraf plugin's fallback path.
@@ -694,7 +695,9 @@ services:
     container_name: minder-telegraf
     restart: on-failure
     volumes:
-    - ../services/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    # Runtime copy (gitignored), seeded from the tracked template by setup.sh; the
+    # telegraf plugin owns its managed region here. See sync_telegraf_config.
+    - ../services/telegraf/telegraf.runtime.conf:/etc/telegraf/telegraf.conf:ro
     - /proc:/host/proc:ro
     - /sys:/host/sys:ro
     - /var/run/docker.sock:/var/run/docker.sock:ro

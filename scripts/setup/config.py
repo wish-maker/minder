@@ -35,6 +35,13 @@ COMPOSE_ENV_FILE = REPO_ROOT / "docker" / "compose" / ".env"
 # enabled, so the default start path + setup gate stay byte-identical. See
 # docs/architecture/bundles.md.
 BUNDLES_STATE = REPO_ROOT / "bundles.state.json"
+# telegraf.conf: the tracked TEMPLATE is the seed; the gitignored RUNTIME copy is
+# what both containers mount, so the telegraf plugin writes its managed region to
+# the runtime file and never dirties the repo. Mirrors ENV_EXAMPLE→COMPOSE_ENV_FILE.
+TELEGRAF_TEMPLATE = REPO_ROOT / "docker" / "services" / "telegraf" / "telegraf.conf"
+TELEGRAF_RUNTIME = (
+    REPO_ROOT / "docker" / "services" / "telegraf" / "telegraf.runtime.conf"
+)
 
 # Tag cache (config.sh PATHS block). CACHE_TTL_HOURS: tag lists expire after 24h.
 CACHE_DIR = REPO_ROOT / ".cache"

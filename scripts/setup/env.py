@@ -92,6 +92,28 @@ def sync_compose_env() -> None:
         pass
 
 
+def sync_telegraf_config() -> None:
+    """Seed the gitignored runtime telegraf.conf from the tracked template when it
+    is absent, so the telegraf plugin writes its managed region to the RUNTIME copy
+    and never dirties the tracked template. Mirrors sync_compose_env: silent and
+    idempotent, and it MUST run before `compose up` — a missing bind-mount source
+    is otherwise created by docker as an empty directory (the bind-mount footgun).
+
+    Seed-if-absent preserves the plugin's managed region across restarts; only a
+    fresh runtime file re-copies the template's static config. (A stale static
+    section after a template bump is the known trade-off of not re-parsing the
+    markers here — the plugin owns the region once seeded.)"""
+    runtime = config.TELEGRAF_RUNTIME
+    if runtime.exists():
+        return
+    try:
+        body = config.TELEGRAF_TEMPLATE.read_bytes()
+    except OSError:
+        return  # no template (unexpected) — leave it to compose/plugin to surface
+    runtime.parent.mkdir(parents=True, exist_ok=True)
+    runtime.write_bytes(body)
+
+
 def _chmod_600(path: Path) -> None:
     try:
         path.chmod(0o600)
@@ -307,3 +329,4 @@ def prepare_env() -> None:
     fill_env_secrets()
     _chmod_600(ENV_FILE)
     sync_compose_env()
+    sync_telegraf_config()
