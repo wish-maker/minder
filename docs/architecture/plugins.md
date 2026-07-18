@@ -76,11 +76,12 @@ runtime — never hand-edit inside the markers.
   — used by no other enabled plugin and no core service — and reports them, stopping them only on
   `--stop-orphans`. The refcount is derived from a consumer graph: `influxdb` has a standing core
   consumer (`grafana` reads it as a datasource — an edge compose `depends_on` doesn't capture), so
-  disabling telegraf leaves influxdb up and offers to stop only telegraf itself. State persists in
-  `.env` (`PLUGIN_TELEGRAF_ENABLED`) so `start` honours it; `plugin status` shows the graph + live
+  disabling telegraf leaves influxdb up and offers to stop only telegraf itself. Enable-state lives
+  in `plugins.state.json` (a dedicated, **secret-free** file — not `.env` — so the network-facing
+  registry can safely share it) and `start` honours it; `plugin status` shows the graph + live
   drift; `plugin reconcile [--stop-orphans]` converges the stack. Every action funnels through
-  `docker compose` — compose stays the single source of truth. (API support is planned — see
-  roadmap; it will move the enable-state to a dedicated secret-free file the registry can share.)
+  `docker compose` — compose stays the single source of truth. (API support is planned — the same
+  secret-free state file + shared refcount logic are what let the registry expose it over HTTP.)
 
 ### `network` — nmap + SNMP discovery (v2)
 

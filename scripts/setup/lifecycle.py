@@ -55,7 +55,7 @@ def start_services() -> None:
     time.sleep(5)
 
     log.info("⑤ Monitoring stack…")
-    # telegraf is gated by the `telegraf` plugin's .env flag (default enabled →
+    # telegraf is gated by the `telegraf` plugin's enable-state (default enabled →
     # identical to the historical `up -d influxdb telegraf`, keeping the gate
     # byte-identical). influxdb always starts: it is a shared datastore (Grafana +
     # any plugin that writes it), not telegraf-owned. See scripts/setup/plugins.py.
@@ -63,7 +63,7 @@ def start_services() -> None:
         docker.compose("up", "-d", "influxdb", "telegraf")
     else:
         docker.compose("up", "-d", "influxdb")
-        log.detail("telegraf plugin disabled (PLUGIN_TELEGRAF_ENABLED=0) — skipped")
+        log.detail("telegraf plugin disabled (plugins.state.json) — skipped")
     docker.compose_monitoring("up", "-d", "prometheus", "grafana", "alertmanager")
     docker.compose("up", "-d", *config.MONITORING_SERVICES)
     time.sleep(5)

@@ -5,11 +5,13 @@ The container control-plane: enabling a plugin brings its dependency services up
 now **orphaned** — used by no other enabled plugin and no core service — and reports
 them, stopping them only on explicit `--stop-orphans`.
 
-State lives in **.env** for now (`PLUGIN_<NAME>_ENABLED`, absent → enabled); the
-API build will move it to a dedicated secret-free `plugins.state` file the registry
-can safely share. The refcount "brain" below (`_consumers` / `_orphans_after`) is
-decoupled from where state lives and how containers are stopped, so both the host
-CLI and the future registry API can share it.
+Enable-state lives in a dedicated, secret-free JSON file (`config.PLUGINS_STATE`,
+`plugins.state.json`) — NOT `.env`, which carries secrets the network-facing
+registry must not mount. Shape: `{"<plugin>": {"enabled": bool}}`; an absent file
+or key means enabled, so the default start path + setup gate stay byte-identical.
+The refcount "brain" below (`_consumers` / `_orphans_after`) is decoupled from where
+state lives and how containers are stopped, so both the host CLI and the future
+registry API can share it.
 
 Dependency model — a uniform refcount, no owned/shared tiers:
 - Each plugin declares `deps`: the service containers it needs.
@@ -23,10 +25,12 @@ Every mutating action funnels through `docker compose` — compose stays the sin
 source of truth; no imperative docker.sock start/stop.
 """
 
-from . import config, docker, env, log
+import json
+
+from . import config, docker, log
 
 SCRIPT_NAME = config.SCRIPT_NAME
-ENV_FILE = config.ENV_FILE
+STATE_FILE = config.PLUGINS_STATE
 
 # name → dependency service containers the plugin needs.
 PLUGINS: dict[str, dict[str, tuple[str, ...]]] = {
@@ -44,17 +48,20 @@ CORE_CONSUMERS: dict[str, tuple[str, ...]] = {
 _ACTIONS = ("enable", "disable", "status", "reconcile")
 
 
-def _flag_key(name: str) -> str:
-    return f"PLUGIN_{name.upper()}_ENABLED"
+def _load_state() -> dict:
+    """Parse plugins.state.json → {plugin: {enabled: bool}}. Missing/corrupt file
+    → {} (everything defaults to enabled), matching the .env-absent semantics."""
+    try:
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def is_enabled(name: str) -> bool:
-    """True unless .env explicitly disables the plugin. Absent key → enabled, so
-    the default start path (and thus the setup gate) is unchanged."""
-    raw = env.get(_flag_key(name))
-    if raw == "":
-        return True
-    return config._truthy(raw)
+    """True unless plugins.state.json explicitly disables the plugin. Absent file/
+    key → enabled, so the default start path (and thus the setup gate) is unchanged."""
+    return bool(_load_state().get(name, {}).get("enabled", True))
 
 
 def _enabled_plugins(exclude: "str | None" = None) -> "set[str]":
@@ -76,38 +83,27 @@ def _orphans_after(disabling: str) -> "list[str]":
     return sorted(d for d in PLUGINS[disabling]["deps"] if not _consumers(d, remaining))
 
 
-def _set_flag(name: str, on: bool) -> None:
-    """Upsert PLUGIN_<NAME>_ENABLED=1|0 in .env (sed-style, mirroring ollama.py):
-    replace every matching line, else append. newline="" so we never translate
-    \\n<->\\r\\n cross-OS. DRY_RUN previews without writing."""
-    key = _flag_key(name)
-    value = "1" if on else "0"
+def _set_enabled(name: str, on: bool) -> None:
+    """Persist plugin enable-state to plugins.state.json (merge, don't clobber other
+    plugins). DRY_RUN previews without writing. sort_keys for a stable diff."""
     if config.DRY_RUN:
-        log.detail(f"[dry-run] would set {key}={value} in .env")
+        log.detail(f"[dry-run] would set {name}.enabled={on} in {STATE_FILE.name}")
         return
-    with ENV_FILE.open("r", encoding="utf-8", newline="") as fh:
-        raw = fh.read()
-    prefix = f"{key}="
-    lines = raw.split("\n")
-    if any(line.startswith(prefix) for line in lines):
-        new_raw = "\n".join(
-            f"{prefix}{value}" if line.startswith(prefix) else line for line in lines
-        )
-    else:
-        sep = "" if raw.endswith("\n") or raw == "" else "\n"
-        new_raw = f"{raw}{sep}{prefix}{value}\n"
-    with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(new_raw)
+    state = _load_state()
+    state.setdefault(name, {})["enabled"] = on
+    STATE_FILE.write_text(
+        json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def enable(name: str) -> int:
     deps = PLUGINS[name]["deps"]
     already = is_enabled(name)
-    _set_flag(name, True)
+    _set_enabled(name, True)
     if already:
         log.info(f"Plugin '{name}' already enabled — ensuring its services are up.")
     else:
-        log.success(f"Plugin '{name}' → enabled ({_flag_key(name)}=1)")
+        log.success(f"Plugin '{name}' → enabled")
     # Bring up every dependency (compose reuses already-running ones + orders via
     # depends_on/health). One command keeps the shape close to start_services.
     docker.compose("up", "-d", *sorted(deps))
@@ -116,8 +112,8 @@ def enable(name: str) -> int:
 
 
 def disable(name: str, stop_orphans: bool = False) -> int:
-    _set_flag(name, False)
-    log.success(f"Plugin '{name}' → disabled ({_flag_key(name)}=0)")
+    _set_enabled(name, False)
+    log.success(f"Plugin '{name}' → disabled")
     orphans = _orphans_after(name)
     kept = sorted(set(PLUGINS[name]["deps"]) - set(orphans))
     if kept:
@@ -173,7 +169,7 @@ def status() -> int:
     enabled = _enabled_plugins()
     for name, spec in PLUGINS.items():
         on = name in enabled
-        log.info(f"{name}  [{'enabled' if on else 'disabled'}]  ({_flag_key(name)})")
+        log.info(f"{name}  [{'enabled' if on else 'disabled'}]")
         for svc in spec["deps"]:
             running = docker.container_running(svc)
             health = docker.container_health(svc) if running else "stopped"
@@ -198,9 +194,6 @@ def run(action: str = "", name: str = "", stop_orphans: bool = False) -> int:
     if action == "status":
         return status()
     if action == "reconcile":
-        if not ENV_FILE.is_file():
-            log.error(f"No .env at {ENV_FILE} — run ./{SCRIPT_NAME} install first.")
-            return 1
         return reconcile(stop_orphans=stop_orphans)
 
     if not name:
@@ -210,9 +203,6 @@ def run(action: str = "", name: str = "", stop_orphans: bool = False) -> int:
     if name not in PLUGINS:
         log.error(f"Unknown plugin: '{name}'")
         log.detail(f"  Known plugins: {', '.join(PLUGINS)}")
-        return 1
-    if not ENV_FILE.is_file():
-        log.error(f"No .env at {ENV_FILE} — run ./{SCRIPT_NAME} install first.")
         return 1
 
     if action == "enable":

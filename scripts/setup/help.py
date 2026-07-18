@@ -59,14 +59,16 @@ _HELP_TEMPLATE = """
                              .env only and prints a "run restart to apply" hint — no restart.
 
 {bold}PLUGINS{nc}
-    plugin status            Show each first-party plugin's enabled flag + its
-                             container state (owned vs shared datastores)
-    plugin enable <name>     Enable in .env + bring its containers up (compose)
-    plugin disable <name>    Disable in .env + stop its OWNED containers; shared
-                             datastores (e.g. influxdb) stay up. Persists across
-                             restart — start reads the same flag. (plugins: telegraf)
-    plugin reconcile         Converge the live stack to the .env flags (refcounts
-                             shared datastores; brings up/stops as needed)
+    plugin status            Show each plugin's enable-state + its dependency
+                             containers and who else uses them (the consumer graph)
+    plugin enable <name>     Enable the plugin + bring its dependency services up
+    plugin disable <name> [--stop-orphans]
+                             Disable it; report dependencies now used by nothing
+                             else. --stop-orphans also stops them (influxdb stays —
+                             Grafana uses it; telegraf stops). (plugins: telegraf)
+    plugin reconcile [--stop-orphans]
+                             Converge the live stack to the enable-state
+    (state lives in plugins.state.json — secret-free; start honours it)
 
 {bold}FLAGS{nc}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing
