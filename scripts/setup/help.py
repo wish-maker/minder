@@ -67,7 +67,8 @@ _HELP_TEMPLATE = """
                              bundle (orphans). --stop-orphans also stops them.
     bundle reconcile [--stop-orphans]
                              Converge the live stack to the enable-state
-    (state lives in bundles.state.json — secret-free; start honours it. bundles: monitoring)
+    bundles: core (always on) · monitoring · inference · rag · graph-rag · chat · voice
+    (state lives in bundles.state.json — secret-free; start honours it)
 
 {bold}FLAGS{nc}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing

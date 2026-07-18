@@ -13,8 +13,10 @@ import pytest
 
 from scripts.setup import bundles
 
-# monitoring's claimed services, in the order enable/reconcile emit them (sorted).
+# monitoring's claimed services (exclusive to it), and every claimed service —
+# both sorted, the order enable/reconcile emit them.
 MON = tuple(sorted(bundles.BUNDLES["monitoring"]["claims"]))
+ALL = tuple(sorted({s for b in bundles.BUNDLES for s in bundles.BUNDLES[b]["claims"]}))
 
 
 @pytest.fixture
@@ -106,22 +108,47 @@ def test_disable_stop_orphans_stops_all_orphaned(statefile, rec_compose):
     assert rec_compose == [("stop", *MON)]
 
 
-def test_reconcile_enabled_ups(monkeypatch, rec_compose):
-    monkeypatch.setattr(bundles, "is_enabled", lambda n: True)
+def test_reconcile_all_enabled_ups_everything(statefile, rec_compose):
+    # no state file → every bundle enabled → up all claimed services.
     assert bundles.reconcile() == 0
-    assert rec_compose == [("up", "-d", *MON)]
+    assert rec_compose == [("up", "-d", *ALL)]
 
 
-def test_reconcile_disabled_reports_without_stopping(monkeypatch, rec_compose):
-    monkeypatch.setattr(bundles, "is_enabled", lambda n: False)
+def test_reconcile_monitoring_disabled_reports_without_stopping(statefile, rec_compose):
+    statefile.write_text(
+        json.dumps({"monitoring": {"enabled": False}}), encoding="utf-8"
+    )
     assert bundles.reconcile() == 0
-    assert rec_compose == []  # orphans reported, not stopped
+    ups = [c for c in rec_compose if c[0] == "up"]
+    expected_up = tuple(sorted(set(ALL) - set(MON)))  # everything except monitoring
+    assert ups == [("up", "-d", *expected_up)]
+    assert not any(c[0] == "stop" for c in rec_compose)  # orphans reported, not stopped
 
 
-def test_reconcile_disabled_stop_orphans(monkeypatch, rec_compose):
-    monkeypatch.setattr(bundles, "is_enabled", lambda n: False)
+def test_reconcile_monitoring_disabled_stop_orphans(statefile, rec_compose):
+    statefile.write_text(
+        json.dumps({"monitoring": {"enabled": False}}), encoding="utf-8"
+    )
     assert bundles.reconcile(stop_orphans=True) == 0
-    assert rec_compose == [("stop", *MON)]
+    stops = [c for c in rec_compose if c[0] == "stop"]
+    assert stops == [("stop", *MON)]  # monitoring services are exclusive → all orphan
+
+
+# ── service_active (what `start` filters each group by) + core guard ───────
+def test_core_services_always_active(statefile):
+    statefile.write_text(json.dumps({"core": {"enabled": False}}), encoding="utf-8")
+    assert bundles.is_enabled("core") is True  # core can never be off
+    assert bundles.service_active("postgres") is True
+
+
+def test_service_active_follows_its_bundle(statefile):
+    assert bundles.service_active("qdrant") is True  # rag enabled (absent → enabled)
+    statefile.write_text(json.dumps({"rag": {"enabled": False}}), encoding="utf-8")
+    assert bundles.service_active("qdrant") is False  # rag off → qdrant not active
+
+
+def test_core_bundle_cannot_be_disabled(statefile):
+    assert bundles.run("disable", "core") == 1
 
 
 # ── dispatch guards ────────────────────────────────────────────────────────

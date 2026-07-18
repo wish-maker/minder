@@ -27,14 +27,40 @@ from . import config, docker, log
 SCRIPT_NAME = config.SCRIPT_NAME
 STATE_FILE = config.BUNDLES_STATE
 
-# bundle name → services it claims. Phase 1: monitoring only. The claim graph is
-# derived here for now; Phase 2 derives it from Compose `minder.bundle=` labels and
-# adds core/inference/rag/graph-rag/chat/voice.
+# bundle name → services it claims (docs/architecture/bundles.md). `core` is the
+# always-on kernel and cannot be disabled. Hardcoded here for now; deriving this
+# from Compose `minder.bundle=` labels needs a YAML parser in the stdlib-only CLI,
+# so it is deferred (this reviewed map is the single source until then).
 BUNDLES: dict[str, dict[str, tuple[str, ...]]] = {
-    "monitoring": {
-        "claims": (*config.MONITORING_SERVICES, *config.EXPORTER_SERVICES),
+    "core": {
+        "claims": (
+            "traefik",
+            "postgres",
+            "redis",
+            "rabbitmq",
+            "neo4j",
+            "minio",
+            "schema-registry",
+            "api-gateway",
+            "plugin-registry",
+            "plugin-state-manager",
+            "marketplace",
+        )
     },
+    "monitoring": {"claims": (*config.MONITORING_SERVICES, *config.EXPORTER_SERVICES)},
+    "inference": {"claims": ("ollama", "model-management")},
+    # rag-pipeline needs ollama (embeddings); chat's openwebui depends_on both
+    # rag-pipeline and ollama — so those are shared claims (compose depends_on made
+    # explicit). Disabling one of rag/chat/inference then can't orphan a service
+    # another still needs; the refcount handles it.
+    "rag": {"claims": ("rag-pipeline", "qdrant", "ollama")},
+    "graph-rag": {"claims": ("graph-rag",)},
+    "chat": {"claims": ("openwebui", "rag-pipeline", "ollama")},
+    "voice": {"claims": ("tts-stt",)},
 }
+
+# The always-on kernel bundle — never disabled, always a claimant.
+CORE_BUNDLE = "core"
 
 _ACTIONS = ("enable", "disable", "status", "reconcile")
 
@@ -50,9 +76,23 @@ def _load_state() -> dict:
 
 
 def is_enabled(name: str) -> bool:
-    """True unless bundles.state.json explicitly disables the bundle. Absent file/
-    key → enabled, so the default start path (and thus the setup gate) is unchanged."""
+    """True unless bundles.state.json explicitly disables the bundle. The `core`
+    bundle is always enabled (the kernel — cannot be disabled). Absent file/key →
+    enabled, so the default start path (and thus the setup gate) is unchanged."""
+    if name == CORE_BUNDLE:
+        return True
     return bool(_load_state().get(name, {}).get("enabled", True))
+
+
+def service_active(service: str) -> bool:
+    """Should `service` run? Yes iff a bundle that claims it is enabled (core is
+    always enabled). An unclaimed service (not in the map) defaults to active so a
+    gap never silently drops a service. This is what `start` filters each group by;
+    with everything enabled the filter is a no-op → the setup gate stays identical."""
+    claimants = [b for b in BUNDLES if service in BUNDLES[b]["claims"]]
+    if not claimants:
+        return True
+    return any(is_enabled(b) for b in claimants)
 
 
 def _enabled_bundles(exclude: "str | None" = None) -> "set[str]":
@@ -194,6 +234,9 @@ def run(action: str = "", name: str = "", stop_orphans: bool = False) -> int:
     if name not in BUNDLES:
         log.error(f"Unknown bundle: '{name}'")
         log.detail(f"  Known bundles: {', '.join(BUNDLES)}")
+        return 1
+    if action == "disable" and name == CORE_BUNDLE:
+        log.error("The 'core' bundle is the always-on kernel and cannot be disabled.")
         return 1
 
     if action == "enable":
