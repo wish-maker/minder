@@ -74,7 +74,9 @@ runtime — never hand-edit inside the markers.
 - **Container lifecycle**: `./setup.sh plugin disable telegraf` stops the `minder-telegraf`
   container but keeps its shared datastore (`influxdb`, also read by Grafana); `plugin enable
   telegraf` brings both back. State persists in `.env` (`PLUGIN_TELEGRAF_ENABLED`) so `start`
-  honours it. Actions funnel through `docker compose` — compose stays the single source of truth.
+  honours it. `plugin status` shows per-plugin flags + live drift; `plugin reconcile` converges
+  the stack to the flags (refcounts shared datastores — core stores like influxdb are never torn
+  down). Every action funnels through `docker compose` — compose stays the single source of truth.
 
 ### `network` — nmap + SNMP discovery (v2)
 

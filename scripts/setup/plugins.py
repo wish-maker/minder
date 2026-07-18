@@ -38,7 +38,15 @@ PLUGINS: dict[str, dict[str, tuple[str, ...]]] = {
     "telegraf": {"owned": ("telegraf",), "shared": ("influxdb",)},
 }
 
-_ACTIONS = ("enable", "disable", "status")
+# Datastores that core (non-plugin) services depend on regardless of any plugin —
+# Grafana reads influxdb, the API services read postgres/redis/etc. reconcile never
+# stops these even when the plugin that also uses them is disabled; only a
+# non-core shared store (none exist yet) can be refcounted down to zero.
+CORE_SHARED = frozenset(
+    {"postgres", "redis", "neo4j", "qdrant", "minio", "rabbitmq", "influxdb"}
+)
+
+_ACTIONS = ("enable", "disable", "status", "reconcile")
 
 
 def _flag_key(name: str) -> str:
@@ -114,8 +122,54 @@ def disable(name: str) -> int:
     return 0
 
 
+def _partition() -> "tuple[set[str], set[str]]":
+    """Compute desired container state from every plugin's .env flag (refcount over
+    the union of enabled plugins):
+      want_up   — every owned+shared container of an ENABLED plugin
+      want_down — owned containers of DISABLED plugins that no enabled plugin also
+                  needs; plus non-core shared stores likewise unneeded. CORE_SHARED
+                  datastores are never listed for teardown (core still needs them).
+    """
+    want_up: set[str] = set()
+    for name, spec in PLUGINS.items():
+        if is_enabled(name):
+            want_up.update(spec["owned"])
+            want_up.update(spec["shared"])
+
+    want_down: set[str] = set()
+    for name, spec in PLUGINS.items():
+        if is_enabled(name):
+            continue
+        for svc in spec["owned"]:
+            if svc not in want_up:
+                want_down.add(svc)
+        for svc in spec["shared"]:
+            if svc not in want_up and svc not in CORE_SHARED:
+                want_down.add(svc)
+    return want_up, want_down
+
+
+def reconcile() -> int:
+    """Converge the live stack to the plugin flags in .env — the primitive `start`
+    and (later) the registry webhook drive. Idempotent; funnels through compose."""
+    want_up, want_down = _partition()
+    log.section("🔌  Reconciling plugin containers")
+    if want_up:
+        log.info(f"Ensuring up:  {', '.join(sorted(want_up))}")
+        docker.compose("up", "-d", *sorted(want_up))
+    if want_down:
+        log.info(f"Stopping (no enabled plugin needs them):  {', '.join(sorted(want_down))}")
+        docker.compose("stop", *sorted(want_down))
+    if not want_up and not want_down:
+        log.info("Nothing to do — plugin containers already match .env.")
+    log.success("Reconcile complete")
+    return 0
+
+
 def status() -> int:
     log.section("🔌  Plugin Container Lifecycle")
+    want_up, want_down = _partition()
+    drift = 0
     for name, spec in PLUGINS.items():
         state = "enabled" if is_enabled(name) else "disabled"
         log.info(f"{name}  [{state}]  ({_flag_key(name)})")
@@ -124,19 +178,29 @@ def status() -> int:
                 running = docker.container_running(svc)
                 health = docker.container_health(svc) if running else "stopped"
                 mark = "✓" if running else "·"
+                # drift = live state disagrees with what the flags want
+                if (svc in want_up and not running) or (svc in want_down and running):
+                    mark, drift = "!", drift + 1
                 log.detail(f"  {mark} {svc:<12} {tier:<7} {health}")
+    if drift:
+        log.warn(f"{drift} container(s) drift from .env — run  ./{SCRIPT_NAME} plugin reconcile")
     return 0
 
 
 def run(action: str = "", name: str = "") -> int:
     if action not in _ACTIONS:
         log.error(
-            f"Usage: ./{SCRIPT_NAME} plugin enable|disable <name>  |  plugin status"
+            f"Usage: ./{SCRIPT_NAME} plugin enable|disable <name>  |  plugin status|reconcile"
         )
         log.detail(f"  Known plugins: {', '.join(PLUGINS)}")
         return 1
     if action == "status":
         return status()
+    if action == "reconcile":
+        if not ENV_FILE.is_file():
+            log.error(f"No .env at {ENV_FILE} — run ./{SCRIPT_NAME} install first.")
+            return 1
+        return reconcile()
 
     if not name:
         log.error(f"./{SCRIPT_NAME} plugin {action} <name>  — plugin name required")

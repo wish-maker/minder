@@ -65,6 +65,8 @@ _HELP_TEMPLATE = """
     plugin disable <name>    Disable in .env + stop its OWNED containers; shared
                              datastores (e.g. influxdb) stay up. Persists across
                              restart — start reads the same flag. (plugins: telegraf)
+    plugin reconcile         Converge the live stack to the .env flags (refcounts
+                             shared datastores; brings up/stops as needed)
 
 {bold}FLAGS{nc}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing
