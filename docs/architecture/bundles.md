@@ -180,6 +180,12 @@ Same operations, two front-ends over one shared brain:
 per-bundle purge**; the only purge is the existing platform-wide `uninstall
 --purge`.
 
+`start`/`restart` **converge to the desired state** (GitOps-style): they bring up
+every enabled bundle's services and **stop** any service no enabled bundle claims
+(a bundle disabled while running is brought down on the next start/restart). The
+immediate `disable` is notify-only by default (non-disruptive); the persisted
+intent is enforced on the next converge.
+
 ## Repo structure
 
 Principles: single source of truth · plugin self-containment · runtime state clearly

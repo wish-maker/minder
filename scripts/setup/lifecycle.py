@@ -92,6 +92,15 @@ def start_services() -> None:
     else:
         log.detail("monitoring bundle disabled — exporters skipped")
 
+    # ⑧ Converge to desired state: stop any service no enabled bundle claims (a
+    # bundle disabled while its services were running is brought down on start/
+    # restart). Emits nothing when all bundles are enabled → the setup gate stays
+    # byte-identical; only runs when something is actually disabled + orphaned.
+    orphans = bundles.orphaned_services()
+    if orphans:
+        log.info("⑧ Converging bundles (stopping disabled services)…")
+        docker.compose("stop", *orphans)
+
     log.success("All service groups dispatched")
 
 

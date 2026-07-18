@@ -124,6 +124,22 @@ def _orphans_after(disabling: str) -> "list[str]":
     )
 
 
+def orphaned_services() -> "list[str]":
+    """Every service claimed by NO enabled bundle — safe to stop. This is what
+    `start`/`restart` converge on: a bundle disabled while its services were running
+    is brought down (state = desired). Deterministic order."""
+    enabled = _enabled_bundles()
+    return sorted(
+        {
+            s
+            for b in BUNDLES
+            if not is_enabled(b)
+            for s in BUNDLES[b]["claims"]
+            if not _claimants(s, enabled)
+        }
+    )
+
+
 def _set_enabled(name: str, on: bool) -> None:
     """Persist a bundle's enable-state to bundles.state.json (merge, don't clobber
     other bundles). DRY_RUN previews without writing. sort_keys for a stable diff."""
@@ -195,15 +211,7 @@ def reconcile(stop_orphans: bool = False) -> int:
     --stop-orphans). The primitive `start` and the future registry API drive."""
     enabled = _enabled_bundles()
     want_up = sorted({s for b in enabled for s in BUNDLES[b]["claims"]})
-    orphans = sorted(
-        {
-            s
-            for b in BUNDLES
-            if not is_enabled(b)
-            for s in BUNDLES[b]["claims"]
-            if not _claimants(s, enabled)
-        }
-    )
+    orphans = orphaned_services()
     log.section("🧩  Reconciling bundle services")
     if want_up:
         log.info(f"Ensuring up:  {', '.join(want_up)}")

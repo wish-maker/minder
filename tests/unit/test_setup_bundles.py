@@ -90,6 +90,17 @@ def test_monitoring_claims_the_observability_stack():
         assert svc in claims
 
 
+def test_orphaned_services_none_when_all_enabled(statefile):
+    assert bundles.orphaned_services() == []  # start/restart → nothing to converge
+
+
+def test_orphaned_services_when_a_bundle_is_disabled(statefile):
+    statefile.write_text(
+        json.dumps({"monitoring": {"enabled": False}}), encoding="utf-8"
+    )
+    assert bundles.orphaned_services() == list(MON)  # start/restart would stop these
+
+
 # ── enable / disable / reconcile funnel through compose ────────────────────
 def test_enable_sets_state_and_ups_all_claims(statefile, rec_compose):
     assert bundles.enable("monitoring") == 0
