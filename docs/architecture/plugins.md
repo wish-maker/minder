@@ -71,6 +71,10 @@ runtime — never hand-edit inside the markers.
   `clear_managed_region`, `reload`.
 - **Compose wiring**: `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`,
   and `/var/run/docker.sock` (restart fallback only).
+- **Container lifecycle**: `./setup.sh plugin disable telegraf` stops the `minder-telegraf`
+  container but keeps its shared datastore (`influxdb`, also read by Grafana); `plugin enable
+  telegraf` brings both back. State persists in `.env` (`PLUGIN_TELEGRAF_ENABLED`) so `start`
+  honours it. Actions funnel through `docker compose` — compose stays the single source of truth.
 
 ### `network` — nmap + SNMP discovery (v2)
 

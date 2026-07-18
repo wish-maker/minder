@@ -1,6 +1,7 @@
 """Help text for the Minder setup CLI — ported from scripts/lib/help.sh
-show_help() (#7, Stage 2). Byte-faithful to the bash heredoc; verified against
-`bash setup.sh --help` by the port.
+show_help() (#7, Stage 2). Was byte-faithful to the bash heredoc; the PLUGINS
+section below is a deliberate post-port addition (the `plugin` verb has no bash
+equivalent — the frozen setup.bash.sh reference does not list it).
 """
 
 import sys
@@ -56,6 +57,14 @@ _HELP_TEMPLATE = """
                              container; external [url] = reach a URL (same-host daemon or a
                              remote host; default http://host.docker.internal:11434). Flips
                              .env only and prints a "run restart to apply" hint — no restart.
+
+{bold}PLUGINS{nc}
+    plugin status            Show each first-party plugin's enabled flag + its
+                             container state (owned vs shared datastores)
+    plugin enable <name>     Enable in .env + bring its containers up (compose)
+    plugin disable <name>    Disable in .env + stop its OWNED containers; shared
+                             datastores (e.g. influxdb) stay up. Persists across
+                             restart — start reads the same flag. (plugins: telegraf)
 
 {bold}FLAGS{nc}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing

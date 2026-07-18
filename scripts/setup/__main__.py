@@ -18,6 +18,7 @@ from . import log
 from . import logs as logs_module
 from . import migrate as migrate_module
 from . import ollama as ollama_module
+from . import plugins as plugins_module
 from . import restart as restart_module
 from . import restore as restore_module
 from . import secrets as secrets_module
@@ -122,6 +123,12 @@ def main(argv: list[str]) -> int:
     if cmd == "doctor":
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()
+    if cmd == "plugin":
+        # Post-port verb (no bash equivalent): plugin enable|disable <name> | status.
+        pos = _positional(argv)
+        action = pos[1] if len(pos) > 1 else ""
+        name = pos[2] if len(pos) > 2 else ""
+        return plugins_module.run(action, name)
     if cmd == "install":
         # setup.sh: default command (no verb) → cmd_install.
         return install_module.run()
