@@ -71,12 +71,16 @@ runtime — never hand-edit inside the markers.
   `clear_managed_region`, `reload`.
 - **Compose wiring**: `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`,
   and `/var/run/docker.sock` (restart fallback only).
-- **Container lifecycle**: `./setup.sh plugin disable telegraf` stops the `minder-telegraf`
-  container but keeps its shared datastore (`influxdb`, also read by Grafana); `plugin enable
-  telegraf` brings both back. State persists in `.env` (`PLUGIN_TELEGRAF_ENABLED`) so `start`
-  honours it. `plugin status` shows per-plugin flags + live drift; `plugin reconcile` converges
-  the stack to the flags (refcounts shared datastores — core stores like influxdb are never torn
-  down). Every action funnels through `docker compose` — compose stays the single source of truth.
+- **Container lifecycle**: `./setup.sh plugin enable telegraf` brings its dependency services up
+  (reusing any already running); `plugin disable telegraf` detects which deps are now **orphaned**
+  — used by no other enabled plugin and no core service — and reports them, stopping them only on
+  `--stop-orphans`. The refcount is derived from a consumer graph: `influxdb` has a standing core
+  consumer (`grafana` reads it as a datasource — an edge compose `depends_on` doesn't capture), so
+  disabling telegraf leaves influxdb up and offers to stop only telegraf itself. State persists in
+  `.env` (`PLUGIN_TELEGRAF_ENABLED`) so `start` honours it; `plugin status` shows the graph + live
+  drift; `plugin reconcile [--stop-orphans]` converges the stack. Every action funnels through
+  `docker compose` — compose stays the single source of truth. (API support is planned — see
+  roadmap; it will move the enable-state to a dedicated secret-free file the registry can share.)
 
 ### `network` — nmap + SNMP discovery (v2)
 

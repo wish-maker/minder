@@ -124,11 +124,13 @@ def main(argv: list[str]) -> int:
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()
     if cmd == "plugin":
-        # Post-port verb (no bash equivalent): plugin enable|disable <name> | status.
-        pos = _positional(argv)
+        # Post-port verb (no bash equivalent): plugin enable|disable <name>
+        # [--stop-orphans] | status | reconcile [--stop-orphans].
+        stop_orphans = "--stop-orphans" in argv
+        pos = [a for a in _positional(argv) if a != "--stop-orphans"]
         action = pos[1] if len(pos) > 1 else ""
         name = pos[2] if len(pos) > 2 else ""
-        return plugins_module.run(action, name)
+        return plugins_module.run(action, name, stop_orphans=stop_orphans)
     if cmd == "install":
         # setup.sh: default command (no verb) → cmd_install.
         return install_module.run()

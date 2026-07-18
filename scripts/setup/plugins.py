@@ -1,31 +1,26 @@
 """`plugin` verb — enable/disable first-party plugins + reconcile their infra.
 
-First slice of the container control-plane (Adım 1). Today it manages the
-`telegraf` plugin only; the model is built to generalise (Adım 2 adds a
-metadata-driven reconcile over every plugin + real refcounting).
+The container control-plane: enabling a plugin brings its dependency services up
+(reusing any already running); disabling one detects which of its dependencies are
+now **orphaned** — used by no other enabled plugin and no core service — and reports
+them, stopping them only on explicit `--stop-orphans`.
 
-State lives in **.env** (the single source of truth, same as `ollama-mode`):
+State lives in **.env** for now (`PLUGIN_<NAME>_ENABLED`, absent → enabled); the
+API build will move it to a dedicated secret-free `plugins.state` file the registry
+can safely share. The refcount "brain" below (`_consumers` / `_orphans_after`) is
+decoupled from where state lives and how containers are stopped, so both the host
+CLI and the future registry API can share it.
 
-    PLUGIN_<NAME>_ENABLED=1|0     absent → enabled
+Dependency model — a uniform refcount, no owned/shared tiers:
+- Each plugin declares `deps`: the service containers it needs.
+- Each service's CONSUMERS = enabled plugins that declare it  ∪  core (non-plugin)
+  services that use it (`CORE_CONSUMERS`). `influxdb` has core consumer `grafana`
+  (a datasource edge that is NOT a compose depends_on), so disabling telegraf
+  leaves influxdb up while offering to stop telegraf itself. That falls out of the
+  graph — no hardcoded never-stop list.
 
-The default-enabled-when-absent rule is deliberate: `start_services` reads the
-same flag, so a stack with no PLUGIN_* keys behaves exactly as before and the
-setup behaviour-gate stays byte-identical (the disabled branch is new surface the
-frozen bash reference never had, and the gate never sets the flag).
-
-Each plugin declares its container dependencies in two tiers:
-
-    owned    containers that exist ONLY for this plugin  → stopped on disable
-    shared   datastores other services also use          → left running
-
-`influxdb` is shared (Grafana reads it; any plugin may write it), so disabling
-telegraf stops the agent but keeps influxdb + its volume — exactly the
-"keep the datastore, stop the collector" behaviour we want. Real cross-plugin
-refcounting of shared stores is Adım 2; for now shared containers are only ever
-brought UP, never torn down.
-
-Every action funnels through `docker compose` so the compose file stays the
-single source of truth — no imperative docker.sock start/stop.
+Every mutating action funnels through `docker compose` — compose stays the single
+source of truth; no imperative docker.sock start/stop.
 """
 
 from . import config, docker, env, log
@@ -33,18 +28,18 @@ from . import config, docker, env, log
 SCRIPT_NAME = config.SCRIPT_NAME
 ENV_FILE = config.ENV_FILE
 
-# name → {owned: containers 1:1 with the plugin, shared: datastores others use}
+# name → dependency service containers the plugin needs.
 PLUGINS: dict[str, dict[str, tuple[str, ...]]] = {
-    "telegraf": {"owned": ("telegraf",), "shared": ("influxdb",)},
+    "telegraf": {"deps": ("telegraf", "influxdb")},
 }
 
-# Datastores that core (non-plugin) services depend on regardless of any plugin —
-# Grafana reads influxdb, the API services read postgres/redis/etc. reconcile never
-# stops these even when the plugin that also uses them is disabled; only a
-# non-core shared store (none exist yet) can be refcounted down to zero.
-CORE_SHARED = frozenset(
-    {"postgres", "redis", "neo4j", "qdrant", "minio", "rabbitmq", "influxdb"}
-)
+# Core (non-plugin) consumers of a shared service — edges the compose depends_on
+# graph does NOT capture (e.g. Grafana reads influxdb as a datasource, not a
+# startup dependency). A service listed here has a standing consumer, so it never
+# becomes orphaned by disabling a plugin.
+CORE_CONSUMERS: dict[str, tuple[str, ...]] = {
+    "influxdb": ("grafana",),
+}
 
 _ACTIONS = ("enable", "disable", "status", "reconcile")
 
@@ -55,18 +50,36 @@ def _flag_key(name: str) -> str:
 
 def is_enabled(name: str) -> bool:
     """True unless .env explicitly disables the plugin. Absent key → enabled, so
-    the default start path (and thus the gate) is unchanged."""
+    the default start path (and thus the setup gate) is unchanged."""
     raw = env.get(_flag_key(name))
     if raw == "":
         return True
     return config._truthy(raw)
 
 
+def _enabled_plugins(exclude: "str | None" = None) -> "set[str]":
+    return {n for n in PLUGINS if n != exclude and is_enabled(n)}
+
+
+def _consumers(service: str, enabled: "set[str]") -> "set[str]":
+    """Everything currently keeping `service` alive: enabled plugins that declare it
+    as a dep, plus any core service that uses it. Empty → the service is orphaned."""
+    users = {p for p in enabled if service in PLUGINS[p]["deps"]}
+    users.update(CORE_CONSUMERS.get(service, ()))
+    return users
+
+
+def _orphans_after(disabling: str) -> "list[str]":
+    """Deps of `disabling` that no OTHER enabled plugin and no core service needs —
+    i.e. the containers safe to stop once this plugin is off. Deterministic order."""
+    remaining = _enabled_plugins(exclude=disabling)
+    return sorted(d for d in PLUGINS[disabling]["deps"] if not _consumers(d, remaining))
+
+
 def _set_flag(name: str, on: bool) -> None:
     """Upsert PLUGIN_<NAME>_ENABLED=1|0 in .env (sed-style, mirroring ollama.py):
     replace every matching line, else append. newline="" so we never translate
-    \\n<->\\r\\n and mangle the file cross-OS. DRY_RUN previews without writing,
-    so the compose calls (already gated) are the only echoed effects."""
+    \\n<->\\r\\n cross-OS. DRY_RUN previews without writing."""
     key = _flag_key(name)
     value = "1" if on else "0"
     if config.DRY_RUN:
@@ -81,7 +94,6 @@ def _set_flag(name: str, on: bool) -> None:
             f"{prefix}{value}" if line.startswith(prefix) else line for line in lines
         )
     else:
-        # keep the trailing newline tidy whether or not the file ended in one
         sep = "" if raw.endswith("\n") or raw == "" else "\n"
         new_raw = f"{raw}{sep}{prefix}{value}\n"
     with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
@@ -89,78 +101,68 @@ def _set_flag(name: str, on: bool) -> None:
 
 
 def enable(name: str) -> int:
-    spec = PLUGINS[name]
+    deps = PLUGINS[name]["deps"]
     already = is_enabled(name)
     _set_flag(name, True)
     if already:
-        log.info(f"Plugin '{name}' already enabled — ensuring its containers are up.")
+        log.info(f"Plugin '{name}' already enabled — ensuring its services are up.")
     else:
         log.success(f"Plugin '{name}' → enabled ({_flag_key(name)}=1)")
-    # Bring up shared datastores first (compose depends_on still orders/health-gates
-    # the owned agent), then the owned containers. One `up` command per group keeps
-    # the emitted commands close to start_services' shape.
-    services = (*spec["shared"], *spec["owned"])
-    docker.compose("up", "-d", *services)
-    log.detail(f"Reconciled: {', '.join(services)}")
+    # Bring up every dependency (compose reuses already-running ones + orders via
+    # depends_on/health). One command keeps the shape close to start_services.
+    docker.compose("up", "-d", *sorted(deps))
+    log.detail(f"Reconciled: {', '.join(sorted(deps))}")
     return 0
 
 
-def disable(name: str) -> int:
-    spec = PLUGINS[name]
+def disable(name: str, stop_orphans: bool = False) -> int:
     _set_flag(name, False)
     log.success(f"Plugin '{name}' → disabled ({_flag_key(name)}=0)")
-    owned = spec["owned"]
-    # Stop only the owned containers; shared datastores (e.g. influxdb) stay up for
-    # their other consumers, and no volume is removed. `stop` (not `down`) so the
-    # container definition + any data volume survive an enable later.
-    docker.compose("stop", *owned)
-    if spec["shared"]:
+    orphans = _orphans_after(name)
+    kept = sorted(set(PLUGINS[name]["deps"]) - set(orphans))
+    if kept:
+        log.detail(f"Kept (still used elsewhere): {', '.join(kept)}")
+    if not orphans:
+        log.info("No orphaned containers — every dependency is still in use.")
+        return 0
+    if stop_orphans:
+        docker.compose("stop", *orphans)
+        log.success(f"Stopped orphaned: {', '.join(orphans)}")
+    else:
+        log.warn(f"Now unused by any plugin or service: {', '.join(orphans)}")
         log.detail(
-            f"Kept shared: {', '.join(spec['shared'])} (other services use these)"
+            f"Left running. Stop them with:  ./{SCRIPT_NAME} plugin disable {name} --stop-orphans"
         )
-    log.detail(f"Stopped: {', '.join(owned)}")
     return 0
 
 
-def _partition() -> "tuple[set[str], set[str]]":
-    """Compute desired container state from every plugin's .env flag (refcount over
-    the union of enabled plugins):
-      want_up   — every owned+shared container of an ENABLED plugin
-      want_down — owned containers of DISABLED plugins that no enabled plugin also
-                  needs; plus non-core shared stores likewise unneeded. CORE_SHARED
-                  datastores are never listed for teardown (core still needs them).
-    """
-    want_up: set[str] = set()
-    for name, spec in PLUGINS.items():
-        if is_enabled(name):
-            want_up.update(spec["owned"])
-            want_up.update(spec["shared"])
-
-    want_down: set[str] = set()
-    for name, spec in PLUGINS.items():
-        if is_enabled(name):
-            continue
-        for svc in spec["owned"]:
-            if svc not in want_up:
-                want_down.add(svc)
-        for svc in spec["shared"]:
-            if svc not in want_up and svc not in CORE_SHARED:
-                want_down.add(svc)
-    return want_up, want_down
-
-
-def reconcile() -> int:
-    """Converge the live stack to the plugin flags in .env — the primitive `start`
-    and (later) the registry webhook drive. Idempotent; funnels through compose."""
-    want_up, want_down = _partition()
+def reconcile(stop_orphans: bool = False) -> int:
+    """Converge to the .env flags: bring up every enabled plugin's deps; detect the
+    containers orphaned by disabled plugins and report (or stop with --stop-orphans).
+    The primitive `start` and the future registry API drive. Idempotent."""
+    enabled = _enabled_plugins()
+    want_up = sorted({d for p in enabled for d in PLUGINS[p]["deps"]})
+    orphans = sorted(
+        {
+            d
+            for p in PLUGINS
+            if not is_enabled(p)
+            for d in PLUGINS[p]["deps"]
+            if not _consumers(d, enabled)
+        }
+    )
     log.section("🔌  Reconciling plugin containers")
     if want_up:
-        log.info(f"Ensuring up:  {', '.join(sorted(want_up))}")
-        docker.compose("up", "-d", *sorted(want_up))
-    if want_down:
-        log.info(f"Stopping (no enabled plugin needs them):  {', '.join(sorted(want_down))}")
-        docker.compose("stop", *sorted(want_down))
-    if not want_up and not want_down:
+        log.info(f"Ensuring up:  {', '.join(want_up)}")
+        docker.compose("up", "-d", *want_up)
+    if orphans and stop_orphans:
+        log.info(f"Stopping orphaned:  {', '.join(orphans)}")
+        docker.compose("stop", *orphans)
+    elif orphans:
+        log.warn(
+            f"Orphaned (unused): {', '.join(orphans)} — pass --stop-orphans to stop"
+        )
+    if not want_up and not orphans:
         log.info("Nothing to do — plugin containers already match .env.")
     log.success("Reconcile complete")
     return 0
@@ -168,29 +170,28 @@ def reconcile() -> int:
 
 def status() -> int:
     log.section("🔌  Plugin Container Lifecycle")
-    want_up, want_down = _partition()
-    drift = 0
+    enabled = _enabled_plugins()
     for name, spec in PLUGINS.items():
-        state = "enabled" if is_enabled(name) else "disabled"
-        log.info(f"{name}  [{state}]  ({_flag_key(name)})")
-        for tier in ("owned", "shared"):
-            for svc in spec[tier]:
-                running = docker.container_running(svc)
-                health = docker.container_health(svc) if running else "stopped"
-                mark = "✓" if running else "·"
-                # drift = live state disagrees with what the flags want
-                if (svc in want_up and not running) or (svc in want_down and running):
-                    mark, drift = "!", drift + 1
-                log.detail(f"  {mark} {svc:<12} {tier:<7} {health}")
-    if drift:
-        log.warn(f"{drift} container(s) drift from .env — run  ./{SCRIPT_NAME} plugin reconcile")
+        on = name in enabled
+        log.info(f"{name}  [{'enabled' if on else 'disabled'}]  ({_flag_key(name)})")
+        for svc in spec["deps"]:
+            running = docker.container_running(svc)
+            health = docker.container_health(svc) if running else "stopped"
+            users = _consumers(svc, enabled)
+            # drift: a needed dep is down, or a dep is up but now orphaned
+            mark = "✓" if running else "·"
+            if (users and not running) or (not users and running):
+                mark = "!"
+            users_s = ", ".join(sorted(users)) if users else "— orphaned"
+            log.detail(f"  {mark} {svc:<12} {health:<9} used by: {users_s}")
     return 0
 
 
-def run(action: str = "", name: str = "") -> int:
+def run(action: str = "", name: str = "", stop_orphans: bool = False) -> int:
     if action not in _ACTIONS:
         log.error(
-            f"Usage: ./{SCRIPT_NAME} plugin enable|disable <name>  |  plugin status|reconcile"
+            f"Usage: ./{SCRIPT_NAME} plugin enable|disable <name> [--stop-orphans]"
+            f"  |  plugin status|reconcile"
         )
         log.detail(f"  Known plugins: {', '.join(PLUGINS)}")
         return 1
@@ -200,7 +201,7 @@ def run(action: str = "", name: str = "") -> int:
         if not ENV_FILE.is_file():
             log.error(f"No .env at {ENV_FILE} — run ./{SCRIPT_NAME} install first.")
             return 1
-        return reconcile()
+        return reconcile(stop_orphans=stop_orphans)
 
     if not name:
         log.error(f"./{SCRIPT_NAME} plugin {action} <name>  — plugin name required")
@@ -214,4 +215,6 @@ def run(action: str = "", name: str = "") -> int:
         log.error(f"No .env at {ENV_FILE} — run ./{SCRIPT_NAME} install first.")
         return 1
 
-    return enable(name) if action == "enable" else disable(name)
+    if action == "enable":
+        return enable(name)
+    return disable(name, stop_orphans=stop_orphans)
