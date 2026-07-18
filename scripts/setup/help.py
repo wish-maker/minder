@@ -6,7 +6,7 @@ equivalent — the frozen setup.bash.sh reference does not list it).
 
 import sys
 
-from . import config, log
+from . import bundles, config, log
 
 _HELP_TEMPLATE = """
 {bold}Minder Platform{nc}  v{version}  —  Setup & Lifecycle Management
@@ -161,16 +161,23 @@ def print_success_banner() -> None:
     for name, port in _API_BANNER:
         e(f"   {name:<20} →  {c}http://localhost:{port}{nc}")
 
-    e("")
-    e(f"{b}{m}🤖 AI Services{nc}")
-    e(f"   OpenWebUI           →  {c}via Traefik (chat.minder.local){nc}")
-    e(f"   TTS / STT           →  {c}http://localhost:8006{nc}")
+    # Only advertise a bundle's URLs when it is enabled — a standard install has
+    # monitoring off, so showing Grafana/Prometheus would mislead. Everything
+    # enabled → every section shown → the install gate stays byte-identical.
+    if bundles.is_enabled("chat") or bundles.is_enabled("voice"):
+        e("")
+        e(f"{b}{m}🤖 AI Services{nc}")
+        if bundles.is_enabled("chat"):
+            e(f"   OpenWebUI           →  {c}via Traefik (chat.minder.local){nc}")
+        if bundles.is_enabled("voice"):
+            e(f"   TTS / STT           →  {c}http://localhost:8006{nc}")
 
-    e("")
-    e(f"{b}{m}📊 Monitoring{nc}")
-    e(f"   Prometheus          →  {c}http://localhost:9090{nc}")
-    e(f"   Grafana             →  {c}http://localhost:3000{nc}")
-    e(f"   InfluxDB            →  {c}http://localhost:8086{nc}")
+    if bundles.is_enabled("monitoring"):
+        e("")
+        e(f"{b}{m}📊 Monitoring{nc}")
+        e(f"   Prometheus          →  {c}http://localhost:9090{nc}")
+        e(f"   Grafana             →  {c}http://localhost:3000{nc}")
+        e(f"   InfluxDB            →  {c}http://localhost:8086{nc}")
 
     e("")
     e(f"{b}{m}🔧 Commands{nc}")

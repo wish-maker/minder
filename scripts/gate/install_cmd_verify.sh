@@ -20,10 +20,11 @@ bsh() { SCRIPT_DIR="$PWD" TERM=xterm bash -c '
   '"$STUBS"'
   '"$1"; }
 PY_STUBS='
-from scripts.setup import preflight, env, infra, versions, lifecycle, health, migrate
+from scripts.setup import preflight, env, infra, versions, lifecycle, health, migrate, bundles
 _noop = lambda *a, **k: None
 preflight.check_prerequisites = _noop
 env.prepare_env = _noop
+bundles.seed_profile = _noop
 infra.create_networks = _noop
 versions.pull_all_images = _noop
 infra.initialize_database = _noop
