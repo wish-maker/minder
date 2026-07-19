@@ -24,7 +24,7 @@ redis-exporter, rabbitmq-exporter). See [Service Bundles](bundles.md).
 ## Architecture Overview
 
 Minder is a local AI orchestration platform providing JWT-authenticated APIs, RAG pipelines
-(Standard + Conversational; HyDE/Self-RAG exist as unwired modules — #45), a knowledge-graph service, a manifest-based plugin system, and a
+(Standard/Conversational/HyDE/Self-RAG/auto via the query `method`; corrective/rerankers unwired — #45), a knowledge-graph service, a manifest-based plugin system, and a
 full observability stack. All services run in Docker and are provisioned by a single `setup.sh`
 entrypoint — a thin shim over the native-Python setup CLI (`python -m scripts.setup`; the
 original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
@@ -32,7 +32,7 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 ### System Capabilities
 
 - **Plugin Management** - Manifest-based plugins with a defined lifecycle (no arbitrary code execution)
-- **RAG** - Document ingestion, chunking, embeddings, vector retrieval; Standard + Conversational RAG live (HyDE/Self-RAG modules present but unwired — #45)
+- **RAG** - Document ingestion, chunking, embeddings, vector retrieval; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective/rerankers unwired — #45)
 - **Knowledge Graph** - spaCy NER entity extraction and Neo4j graph construction/retrieval (graph-rag)
 - **Authentication** - JWT-based auth (bcrypt password hashing) on core services
 - **Observability** - Prometheus, Grafana, InfluxDB, Alertmanager, Jaeger, OpenTelemetry collector
@@ -130,7 +130,7 @@ All eight core APIs are FastAPI services with real implementations.
 
 #### RAG Pipeline (Port 8004)
 - Knowledge bases, document upload (PDF/TXT/MD via pypdf + LangChain splitter), Qdrant vectors,
-  Ollama embeddings + LLM; Standard + Conversational RAG live (HyDE/Self-RAG/decision-engine are unwired modules — #45)
+  Ollama embeddings + LLM; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective/rerankers unwired — #45)
 
 #### Model Management (Port 8005)
 - Ollama model list / pull / delete / test (real). `/models/{id}/constraints` and
