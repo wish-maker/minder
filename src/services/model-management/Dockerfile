@@ -23,10 +23,12 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 # Copy application
 COPY src/services/model-management/main.py .
 COPY src/services/model-management/models.py .
+COPY src/services/model-management/core /app/core
 COPY src/services/model-management/routes /app/routes
 
-# Copy core + shared modules (shared.* imported via /app/src on sys.path)
-COPY src/core /app/src/core
+# Copy shared modules (shared.* imported via /app/src on sys.path). The framework
+# src/core is intentionally NOT copied — this service doesn't import it, and doing so
+# would shadow the service-local core/ package on sys.path (mirrors graph-rag).
 COPY src/shared /app/src/shared
 
 # Create non-root user
