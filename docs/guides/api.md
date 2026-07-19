@@ -86,7 +86,7 @@ The gateway forwards these prefixes to the corresponding backend service:
 ```http
 GET  /v1/ai/functions/definitions        # aggregated plugin AI-tool (function) defs
 POST /v1/ai/functions/{function_name}     # execute a named tool (OpenAI function-result format)
-POST /v1/ai/chat/completions              # OpenAI-compatible chat; currently proxies to Ollama /api/chat
+POST /v1/ai/chat/completions              # chat via Ollama; plugin function-calling is opt-in via {"minder_tools": true}
 ```
 
 #### Observability

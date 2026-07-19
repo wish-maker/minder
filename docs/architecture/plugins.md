@@ -96,19 +96,30 @@ to telegraf's `set_managed_region`.
   discovery (`NETWORK_AUTO_EXPAND`), and per-sink toggles (`NETWORK_SINK_*`).
 - **Image**: needs `nmap` + `snmp` in the plugin-registry Dockerfile.
 
-> Module plugins are invoked via the `actions` endpoint, not the AI-tool aggregation — the loader
-> treats a plugin dir as manifest-based **or** module-based, so a module plugin can't also ship a
-> manifest to appear in `/v1/plugins/ai/tools` (tracked separately).
+## AI Tools (Ollama function-calling)
 
-## AI Tools
+Plugins advertise **AI tools** for Ollama function-calling; `GET /v1/plugins/ai/tools`
+aggregates them into OpenAI/Ollama tool definitions.
 
-Plugins may also register as **AI tools** for Ollama function calling. The registry aggregates
-tools, the marketplace catalogs them, and the state manager executes them with license validation.
+- A **module plugin** declares tools in code via an `AI_TOOLS` class attribute — a list
+  of `{name, description, parameters (JSON Schema), action}` where `action` is one of the
+  plugin's `ACTIONS` (so the tool maps to `POST /v1/plugins/<name>/actions/<action>`).
+  See `src/plugins/_contract.py`; the `network` plugin is the reference (`network_scan`,
+  `network_reconcile`). Module plugins no longer need a manifest to appear in the
+  aggregation (#60).
+- A **manifest plugin** lists the same shape under its manifest's `ai_tools` key.
 
-Tool schema:
+Tool schema (OpenAI/Ollama):
 ```json
-{ "name": "...", "description": "...", "input_schema": { }, "endpoint": "..." }
+{ "name": "...", "description": "...", "parameters": { "type": "object", "properties": {} }, "action": "..." }
 ```
+
+**End-to-end function-calling** runs through the API Gateway's
+`POST /v1/ai/chat/completions` with `"minder_tools": true` (opt-in — without it, chat is
+a plain Ollama passthrough). The gateway offers the aggregated tools to Ollama, executes
+any `tool_calls` against the plugin action endpoints **forwarding the caller's JWT** (tools
+run as the calling user), and feeds results back for the final answer. A tool failure (e.g.
+a 401 when unauthenticated) is fed back to the model, never aborting the chat.
 
 ## API Endpoints
 

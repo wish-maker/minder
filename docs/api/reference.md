@@ -86,8 +86,8 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/ai/functions/definitions` | Aggregated AI-tool (function) definitions from all plugins, in OpenAI function schema |
-| POST | `/v1/ai/functions/{function_name}` | Execute a named AI tool; proxied to the plugin's endpoint, returned in OpenAI function-result format |
-| POST | `/v1/ai/chat/completions` | OpenAI-compatible chat completions. **Note:** currently routes straight to Ollama `/api/chat`; a native tool-calling flow is a documented TODO |
+| POST | `/v1/ai/functions/{function_name}` | Execute a named AI tool; proxied to the plugin's endpoint (forwards the caller's JWT), returned in OpenAI function-result format |
+| POST | `/v1/ai/chat/completions` | Chat via Ollama. Plugin function-calling is **opt-in** via `"minder_tools": true` (the gateway offers plugin tools, executes the model's `tool_calls` against plugin actions forwarding the caller's JWT, and feeds results back). Without the flag it's a plain Ollama `/api/chat` passthrough |
 
 ### Ops
 
@@ -398,11 +398,16 @@ register() → initialize() (READY) → health_check() (60s loop)
            + analyze()
 ```
 
-Plugins may register as **AI tools** for Ollama function calling using the schema:
+Plugins advertise **AI tools** for Ollama function-calling. A module plugin declares an
+`AI_TOOLS` class attribute (a manifest plugin uses its `ai_tools` key), each tool being:
 
 ```json
-{ "name": "...", "description": "...", "input_schema": { }, "endpoint": "..." }
+{ "name": "...", "description": "...", "parameters": { "type": "object", "properties": {} }, "action": "..." }
 ```
+
+`action` maps to `POST /v1/plugins/<plugin>/actions/<action>`. `GET /v1/plugins/ai/tools`
+aggregates these into OpenAI/Ollama tool defs; drive the end-to-end loop via
+`POST /v1/ai/chat/completions` with `"minder_tools": true` (see the API Gateway section).
 
 Plugins can write to any storage backend (postgres, qdrant, neo4j, minio, influxdb) and
 publish async events through rabbitmq.

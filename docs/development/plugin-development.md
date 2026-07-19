@@ -133,31 +133,42 @@ internal Docker network using service names.
 
 ## AI Tools
 
-Plugins can register **AI tools** that Ollama-backed function calling can invoke. Tool
-discovery and execution are handled by plugin-state-manager (`8003`); the registry
-aggregates tools and the marketplace maintains an AI-tool catalog.
+Plugins advertise **AI tools** that Ollama function-calling can invoke. `GET
+/v1/plugins/ai/tools` (plugin-registry `:8001`) aggregates them into OpenAI/Ollama tool
+definitions; the API Gateway drives the end-to-end loop.
 
-A tool is declared with this schema:
+A **module plugin** declares tools in code via an `AI_TOOLS` class attribute; a
+**manifest plugin** lists the same shape under its manifest's `ai_tools` key:
 
-```json
-{
-  "name": "get_example_metric",
-  "description": "What the tool does, for the model to reason about",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "symbol": { "type": "string" }
-    },
-    "required": ["symbol"]
-  },
-  "endpoint": "/tools/example/get_example_metric"
-}
+```python
+class MyPlugin:
+    ACTIONS = frozenset({"get_example_metric"})   # the invocable methods
+
+    AI_TOOLS = [
+        {
+            "name": "get_example_metric",
+            "description": "What the tool does, for the model to reason about",
+            "parameters": {                          # JSON Schema for the arguments
+                "type": "object",
+                "properties": {"symbol": {"type": "string"}},
+                "required": ["symbol"],
+            },
+            "action": "get_example_metric",          # -> POST /v1/plugins/<name>/actions/<action>
+        },
+    ]
 ```
 
-- `name` — unique tool identifier.
-- `description` — natural-language description used by the model.
-- `input_schema` — JSON Schema for the tool's arguments.
-- `endpoint` — the fixed handler endpoint the platform calls to execute the tool.
+- `name` — unique tool identifier the model calls.
+- `description` — natural-language description the model reasons about.
+- `parameters` — JSON Schema for the tool's arguments (OpenAI/Ollama format).
+- `action` — one of the plugin's `ACTIONS`; the tool maps to `POST
+  /v1/plugins/<name>/actions/<action>` (or give an explicit `endpoint` instead).
+
+**Invocation:** call the API Gateway's `POST /v1/ai/chat/completions` with
+`"minder_tools": true`. The gateway offers the tools to Ollama, executes the model's
+`tool_calls` against the action endpoints **as the calling user** (it forwards your JWT),
+and feeds results back for the answer. See `src/plugins/_contract.py` and the `network`
+plugin for a working reference.
 
 ## Registering a Plugin
 
