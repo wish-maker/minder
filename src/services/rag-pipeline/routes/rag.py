@@ -89,6 +89,40 @@ async def list_knowledge_bases():
     return list(state.knowledge_bases.values())
 
 
+@router.get("/knowledge-base/{kb_id}", tags=["Knowledge Base"])
+async def get_knowledge_base(kb_id: str):
+    """Get a single knowledge base by id."""
+    kb = state.knowledge_bases.get(kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    return kb
+
+
+@router.delete("/knowledge-base/{kb_id}", tags=["Knowledge Base"])
+async def delete_knowledge_base(kb_id: str):
+    """Delete a knowledge base: its Qdrant collection, its PostgreSQL row, and the
+    in-memory entry. Idempotent-ish — 404 if the KB is unknown."""
+    if kb_id not in state.knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    # Drop the Qdrant collection (best-effort — may already be gone).
+    try:
+        state.get_qdrant_client().delete_collection(collection_name=kb_id)
+        logger.info(f"✅ Deleted Qdrant collection: {kb_id}")
+    except Exception as e:
+        logger.warning(f"⚠️  Failed to delete Qdrant collection {kb_id}: {e}")
+
+    if state.PG_AVAILABLE:
+        try:
+            await state.delete_kb_from_postgres(kb_id)
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to delete KB from PostgreSQL: {e}")
+
+    state.knowledge_bases.pop(kb_id, None)
+    logger.info(f"✅ Deleted knowledge base: {kb_id}")
+    return {"message": "Knowledge base deleted", "id": kb_id}
+
+
 @router.post(
     "/knowledge-base/{kb_id}/upload",
     response_model=DocumentUploadResponse,
@@ -219,6 +253,24 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
         "message": "RAG pipeline created successfully",
         "pipeline_id": pipeline_id,
     }
+
+
+@router.delete("/pipeline/{pipeline_id}", tags=["Pipeline"])
+async def delete_rag_pipeline(pipeline_id: str):
+    """Delete a RAG pipeline (its PostgreSQL row + the in-memory entry). The KBs it
+    referenced are left intact. 404 if the pipeline is unknown."""
+    if pipeline_id not in state.rag_pipelines:
+        raise HTTPException(status_code=404, detail="RAG pipeline not found")
+
+    if state.PG_AVAILABLE:
+        try:
+            await state.delete_pipeline_from_postgres(pipeline_id)
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to delete pipeline from PostgreSQL: {e}")
+
+    state.rag_pipelines.pop(pipeline_id, None)
+    logger.info(f"✅ Deleted RAG pipeline: {pipeline_id}")
+    return {"message": "RAG pipeline deleted", "id": pipeline_id}
 
 
 @router.post(
