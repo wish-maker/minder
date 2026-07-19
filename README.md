@@ -138,14 +138,18 @@ Your complete AI platform is now running with:
 
 ### 📚 **"I want to chat with my documents privately"**
 ```bash
-# Create a knowledge base, then upload documents into it
+# Create a knowledge base (name AND description required), then upload documents
 curl -X POST http://localhost:8004/knowledge-base \
-  -H "Content-Type: application/json" -d '{"name":"My Docs"}'
+  -H "Content-Type: application/json" -d '{"name":"My Docs","description":"my documents"}'
 curl -X POST http://localhost:8004/knowledge-base/<kb_id>/upload \
   -F "file=@report.pdf"
 
-# Then query it through the RAG pipeline — see the interactive API docs
-# at http://localhost:8004/docs for the exact request shape.
+# Then create a pipeline over the KB and query it
+curl -X POST http://localhost:8004/pipeline \
+  -H "Content-Type: application/json" -d '{"name":"my-pipe","knowledge_base_ids":["<kb_id>"]}'
+curl -X POST http://localhost:8004/pipeline/<pipeline_id>/query \
+  -H "Content-Type: application/json" -d '{"question":"What is in my docs?","top_k":3}'
+# Note: generation needs a reachable ollama (OLLAMA_BASE_URL); see docs/getting-started/ai-setup.md.
 ```
 
 ### 🤖 **"I want to run custom AI models locally"**

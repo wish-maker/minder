@@ -135,9 +135,11 @@ All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
 **Purpose**: Retrieval-augmented generation
 
 **Endpoints (representative)**:
-- `POST /v1/knowledge-base` — create a knowledge base
-- `POST /v1/documents` — ingest a document (PDF/TXT/MD via pypdf + LangChain splitter)
-- `GET /v1/documents/search` — semantic search
+- `POST /knowledge-base` — create a knowledge base (name + description)
+- `GET /knowledge-bases` — list knowledge bases
+- `POST /knowledge-base/{kb_id}/upload` — ingest a document (PDF/TXT/MD via pypdf + LangChain splitter)
+- `POST /pipeline` — create a RAG pipeline over one or more KBs
+- `POST /pipeline/{pipeline_id}/query` — query (retrieval + generation)
 
 **Pipeline**: query → embed (Ollama) → search (Qdrant) → retrieve context → generate (Ollama LLM).
 Live query endpoint does Standard + Conversational RAG. HyDE, Self-RAG, and a decision engine exist as modules but are not wired into the live endpoint (#45).
