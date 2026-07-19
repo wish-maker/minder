@@ -70,9 +70,7 @@ minder/                              # Project root
 └── scripts/                         # Setup & utility scripts
     ├── setup/                       # ⭐ Native-Python setup CLI (python -m scripts.setup)
     ├── lib/                         # Bash reference modules (behavior-gate parity only)
-    ├── gate/                        # Behavior gate — verifies python ↔ bash-reference parity
-    ├── health-check.sh              # Standalone ops helper (--watch/--report/--fix); not wired into the CLI — see #68
-    └── validate-installation.sh    # Standalone e2e smoke (stop→start→restart); not wired into the CLI — see #68
+    └── gate/                        # Behavior gate — verifies python ↔ bash-reference parity
     # (secrets are auto-filled by setup.sh into ./.env — no separate generate-secrets step)
 ```
 
@@ -401,7 +399,7 @@ deploy:
 
 ```bash
 # Check all services
-./scripts/health-check.sh
+bash setup.sh health
 
 # Check specific service
 curl http://localhost:8000/health
@@ -423,8 +421,8 @@ docker logs minder-api-gateway > api-gateway.log
 ### Diagnostics
 
 ```bash
-# Run health check
-./scripts/health-check.sh
+# Run health check (or `bash setup.sh doctor` for deeper diagnostics)
+bash setup.sh health
 
 # Container stats
 docker stats
