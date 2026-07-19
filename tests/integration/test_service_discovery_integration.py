@@ -62,7 +62,7 @@ async def test_service_discovery_flow():
     3. Dynamic proxy routing
     4. Service discovery
     """
-    from routes.plugins import ProxyRouter
+    from routes.proxy import ProxyRouter
 
     # Define ServiceRegistration locally to avoid config import issues
     class ServiceRegistration(BaseModel):

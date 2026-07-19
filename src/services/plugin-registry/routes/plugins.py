@@ -1,178 +1,337 @@
+"""Plugin CRUD + lifecycle endpoints.
+
+Built via a factory with shared state (plugins_db, plugin_instances, plugin_manifests,
+webhook_routes, redis) and the main-owned helpers (update_plugin_in_database,
+register_plugin_webhook, handle_webhook_request) injected — those helpers are also used
+by startup/webhook-registration, so they stay in main. validate_manifest, auth deps and
+PluginInfo are imported directly (no request state). Mirrors routes/services.py.
 """
-Dynamic Proxy Routes for Plugin Microservices
-Handles request forwarding to registered plugin services
-"""
 
-import logging
-from typing import Dict
+import inspect
+import json
+from datetime import datetime, timezone
 
-import httpx
-from fastapi import HTTPException, Request, Response
+import yaml
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
+from models import PluginInfo
+from schemas.validator import validate_manifest
 
-logger = logging.getLogger("minder.plugin-registry")
+from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
 
 
-class ProxyRouter:
-    """Dynamic proxy router for plugin microservices"""
+def build_plugins_router(
+    *,
+    plugins_db,
+    plugin_instances,
+    plugin_manifests,
+    webhook_routes,
+    redis_client,
+    update_plugin_in_database,
+    register_plugin_webhook,
+    handle_webhook_request,
+    logger,
+) -> APIRouter:
+    router = APIRouter(tags=["Plugins"])
 
-    def __init__(self, services_db: Dict):
-        """
-        Initialize proxy router
+    @router.get("/plugins")
+    async def list_plugins_redirect():
+        """Redirect /plugins to /v1/plugins for backward compatibility"""
+        return RedirectResponse(url="/v1/plugins", status_code=301)
 
-        Args:
-            services_db: Dictionary of registered services
-        """
-        self.services_db = services_db
-        self.http_client = None
+    @router.get("/v1/plugins")
+    async def list_plugins():
+        """List all registered plugins (public endpoint)"""
+        return {"plugins": list(plugins_db.values()), "count": len(plugins_db)}
 
-    async def get_http_client(self):
-        """Get or create HTTP client for proxying"""
-        if self.http_client is None:
-            self.http_client = httpx.AsyncClient(
-                timeout=30.0,
-                limits=httpx.Limits(max_keepalive_connections=50, max_connections=100),
-            )
-        return self.http_client
+    @router.get("/v1/plugins/{plugin_name}")
+    async def get_plugin(plugin_name: str):
+        """Get plugin details"""
+        plugin = plugins_db.get(plugin_name)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+        return plugin
 
-    async def forward_request(
-        self, service_name: str, path: str, request: Request
-    ) -> Response:
-        """
-        Forward HTTP request to registered service
-
-        Args:
-            service_name: Name of the target service
-            path: Request path to forward
-            request: Original FastAPI request object
-
-        Returns:
-            Response from the target service
-
-        Raises:
-            HTTPException 404: If service not found
-            HTTPException 503: If service unavailable
-        """
-        # Check if service is registered
-        service = self.services_db.get(service_name)
-        if not service:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Service '{service_name}' not registered",
-            )
-
-        # Build target URL
-        target_url = f"http://{service.host}:{service.port}{path}"
-
-        logger.debug(f"Proxying {request.method} {target_url}")
-
+    def _parse_manifest(body: bytes, content_type: str):
+        is_yaml = (
+            "yaml" in content_type
+            or "yml" in content_type
+            or body.strip().startswith(b"apiVersion")
+        )
         try:
-            # Get HTTP client
-            client = await self.get_http_client()
-
-            # Prepare request data
-            body = await request.body()
-            headers = dict(request.headers)
-
-            # Remove hop-by-hop headers
-            headers.pop("host", None)
-            headers.pop("connection", None)
-            headers.pop("keep-alive", None)
-
-            # Forward request
-            response = await client.request(
-                method=request.method,
-                url=target_url,
-                headers=headers,
-                content=body,
-                params=request.query_params,
-            )
-
-            # Return response
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-            )
-
-        except httpx.ConnectError as e:
-            logger.error(f"Failed to connect to service {service_name}: {e}")
-            raise HTTPException(
-                status_code=503,
-                detail=f"Service '{service_name}' unavailable: connection failed",
-            )
-
-        except httpx.TimeoutException:
-            logger.error(f"Timeout connecting to service {service_name}")
-            raise HTTPException(
-                status_code=504,
-                detail=f"Service '{service_name}' timeout",
-            )
-
+            return yaml.safe_load(body) if is_yaml else json.loads(body.decode())
         except Exception as e:
-            logger.error(f"Error proxying to {service_name}: {e}")
             raise HTTPException(
-                status_code=500,
-                detail=f"Proxy error: {str(e)}",
+                status_code=400, detail=f"Failed to parse manifest: {e}"
             )
 
-    async def health_check_proxy(self, service_name: str) -> Dict:
-        """
-        Perform health check on registered service
+    @router.post("/v1/plugins/install")
+    async def install_plugin(request: Request, background_tasks: BackgroundTasks):
+        """Install a plugin from a manifest (manifest-based, no code execution)."""
+        manifest = _parse_manifest(
+            await request.body(), request.headers.get("content-type", "")
+        )
 
-        Args:
-            service_name: Name of the service to check
+        is_valid, errors = validate_manifest(manifest)
+        if not is_valid:
+            raise HTTPException(status_code=422, detail={"errors": errors})
 
-        Returns:
-            Health check response from service
-
-        Raises:
-            HTTPException 404: If service not found
-            HTTPException 503: If health check fails
-        """
-        service = self.services_db.get(service_name)
-        if not service:
+        plugin_name = manifest.get("metadata", {}).get("name")
+        if not plugin_name:
             raise HTTPException(
-                status_code=404,
-                detail=f"Service '{service_name}' not registered",
+                status_code=400, detail="Plugin name required in metadata"
+            )
+        if plugin_name in plugins_db:
+            raise HTTPException(
+                status_code=409, detail=f"Plugin {plugin_name} already installed"
+            )
+
+        meta = manifest.get("metadata", {})
+        try:
+            await update_plugin_in_database(
+                plugin_name,
+                version=meta.get("version", "1.0.0"),
+                description=meta.get("description", ""),
+                author=meta.get("author", ""),
+                status="registered",
+                enabled=True,
+            )
+            plugin_manifests[plugin_name] = manifest
+            logger.info(f"Stored manifest for plugin: {plugin_name}")
+        except Exception as e:
+            logger.error(f"Failed to store manifest in database: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to store manifest: {e}"
             )
 
         try:
-            client = await self.get_http_client()
-            health_url = (
-                f"http://{service.host}:{service.port}{service.health_check_url}"
+            await register_plugin_webhook(plugin_name, manifest)
+            logger.info(f"Registered webhook route for plugin: {plugin_name}")
+        except Exception as e:
+            logger.error(f"Failed to register webhook: {e}")
+
+        plugins_db[plugin_name] = PluginInfo(
+            name=plugin_name,
+            version=meta.get("version", "1.0.0"),
+            description=meta.get("description", ""),
+            author=meta.get("author", ""),
+            status="registered",
+            enabled=True,
+            registered_at=datetime.now().isoformat(),
+        )
+
+        return {
+            "message": f"Plugin {plugin_name} installed successfully",
+            "plugin": plugin_name,
+            "webhook_path": manifest.get("spec", {})
+            .get("trigger", {})
+            .get("webhook", {})
+            .get("path"),
+        }
+
+    @router.delete("/v1/plugins/{plugin_name}")
+    async def uninstall_plugin(
+        plugin_name: str, current_user: dict = Depends(get_current_user)
+    ):
+        """Uninstall a plugin"""
+        if plugin_name not in plugins_db:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+        if plugin_name in plugin_instances:
+            await plugin_instances[plugin_name].shutdown()
+            del plugin_instances[plugin_name]
+        del plugins_db[plugin_name]
+        redis_client.delete(f"plugin:{plugin_name}")
+        return {"message": f"Plugin {plugin_name} uninstalled"}
+
+    @router.post("/webhook/{path:path}")
+    async def handle_webhook(path: str, request: Request):
+        """Generic webhook handler; routes to the plugin registered for the path."""
+        return await handle_webhook_request(f"/webhook/{path}", request)
+
+    @router.post("/v1/plugins/{plugin_name}/enable")
+    async def enable_plugin(
+        plugin_name: str, current_user: dict = Depends(get_current_user)
+    ):
+        """Enable a plugin"""
+        plugin = plugins_db.get(plugin_name)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+        plugin.status = "enabled"
+        if plugin_name in plugin_instances:
+            plugin_instances[plugin_name].status = "ready"
+        await update_plugin_in_database(plugin_name, status="enabled", enabled=True)
+        return {"message": f"Plugin {plugin_name} enabled"}
+
+    @router.post("/v1/plugins/{plugin_name}/disable")
+    async def disable_plugin(
+        plugin_name: str, current_user: dict = Depends(get_current_user)
+    ):
+        """Disable a plugin"""
+        plugin = plugins_db.get(plugin_name)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+        plugin.status = "disabled"
+        if plugin_name in plugin_instances:
+            plugin_instances[plugin_name].status = "registered"
+        await update_plugin_in_database(plugin_name, status="disabled", enabled=False)
+        return {"message": f"Plugin {plugin_name} disabled"}
+
+    @router.post("/v1/plugins/reload-webhook")
+    async def reload_plugin_webhook(request: Request):
+        """Re-register a plugin's webhook route from an uploaded manifest."""
+        manifest = _parse_manifest(
+            await request.body(), request.headers.get("content-type", "")
+        )
+
+        is_valid, errors = validate_manifest(manifest)
+        if not is_valid:
+            raise HTTPException(status_code=422, detail={"errors": errors})
+
+        plugin_name = manifest.get("metadata", {}).get("name")
+        if not plugin_name:
+            raise HTTPException(
+                status_code=400, detail="Plugin name required in metadata"
+            )
+        if plugin_name not in plugins_db:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Plugin {plugin_name} not found. Install it first.",
             )
 
-            response = await client.get(health_url, timeout=5.0)
+        plugin_manifests[plugin_name] = manifest
+        logger.info(f"Reloaded manifest for plugin: {plugin_name}")
+        try:
+            await register_plugin_webhook(plugin_name, manifest)
+            logger.info(f"Re-registered webhook route for plugin: {plugin_name}")
+        except Exception as e:
+            logger.error(f"Failed to re-register webhook: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to register webhook: {e}"
+            )
 
-            if response.status_code == 200:
-                return response.json()
-            else:
+        return {
+            "message": f"Webhook re-registered for {plugin_name}",
+            "webhook_path": f"/webhook{manifest['spec']['trigger']['webhook']['path']}",
+            "registered_routes": list(webhook_routes.keys()),
+        }
+
+    @router.get("/v1/plugins/{plugin_name}/health")
+    async def get_plugin_health(plugin_name: str):
+        """Get plugin health status"""
+        plugin = plugins_db.get(plugin_name)
+        if not plugin:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+        plugin_instance = plugin_instances.get(plugin_name)
+        if not plugin_instance:
+            return {
+                "name": plugin_name,
+                "health_status": plugin.health_status,
+                "last_health_check": plugin.last_health_check,
+                "message": "Plugin instance not available",
+            }
+        return await plugin_instance.health_check()
+
+    @router.post("/v1/plugins/{plugin_name}/collect")
+    @enforce_rate_limit(max_requests=10, window_minutes=1)
+    async def trigger_plugin_collection(
+        plugin_name: str,
+        background_tasks: BackgroundTasks,
+        current_user: dict = Depends(get_current_user),
+    ):
+        """Manually trigger a plugin's background data collection."""
+        plugin = plugins_db.get(plugin_name)
+        if not plugin:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' not found"
+            )
+        if plugin.status != "enabled":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Plugin '{plugin_name}' is not enabled. Current status: {plugin.status}",
+            )
+        plugin_instance = plugin_instances.get(plugin_name)
+        if not plugin_instance:
+            raise HTTPException(
+                status_code=500, detail=f"Plugin '{plugin_name}' instance not available"
+            )
+        background_tasks.add_task(plugin_instance.collect_data)
+        username = current_user.get("username", "unknown")
+        logger.info(
+            f"Data collection triggered for plugin: {plugin_name} | User: {username} "
+            f"({current_user.get('role', 'unknown')}) | {datetime.now(timezone.utc).isoformat()}"
+        )
+        return {
+            "message": f"Data collection triggered for {plugin_name}",
+            "plugin": plugin_name,
+            "status": "collecting",
+            "triggered_by": username,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "note": "Collection runs in background. Check /health endpoint for results.",
+        }
+
+    @router.post("/v1/plugins/{plugin_name}/actions/{action}")
+    @enforce_rate_limit(max_requests=20, window_minutes=1)
+    async def invoke_plugin_action(
+        plugin_name: str,
+        action: str,
+        request: Request,
+        current_user: dict = Depends(get_current_user),
+    ):
+        """Invoke a WHITELISTED action on a running plugin (the write/execute path).
+
+        Only methods a plugin explicitly exposes via its ``ACTIONS`` set are callable
+        — no arbitrary method access. A JSON-object body is passed as keyword args.
+        Reads still use /collect + /analysis; this is for state-changing actions such
+        as the telegraf plugin's config management.
+        """
+        plugin = plugins_db.get(plugin_name)
+        instance = plugin_instances.get(plugin_name)
+        if not plugin or instance is None:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' is not running"
+            )
+        allowed: "frozenset[str]" = getattr(instance, "ACTIONS", frozenset())
+        method = getattr(instance, action, None)
+        if action not in allowed or not callable(method):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Plugin '{plugin_name}' exposes no action '{action}'",
+            )
+        raw = await request.body()
+        kwargs = {}
+        if raw:
+            try:
+                kwargs = json.loads(raw)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Body must be JSON")
+            if not isinstance(kwargs, dict):
                 raise HTTPException(
-                    status_code=503,
-                    detail=f"Service '{service_name}' unhealthy: status {response.status_code}",
+                    status_code=400,
+                    detail="Body must be a JSON object of method keyword args",
                 )
-
-        except httpx.ConnectError:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Service '{service_name}' unreachable",
-            )
-
-        except httpx.TimeoutException:
-            raise HTTPException(
-                status_code=504,
-                detail=f"Service '{service_name}' health check timeout",
-            )
-
+        # Arg-binding errors are the caller's fault (400); a failure from RUNNING
+        # the method is server-side (500). Plugins raise ValueError for invalid
+        # input (documented convention) → 400. This avoids masking a genuine bug
+        # (a TypeError inside the method) as a 400.
+        try:
+            inspect.signature(method).bind(**kwargs)
+        except TypeError as e:
+            raise HTTPException(status_code=400, detail=f"bad arguments: {e}")
+        try:
+            result = method(**kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"Health check failed for {service_name}: {e}")
-            raise HTTPException(
-                status_code=503,
-                detail=f"Health check failed: {str(e)}",
-            )
+            logger.error(f"Action {plugin_name}.{action} failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Action failed: {e}")
+        logger.info(
+            f"Action '{action}' invoked on plugin {plugin_name} | "
+            f"User: {current_user.get('username', 'unknown')}"
+        )
+        return {"plugin": plugin_name, "action": action, "result": result}
 
-    async def close(self):
-        """Close HTTP client"""
-        if self.http_client:
-            await self.http_client.aclose()
-            self.http_client = None
+    return router
