@@ -229,6 +229,11 @@ backups/**/*
 # So no further !-exceptions are needed; the blanket *.sql rule correctly ignores dumps.
 !docker/services/postgres/init.sql
 
+# Runtime telegraf.conf: seeded from the tracked template (telegraf.conf) by
+# setup.sh; the telegraf plugin writes its managed region here, so this copy must
+# stay untracked or every `start` would dirty the repo. Template stays tracked.
+docker/services/telegraf/telegraf.runtime.conf
+
 # Gate harness — generated traces are regenerated on demand; the harness is the
 # durable artifact (a committed golden trace would go stale + is machine-sensitive).
 scripts/gate/*.trace
