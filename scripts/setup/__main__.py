@@ -10,6 +10,7 @@ setup.bash.sh). An unknown command errors + prints help, mirroring the bash
 import sys
 
 from . import backup as backup_module
+from . import bundles as bundles_module
 from . import config
 from . import doctor as doctor_module
 from . import help as help_module
@@ -122,9 +123,27 @@ def main(argv: list[str]) -> int:
     if cmd == "doctor":
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()
+    if cmd == "bundle":
+        # Post-port verb (no bash equivalent): bundle enable|disable <name>
+        # [--stop-orphans] | status | reconcile [--stop-orphans].
+        stop_orphans = "--stop-orphans" in argv
+        pos = [a for a in _positional(argv) if a != "--stop-orphans"]
+        action = pos[1] if len(pos) > 1 else ""
+        name = pos[2] if len(pos) > 2 else ""
+        return bundles_module.run(action, name, stop_orphans=stop_orphans)
     if cmd == "install":
-        # setup.sh: default command (no verb) → cmd_install.
-        return install_module.run()
+        # setup.sh: default command (no verb) → cmd_install. Optional
+        # `--profile minimal|standard|full` seeds the initial bundle set.
+        profile = "standard"
+        if "--profile" in argv:
+            i = argv.index("--profile")
+            if i + 1 < len(argv):
+                profile = argv[i + 1]
+        if profile not in bundles_module.PROFILES:
+            log.error(f"Unknown install profile: '{profile}'")
+            log.detail(f"  Profiles: {', '.join(bundles_module.PROFILES)}")
+            return 1
+        return install_module.run(profile)
 
     # Unknown command — mirrors setup.sh main()'s `*)` case: error, help, exit 1.
     log.error(f"Unknown command: {cmd}")

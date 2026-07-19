@@ -1,11 +1,12 @@
 """Help text for the Minder setup CLI — ported from scripts/lib/help.sh
-show_help() (#7, Stage 2). Byte-faithful to the bash heredoc; verified against
-`bash setup.sh --help` by the port.
+show_help() (#7, Stage 2). Was byte-faithful to the bash heredoc; the BUNDLES
+section below is a deliberate post-port addition (the `bundle` verb has no bash
+equivalent — the frozen setup.bash.sh reference does not list it).
 """
 
 import sys
 
-from . import config, log
+from . import bundles, config, log
 
 _HELP_TEMPLATE = """
 {bold}Minder Platform{nc}  v{version}  —  Setup & Lifecycle Management
@@ -15,6 +16,9 @@ _HELP_TEMPLATE = """
 
 {bold}INSTALL & LIFECYCLE{nc}
     (none)                  Full install: prereqs → env → network → DB → services → health
+    install [--profile P]   P = minimal (core only) | standard (default: core+inference
+                            +rag+chat) | full (everything incl. monitoring). Seeds the
+                            initial bundles; change later with `bundle enable/disable`.
     start                   Start all services
     stop [--clean]          Stop services; --clean prunes dangling images
     restart                 Stop then start
@@ -56,6 +60,18 @@ _HELP_TEMPLATE = """
                              container; external [url] = reach a URL (same-host daemon or a
                              remote host; default http://host.docker.internal:11434). Flips
                              .env only and prints a "run restart to apply" hint — no restart.
+
+{bold}BUNDLES{nc}  (capability groups of services — see docs/architecture/bundles.md)
+    bundle status            Show each bundle's enable-state + its services and
+                             which enabled bundles claim them (the claim graph)
+    bundle enable <name>     Enable the bundle + bring its services up
+    bundle disable <name> [--stop-orphans]
+                             Disable it; report services now claimed by no enabled
+                             bundle (orphans). --stop-orphans also stops them.
+    bundle reconcile [--stop-orphans]
+                             Converge the live stack to the enable-state
+    bundles: core (always on) · monitoring · inference · rag · graph-rag · chat · voice
+    (state lives in bundles.state.json — secret-free; start honours it)
 
 {bold}FLAGS{nc}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing
@@ -145,16 +161,23 @@ def print_success_banner() -> None:
     for name, port in _API_BANNER:
         e(f"   {name:<20} →  {c}http://localhost:{port}{nc}")
 
-    e("")
-    e(f"{b}{m}🤖 AI Services{nc}")
-    e(f"   OpenWebUI           →  {c}via Traefik (chat.minder.local){nc}")
-    e(f"   TTS / STT           →  {c}http://localhost:8006{nc}")
+    # Only advertise a bundle's URLs when it is enabled — a standard install has
+    # monitoring off, so showing Grafana/Prometheus would mislead. Everything
+    # enabled → every section shown → the install gate stays byte-identical.
+    if bundles.is_enabled("chat") or bundles.is_enabled("voice"):
+        e("")
+        e(f"{b}{m}🤖 AI Services{nc}")
+        if bundles.is_enabled("chat"):
+            e(f"   OpenWebUI           →  {c}via Traefik (chat.minder.local){nc}")
+        if bundles.is_enabled("voice"):
+            e(f"   TTS / STT           →  {c}http://localhost:8006{nc}")
 
-    e("")
-    e(f"{b}{m}📊 Monitoring{nc}")
-    e(f"   Prometheus          →  {c}http://localhost:9090{nc}")
-    e(f"   Grafana             →  {c}http://localhost:3000{nc}")
-    e(f"   InfluxDB            →  {c}http://localhost:8086{nc}")
+    if bundles.is_enabled("monitoring"):
+        e("")
+        e(f"{b}{m}📊 Monitoring{nc}")
+        e(f"   Prometheus          →  {c}http://localhost:9090{nc}")
+        e(f"   Grafana             →  {c}http://localhost:3000{nc}")
+        e(f"   InfluxDB            →  {c}http://localhost:8086{nc}")
 
     e("")
     e(f"{b}{m}🔧 Commands{nc}")

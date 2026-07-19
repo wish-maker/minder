@@ -17,7 +17,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 
-from . import config, docker, env, log
+from . import bundles, config, docker, env, log
 
 
 def _server_ip() -> str:
@@ -46,6 +46,11 @@ def run_health_checks(json_mode: bool = False) -> int:
     server_ip = _server_ip()
 
     def _check_endpoint(name: str, path: str) -> None:
+        # Skip services whose bundle is disabled — they were never started, so a
+        # probe would falsely report them down. Everything enabled → no skip → the
+        # setup gate stays byte-identical.
+        if not bundles.service_active(name):
+            return
         port = path.split("/", 1)[0]
         health_path = path.split("/", 1)[1] if "/" in path else path
         if health_path == port:  # bare "port" spec → default health path

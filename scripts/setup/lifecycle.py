@@ -14,7 +14,14 @@ it is verified under the gate's docker shim (container_health → healthy → in
 import os
 import time
 
-from . import config, docker, env, log
+from . import bundles, config, docker, env, log
+
+
+def _active(services: "tuple[str, ...]") -> "list[str]":
+    """Keep only services whose claiming bundle is enabled (bundles.service_active).
+    With everything enabled (the default + the setup gate) the list is unchanged, so
+    each group's `compose up` stays byte-identical to the frozen bash reference."""
+    return [s for s in services if bundles.service_active(s)]
 
 
 def start_services() -> None:
@@ -31,19 +38,23 @@ def start_services() -> None:
             "   Platform-managed ollama container will NOT start (compose 'internal-ollama' profile inactive)"
         )
         os.environ.pop("COMPOSE_PROFILES", None)
-    else:
+    elif bundles.service_active("ollama"):
+        # ollama is claimed by inference/rag/chat — start it if any of them is on.
         log.info(
             "🏠 Internal Ollama mode (platform-managed container, default zero-config)"
         )
         log.info("   OLLAMA_BASE_URL: (empty, using internal minder-ollama container)")
         os.environ["COMPOSE_PROFILES"] = "internal-ollama"
+    else:
+        log.info("⏸️  no bundle claims ollama — internal ollama will NOT start")
+        os.environ.pop("COMPOSE_PROFILES", None)
 
     log.info("① Security layer…")
     docker.compose("up", "-d", *config.SECURITY_SERVICES)
     time.sleep(5)
 
     log.info("② Infrastructure (DB, cache, vector store, AI runtime)…")
-    docker.compose("up", "-d", *config.CORE_SERVICES)
+    docker.compose("up", "-d", *_active(config.CORE_SERVICES))
     time.sleep(8)
 
     log.info("③ Message broker (RabbitMQ)…")
@@ -51,21 +62,44 @@ def start_services() -> None:
     docker.wait_healthy("rabbitmq", config.TIMEOUT_SERVICES)
 
     log.info("④ Core microservices…")
-    docker.compose("up", "-d", *config.API_SERVICES)
+    docker.compose("up", "-d", *_active(config.API_SERVICES))
     time.sleep(5)
 
     log.info("⑤ Monitoring stack…")
-    docker.compose("up", "-d", "influxdb", "telegraf")
-    docker.compose_monitoring("up", "-d", "prometheus", "grafana", "alertmanager")
-    docker.compose("up", "-d", *config.MONITORING_SERVICES)
+    # The whole observability stack is the `monitoring` bundle (influxdb/telegraf/
+    # prometheus/grafana/alertmanager/jaeger/otel + exporters in ⑦). Gated on its
+    # enable-state; default enabled → identical to the historical commands, keeping
+    # the setup gate byte-identical. See scripts/setup/bundles.py + bundles.md.
+    if bundles.is_enabled("monitoring"):
+        docker.compose("up", "-d", "influxdb", "telegraf")
+        docker.compose_monitoring("up", "-d", "prometheus", "grafana", "alertmanager")
+        docker.compose("up", "-d", *config.MONITORING_SERVICES)
+    else:
+        log.detail("monitoring bundle disabled (bundles.state.json) — skipped")
     time.sleep(5)
 
     log.info("⑥ AI enhancement services…")
-    docker.compose("up", "-d", *config.AI_SERVICES)
+    ai_services = _active(config.AI_SERVICES)
+    if ai_services:
+        docker.compose("up", "-d", *ai_services)
+    else:
+        log.detail("no AI-enhancement bundles enabled (chat/voice) — skipped")
     time.sleep(5)
 
     log.info("⑦ Metrics exporters…")
-    docker.compose_monitoring("up", "-d", *config.EXPORTER_SERVICES)
+    if bundles.is_enabled("monitoring"):
+        docker.compose_monitoring("up", "-d", *config.EXPORTER_SERVICES)
+    else:
+        log.detail("monitoring bundle disabled — exporters skipped")
+
+    # ⑧ Converge to desired state: stop any service no enabled bundle claims (a
+    # bundle disabled while its services were running is brought down on start/
+    # restart). Emits nothing when all bundles are enabled → the setup gate stays
+    # byte-identical; only runs when something is actually disabled + orphaned.
+    orphans = bundles.orphaned_services()
+    if orphans:
+        log.info("⑧ Converging bundles (stopping disabled services)…")
+        docker.compose("stop", *orphans)
 
     log.success("All service groups dispatched")
 
@@ -74,11 +108,13 @@ def wait_for_services() -> None:
     """bash wait_for_services: wait each service group healthy (best-effort; the
     bash `|| true` per svc is mirrored by ignoring wait_healthy's return)."""
     log.section("⏳  Waiting for Services")
-    for svc in config.CORE_SERVICES:
+    # Only wait on services whose bundle is enabled — a disabled bundle's services
+    # were never started (see _active). Everything enabled → same lists as before.
+    for svc in _active(config.CORE_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_SERVICES)
-    for svc in config.API_SERVICES:
+    for svc in _active(config.API_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_SERVICES)
-    for svc in config.MONITORING_SERVICES:
+    for svc in _active(config.MONITORING_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_MONITORING)
-    for svc in config.AI_SERVICES:
+    for svc in _active(config.AI_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_AI)

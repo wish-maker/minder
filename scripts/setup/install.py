@@ -6,7 +6,7 @@ already-verified functions; verified by its own output (banner + phase labels +
 success banner) and call order via scripts/gate/install_cmd_verify.sh.
 """
 
-from . import config, env, health
+from . import bundles, config, env, health
 from . import help as help_module
 from . import infra, lifecycle, log, migrate, preflight, versions
 
@@ -16,7 +16,7 @@ def _clear() -> None:
     log._write_raw("\033[H\033[2J")
 
 
-def run() -> int:
+def run(profile: str = "standard") -> int:
     _clear()
 
     color = log._colors_on()
@@ -41,6 +41,10 @@ def run() -> int:
     preflight.check_prerequisites()
     log.progress_next("Setting up environment")
     env.prepare_env()
+    # Seed the bundle enable-state for a fresh install (silent + skip-if-exists +
+    # DRY_RUN no-op → keeps install_cmd_verify byte-identical). `bundle status`
+    # shows the result; `bundle enable <name>` adds more later.
+    bundles.seed_profile(profile)
     log.progress_next("Creating Docker network")
     infra.create_networks()
     log.progress_next("Resolving & pulling images")

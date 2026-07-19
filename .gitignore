@@ -8,6 +8,9 @@
 
 # Environment Files
 .env
+# Bundle enable-state (user's choice of which bundles are on) — runtime state,
+# managed by `setup.sh bundle`; not committed. Secret-free by design.
+bundles.state.json
 .env.local
 .env.*.local
 .env.development.local
