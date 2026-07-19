@@ -460,6 +460,8 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     - MARKETPLACE_URL=http://minder-marketplace:8002
+    # Trusted token for the startup marketplace tool-sync (service-to-service).
+    - SERVICE_SYNC_TOKEN=${SERVICE_SYNC_TOKEN:-}
     # Telegraf plugin (src/plugins/telegraf): manages the telegraf config + reload.
     - TELEGRAF_CONFIG_PATH=/app/telegraf-config/telegraf.conf
     - TELEGRAF_CONTAINER=minder-telegraf
@@ -905,6 +907,8 @@ services:
     - REDIS_PASSWORD=${REDIS_PASSWORD}
     - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
     - JWT_SECRET=${JWT_SECRET}
+    # Accept the trusted service token on internal sync/create endpoints.
+    - SERVICE_SYNC_TOKEN=${SERVICE_SYNC_TOKEN:-}
     - JWT_ALGORITHM=HS256
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}

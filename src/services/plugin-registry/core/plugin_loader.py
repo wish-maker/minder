@@ -248,8 +248,13 @@ async def load_plugin_from_module(plugin_dir: Path):
                 ),
             )
 
-            # Auto-sync AI tools with marketplace
-            await sync_plugin_ai_tools(plugin_name, plugin_dir)
+            # Auto-sync AI tools with marketplace. Module plugins have no manifest, so
+            # pass their in-code AI_TOOLS so the marketplace catalog is populated too.
+            await sync_plugin_ai_tools(
+                plugin_name,
+                plugin_dir,
+                module_ai_tools=getattr(plugin_instance, "AI_TOOLS", None),
+            )
 
     except Exception as e:
         logger.error(f"Failed to load plugin from {plugin_dir}: {e}")

@@ -55,6 +55,9 @@ async def import_ai_tools_from_manifest(
                 errors.append("Tool missing 'name' field")
                 continue
 
+            # display_name is NOT NULL in marketplace_ai_tools; default to the tool name.
+            display_name = tool_def.get("display_name") or tool_name
+
             # Check if tool already exists
             existing = await conn.fetchrow(
                 "SELECT id FROM marketplace_ai_tools WHERE plugin_id = $1 AND tool_name = $2",
@@ -110,8 +113,9 @@ async def import_ai_tools_from_manifest(
                         parameters_schema = $5,
                         response_schema = $6,
                         required_tier = $7,
+                        display_name = $8,
                         active = TRUE
-                    WHERE id = $8
+                    WHERE id = $9
                     """,
                     tool_type,
                     tool_def.get("description", ""),
@@ -120,6 +124,7 @@ async def import_ai_tools_from_manifest(
                     json.dumps(parameters_schema),
                     json.dumps(response_schema),
                     required_tier,
+                    display_name,
                     existing["id"],
                 )
                 logger.info(f"Updated AI tool: {tool_name} for plugin {plugin_id}")
@@ -128,16 +133,17 @@ async def import_ai_tools_from_manifest(
                 await conn.execute(
                     """
                     INSERT INTO marketplace_ai_tools (
-                        id, plugin_id, tool_name, tool_type, description,
+                        id, plugin_id, tool_name, display_name, tool_type, description,
                         endpoint_path, http_method, parameters_schema,
                         response_schema, required_tier, active
                     ) VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
                     )
                     """,
                     str(uuid.uuid4()),
                     plugin_id,
                     tool_name,
+                    display_name,
                     tool_type,
                     tool_def.get("description", ""),
                     tool_def.get("endpoint", f"/{tool_name}"),

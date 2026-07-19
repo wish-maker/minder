@@ -10,7 +10,7 @@ from services.marketplace.models.plugin import (
     PluginListResponse,
     PluginResponse,
 )
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import get_current_user_or_service
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
 
@@ -214,7 +214,8 @@ async def search_plugins(
 
 @router.post("/plugins", response_model=PluginResponse, status_code=201)
 async def create_plugin(
-    plugin_data: PluginCreate, current_user: dict = Depends(get_current_user)
+    plugin_data: PluginCreate,
+    current_user: dict = Depends(get_current_user_or_service),
 ):
     """
     Create a new plugin in marketplace
