@@ -1,8 +1,9 @@
 # ADR: Bundle Model — Capability-Oriented Service Control-Plane
 
-> **Status:** Accepted (design) · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
-> `plugin enable/disable` control-plane on branch `feat/plugin-lifecycle-gating`
-> (which will be renamed to the bundle model in Phase 1).
+> **Status:** Accepted — Phases 0-2 shipped (#62), first Phase-3 slice shipped (#64);
+> remaining Phase 3 tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
+> `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`, renamed
+> to the bundle model in Phase 1 and merged as `feat/bundles`).
 
 ## Context
 
