@@ -360,7 +360,7 @@ Entity extraction and knowledge-graph construction/retrieval, backed by **Neo4j*
 | POST | `/construct-graph` | Build a Neo4j knowledge graph from documents/entities |
 | POST | `/retrieve` | Graph-based retrieval over entity relationships |
 | POST | `/entity-context` | Retrieve context / neighbors around an entity |
-| DELETE | `/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept) |
+| DELETE | `/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |
 | GET | `/health` | Service health |
 
 ---
