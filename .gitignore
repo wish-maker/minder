@@ -44,14 +44,11 @@ data/logs/
 data/cache/
 
 # Build & Cache Directories
-.buildcache/
 cache/
 *.cache/
 
 # Log Files
-*.log
 monitoring-log.txt
-logs/
 
 # Backup Files
 *.backup
@@ -90,12 +87,7 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .cache/
-.pytest_cache/
 .pytest_cache/**/*
-
-# Build & Setup Cache
-.buildcache/
-.buildcache/**/*
 
 # Node.js
 node_modules/
