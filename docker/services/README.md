@@ -23,7 +23,7 @@ This directory contains the Docker Compose deployment configuration for the Mind
 - **RAG Pipeline** - Retrieval Augmented Generation (Internal network)
 - **Model Management** - Model management (Internal network)
 - **TTS-STT Service** - Speech/speech-to-text (Port: 8006)
-- **Model Fine-tuning** - Model fine-tuning (Port: 8007)
+- **Graph-RAG** - spaCy NER + Neo4j knowledge graph (Port: 8008)
 
 ### Messaging
 - **RabbitMQ** - Message broker (Port: 15672)

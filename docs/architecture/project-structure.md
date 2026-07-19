@@ -55,7 +55,7 @@ minder/                              # Project root
 │   │   ├── tts-stt/                 # TTS / STT (port 8006)
 │   │   └── graph-rag/               # Graph RAG / knowledge graph (port 8008)
 │   ├── core/                        # Core framework (incl. config/default_plugins.yml stub)
-│   ├── plugins/                     # Plugin implementations (empty — none shipped yet)
+│   ├── plugins/                     # First-party module plugins (telegraf, network) + _contract.py
 │   ├── requirements/                # Shared Python dependency sets (see below)
 │   └── shared/                      # Shared utilities (ai, auth, config, models, utils)
 │
@@ -494,7 +494,7 @@ docker system prune -f
 # Increase Docker memory limit (Docker Desktop settings)
 ```
 
-See [TROUBLESHOOTING.md](../troubleshooting/TROUBLESHOOTING.md) for more details.
+See [troubleshooting.md](../troubleshooting/troubleshooting.md) for more details.
 
 ## Contributing
 

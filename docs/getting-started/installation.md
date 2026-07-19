@@ -73,7 +73,9 @@ cp .env docker/compose/.env
 docker compose --file docker/compose/docker-compose.yml up -d
 ```
 
-Compose defines 31 services; a full `setup.sh install` runs 30 (see caveats below), grouped as:
+Compose defines 31 services; a default `setup.sh install` seeds the **standard** bundle
+profile (core + inference + rag + chat) — monitoring, graph-rag, and voice are opt-in
+(`install --profile full` starts all 31). The full set is grouped as:
 - Reverse Proxy (1): Traefik v3 (Authelia is defined but currently commented out / disabled)
 - Storage (7, internal-only): PostgreSQL, Redis, Qdrant, Neo4j, MinIO, RabbitMQ, Apicurio schema-registry
 - Inference (2): Ollama (internal-only), OpenWebUI (via Traefik)
@@ -240,7 +242,7 @@ pytest tests/integration/ -v
 ## Startup
 
 First startup pulls images and (in internal Ollama mode) downloads the models in
-`OLLAMA_PULL_MODELS` (~3GB by default), so allow extra time on the first run.
+`OLLAMA_MODELS` (~3GB by default), so allow extra time on the first run.
 On an ARM Raspberry Pi 4, initial provisioning takes several minutes.
 
 Rough order:
@@ -249,14 +251,19 @@ Rough order:
 3. Core APIs (Gateway, Registry, Marketplace, State Manager, RAG, Model Management, TTS/STT, Graph-RAG)
 4. Ollama + model pulls (internal mode only)
 5. Observability stack (Prometheus, Grafana, InfluxDB, Jaeger, exporters) + OpenWebUI
+   — only when the `monitoring`/`chat` bundles are enabled (see below).
 
-**Final state (via `setup.sh install`):** 30 containers running. Of the healthchecked
-services, 3 (otel-collector, redis-exporter, rabbitmq-exporter) have no healthcheck by
-design — they show as "no-healthcheck", not "unhealthy".
+**Final state (default `standard` profile):** the core + inference + rag + chat bundles
+run; monitoring, graph-rag, and voice are off until enabled (`setup.sh bundle enable
+<name>` or `install --profile full`). Of the healthchecked services, 3 (otel-collector,
+redis-exporter, rabbitmq-exporter) have no healthcheck by design — they show as
+"no-healthcheck", not "unhealthy".
 
-**Known caveats (verified on a 2026-07-10 clean install):**
-- All 31 containers start on both `install` and `start` (MinIO + schema-registry are wired
-  into the core startup group). `install` additionally creates the MinIO buckets.
+**Known caveats:**
+- `install --profile full` (or enabling every bundle) starts all 31 containers; the default
+  `standard` profile omits monitoring/graph-rag/voice. `install` additionally creates the
+  MinIO buckets. `start` honours the recorded bundle state (`bundles.state.json`).
+  See [Service Bundles](../architecture/bundles.md).
 
 ## Troubleshooting
 

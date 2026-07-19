@@ -4,10 +4,12 @@
 
 **Platform Version:** 1.0.0
 **Last Updated:** 2026-07-10
-**Containers:** 31 (Authelia excluded — disabled). `bash setup.sh install` and
-`bash setup.sh start` both bring up all 31 (MinIO and schema-registry are wired into the
-core startup group). All run healthy; only 3 carry no healthcheck by design
-(otel-collector, redis-exporter, rabbitmq-exporter).
+**Containers:** 31 defined (Authelia excluded — disabled). `setup.sh install` seeds the
+**standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and
+voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start
+all 31). `start` then honours the recorded bundle state (`bundles.state.json`). Started
+services run healthy; only 3 carry no healthcheck by design (otel-collector,
+redis-exporter, rabbitmq-exporter). See [Service Bundles](bundles.md).
 **Core API Services:** 8 (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, tts-stt, graph-rag)
 **Data Stores:** 7 (PostgreSQL, Redis, Qdrant, Neo4j, RabbitMQ, MinIO, schema-registry)
 **AI Runtime:** Ollama with local LLM support (profile-gated; disabled when using an external/native Ollama host)
@@ -104,7 +106,7 @@ Total: 31 containers across core APIs, inference, storage, and observability
 #### Authelia (9091) — ⏸️ DISABLED
 - Would provide SSO and 2FA, but is **commented out** in `docker-compose.yml`
 - Disabled due to a crash loop (missing database + NTP sync). A `forwardauth` middleware is still
-  wired on four Traefik routers (api-gateway, grafana, openwebui, jaeger), but because the
+  wired on five Traefik routers (minio, api-gateway, grafana, openwebui, jaeger), but because the
   container is down, that auth is **not enforced**. Keep-vs-drop remains an open decision.
 
 ### Core APIs

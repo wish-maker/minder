@@ -77,9 +77,12 @@ mkdir -p "$BACKUP_DIR"
 # Logical dump of ALL databases (roles + data)
 docker exec minder-postgres pg_dumpall -U minder > "$BACKUP_DIR/full_backup.sql"
 
-# Also snapshot the raw data volume as a fallback
+# Also snapshot the raw data volume as a fallback.
+# NOTE: the volume is prefixed with the compose PROJECT name (the compose dir is
+# docker/compose/ → project "compose" → volume "compose_postgres_data"). Confirm the
+# exact name with `docker volume ls | grep postgres` before running these commands.
 docker run --rm \
-  -v docker_postgres_data:/data \
+  -v compose_postgres_data:/data \
   -v "$BACKUP_DIR:/backup" \
   alpine tar czf /backup/postgres_data.tar.gz -C /data .
 
@@ -108,7 +111,7 @@ BACKUP_DIR="${1:?Usage: $0 <backup_directory>}"
 #    Edit: docker/compose/docker-compose.yml
 
 # 2. Remove the old data volume (IRREVERSIBLE — you are relying on the dump)
-docker volume rm docker_postgres_data
+docker volume rm compose_postgres_data
 
 # 3. Start the new PostgreSQL
 docker compose --file docker/compose/docker-compose.yml up -d postgres
@@ -167,9 +170,9 @@ bash setup.sh stop
 git checkout docker/compose/docker-compose.yml
 
 # Remove the failed volume and restore the raw data snapshot
-docker volume rm docker_postgres_data
+docker volume rm compose_postgres_data
 docker run --rm \
-  -v docker_postgres_data:/data \
+  -v compose_postgres_data:/data \
   -v "$BACKUP_DIR:/backup" \
   alpine tar xzf /backup/postgres_data.tar.gz -C /data
 

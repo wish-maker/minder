@@ -97,8 +97,9 @@ separately, not wired here.
 - `telegraf/` — manages the telegraf config's "managed region" and reloads telegraf
   (watch-config `poll`, with a docker-restart fallback). Reference/template.
   **Implemented.** Needs the plugin-registry wiring in `docker-compose.yml`:
-  `TELEGRAF_CONFIG_PATH` (writable telegraf.conf mount), `TELEGRAF_CONTAINER`, and
-  `/var/run/docker.sock` (restart fallback only).
+  `TELEGRAF_CONFIG_PATH` (writable mount of the gitignored `telegraf.runtime.conf`,
+  seeded from the tracked template so runtime writes never dirty the repo),
+  `TELEGRAF_CONTAINER`, and `/var/run/docker.sock` (restart fallback only).
 - `network/` (v2) — host/service/SNMP discovery: **nmap** connect scan (`-sT -sV`,
   no root) for open ports + service/product/version, and **SNMP OID lookup** (system
   group via `snmpget`) for SNMP hosts; falls back to a stdlib TCP probe if nmap is
