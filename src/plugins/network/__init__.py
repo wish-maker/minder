@@ -118,6 +118,30 @@ class NetworkPlugin:
 
     ACTIONS = frozenset({"scan", "reconcile"})
 
+    # AI tools this plugin advertises for Ollama function-calling. Each maps to an
+    # ACTION (invoked via POST /v1/plugins/network/actions/<action>); `parameters`
+    # is a JSON Schema. Aggregated by GET /v1/plugins/ai/tools. See _contract.py.
+    AI_TOOLS = [
+        {
+            "name": "network_scan",
+            "description": (
+                "Scan the configured network targets with nmap (open ports, service "
+                "and version detection) and refresh the host/service inventory."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "action": "scan",
+        },
+        {
+            "name": "network_reconcile",
+            "description": (
+                "Run the network plugin's discover-then-act reconcile cycle: scan, "
+                "then fan findings into telegraf/PostgreSQL/Neo4j."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+            "action": "reconcile",
+        },
+    ]
+
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
         self.targets = os.environ.get("NETWORK_SCAN_TARGETS", "")

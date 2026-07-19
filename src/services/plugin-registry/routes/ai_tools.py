@@ -36,52 +36,59 @@ def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
             logger.error(f"Failed to load manifest for {plugin_name}: {e}")
             return None
 
+    def _tool_to_openai(plugin_name: str, tool: dict) -> "dict | None":
+        """Normalise a plain-dict tool declaration into an OpenAI/Ollama function-
+        calling tool definition. A tool is
+        ``{name, description, parameters (JSON Schema), action|endpoint, method?}``.
+        `action` maps to POST /v1/plugins/<name>/actions/<action>; `endpoint` is an
+        explicit override. Returns None if the tool has no name."""
+        name = tool.get("name")
+        if not name:
+            return None
+        action = tool.get("action")
+        endpoint = tool.get("endpoint") or (f"/actions/{action}" if action else "")
+        parameters = tool.get("parameters") or {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        }
+        return {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": tool.get("description", ""),
+                "parameters": parameters,
+            },
+            "metadata": {
+                "plugin": plugin_name,
+                "endpoint": f"/v1/plugins/{plugin_name}{endpoint}",
+                "method": tool.get("method", "POST"),
+            },
+        }
+
     @router.get("/v1/plugins/ai/tools")
     async def get_all_ai_tools():
-        """Aggregate OpenAI-compatible tool definitions from all active plugins."""
+        """Aggregate OpenAI-compatible tool definitions from all active plugins.
+
+        Tools come from a module plugin's in-code ``AI_TOOLS`` class attribute AND/OR
+        a manifest's ``ai_tools`` — so module plugins (telegraf, network) can now
+        advertise function-calling tools, not just manifest plugins (#60)."""
         all_tools = []
         for plugin_name in plugins_db:
             try:
-                if not plugin_instances.get(plugin_name):
+                instance = plugin_instances.get(plugin_name)
+                if not instance:
                     logger.debug(f"Plugin instance not available: {plugin_name}")
                     continue
+                # Module plugins declare tools in code; manifest plugins in the file.
+                tools = list(getattr(instance, "AI_TOOLS", None) or [])
                 manifest = await _load_plugin_manifest(plugin_name)
-                if not manifest:
-                    logger.debug(f"No manifest found for plugin: {plugin_name}")
-                    continue
-                for tool in validate_ai_tools(manifest):
-                    properties = {}
-                    required = []
-                    for param_name, param_def in tool.parameters.items():
-                        properties[param_name] = {
-                            "type": param_def.type.value,
-                            "description": param_def.description,
-                        }
-                        if param_def.enum:
-                            properties[param_name]["enum"] = param_def.enum
-                        if param_def.default is not None:
-                            properties[param_name]["default"] = param_def.default
-                        if param_def.required:
-                            required.append(param_name)
-                    all_tools.append(
-                        {
-                            "type": "function",
-                            "function": {
-                                "name": tool.name,
-                                "description": tool.description,
-                                "parameters": {
-                                    "type": "object",
-                                    "properties": properties,
-                                    "required": required,
-                                },
-                            },
-                            "metadata": {
-                                "plugin": plugin_name,
-                                "endpoint": f"/v1/plugins/{plugin_name}{tool.endpoint}",
-                                "method": tool.method,
-                            },
-                        }
-                    )
+                if manifest:
+                    tools += validate_ai_tools(manifest)
+                for tool in tools:
+                    entry = _tool_to_openai(plugin_name, tool)
+                    if entry:
+                        all_tools.append(entry)
             except Exception as e:
                 logger.error(f"Failed to load AI tools from plugin {plugin_name}: {e}")
                 continue

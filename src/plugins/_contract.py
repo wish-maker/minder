@@ -71,3 +71,10 @@ class Plugin(Protocol):
 # as kwargs). Only names in ACTIONS are reachable — nothing else on the instance.
 # Reads use /collect (collect_data) + /analysis (analyze); ACTIONS is for state
 # changes (e.g. the telegraf plugin's set_managed_region / reload).
+#
+# Optional: a plugin MAY advertise Ollama function-calling tools by declaring a
+# class attribute ``AI_TOOLS`` — a list of plain dicts, each
+# ``{name, description, parameters (JSON Schema), action}`` where ``action`` is one
+# of the plugin's ACTIONS (so the tool maps to POST /v1/plugins/<name>/actions/
+# <action>). ``GET /v1/plugins/ai/tools`` aggregates these (module plugins) and any
+# manifest ``ai_tools`` (manifest plugins) into OpenAI/Ollama tool definitions.
