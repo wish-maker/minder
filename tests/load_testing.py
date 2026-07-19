@@ -10,7 +10,7 @@ import logging
 import statistics
 import time
 import tracemalloc
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
 
@@ -435,14 +435,14 @@ class LoadTester:
             )
             logger.info(f"Failed: {stats.failed_requests}")
             logger.info(f"Requests/sec: {stats.requests_per_second:.2f}")
-            logger.info(f"\nResponse Times:")
+            logger.info("\nResponse Times:")
             logger.info(f"  Average: {stats.avg_response_time_ms:.2f} ms")
             logger.info(f"  Min: {stats.min_response_time_ms:.2f} ms")
             logger.info(f"  Max: {stats.max_response_time_ms:.2f} ms")
             logger.info(f"  P50: {stats.p50_response_time_ms:.2f} ms")
             logger.info(f"  P95: {stats.p95_response_time_ms:.2f} ms")
             logger.info(f"  P99: {stats.p99_response_time_ms:.2f} ms")
-            logger.info(f"\nResource Usage:")
+            logger.info("\nResource Usage:")
             logger.info(
                 f"  Memory: {stats.avg_memory_mb:.2f} MB (max: {stats.max_memory_mb:.2f} MB)"
             )

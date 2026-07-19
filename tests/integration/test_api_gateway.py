@@ -6,8 +6,6 @@ SKIPPED: Requires running Minder services
 """
 
 import pytest
-import pytest_asyncio
-from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
@@ -101,12 +99,14 @@ class TestAPIGatewayIntegration:
         assert 429 in responses or len(responses) == 20
 
     def test_rate_limiting_headers(self, gateway_test_client):
-        """Test rate limiting headers"""
+        """Rate-limit headers are optional; assert the request completed and any
+        present documented headers are non-empty."""
         response = gateway_test_client.get("/v1/plugins")
-        # Check for rate limit headers
+        assert response.status_code < 600
         rate_limit_headers = ["X-RateLimit-Limit", "X-RateLimit-Remaining"]
-        # May or may not have headers depending on implementation
-        pass
+        for header in rate_limit_headers:
+            if header in response.headers:
+                assert response.headers[header] != ""
 
 
 class TestAPIGatewayErrorHandling:

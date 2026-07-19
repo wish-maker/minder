@@ -6,8 +6,6 @@ Tests plugin discovery, configuration, execution, error handling, and lifecycle.
 SKIPPED: Plugin Registry Service not yet implemented
 """
 
-from typing import Dict, List
-
 import pytest
 import requests
 

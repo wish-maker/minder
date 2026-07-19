@@ -37,16 +37,16 @@ jobs:
           pip install -r src/requirements/requirements-dev.txt
 
       - name: Run Black
-        run: black --check src/services/ src/core/ scripts/setup/
+        run: black --check src/services/ src/core/ src/shared/ scripts/setup/ tests/
 
       - name: Run isort
-        run: isort --check-only src/services/ src/core/ scripts/setup/
+        run: isort --check-only src/services/ src/core/ src/shared/ scripts/setup/ tests/
 
       - name: Run Flake8
-        run: flake8 src/services/ src/core/ scripts/setup/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+        run: flake8 src/services/ src/core/ src/shared/ scripts/setup/ tests/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run MyPy
-        run: mypy src/services/ scripts/setup/ --ignore-missing-imports || true
+        run: mypy src/services/ src/shared/ scripts/setup/ --ignore-missing-imports || true
 
   shell-lint:
     name: Shell Lint (setup.sh shim + setup.bash.sh + scripts/lib)
