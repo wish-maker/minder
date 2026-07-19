@@ -55,8 +55,8 @@ from core.webhooks import (  # noqa: E402
     register_plugin_webhook,
 )
 from routes.ai_tools import build_ai_tools_router  # noqa: E402
-from routes.plugins import ProxyRouter  # noqa: E402
-from routes.plugins_api import build_plugins_router  # noqa: E402
+from routes.plugins import build_plugins_router  # noqa: E402
+from routes.proxy import ProxyRouter  # noqa: E402
 from routes.services import build_services_router  # noqa: E402
 
 from shared.metrics import setup_metrics  # noqa: E402
@@ -248,7 +248,7 @@ async def force_webhooks():
     }
 
 
-# Plugin CRUD/lifecycle endpoints (routes/plugins_api.py). Included last so the
+# Plugin CRUD/lifecycle endpoints (routes/plugins.py). Included last so the
 # main-owned helpers it injects (update_plugin_in_database, register_plugin_webhook,
 # handle_webhook_request) are already imported, and so route order matches history.
 app.include_router(

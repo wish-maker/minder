@@ -20,7 +20,7 @@ try:
     sys.path.insert(
         0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry")
     )
-    from routes.plugins import ProxyRouter
+    from routes.proxy import ProxyRouter
 
     PROXY_ROUTER_AVAILABLE = True
 except ImportError:
