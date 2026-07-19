@@ -36,6 +36,16 @@ def rec_compose(monkeypatch):
     return calls
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_external(monkeypatch):
+    """Make external_binding deterministic regardless of the host's real .env: ignore
+    OLLAMA_BASE_URL by default so every service reads as managed. Tests exercising the
+    external path set os.environ["OLLAMA_BASE_URL"] explicitly (which wins over .env).
+    """
+    monkeypatch.setattr(bundles.env, "get", lambda key: "")
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+
 # ── bundles.state.json enable semantics ────────────────────────────────────
 def test_is_enabled_absent_defaults_true(statefile):
     assert not statefile.exists()  # missing file → everything enabled
@@ -159,6 +169,34 @@ def test_reconcile_monitoring_disabled_stop_orphans(statefile, rec_compose):
     assert bundles.reconcile(stop_orphans=True) == 0
     stops = [c for c in rec_compose if c[0] == "stop"]
     assert stops == [("stop", *MON)]  # monitoring services are exclusive → all orphan
+
+
+# ── external binding (ollama via OLLAMA_BASE_URL) ──────────────────────────
+def test_external_binding_none_when_unset():
+    assert bundles.external_binding("ollama") is None  # neutralized by autouse
+    assert bundles.external_binding("qdrant") is None  # never bindable
+
+
+def test_external_binding_reads_env_var(monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-node:11434")
+    assert bundles.external_binding("ollama") == "http://gpu-node:11434"
+    assert bundles.external_binding("model-management") is None
+
+
+def test_enable_skips_externally_bound_service(statefile, rec_compose, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-node:11434")
+    # inference claims ollama + model-management; ollama is external → only the
+    # managed one is started (no idle internal ollama duplicate).
+    assert bundles.enable("inference") == 0
+    assert rec_compose == [("up", "-d", "model-management")]
+
+
+def test_reconcile_skips_externally_bound_service(statefile, rec_compose, monkeypatch):
+    monkeypatch.setenv("OLLAMA_BASE_URL", "http://gpu-node:11434")
+    assert bundles.reconcile() == 0
+    ups = [c for c in rec_compose if c[0] == "up"]
+    expected_up = tuple(s for s in ALL if s != "ollama")
+    assert ups == [("up", "-d", *expected_up)]
 
 
 # ── service_active (what `start` filters each group by) + core guard ───────

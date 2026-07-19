@@ -102,6 +102,13 @@ A claim resolves to a **binding**, per deployment:
 | **external** | a configured address on the network (e.g. `OLLAMA_BASE_URL=http://gpu:11434`, external Postgres) | no — nothing to GC; reachability-probed only |
 
 This generalises the proven `OLLAMA_BASE_URL` local/remote pattern to every service.
+
+> **Implemented so far (2026-07-19):** the control-plane already honours the ONE
+> binding that exists today — `ollama` via `OLLAMA_BASE_URL` (`bundles.EXTERNAL_BINDINGS`).
+> When it is set, `bundle status` shows ollama as `⇄ external → <url>` (not orphan-drift)
+> and `enable`/`reconcile` never start the internal container. The general resolution
+> matrix below (self-host / prompt) is still Phase 3.
+
 Resolution matrix (per claim):
 
 | Address configured? | Plugin can self-host? | Result |
