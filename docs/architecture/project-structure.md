@@ -71,9 +71,8 @@ minder/                              # Project root
     ├── setup/                       # ⭐ Native-Python setup CLI (python -m scripts.setup)
     ├── lib/                         # Bash reference modules (behavior-gate parity only)
     ├── gate/                        # Behavior gate — verifies python ↔ bash-reference parity
-    ├── health-check.sh              # Health monitoring ⭐
-    ├── rolling-update.sh            # Rolling updates
-    └── validate-installation.sh    # Install validation
+    ├── health-check.sh              # Standalone ops helper (--watch/--report/--fix); not wired into the CLI — see #68
+    └── validate-installation.sh    # Standalone e2e smoke (stop→start→restart); not wired into the CLI — see #68
     # (secrets are auto-filled by setup.sh into ./.env — no separate generate-secrets step)
 ```
 
