@@ -143,7 +143,7 @@ All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
 - `POST /pipeline/{pipeline_id}/query` — query (retrieval + generation)
 
 **Pipeline**: query → embed (Ollama) → search (Qdrant) → retrieve context → generate (Ollama LLM).
-Live query endpoint does Standard + Conversational RAG. HyDE, Self-RAG, and a decision engine exist as modules but are not wired into the live endpoint (#45).
+The live query endpoint selects the RAG method via the `method` field: `standard`, `hyde` (HyDE), `self_rag` (Self-RAG), or `auto` (decision engine) — plus Conversational via `conversation_id`. Corrective-RAG and rerankers exist as modules but are not yet wired (#45).
 
 #### Model Management (Port 8005)
 **Purpose**: Model registry and lifecycle over Ollama

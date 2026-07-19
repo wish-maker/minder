@@ -25,7 +25,7 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 | Plugin Registry | `minder-plugin-registry` | 8001 | Manifest install, health loop, service discovery, AI-tool aggregation |
 | Marketplace | `minder-marketplace` | 8002 | Discovery/search/featured, license tiers, dependency graph (Neo4j) |
 | Plugin State Manager | `minder-plugin-state-manager` | 8003 | Plugin state, tool discovery, tool execution, licensing |
-| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors; Standard + Conversational RAG (HyDE/Self-RAG modules exist but are not wired — #45) |
+| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors; Standard/Conversational/HyDE/Self-RAG/auto RAG via the query `method` field (corrective/rerankers unwired — #45) |
 | Model Management | `minder-model-management` | 8005 | Ollama list/pull/delete/test (some endpoints are placeholders) |
 | TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (gTTS), speech-to-text (`speech_recognition`) |
 | Graph-RAG | `minder-graph-rag` | 8008 | spaCy NER, Neo4j knowledge-graph construction and retrieval |
@@ -281,8 +281,10 @@ Plugin state control, AI-tool discovery/execution, and per-plugin licensing.
 Chunking, embedding, retrieval, and generation. Documents are embedded into **Qdrant**;
 embeddings and generation run through **Ollama**. The live query endpoint supports
 **Standard** and **Conversational** RAG (set `conversation_id` for multi-turn history).
-HyDE, Self-RAG, and a decision engine exist as modules but are **not wired into the live
-endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)).
+Standard, Conversational, **HyDE**, **Self-RAG**, and an **auto** decision-engine are
+all selectable via the `method` field on `POST /pipeline/{id}/query`
+(`standard`/`hyde`/`self_rag`/`auto`). Corrective-RAG and rerankers/compressors exist
+as modules but are **not yet wired** ([#45](https://github.com/wish-maker/minder/issues/45)).
 
 | Method | Path | Description |
 |--------|------|-------------|
