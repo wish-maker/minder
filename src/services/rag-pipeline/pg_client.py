@@ -181,6 +181,44 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
         return False
 
 
+async def delete_kb_from_postgres(kb_id: str) -> bool:
+    """Delete a knowledge base row from PostgreSQL."""
+    try:
+        conn = await get_pg_connection()
+        if not conn:
+            return False
+
+        async with conn.acquire() as connection:
+            await connection.execute("DELETE FROM knowledge_bases WHERE id = $1", kb_id)
+
+        logger.info(f"✅ KB deleted from PostgreSQL: {kb_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete KB from PostgreSQL: {e}")
+        return False
+
+
+async def delete_pipeline_from_postgres(pipeline_id: str) -> bool:
+    """Delete a RAG pipeline row from PostgreSQL."""
+    try:
+        conn = await get_pg_connection()
+        if not conn:
+            return False
+
+        async with conn.acquire() as connection:
+            await connection.execute(
+                "DELETE FROM rag_pipelines WHERE id = $1", pipeline_id
+            )
+
+        logger.info(f"✅ Pipeline deleted from PostgreSQL: {pipeline_id}")
+        return True
+
+    except Exception as e:
+        logger.error(f"❌ Failed to delete pipeline from PostgreSQL: {e}")
+        return False
+
+
 async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
     """Load all knowledge bases from PostgreSQL"""
     try:

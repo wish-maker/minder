@@ -48,8 +48,10 @@ try:
 
     save_kb_to_postgres = pg_client.save_kb_to_postgres
     load_kb_from_postgres = pg_client.load_kb_from_postgres
+    delete_kb_from_postgres = pg_client.delete_kb_from_postgres
     save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
     load_pipelines_from_postgres = pg_client.load_pipelines_from_postgres
+    delete_pipeline_from_postgres = pg_client.delete_pipeline_from_postgres
     initialize_schema = pg_client.initialize_schema
     PG_AVAILABLE = True
     logger.info("✅ PostgreSQL persistence available")
@@ -59,8 +61,10 @@ except ImportError:
 
         save_kb_to_postgres = pg_client.save_kb_to_postgres
         load_kb_from_postgres = pg_client.load_kb_from_postgres
+        delete_kb_from_postgres = pg_client.delete_kb_from_postgres
         save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
         load_pipelines_from_postgres = pg_client.load_pipelines_from_postgres
+        delete_pipeline_from_postgres = pg_client.delete_pipeline_from_postgres
         initialize_schema = pg_client.initialize_schema
         PG_AVAILABLE = True
         logger.info("✅ PostgreSQL persistence available")
