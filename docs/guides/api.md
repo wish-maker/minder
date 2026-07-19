@@ -170,8 +170,10 @@ GET /health
 
 #### Knowledge bases
 ```http
-GET  /knowledge-bases
-POST /knowledge-base
+GET    /knowledge-bases
+GET    /knowledge-base/{id}
+POST   /knowledge-base
+DELETE /knowledge-base/{id}
 ```
 
 #### Upload a document into a knowledge base
@@ -181,11 +183,14 @@ Content-Type: multipart/form-data
 
 file: <document_file>
 ```
+> Returns 503 if the embedding backend (Ollama) is unreachable — the document is
+> not indexed rather than silently stored with a zero-vector.
 
 #### Pipelines and query
 ```http
-POST /pipeline
-POST /pipeline/{id}/query
+POST   /pipeline
+DELETE /pipeline/{id}
+POST   /pipeline/{id}/query
 Content-Type: application/json
 
 { "question": "What is machine learning?", "top_k": 3 }

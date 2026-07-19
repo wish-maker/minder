@@ -287,10 +287,13 @@ endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)).
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/initialize` | Initialize the Ollama client / warm the pipeline |
-| POST | `/knowledge-base` | Create a knowledge base (pick embedding + LLM model) |
+| POST | `/knowledge-base` | Create a knowledge base (`name` + `description` required; pick embedding + LLM model) |
 | GET | `/knowledge-bases` | List knowledge bases |
-| POST | `/knowledge-base/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB |
+| GET | `/knowledge-base/{kb_id}` | Get a single knowledge base (404 if unknown) |
+| DELETE | `/knowledge-base/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
+| POST | `/knowledge-base/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector) |
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
+| DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
@@ -357,6 +360,7 @@ Entity extraction and knowledge-graph construction/retrieval, backed by **Neo4j*
 | POST | `/construct-graph` | Build a Neo4j knowledge graph from documents/entities |
 | POST | `/retrieve` | Graph-based retrieval over entity relationships |
 | POST | `/entity-context` | Retrieve context / neighbors around an entity |
+| DELETE | `/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept) |
 | GET | `/health` | Service health |
 
 ---
