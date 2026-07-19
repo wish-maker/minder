@@ -3,15 +3,16 @@
 A **bundle** is a named group of services delivering a capability (monitoring,
 rag, …); it is the enable/disable + refcount unit. See docs/architecture/bundles.md.
 
-Phase 1 wires the **monitoring** bundle only; the full map (core/inference/rag/…),
-Compose-label derivation, and binding (managed/external) land in Phase 2 — the
-other services are still started unconditionally by lifecycle until then.
+The full bundle map (core/inference/rag/…) is wired and `start` honours every
+bundle. Still deferred: Compose-label derivation of the map (needs a YAML parser in
+the stdlib-only CLI — see BUNDLES below) and moving the pure brain to `shared/` so
+the registry API and host CLI share it (bundles.md Phase 3).
 
 Enable-state lives in a dedicated, secret-free JSON file (`config.BUNDLES_STATE`,
 `bundles.state.json`) — NOT `.env`, which carries secrets the network-facing
 registry must not mount. Shape `{"<bundle>": {"enabled": bool}}`; an absent file or
 key means enabled, so the default start path + setup gate stay byte-identical. (The
-product-default profile is seeded by `install` separately — Phase 2.)
+product-default profile is seeded by `install --profile` via `seed_profile`.)
 
 Model: a service is UP iff ≥1 **enabled** bundle **claims** it. `owned`/`shared`
 are DERIVED display states, never stored — the operational binary is referenced
