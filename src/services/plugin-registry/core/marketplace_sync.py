@@ -1,19 +1,70 @@
 """
 Marketplace AI-tool synchronization.
 
-When a plugin is loaded, its manifest's ``ai_tools`` are pushed to the marketplace
-service so they show up in the tool catalog. This module owns the two HTTP helpers
-that talk to the marketplace API; it is called by the plugin loader.
+When a plugin is loaded, its AI tools are pushed to the marketplace service so they
+show up in the tool catalog. Tools come from either a manifest's ``ai_tools`` (manifest
+plugins) or a module plugin's in-code ``AI_TOOLS`` class attribute (passed in by the
+loader). This module owns the HTTP helpers that talk to the marketplace API.
 """
 
 import os
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import httpx
 from core.state import logger
 
+# Trusted internal token for service-to-service marketplace writes (this sync runs at
+# startup with no user JWT). Sent as X-Service-Token; the marketplace accepts it via
+# get_current_user_or_service. Empty -> no header (marketplace will require a user JWT).
+SERVICE_SYNC_TOKEN = os.environ.get("SERVICE_SYNC_TOKEN", "")
 
-async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
+
+def _service_headers() -> Dict[str, str]:
+    return {"X-Service-Token": SERVICE_SYNC_TOKEN} if SERVICE_SYNC_TOKEN else {}
+
+
+def _to_marketplace_tool(tool: Dict) -> Dict:
+    """Normalise a tool declaration to the shape the marketplace importer expects.
+
+    The AI_TOOLS / manifest ai_tools schema uses an OpenAI/Ollama nested JSON Schema
+    for ``parameters`` (``{type, properties, required}``) and an ``action``. The
+    marketplace importer expects a FLAT ``parameters`` map (``{param: {type, ...,
+    required: bool}}``) plus ``type``/``endpoint``/``method``. Convert between them so
+    module-plugin tools populate the catalog. Already-flat tools pass through.
+    """
+    params = tool.get("parameters") or {}
+    # Nested JSON Schema -> flat param map (the importer's expected shape).
+    if isinstance(params, dict) and "properties" in params:
+        required = set(params.get("required", []) or [])
+        flat = {
+            name: {
+                **(spec if isinstance(spec, dict) else {}),
+                "required": name in required,
+            }
+            for name, spec in (params.get("properties") or {}).items()
+        }
+    else:
+        flat = params
+    action = tool.get("action")
+    out = {
+        "name": tool.get("name"),
+        "description": tool.get("description", ""),
+        "parameters": flat,
+        "type": tool.get("type", "action" if action else "analysis"),
+        "method": tool.get("method", "POST"),
+    }
+    endpoint = tool.get("endpoint") or (f"/actions/{action}" if action else None)
+    if endpoint:
+        out["endpoint"] = endpoint
+    return out
+
+
+async def sync_plugin_ai_tools(
+    plugin_name: str,
+    plugin_dir: Path,
+    module_ai_tools: Optional[List[Dict]] = None,
+):
     """
     Automatically sync AI tools from plugin manifest to marketplace
 
@@ -25,30 +76,37 @@ async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
         plugin_dir: Path to plugin directory
     """
     try:
-        # Load plugin manifest
+        # Load a plugin manifest if one exists (manifest plugins).
+        manifest = None
         manifest_file = plugin_dir / "manifest.yml"
         if not manifest_file.exists():
             manifest_file = plugin_dir / "manifest.json"
+        if manifest_file.exists():
+            import yaml
 
-        if not manifest_file.exists():
-            logger.debug(f"No manifest found for plugin {plugin_name}")
+            with open(manifest_file, "r") as f:
+                if manifest_file.suffix in [".yaml", ".yml"]:
+                    manifest = yaml.safe_load(f)
+                else:
+                    import json
+
+                    manifest = json.load(f)
+
+        # Tools come from the manifest (manifest plugins) or the passed-in module
+        # AI_TOOLS (module plugins, which have no manifest).
+        raw_tools = (manifest or {}).get("ai_tools") or module_ai_tools or []
+        if not raw_tools:
+            logger.debug(f"No AI tools to sync for {plugin_name}")
             return
 
-        # Load manifest
-        import yaml
-
-        with open(manifest_file, "r") as f:
-            if manifest_file.suffix in [".yaml", ".yml"]:
-                manifest = yaml.safe_load(f)
-            else:
-                import json
-
-                manifest = json.load(f)
-
-        # Check if plugin has AI tools
-        if "ai_tools" not in manifest:
-            logger.debug(f"No AI tools defined in manifest for {plugin_name}")
-            return
+        # Normalise to the marketplace importer's shape, and ensure we have a manifest
+        # dict to describe the plugin (synthesised for module plugins).
+        if manifest is None:
+            manifest = {"name": plugin_name, "version": "1.0.0", "description": ""}
+        manifest = {
+            **manifest,
+            "ai_tools": [_to_marketplace_tool(t) for t in raw_tools],
+        }
 
         # Get or create plugin in marketplace
         plugin_id = await get_or_create_marketplace_plugin(plugin_name, manifest)
@@ -70,6 +128,7 @@ async def sync_plugin_ai_tools(plugin_name: str, plugin_dir: Path):
                     "plugin_id": plugin_id,
                     "manifest": manifest,
                 },
+                headers=_service_headers(),
             )
 
             if response.status_code == 200:
@@ -148,7 +207,9 @@ async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> 
                 plugin_data["repository_url"] = repository
 
             create_response = await client.post(
-                f"{marketplace_url}/v1/marketplace/plugins", json=plugin_data
+                f"{marketplace_url}/v1/marketplace/plugins",
+                json=plugin_data,
+                headers=_service_headers(),
             )
 
             if create_response.status_code in [200, 201]:

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from services.marketplace.core.ai_tools_importer import sync_plugin_tools
 from services.marketplace.core.database import get_pool
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import get_current_user, get_current_user_or_service
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,8 @@ async def get_ai_tool_details(tool_name: str):
 
 @router.post("/sync")
 async def sync_ai_tools(
-    request: AIToolsSyncRequest, current_user: dict = Depends(get_current_user)
+    request: AIToolsSyncRequest,
+    current_user: dict = Depends(get_current_user_or_service),
 ):
     """
     Sync AI tools from plugin manifest

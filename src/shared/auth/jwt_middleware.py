@@ -6,6 +6,7 @@ All services must use the same JWT_SECRET environment variable.
 """
 
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Dict, Optional
@@ -24,6 +25,12 @@ if not JWT_SECRET:
 
 JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "60"))
+
+# Shared secret for trusted internal service-to-service calls (e.g. plugin-registry
+# -> marketplace tool sync, which runs at startup with no user JWT). Accepted via the
+# X-Service-Token header on the endpoints that opt in (get_current_user_or_service).
+# Unset -> service-token auth is disabled and only user JWTs are accepted.
+SERVICE_SYNC_TOKEN = os.environ.get("SERVICE_SYNC_TOKEN")
 
 
 # ============================================================================
@@ -140,6 +147,25 @@ async def get_current_user_optional(request: Request) -> Optional[Dict]:
         return await get_current_user(request)
     except HTTPException:
         return None
+
+
+async def get_current_user_or_service(request: Request) -> Dict:
+    """Accept either a valid user JWT OR a trusted internal service token.
+
+    Used by internal service-to-service endpoints (e.g. plugin-registry -> marketplace
+    tool sync, which runs at startup with no user context). If the ``X-Service-Token``
+    header matches ``SERVICE_SYNC_TOKEN`` (constant-time compare) a service principal is
+    returned; otherwise this falls back to ``get_current_user`` (user JWT, 401 if
+    invalid). The service token is never accepted when ``SERVICE_SYNC_TOKEN`` is unset.
+    """
+    svc = request.headers.get("X-Service-Token")
+    if SERVICE_SYNC_TOKEN and svc and secrets.compare_digest(svc, SERVICE_SYNC_TOKEN):
+        return {
+            "sub": "internal-service",
+            "username": "service-sync",
+            "role": "service",
+        }
+    return await get_current_user(request)
 
 
 # ============================================================================
