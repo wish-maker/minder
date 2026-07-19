@@ -3,7 +3,6 @@ Conprehensive test configuration for Minder services.
 Provides fixtures and utilities for unit, integration, and E2E tests.
 """
 
-import asyncio
 import importlib.util
 import os
 import sys
@@ -98,9 +97,7 @@ try:
         print(f"❌ Failed to load Model Management: {e}")
 
     try:
-        tts_app = load_service_module(
-            services_base / "tts-stt", "tts_stt.main"
-        )
+        tts_app = load_service_module(services_base / "tts-stt", "tts_stt.main")
         print("✅ Loaded TTS-STT Service")
     except Exception as e:
         print(f"❌ Failed to load TTS-STT Service: {e}")
@@ -426,9 +423,7 @@ def gateway_test_client_no_redis():
     """Create test client without Redis dependency (for testing without rate limiting)"""
     # Access to FastAPI app from the module
     if gateway_app:
-        with unittest.mock.patch(
-            "services.api-gateway.main.redis_client", return_value=None
-        ):
+        with patch("services.api-gateway.main.redis_client", return_value=None):
             return TestClient(gateway_app.app)
     else:
         return TestClient(None)

@@ -82,7 +82,11 @@ def test_entity_context_regression():
     )
     r = httpx.post(
         f"{GRAPH_RAG}/entity-context",
-        json={"entity_text": "Ada Lovelace", "include_neighbors": True, "context_window": 3},
+        json={
+            "entity_text": "Ada Lovelace",
+            "include_neighbors": True,
+            "context_window": 3,
+        },
         timeout=TIMEOUT,
     )
     assert r.status_code == 200, r.text

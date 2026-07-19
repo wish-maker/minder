@@ -20,8 +20,8 @@ sys.path.insert(
     0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry")
 )
 
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
 
 class MockCryptoPlugin:

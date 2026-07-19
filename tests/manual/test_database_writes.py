@@ -82,14 +82,16 @@ async def test_database_writes():
         )
 
         # Create test table
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS test_news_write (
                 id SERIAL PRIMARY KEY,
                 title VARCHAR(255),
                 content TEXT,
                 created_at TIMESTAMP DEFAULT NOW()
             )
-        """)
+        """
+        )
 
         # Insert test data
         test_title = f"Test News {datetime.now().isoformat()}"

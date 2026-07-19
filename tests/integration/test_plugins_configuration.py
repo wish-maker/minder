@@ -6,9 +6,6 @@ Tests plugin configuration management, settings persistence, and versioning.
 SKIPPED: Requires running Minder services
 """
 
-import json
-from typing import Dict
-
 import pytest
 import requests
 

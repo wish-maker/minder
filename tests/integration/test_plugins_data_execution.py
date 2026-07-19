@@ -6,8 +6,6 @@ Tests actual data retrieval and processing from plugins.
 SKIPPED: Requires running Minder services
 """
 
-from typing import Dict, List
-
 import pytest
 import requests
 

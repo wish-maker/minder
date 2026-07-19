@@ -38,7 +38,7 @@ async def verify_postgres_running():
                 database=settings.POSTGRES_DB,
             )
             await conn.close()
-            print(f"\n[OK] PostgreSQL test container ready")
+            print("\n[OK] PostgreSQL test container ready")
             return
         except Exception as e:
             if attempt < max_attempts - 1:
@@ -57,7 +57,6 @@ async def clean_database(verify_postgres_running):
     Setup: Create users table
     Teardown: Drop all data and table
     """
-    import asyncpg
     from core.auth import close_pg_pool, get_pg_pool, init_users_table
 
     # Close any existing pool
@@ -117,7 +116,6 @@ class TestAuthFlowE2E:
 
     async def test_1_register_creates_user_in_db(self, api_client):
         """Step 1: Register creates user in PostgreSQL with hashed password"""
-        import asyncpg
         from core.auth import get_pg_pool
 
         response = await api_client.post(
@@ -302,9 +300,9 @@ class TestAuthProtectedEndpoints:
         """Expired JWT returns 401"""
         from datetime import datetime, timedelta
 
+        from core.auth import verify_jwt_token
         from fastapi import HTTPException
         from jose import jwt
-        from core.auth import verify_jwt_token
 
         # Create expired token
         expired_payload = {
@@ -323,8 +321,8 @@ class TestAuthProtectedEndpoints:
 
     async def test_invalid_jwt_returns_401(self):
         """Invalid JWT returns 401"""
-        from fastapi import HTTPException
         from core.auth import verify_jwt_token
+        from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc:
             verify_jwt_token("not.a.valid.jwt.token")
