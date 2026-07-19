@@ -39,6 +39,33 @@ This edits only `OLLAMA_BASE_URL` in `./.env`; it does **not** restart — run
 `bash setup.sh restart` to apply. In external mode the local Ollama container is
 not started (it's gated behind the compose profile), saving RAM/CPU.
 
+### The URL must be reachable *from inside the containers*
+
+`OLLAMA_BASE_URL` is resolved by the service containers on the Docker network — **not**
+by your host shell. An address that works from the host (or only on your LAN's DNS) can
+still be unreachable from a container. In particular:
+
+- **Ollama running natively on the same machine as Docker:** use
+  `http://host.docker.internal:11434` (Docker Desktop's host alias) or the host's LAN IP
+  (`http://192.168.68.109:11434`). `http://localhost:11434` will **not** work from a
+  container (localhost there is the container itself).
+- **A bare hostname** (e.g. `http://gpu-node:11434`) only works if that name resolves
+  *inside the containers*. If it resolves nowhere, inference silently breaks.
+
+⚠️ **Failure mode (see [#77]):** if the URL is unreachable, document upload still returns
+`200` but stores a **zero-vector** (the doc is never retrievable), and queries return
+`"Error generating response: ... Name or service not known"`. Always verify from a
+container, not the host:
+
+```bash
+# expect 200 — this is what the RAG/model-management services actually see
+docker exec minder-rag-pipeline curl -s -o /dev/null -w '%{http_code}\n' \
+  --max-time 5 "$OLLAMA_BASE_URL/api/tags"
+```
+
+Ollama must also be listening on all interfaces for containers to reach it — start the
+native server with `OLLAMA_HOST=0.0.0.0` (not the default `127.0.0.1`).
+
 ## Automatic model downloads
 
 **When:** On startup, in internal mode
