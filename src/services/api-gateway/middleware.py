@@ -5,12 +5,12 @@ FastAPI app is created.
 """
 
 import logging
+import sys
 import time
 import uuid
 
 from clients import redis_client
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from metrics import (
     http_request_duration_seconds,
@@ -19,6 +19,13 @@ from metrics import (
 )
 
 from config import settings
+
+# Shared library on path (idempotent; also done in core/auth.py) so this module can
+# use the shared CORS helper instead of re-implementing the middleware wiring (#49).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.utils.cors import add_cors_middleware  # noqa: E402
 
 logger = logging.getLogger("minder.api-gateway")
 
@@ -32,13 +39,7 @@ def register_middleware(app: FastAPI) -> None:
         if settings.CORS_ALLOWED_ORIGINS
         else ["*"]
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=cors_origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    add_cors_middleware(app, allowed_origins=cors_origins)
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):

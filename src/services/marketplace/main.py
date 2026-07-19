@@ -8,12 +8,12 @@ from datetime import datetime
 sys.path.insert(0, "/app/src")
 
 from fastapi import FastAPI  # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
 from services.marketplace.config import settings  # noqa: E402
 from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
+from shared.utils.cors import add_cors_middleware  # noqa: E402
 
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.marketplace")
@@ -67,13 +67,7 @@ cors_origins = (
     if settings.CORS_ALLOWED_ORIGINS
     else _DEV_CORS_ORIGINS
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+add_cors_middleware(app, allowed_origins=cors_origins)
 
 # Prometheus metrics: request-tracking middleware + /metrics endpoint
 setup_metrics(app)
