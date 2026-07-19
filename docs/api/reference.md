@@ -299,9 +299,16 @@ endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)).
 # Create a knowledge base, then upload a document into it
 KB=$(curl -s -X POST http://localhost:8004/knowledge-base \
   -H 'Content-Type: application/json' \
-  -d '{"name":"My Docs"}' | jq -r '.id')
+  -d '{"name":"My Docs","description":"my documents"}' | jq -r '.id')
 
 curl -X POST "http://localhost:8004/knowledge-base/$KB/upload" -F "file=@doc.pdf"
+
+# Query: create a pipeline over the KB, then query it
+PIPE=$(curl -s -X POST http://localhost:8004/pipeline \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"my-pipe\",\"knowledge_base_ids\":[\"$KB\"]}" | jq -r '.pipeline_id')
+curl -X POST "http://localhost:8004/pipeline/$PIPE/query" \
+  -H 'Content-Type: application/json' -d '{"question":"What is in my docs?","top_k":3}'
 ```
 
 ---

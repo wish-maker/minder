@@ -188,7 +188,7 @@ POST /pipeline
 POST /pipeline/{id}/query
 Content-Type: application/json
 
-{ "query": "What is machine learning?" }
+{ "question": "What is machine learning?", "top_k": 3 }
 ```
 
 > The exact request/response shapes are defined by the service's Pydantic models —
