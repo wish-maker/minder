@@ -143,10 +143,18 @@ async def execute_function(function_name: str, request: Request):
 
 
 async def _ollama_chat(body: Dict) -> Dict:
-    """Plain passthrough to Ollama /api/chat (non-streaming)."""
+    """Call Ollama /api/chat and return the single JSON response.
+
+    ``stream`` is forced off: Ollama streams newline-delimited JSON by default, which
+    ``response.json()`` cannot parse (it raises "Extra data" on the second line) and
+    which the tool loop cannot inspect for ``tool_calls``. This endpoint has always
+    aggregated a single response (never proxied a stream), so pinning stream=False is a
+    correctness fix, not a behaviour change.
+    """
+    payload = {**body, "stream": False}
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{OLLAMA_BASE_URL}/api/chat", json=body, timeout=120.0
+            f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=120.0
         )
         response.raise_for_status()
         return response.json()
@@ -204,7 +212,12 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
                     content = json.dumps(result)[:4000]
                 except httpx.HTTPStatusError as he:
                     code = he.response.status_code
-                    content = f"error: tool '{name}' returned HTTP {code}"
+                    # Feed the downstream error detail back to the model, not just the
+                    # status code, so it can self-correct on a later iteration — e.g. a
+                    # hallucinated argument yields "bad arguments: got an unexpected
+                    # keyword argument 'x'", letting the model retry without it.
+                    detail = he.response.text.strip()[:500] or "(no detail)"
+                    content = f"error: tool '{name}' returned HTTP {code}: {detail}"
                     if code == 401:
                         content += " (authentication required — sign in to use it)"
                 except Exception as te:
