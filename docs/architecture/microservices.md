@@ -136,9 +136,10 @@ All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
 
 **Endpoints (representative)**:
 - `POST /knowledge-base` — create a knowledge base (name + description)
-- `GET /knowledge-bases` — list knowledge bases
-- `POST /knowledge-base/{kb_id}/upload` — ingest a document (PDF/TXT/MD via pypdf + LangChain splitter)
-- `POST /pipeline` — create a RAG pipeline over one or more KBs
+- `GET /knowledge-bases` · `GET /knowledge-base/{kb_id}` — list / get one
+- `DELETE /knowledge-base/{kb_id}` — delete a KB (Qdrant collection + PostgreSQL row)
+- `POST /knowledge-base/{kb_id}/upload` — ingest a document (PDF/TXT/MD via pypdf + LangChain splitter; 503 if the embedding backend is unreachable — no silent zero-vector)
+- `POST /pipeline` · `DELETE /pipeline/{pipeline_id}` — create / delete a RAG pipeline over one or more KBs
 - `POST /pipeline/{pipeline_id}/query` — query (retrieval + generation)
 
 **Pipeline**: query → embed (Ollama) → search (Qdrant) → retrieve context → generate (Ollama LLM).
@@ -170,6 +171,7 @@ Live query endpoint does Standard + Conversational RAG. HyDE, Self-RAG, and a de
 - `POST /construct-graph` — build the knowledge graph in Neo4j
 - `POST /retrieve` — graph retrieval
 - `POST /entity-context` — entity context lookup
+- `DELETE /graph/document/{document_id}` — delete a document's graph (relationships + orphaned entities)
 
 ### Web UI
 

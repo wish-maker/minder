@@ -142,7 +142,7 @@ All eight core APIs are FastAPI services with real implementations.
 
 #### Graph RAG (Port 8008)
 - spaCy NER entity extraction, Neo4j knowledge-graph construction, graph retrieval, entity context.
-  Endpoints: `POST /extract`, `/construct-graph`, `/retrieve`, `/entity-context`
+  Endpoints: `POST /extract`, `/construct-graph`, `/retrieve`, `/entity-context`, `DELETE /graph/document/{id}`
 
 ### Inference & Web UI
 

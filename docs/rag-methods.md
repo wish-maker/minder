@@ -19,9 +19,11 @@ Cross-Encoder re-ranking, Contextual Compression, Hybrid/BM25, Parent-Child, RAP
 
 > **⚠️ Correction (empirically verified 2026-07-10):** Only **Standard** and **Conversational**
 > RAG are reachable in the running service. Proof:
-> - The live `/openapi.json` lists exactly 9 paths (`/`, `/health`, `/initialize`,
->   `/knowledge-base`, `/knowledge-base/{id}/upload`, `/knowledge-bases`, `/metrics`,
->   `/pipeline`, `/pipeline/{id}/query`) — no HyDE/Self-RAG/agent routes. All such paths 404.
+> - The live `/openapi.json` lists these paths: `/`, `/health`, `/initialize`,
+>   `/metrics`, `/knowledge-base`, `/knowledge-bases`, `/knowledge-base/{id}`,
+>   `/knowledge-base/{id}/upload`, `/pipeline`, `/pipeline/{id}`, `/pipeline/{id}/query`
+>   (KB create/list/get/delete + upload + pipeline create/delete/query) — no
+>   HyDE/Self-RAG/agent routes. All such paths 404.
 > - The rag-pipeline **Dockerfile only COPYs** `main.py`, `pg_client.py`, `config.yaml`,
 >   `repositories/`, and `src/core`. It does **not** ship `domain/` or `agent/`, so
 >   HyDE / Self-RAG / decision-engine (and the Bucket-2 modules) **are not even present in the
