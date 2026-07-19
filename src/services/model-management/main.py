@@ -9,32 +9,24 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from prometheus_client import Gauge
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+# Domain logic lives in core/ (service-structure standard: thin main + core/).
+from core.ollama_manager import (  # noqa: E402
+    OLLAMA_AVAILABLE,
+    OLLAMA_HOST,
+    OllamaManager,
+)
+
 from shared.metrics import setup_metrics  # noqa: E402
-
-# Ollama client for real model management
-try:
-    from ollama import AsyncClient
-
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
-    logging.warning("ollama package not installed. Install with: pip install ollama")
 
 logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
 logger = logging.getLogger("minder.model-management")
-
-# ============================================================================
-# Configuration
-# ============================================================================
-
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 
 
 @asynccontextmanager
@@ -80,112 +72,7 @@ models_registered_total = Gauge(
 # Pydantic models
 from models import FineTuneRequest, ModelConstraints, ModelInfo  # noqa: E402,F401
 
-# ============================================================================
-# Ollama Client Management
-# ============================================================================
-
-
-class OllamaManager:
-    """Manage Ollama client connections for model lifecycle"""
-
-    def __init__(self):
-        self.client: Optional[AsyncClient] = None
-        self._initialized = False
-
-    async def initialize(self):
-        """Initialize Ollama client"""
-        if not OLLAMA_AVAILABLE:
-            raise RuntimeError("Ollama package not installed")
-
-        try:
-            self.client = AsyncClient(host=OLLAMA_HOST)
-            self._initialized = True
-            logger.info(f"✅ Ollama client initialized: {OLLAMA_HOST}")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Ollama client: {e}")
-            raise
-
-    async def list_models(self) -> List[Dict[str, Any]]:
-        """List all models from Ollama"""
-        if not self._initialized:
-            await self.initialize()
-
-        try:
-            response = await self.client.list()
-            models = response.get("models", [])
-            logger.debug(f"Retrieved {len(models)} models from Ollama")
-            return models
-        except Exception as e:
-            logger.error(f"❌ Failed to list models: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to list models: {str(e)}"
-            )
-
-    async def pull_model(self, model_id: str, stream: bool = False) -> Dict[str, Any]:
-        """Pull/download a model from Ollama library"""
-        if not self._initialized:
-            await self.initialize()
-
-        try:
-            logger.info(f"Pulling model: {model_id}")
-            response = await self.client.pull(model=model_id, stream=stream)
-            return {"model": model_id, "status": "pulled", "details": response}
-        except Exception as e:
-            logger.error(f"❌ Failed to pull model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to pull model: {str(e)}"
-            )
-
-    async def show_model(self, model_id: str) -> Dict[str, Any]:
-        """Show detailed information about a model"""
-        if not self._initialized:
-            await self.initialize()
-
-        try:
-            response = await self.client.show(model=model_id)
-            return response
-        except Exception as e:
-            logger.error(f"❌ Failed to show model {model_id}: {e}")
-            raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
-
-    async def delete_model(self, model_id: str) -> Dict[str, Any]:
-        """Delete a model from local storage"""
-        if not self._initialized:
-            await self.initialize()
-
-        try:
-            logger.warning(f"Deleting model: {model_id}")
-            response = await self.client.delete(model=model_id)
-            return {"model": model_id, "status": "deleted", "details": response}
-        except Exception as e:
-            logger.error(f"❌ Failed to delete model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to delete model: {str(e)}"
-            )
-
-    async def test_model(
-        self, model_id: str, prompt: str = "Hello, test."
-    ) -> Dict[str, Any]:
-        """Test a model with a simple generation"""
-        if not self._initialized:
-            await self.initialize()
-
-        try:
-            response = await self.client.generate(model=model_id, prompt=prompt)
-            return {
-                "model": model_id,
-                "prompt": prompt,
-                "response": response.get("response", ""),
-                "status": "success",
-            }
-        except Exception as e:
-            logger.error(f"❌ Failed to test model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to test model: {str(e)}"
-            )
-
-
-# Global Ollama manager
+# Ollama client manager — domain logic lives in core/ollama_manager.py.
 ollama_manager = OllamaManager()
 
 
