@@ -11,13 +11,13 @@ from datetime import datetime
 
 from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from routes import licensing, state, tools
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
 from shared.config import MinderBaseSettings  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
+from shared.utils.cors import add_cors_middleware  # noqa: E402
 
 # ============================================================================
 # Settings
@@ -87,14 +87,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS middleware (shared helper; preserves this service's allow-all policy)
+add_cors_middleware(app, allowed_origins=["*"])
 
 # Prometheus metrics: request-tracking middleware + /metrics endpoint
 setup_metrics(app)
