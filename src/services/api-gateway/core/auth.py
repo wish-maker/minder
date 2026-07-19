@@ -6,15 +6,25 @@ Real PostgreSQL + bcrypt implementation.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
+import sys
 from typing import Any, Dict, Optional
 
 import asyncpg
 from bcrypt import checkpw, gensalt, hashpw
 from fastapi import HTTPException, Request
-from jose import jwt
 
 from config import settings
+
+# Shared JWT implementation is the single source of truth for token creation and
+# verification (issue #49). api-gateway copies src/shared to /app/src/shared but does
+# not put it on sys.path by default, so add it here and delegate the JWT functions
+# below to shared.auth.jwt_middleware instead of maintaining a divergent fork. Token
+# payload/secret/algorithm/expiry are identical (same JWT_* env), so issued tokens stay
+# byte-compatible with every downstream service that already uses the shared module.
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.auth import jwt_middleware  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -175,33 +185,27 @@ async def verify_user_credentials(
 
 def create_jwt_token(data: Dict[str, Any]) -> str:
     """
-    Create JWT access token with expiration
+    Create JWT access token with expiration.
+
+    Thin delegate to ``shared.auth.jwt_middleware.create_jwt_token`` so token issuance
+    lives in exactly one place (issue #49). Reads the same JWT_SECRET/JWT_ALGORITHM/
+    JWT_EXPIRATION_MINUTES environment variables api-gateway's ``settings`` reads, so the
+    emitted tokens are unchanged.
 
     Args:
         data: Dictionary containing token payload (sub, username, role, etc.)
 
     Returns:
         Encoded JWT token as string
-
-    Example:
-        >>> token = create_jwt_token({"sub": "user123", "username": "admin"})
-        >>> len(token) > 100
-        True
     """
-    to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.JWT_EXPIRATION_MINUTES
-    )
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
-    )
-    return encoded_jwt
+    return jwt_middleware.create_jwt_token(data)
 
 
 def verify_jwt_token(token: str) -> Dict:
     """
-    Verify and decode JWT token
+    Verify and decode a JWT token.
+
+    Thin delegate to ``shared.auth.jwt_middleware.verify_jwt_token`` (issue #49).
 
     Args:
         token: JWT token to verify
@@ -210,33 +214,24 @@ def verify_jwt_token(token: str) -> Dict:
         Decoded token payload
 
     Raises:
-        HTTPException: If token is expired or invalid
+        HTTPException: 401 if the token is expired or invalid
     """
-    try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    return jwt_middleware.verify_jwt_token(token)
 
 
-async def get_current_user(request: Request):
+async def get_current_user(request: Request) -> Optional[Dict]:
     """
-    Get current user from JWT token (if present)
+    Get current user from the JWT token if present, otherwise None.
+
+    api-gateway historically treats auth as optional at this layer (write protection is
+    enforced explicitly in ``routes/proxy.py``), so this preserves the return-None-on-
+    missing-token behaviour by delegating to the shared *optional* dependency rather than
+    the raising ``get_current_user`` (issue #49).
 
     Args:
         request: FastAPI request object
 
     Returns:
-        User payload if token present, None otherwise
+        User payload if a valid token is present, None otherwise
     """
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return None
-
-    token = auth_header.split(" ")[1]
-    payload = verify_jwt_token(token)
-    return payload
+    return await jwt_middleware.get_current_user_optional(request)
