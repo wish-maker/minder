@@ -22,11 +22,32 @@ funnels through `docker compose` — compose stays the single source of truth.
 """
 
 import json
+import os
 
-from . import config, docker, log
+from . import config, docker, env, log
 
 SCRIPT_NAME = config.SCRIPT_NAME
 STATE_FILE = config.BUNDLES_STATE
+
+# Services whose platform-managed container is replaced by an EXTERNAL endpoint when
+# its env var is non-empty — the exact binding lifecycle.start_services already reads
+# to gate the internal-ollama profile. For an externally-bound service we don't own a
+# container: `status` shows it as external (not orphan-drift) and `enable`/`reconcile`
+# skip starting it. This is the one binding that exists today (ollama via
+# OLLAMA_BASE_URL); the general managed/external/self-host model is Phase 3 (see
+# docs/architecture/bundles.md).
+EXTERNAL_BINDINGS: dict[str, str] = {"ollama": "OLLAMA_BASE_URL"}
+
+
+def external_binding(service: str) -> "str | None":
+    """The external endpoint a service is bound to (its internal container is NOT
+    ours to run), or None when it is platform-managed. Same source of truth as
+    lifecycle: an exported env var wins, else root .env; empty → managed."""
+    var = EXTERNAL_BINDINGS.get(service)
+    if not var:
+        return None
+    return (os.environ.get(var) or env.get(var)) or None
+
 
 # bundle name → services it claims (docs/architecture/bundles.md). `core` is the
 # always-on kernel and cannot be disabled. Hardcoded here for now; deriving this
@@ -187,10 +208,19 @@ def enable(name: str) -> int:
         log.info(f"Bundle '{name}' already enabled — ensuring its services are up.")
     else:
         log.success(f"Bundle '{name}' → enabled")
-    # Bring up every claimed service (compose reuses already-running ones + orders
-    # via depends_on/health). One command keeps the shape close to start_services.
-    docker.compose("up", "-d", *sorted(claims))
-    log.detail(f"Reconciled: {', '.join(sorted(claims))}")
+    # Bring up every claimed service EXCEPT ones bound to an external endpoint — we
+    # don't run their container (starting it would spin an idle duplicate of the
+    # external one). Compose reuses already-running ones + orders via depends_on.
+    managed = [s for s in sorted(claims) if not external_binding(s)]
+    for svc in sorted(claims):
+        endpoint = external_binding(svc)
+        if endpoint:
+            log.detail(f"{svc}: external ({endpoint}) — not started")
+    if managed:
+        docker.compose("up", "-d", *managed)
+    log.detail(
+        f"Reconciled: {', '.join(managed) if managed else '(none — all external)'}"
+    )
     return 0
 
 
@@ -220,9 +250,14 @@ def reconcile(stop_orphans: bool = False) -> int:
     detect services orphaned by disabled bundles and report (or stop with
     --stop-orphans). The primitive `start` and the future registry API drive."""
     enabled = _enabled_bundles()
-    want_up = sorted({s for b in enabled for s in BUNDLES[b]["claims"]})
+    claimed = sorted({s for b in enabled for s in BUNDLES[b]["claims"]})
+    # Externally-bound services aren't ours to start (see external_binding).
+    want_up = [s for s in claimed if not external_binding(s)]
+    external = [s for s in claimed if external_binding(s)]
     orphans = orphaned_services()
     log.section("🧩  Reconciling bundle services")
+    if external:
+        log.detail(f"External (not started): {', '.join(external)}")
     if want_up:
         log.info(f"Ensuring up:  {', '.join(want_up)}")
         docker.compose("up", "-d", *want_up)
@@ -249,6 +284,14 @@ def status() -> int:
             running = docker.container_running(svc)
             health = docker.container_health(svc) if running else "stopped"
             claimants = _claimants(svc, enabled)
+            endpoint = external_binding(svc)
+            if endpoint:
+                # Externally bound: we don't run this container, so a stopped one is
+                # NOT drift — show the endpoint. A RUNNING one IS drift (an idle
+                # internal duplicate that shouldn't be up).
+                mark = "!" if running else "⇄"
+                log.detail(f"  {mark} {svc:<20} {health:<9} external → {endpoint}")
+                continue
             # drift: a claimed service is down, or a service is up but now orphaned
             mark = "✓" if running else "·"
             if (claimants and not running) or (not claimants and running):
