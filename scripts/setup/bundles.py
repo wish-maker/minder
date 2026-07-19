@@ -78,12 +78,21 @@ _ACTIONS = ("enable", "disable", "status", "reconcile")
 
 def _load_state() -> dict:
     """Parse bundles.state.json → {bundle: {enabled: bool}}. Missing/corrupt file
-    → {} (everything defaults to enabled), matching the absent-key semantics."""
+    → {} (everything defaults to enabled), matching the absent-key semantics.
+
+    The file is documented as hand-editable, so a plausible mis-edit — a per-bundle
+    value that is valid JSON but not the `{enabled: bool}` shape, e.g. `{"rag": false}`
+    instead of `{"rag": {"enabled": false}}` — must NOT crash callers (is_enabled /
+    _set_enabled index into these values). Non-dict entries are dropped so they
+    degrade to the documented "defaults to enabled" instead of raising, and get
+    self-healed on the next `_set_enabled` write."""
     try:
         data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, dict)}
 
 
 def is_enabled(name: str) -> bool:

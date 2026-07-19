@@ -54,6 +54,22 @@ def test_is_enabled_corrupt_file_defaults_true(statefile):
     assert bundles.is_enabled("monitoring") is True
 
 
+def test_is_enabled_wrong_shape_value_defaults_true(statefile):
+    # Plausible hand-edit: bare bool instead of {"enabled": bool}. Must not raise
+    # AttributeError in is_enabled/service_active — degrade to enabled.
+    statefile.write_text(json.dumps({"rag": False}), encoding="utf-8")
+    assert bundles.is_enabled("rag") is True
+    assert bundles.service_active("qdrant") is True
+
+
+def test_set_enabled_self_heals_wrong_shape_value(statefile):
+    # A malformed key must not crash the setdefault-and-index write, and the
+    # rewrite normalises it back to the documented shape.
+    statefile.write_text(json.dumps({"rag": "off"}), encoding="utf-8")
+    bundles._set_enabled("rag", False)
+    assert json.loads(statefile.read_text())["rag"]["enabled"] is False
+
+
 def test_set_enabled_writes_json(statefile):
     bundles._set_enabled("monitoring", False)
     assert json.loads(statefile.read_text())["monitoring"]["enabled"] is False
