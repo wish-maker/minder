@@ -95,6 +95,21 @@ async def construct_knowledge_graph_handler(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def delete_document_graph_handler(
+    document_id: str,
+    graph_constructor: KnowledgeGraphConstructor,
+):
+    """Delete a document's knowledge-graph nodes/relationships from Neo4j."""
+    if graph_constructor is None:
+        raise HTTPException(status_code=503, detail="graph constructor not initialized")
+    try:
+        counts = await graph_constructor.delete_document(document_id)
+        return {"success": True, "document_id": document_id, **counts}
+    except Exception as e:
+        logger.error(f"❌ Failed to delete document graph {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def retrieve_with_graph_handler(
     request: GraphRetrievalRequest,
     entity_extractor: EntityExtractor,
