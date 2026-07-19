@@ -10,10 +10,11 @@ It also explains how to point selected data services (Redis, PostgreSQL, Qdrant)
 cloud providers instead of the local Docker containers, using environment variables and
 without modifying code.
 
-Minder runs **31 containers** (Authelia excluded/disabled). `bash setup.sh install` and
-`bash setup.sh start` both bring up all 31 — MinIO and schema-registry are wired into the
-core startup group. The single source of truth is the hand-maintained
-`docker/compose/docker-compose.yml`.
+Minder defines **31 containers** (Authelia excluded/disabled). `setup.sh install` seeds
+the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag,
+and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` for
+all 31), and `start` honours the recorded bundle state. The single source of truth is the
+hand-maintained `docker/compose/docker-compose.yml`.
 
 ---
 

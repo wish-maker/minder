@@ -42,7 +42,7 @@ not started (it's gated behind the compose profile), saving RAM/CPU.
 ## Automatic model downloads
 
 **When:** On startup, in internal mode
-**What:** Pulls the models listed in `OLLAMA_PULL_MODELS` (default llama3.2 + nomic-embed-text)
+**What:** Pulls the models listed in `OLLAMA_MODELS` (default llama3.2 + nomic-embed-text)
 **Detection:** Skips a model if it already exists in the Ollama volume
 
 Model storage lives in `/root/.ollama/models` inside the container, backed by a
@@ -54,7 +54,7 @@ Docker volume so models survive container recreation.
 
 ```bash
 # Models to auto-pull on startup (comma-separated)
-OLLAMA_PULL_MODELS=llama3.2,nomic-embed-text
+OLLAMA_MODELS=llama3.2,nomic-embed-text
 
 # Which models the services use for each purpose
 OLLAMA_LLM_MODEL=llama3.2
@@ -131,10 +131,10 @@ Edit root `./.env`:
 
 ```bash
 # Pull different models on startup
-OLLAMA_PULL_MODELS=mistral,qwen2.5,nomic-embed-text
+OLLAMA_MODELS=mistral,qwen2.5,nomic-embed-text
 
 # To disable automatic pulls, leave the list empty
-OLLAMA_PULL_MODELS=
+OLLAMA_MODELS=
 ```
 
 Then restart to apply:

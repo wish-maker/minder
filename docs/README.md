@@ -6,15 +6,16 @@ This directory contains all documentation for the Minder platform.
 
 ### 🚀 Getting Started (`getting-started/`)
 - [Installation](getting-started/installation.md) - System installation via `setup.sh`
-- [Quick Start](QUICKSTART.md) - Get started fast
+- [Quick Start](quickstart.md) - Get started fast
 - [AI Setup](getting-started/ai-setup.md) - Ollama model configuration (internal/external)
 - [RAG Methods](rag-methods.md) - Retrieval-augmented generation methods
-- [External Services Guide](EXTERNAL_SERVICES_GUIDE.md) - Pointing at external backends
+- [External Services Guide](external-services-guide.md) - Pointing at external backends
 
 ### 🏗️ Architecture (`architecture/`)
 - [Overview](architecture/overview.md) - Platform architecture
 - [Microservices](architecture/microservices.md) - Service structure
 - [Plugin System](architecture/plugins.md) - Plugin architecture
+- [Service Bundles](architecture/bundles.md) - Capability control-plane (enable/disable service groups)
 - [Project Structure](architecture/project-structure.md) - Code organization
 - [Roadmap](architecture/roadmap.md) - Future plans
 
@@ -34,7 +35,7 @@ This directory contains all documentation for the Minder platform.
 ### 🔧 Operations (`operations/`)
 - [Service Access Guide](operations/service-access.md) - Daily operations and service access
 - [Security Architecture](operations/security-architecture.md) - Security model
-- [PostgreSQL Migration Guide](operations/POSTGRESQL_MIGRATION_GUIDE.md) - Database migrations
+- [PostgreSQL Migration Guide](operations/postgresql-migration-guide.md) - Database migrations
 
 ### 🔒 Security & Guides (`guides/`)
 - [Authentication](guides/authentication.md) - Authelia SSO
@@ -54,7 +55,7 @@ This directory contains all documentation for the Minder platform.
 
 ### For Users
 - Start here: [Installation Guide](getting-started/installation.md)
-- Learn basics: [Quick Start](QUICKSTART.md)
+- Learn basics: [Quick Start](quickstart.md)
 - Get help: [Troubleshooting](troubleshooting/common-issues.md)
 
 ### For Developers
@@ -74,7 +75,7 @@ This directory contains all documentation for the Minder platform.
 ## 📊 Current System Status
 
 **Platform Version:** 1.0.0
-**Services:** 31 containers (all start via `setup.sh install`/`start`); 3 have no healthcheck by design
+**Services:** 31 containers defined; `setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat), monitoring/graph-rag/voice opt-in (`--profile full` = all 31); 3 have no healthcheck by design
 **Environment:** Development (production hardening not yet applied)
 **Host:** Raspberry Pi 4 (ARM)
 

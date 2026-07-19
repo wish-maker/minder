@@ -15,13 +15,17 @@ This plugin does NOT do network discovery — that is a separate `network` plugi
 job, which would feed discovered targets into this plugin's managed region.
 
 Wiring (docker-compose.yml, plugin-registry service):
-  - ``TELEGRAF_CONFIG_PATH`` — writable bind mount of the same telegraf.conf the
-    telegraf container reads (``:ro`` there).
+  - ``TELEGRAF_CONFIG_PATH`` — writable bind mount of the same runtime telegraf.conf
+    the telegraf container reads (``:ro`` there); on the host this is the gitignored
+    ``telegraf.runtime.conf`` (see the note below).
   - ``TELEGRAF_CONTAINER`` — container name for the restart fallback.
   - ``/var/run/docker.sock`` + ``group_add`` — for the restart fallback only.
 
-Note: telegraf.conf is git-tracked; the managed region ships EMPTY. When the plugin
-writes inputs into it at runtime the tracked file shows a diff — that is expected.
+Note: the file the plugin writes is the **gitignored** ``telegraf.runtime.conf``
+(seeded from the git-tracked ``telegraf.conf`` template by setup.sh's
+``sync_telegraf_config``; both containers mount the runtime copy). The managed region
+ships EMPTY in the template; runtime writes land in the runtime copy, so the tracked
+template is never dirtied. See ``scripts/setup/config.py`` (TELEGRAF_TEMPLATE/RUNTIME).
 """
 
 import asyncio

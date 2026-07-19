@@ -8,7 +8,7 @@ Pi 4, 31 containers). Services run as Docker containers named `minder-<service>`
 at `docker/compose/docker-compose.yml`; the root `./.env` is the single source of truth for
 configuration.
 
-For the broader guide, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+For the broader guide, see [troubleshooting.md](troubleshooting.md).
 
 ---
 

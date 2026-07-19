@@ -75,13 +75,18 @@ The claim graph has three sources, merged into one `service → claimants` map:
 
 | Bundle | Services | Default |
 |--------|----------|---------|
-| **core** (always-on) | traefik, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry, **authelia** (currently disabled — issue #15; joins core when enabled) | ON (mandatory) |
+| **core** (always-on) | traefik, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry | ON (mandatory) |
 | **monitoring** | influxdb, telegraf, prometheus, grafana, alertmanager, jaeger, otel-collector, postgres-exporter, redis-exporter, rabbitmq-exporter, node-exporter, cadvisor, blackbox-exporter | **OFF** |
 | **inference** | ollama, model-management | ON |
-| **rag** | rag-pipeline, qdrant | ON |
+| **rag** | rag-pipeline, qdrant, ollama | ON |
 | **graph-rag** | graph-rag | **OFF** |
-| **chat** | openwebui | ON |
+| **chat** | openwebui, rag-pipeline, ollama | ON |
 | **voice** | tts-stt | **OFF** |
+
+> The `core` map above is `bundles.BUNDLES["core"]["claims"]` as shipped. **authelia**
+> is NOT in the claim map yet (it's disabled — issue #15); the design intent is for it
+> to join `core` when #15 re-enables it. `rag`/`chat` share `ollama` (and `chat` shares
+> `rag-pipeline`) so the refcount can't orphan a service another enabled bundle needs.
 
 Notes:
 - **marketplace is core** → neo4j is always on (marketplace uses it for the
@@ -168,16 +173,18 @@ setup.sh install --profile full     # everything
 
 A profile only **seeds** `bundles.state.json` at install — it is not a persistent
 mode and there is no lock-in. Post-install, bundles are toggled freely (`bundle
-enable/disable`), or a preset re-applied (`bundle profile <name>`; `--exact` also
-disables extras, otherwise additive).
+enable/disable`). A post-install `bundle profile <name>` re-apply (with `--exact` to
+also disable extras) is **planned, not yet implemented** — `install --profile` is the
+only profile entry point today.
 
 ## Control surface
 
 Same operations, two front-ends over one shared brain:
 
-- **Host CLI (Phase 1–2, available now-ish):**
-  `setup.sh bundle enable|disable|status|reconcile <name> [--stop-orphans]`,
-  `setup.sh bundle profile <name>`.
+- **Host CLI (Phases 1–2, shipped):**
+  `setup.sh bundle enable|disable|status|reconcile <name> [--stop-orphans]` and
+  `setup.sh install --profile <name>`. (`setup.sh bundle profile <name>` for a
+  post-install re-apply is planned — not yet implemented.)
 - **Registry API (Phase 3):** `GET /v1/bundles`, `POST /v1/bundles/{name}/enable|disable`,
   `POST /v1/bundles/reconcile`, `POST /v1/bundles/profile/{name}`. The
   container-orchestration privilege runs through a **docker-socket-proxy**

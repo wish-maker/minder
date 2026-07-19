@@ -331,7 +331,7 @@ Authentication in api-gateway is **JWT + bcrypt** with Redis-backed rate limitin
 - [Code Style Guide](code-style.md)
 - [Testing Guide](testing.md)
 - [Plugin Development](plugin-development.md)
-- [Troubleshooting](../troubleshooting/TROUBLESHOOTING.md)
+- [Troubleshooting](../troubleshooting/troubleshooting.md)
 
 ## Best Practices Summary
 
