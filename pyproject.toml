@@ -19,3 +19,9 @@ markers = [
     "slow: tests that take a long time to run",
     "security: security-focused tests",
 ]
+filterwarnings = [
+    # All pydantic v2 class-based `Config` was migrated to ConfigDict (#75). Guard
+    # against reintroduction: any Pydantic-V2-since-2.0 deprecation (class Config,
+    # model.dict(), @validator, parse_obj, …) fails the suite instead of warning.
+    "error::pydantic.warnings.PydanticDeprecatedSince20",
+]
