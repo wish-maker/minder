@@ -193,6 +193,37 @@ class KnowledgeGraphConstructor:
         logger.info(f"✅ Linked document to {count} entities")
         return count
 
+    async def delete_document(self, document_id: str) -> Dict[str, int]:
+        """Delete a document's graph: its RELATES_TO edges (tagged with this
+        document_id), the Document node and its MENTIONS edges, and any Entity left
+        with no edges afterwards. Entities still shared with other documents are
+        kept. Returns the deletion counts."""
+        async with self.driver.session() as session:
+            rels = await session.run(
+                "MATCH ()-[r:RELATES_TO {document_id: $document_id}]->() DELETE r",
+                document_id=document_id,
+            )
+            rels_deleted = (await rels.consume()).counters.relationships_deleted
+
+            doc = await session.run(
+                "MATCH (d:Document {id: $document_id}) DETACH DELETE d",
+                document_id=document_id,
+            )
+            docs_deleted = (await doc.consume()).counters.nodes_deleted
+
+            orphans = await session.run("MATCH (e:Entity) WHERE NOT (e)--() DELETE e")
+            orphans_deleted = (await orphans.consume()).counters.nodes_deleted
+
+        logger.info(
+            f"✅ Deleted document graph {document_id}: {docs_deleted} document, "
+            f"{rels_deleted} relationships, {orphans_deleted} orphaned entities"
+        )
+        return {
+            "document_deleted": docs_deleted,
+            "relationships_deleted": rels_deleted,
+            "orphan_entities_deleted": orphans_deleted,
+        }
+
     async def get_graph_statistics(self) -> Dict[str, int]:
         """
         Get graph statistics

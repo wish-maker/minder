@@ -28,6 +28,7 @@ from models.schemas import (
 # Import API routes
 from routes.api import (
     construct_knowledge_graph_handler,
+    delete_document_graph_handler,
     extract_entities_handler,
     get_entity_context_handler,
     retrieve_with_graph_handler,
@@ -189,6 +190,12 @@ async def construct_knowledge_graph(request: KnowledgeGraphRequest):
     return await construct_knowledge_graph_handler(
         request, entity_extractor, graph_constructor
     )
+
+
+@app.delete("/graph/document/{document_id}", tags=["Knowledge Graph"])
+async def delete_document_graph(document_id: str):
+    """Delete a document's knowledge-graph nodes/relationships from Neo4j."""
+    return await delete_document_graph_handler(document_id, graph_constructor)
 
 
 @app.post("/retrieve", tags=["Graph Retrieval"])
