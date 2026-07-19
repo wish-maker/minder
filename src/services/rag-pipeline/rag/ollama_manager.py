@@ -8,12 +8,7 @@ the query runner / RAG method modules, which receive it as an opaque
 import logging
 from typing import Any, Dict, List, Optional
 
-from config import (
-    DEFAULT_EMBEDDING_MODEL,
-    DEFAULT_LLM_MODEL,
-    EMBEDDING_DIMENSIONS,
-    OLLAMA_HOST,
-)
+from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL, OLLAMA_HOST
 
 logger = logging.getLogger(__name__)
 
@@ -102,12 +97,19 @@ class OllamaManager:
             try:
                 response = await self.embed_client.embeddings(model=model, prompt=text)
                 embedding = response.get("embedding", [])
-                embeddings.append(embedding)
             except Exception as e:
-                logger.error(f"❌ Embedding generation failed: {e}")
-                # Return zero vector as fallback
-                dim = EMBEDDING_DIMENSIONS.get(model, 768)
-                embeddings.append([0.0] * dim)
+                # Do NOT substitute a zero-vector — that silently corrupts the index
+                # (upload would "succeed" with an unsearchable doc, queries return
+                # garbage). Fail loudly so callers can surface a real error. See #77.
+                logger.error(f"❌ Embedding generation failed ({model}): {e}")
+                raise RuntimeError(
+                    f"embedding generation failed for model '{model}': {e}"
+                ) from e
+            if not embedding:
+                raise RuntimeError(
+                    f"embedding backend returned an empty vector for model '{model}'"
+                )
+            embeddings.append(embedding)
 
         return embeddings
 
