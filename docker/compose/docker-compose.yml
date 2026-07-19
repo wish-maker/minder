@@ -740,7 +740,7 @@ services:
     pid: host
     user: root
   prometheus:
-    image: prom/prometheus:v3.13.0
+    image: prom/prometheus:v3.13.1
     container_name: minder-prometheus
     restart: on-failure
     volumes:
@@ -1079,7 +1079,7 @@ services:
 
   # Node Exporter (for host metrics - optional for production)
   node-exporter:
-    image: prom/node-exporter:v1.11.1
+    image: prom/node-exporter:v1.12.0
     container_name: minder-node-exporter
     restart: on-failure
     command:
