@@ -115,10 +115,23 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     if not chunks:
         raise HTTPException(status_code=400, detail="No text content extracted")
 
-    # Generate embeddings
-    with state.embedding_generation_duration.labels(model=kb["embedding_model"]).time():
-        embeddings = await state.ollama_manager.generate_embeddings(
-            chunks, model=kb["embedding_model"]
+    # Generate embeddings — fail loudly if the backend is unreachable rather than
+    # storing zero-vectors, which would make the document silently unsearchable (#77).
+    try:
+        with state.embedding_generation_duration.labels(
+            model=kb["embedding_model"]
+        ).time():
+            embeddings = await state.ollama_manager.generate_embeddings(
+                chunks, model=kb["embedding_model"]
+            )
+    except Exception as e:
+        state.documents_processed_total.labels(status="failed").inc()
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Embedding backend unavailable — document was NOT indexed. Check that "
+                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
+            ),
         )
 
     # Store in Qdrant
@@ -247,10 +260,20 @@ async def retrieve_relevant_documents(
     first_kb_id = pipeline["knowledge_base_ids"][0]
     embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
 
-    # Create embedding for question
-    question_embeddings = await state.ollama_manager.generate_embeddings(
-        [question], model=embed_model
-    )
+    # Create embedding for question — fail loudly if the backend is unreachable
+    # rather than searching with a garbage vector (#77).
+    try:
+        question_embeddings = await state.ollama_manager.generate_embeddings(
+            [question], model=embed_model
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Embedding backend unavailable — cannot answer query. Check that "
+                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
+            ),
+        )
     question_embedding = question_embeddings[0]
 
     # Search across all knowledge bases
