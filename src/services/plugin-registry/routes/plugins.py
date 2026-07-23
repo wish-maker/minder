@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse
 from models import PluginInfo
 from schemas.validator import validate_manifest
 
+from core import plugin_config as cfgmod
 from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
 
 
@@ -28,6 +29,8 @@ def build_plugins_router(
     webhook_routes,
     redis_client,
     update_plugin_in_database,
+    load_plugin_config,
+    save_plugin_config,
     register_plugin_webhook,
     handle_webhook_request,
     logger,
@@ -333,5 +336,78 @@ def build_plugins_router(
             f"User: {current_user.get('username', 'unknown')}"
         )
         return {"plugin": plugin_name, "action": action, "result": result}
+
+    # ── central plugin configuration (#34) ─────────────────────────────────────
+    @router.get("/v1/plugins/{plugin_name}/config")
+    async def get_plugin_config(plugin_name: str):
+        """Return a plugin's config schema + current effective values (secrets masked).
+
+        Effective = declared defaults → env → persisted (API-set) overrides. A UI can
+        render `schema` as a form and show `values` as the live config.
+        """
+        instance = plugin_instances.get(plugin_name)
+        if instance is None:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' is not running"
+            )
+        schema = cfgmod.get_schema(instance)
+        if not schema:
+            return {
+                "plugin": plugin_name,
+                "configurable": False,
+                "schema": [],
+                "values": {},
+            }
+        persisted = await load_plugin_config(plugin_name)
+        values = cfgmod.effective_config(instance, persisted)
+        return {
+            "plugin": plugin_name,
+            "configurable": True,
+            "schema": schema,
+            "values": cfgmod.mask_secrets(instance, values),
+        }
+
+    @router.put("/v1/plugins/{plugin_name}/config")
+    @enforce_rate_limit(max_requests=20, window_minutes=1)
+    async def update_plugin_config(
+        plugin_name: str,
+        request: Request,
+        current_user: dict = Depends(get_current_user),
+    ):
+        """Update a plugin's config (JWT-gated): validate → persist → apply live.
+
+        Body is a JSON object of {key: value} for keys in the plugin's CONFIG_SCHEMA.
+        Merges over existing persisted overrides, applies via apply_config (no restart).
+        """
+        instance = plugin_instances.get(plugin_name)
+        if instance is None:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' is not running"
+            )
+        if not cfgmod.get_schema(instance):
+            raise HTTPException(
+                status_code=400, detail=f"Plugin '{plugin_name}' is not configurable"
+            )
+        raw = await request.body()
+        try:
+            incoming = json.loads(raw) if raw else {}
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Body must be JSON")
+        ok, err = cfgmod.validate_update(instance, incoming)
+        if not ok:
+            raise HTTPException(status_code=400, detail=err)
+        persisted = await load_plugin_config(plugin_name)
+        persisted.update(incoming)
+        await save_plugin_config(plugin_name, persisted)
+        values = cfgmod.apply_effective(instance, persisted)
+        logger.info(
+            f"Config updated for plugin {plugin_name}: {list(incoming.keys())} | "
+            f"User: {current_user.get('username', 'unknown')}"
+        )
+        return {
+            "plugin": plugin_name,
+            "updated": list(incoming.keys()),
+            "values": cfgmod.mask_secrets(instance, values),
+        }
 
     return router

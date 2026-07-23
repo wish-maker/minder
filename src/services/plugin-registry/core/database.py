@@ -191,3 +191,37 @@ async def update_plugin_in_database(plugin_name: str, **updates):
         import traceback
 
         logger.error(f"Traceback: {traceback.format_exc()}")
+
+
+async def load_plugin_config(plugin_name: str) -> dict:
+    """Load a plugin's persisted (API-set) config overrides. {} if none/on error."""
+    pool = await get_postgres_connection()
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT config FROM plugin_configs WHERE plugin_name = $1", plugin_name
+            )
+        if not row or row["config"] is None:
+            return {}
+        cfg = row["config"]
+        return cfg if isinstance(cfg, dict) else (json.loads(cfg) or {})
+    except Exception as e:
+        logger.error(f"Failed to load config for {plugin_name}: {e}")
+        return {}
+
+
+async def save_plugin_config(plugin_name: str, config: dict) -> None:
+    """Upsert a plugin's persisted config overrides (JSONB)."""
+    pool = await get_postgres_connection()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO plugin_configs (plugin_name, config, updated_at)
+            VALUES ($1, $2::jsonb, NOW())
+            ON CONFLICT (plugin_name) DO UPDATE SET
+                config = EXCLUDED.config, updated_at = NOW()
+            """,
+            plugin_name,
+            json.dumps(config),
+        )
+    logger.info(f"Saved config for plugin {plugin_name}: {list(config.keys())}")

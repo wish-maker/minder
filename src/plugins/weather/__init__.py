@@ -43,6 +43,25 @@ class WeatherPlugin:
 
     ACTIONS = frozenset({"refresh", "get_weather"})
 
+    # Central config (#34): manageable over the API — GET/PUT /v1/plugins/weather/config.
+    # We can't know a user's city, so the collected locations are a first-class,
+    # runtime-editable setting (no restart) rather than baked-in.
+    _DEFAULT_LOCATIONS = "Istanbul:41.01:28.98,London:51.51:-0.13"
+    CONFIG_SCHEMA = [
+        {
+            "key": "WEATHER_LOCATIONS",
+            "type": "string",
+            "default": _DEFAULT_LOCATIONS,
+            "description": "Locations to collect, as 'name:lat:lon' triples, comma-separated.",
+        },
+        {
+            "key": "WEATHER_SINK_INFLUXDB",
+            "type": "bool",
+            "default": True,
+            "description": "Write each collection to InfluxDB as a time series.",
+        },
+    ]
+
     AI_TOOLS = [
         {
             "name": "get_weather",
@@ -66,17 +85,35 @@ class WeatherPlugin:
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
-        self.locations = self._parse_locations(
-            os.environ.get(
-                "WEATHER_LOCATIONS", "Istanbul:41.01:28.98,London:51.51:-0.13"
-            )
-        )
+        # env-only knobs (not user-facing config)
         self.api_base = os.environ.get("WEATHER_API_BASE", _DEFAULT_API)
         self.geocode_base = os.environ.get("WEATHER_GEOCODE_BASE", _DEFAULT_GEOCODE)
-        self.sink_influxdb = os.environ.get("WEATHER_SINK_INFLUXDB", "1") == "1"
         self.http_timeout = float(os.environ.get("WEATHER_HTTP_TIMEOUT", "10"))
         self.status = "registered"
         self._last: Dict = {}
+        # Bootstrap the schema-backed config from defaults+env via the single
+        # config→state path; the registry re-applies with persisted (API) overrides
+        # right after load (see core.plugin_config.apply_effective).
+        self.apply_config(
+            {
+                "WEATHER_LOCATIONS": os.environ.get(
+                    "WEATHER_LOCATIONS", self._DEFAULT_LOCATIONS
+                ),
+                "WEATHER_SINK_INFLUXDB": os.environ.get("WEATHER_SINK_INFLUXDB", "1"),
+            }
+        )
+
+    def apply_config(self, cfg: Dict) -> None:
+        """Map centrally-managed config → runtime state (no restart). See CONFIG_SCHEMA."""
+        if "WEATHER_LOCATIONS" in cfg:
+            self.locations = self._parse_locations(cfg["WEATHER_LOCATIONS"] or "")
+        if "WEATHER_SINK_INFLUXDB" in cfg:
+            v = cfg["WEATHER_SINK_INFLUXDB"]
+            self.sink_influxdb = (
+                v
+                if isinstance(v, bool)
+                else str(v).lower() in ("1", "true", "yes", "on")
+            )
 
     @staticmethod
     def _parse_locations(spec: str) -> List[Tuple[str, float, float]]:
