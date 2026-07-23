@@ -218,8 +218,12 @@ backups/**/*
 #   - marketplace migrations/schema.sql: was a BYTE-IDENTICAL dup of the tracked
 #     ../schema.sql → DELETED (#10, 2026-07-04). run_migrations() now reads only the
 #     tracked src/services/marketplace/schema.sql (single source of truth).
-# So no further !-exceptions are needed; the blanket *.sql rule correctly ignores dumps.
+# UPDATE (#17, 2026-07-23): each service now ships a declarative `schema.sql`
+# (discoverable single source of truth, applied at startup via shared.db.apply_schema)
+# — these are tracked infrastructure, not dumps, so un-ignore them. The blanket *.sql
+# rule still correctly ignores DB dumps/backups elsewhere.
 !docker/services/postgres/init.sql
+!src/services/**/schema.sql
 
 # Runtime telegraf.conf: seeded from the tracked template (telegraf.conf) by
 # setup.sh; the telegraf plugin writes its managed region here, so this copy must

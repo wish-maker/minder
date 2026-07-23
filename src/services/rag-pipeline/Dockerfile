@@ -24,6 +24,7 @@ COPY src/services/rag-pipeline/main.py .
 COPY src/services/rag-pipeline/config.py .
 COPY src/services/rag-pipeline/models.py .
 COPY src/services/rag-pipeline/state.py .
+COPY src/services/rag-pipeline/schema.sql .
 COPY src/services/rag-pipeline/routes /app/routes
 # pg_client.py now lives in repositories/ (persistence) and quality_evaluator.py in
 # domain/ — both copied with their packages below, no standalone COPY needed.
