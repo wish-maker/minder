@@ -8,12 +8,19 @@ the in-memory caches live in ``core.state``.
 """
 
 import json
+import sys
 
-import asyncpg
 from core.state import logger, plugins_db
 from models import PluginInfo
 
 from config import settings
+
+# Shared pool factory owns create_pool construction (#49). main.py inserts /app/src
+# before importing this module; guard anyway so import order can't break it.
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.db.pool import create_pg_pool  # noqa: E402
 
 # Global connection pool (lazily created by get_postgres_connection)
 postgres_pool = None
@@ -38,7 +45,9 @@ async def get_postgres_connection():
     """Get PostgreSQL connection pool (creating it on first use)."""
     global postgres_pool
     if postgres_pool is None:
-        postgres_pool = await asyncpg.create_pool(
+        # command_timeout=None preserves the previous behaviour (no per-command
+        # timeout). hasattr fallbacks preserved for the same defaults as before.
+        postgres_pool = await create_pg_pool(
             host=(
                 settings.POSTGRES_HOST
                 if hasattr(settings, "POSTGRES_HOST")
@@ -60,6 +69,7 @@ async def get_postgres_connection():
             ),
             min_size=2,
             max_size=10,
+            command_timeout=None,
         )
     return postgres_pool
 
