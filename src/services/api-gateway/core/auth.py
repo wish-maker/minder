@@ -25,6 +25,7 @@ if "/app/src" not in sys.path:
     sys.path.insert(0, "/app/src")
 
 from shared.auth import jwt_middleware  # noqa: E402
+from shared.db.pool import create_pg_pool  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,9 @@ async def get_pg_pool() -> asyncpg.Pool:
     """Get or create PostgreSQL connection pool"""
     global _pg_pool
     if _pg_pool is None:
-        _pg_pool = await asyncpg.create_pool(
+        # command_timeout=None preserves the previous behaviour (no per-command
+        # timeout); the shared helper defaults to 60 which callers opt into.
+        _pg_pool = await create_pg_pool(
             host=settings.POSTGRES_HOST,
             port=int(settings.POSTGRES_PORT),
             user=settings.POSTGRES_USER,
@@ -48,6 +51,7 @@ async def get_pg_pool() -> asyncpg.Pool:
             database=settings.POSTGRES_DB,
             min_size=1,
             max_size=10,
+            command_timeout=None,
         )
         logger.info("Created PostgreSQL connection pool for auth")
     return _pg_pool

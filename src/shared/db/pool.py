@@ -8,6 +8,7 @@ identical to the previous inline implementations.
 """
 
 import logging
+from typing import Optional
 
 import asyncpg
 
@@ -23,7 +24,7 @@ async def create_pg_pool(
     database: str,
     min_size: int = 2,
     max_size: int = 10,
-    command_timeout: int = 60,
+    command_timeout: Optional[int] = 60,
     auto_create: bool = False,
 ) -> asyncpg.Pool:
     """Create an asyncpg connection pool.

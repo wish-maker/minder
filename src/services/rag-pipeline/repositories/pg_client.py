@@ -43,11 +43,21 @@ async def get_pg_connection():
     if not ASYNCPG_AVAILABLE:
         return None
 
+    # Imported here (not at module top) so this module still imports when asyncpg is
+    # absent — shared.db.pool imports asyncpg unconditionally. /app/src is on the path
+    # (main.py inserts it); guard anyway.
+    import sys
+
+    if "/app/src" not in sys.path:
+        sys.path.insert(0, "/app/src")
+    from shared.db.pool import create_pg_pool
+
     # Use globals() to explicitly access and update the module-level variable
     if globals()["pg_pool"] is None:
         try:
-            # Create connection pool
-            pool = await asyncpg.create_pool(
+            # Create connection pool. command_timeout=None preserves the previous
+            # behaviour (no per-command timeout).
+            pool = await create_pg_pool(
                 host=PG_HOST,
                 port=int(PG_PORT),
                 user=PG_USER,
@@ -55,6 +65,7 @@ async def get_pg_connection():
                 database=PG_DATABASE,
                 min_size=2,
                 max_size=10,
+                command_timeout=None,
             )
             # Explicitly update the module-level variable using globals()
             globals()["pg_pool"] = pool
