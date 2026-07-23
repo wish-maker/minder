@@ -677,6 +677,14 @@ services:
     - influxdb@minder
     - --http-bind
     - 0.0.0.0:8086
+    # #109: InfluxDB 3-core has auth ON by default and no token was ever provisioned,
+    # so every write/health 401'd (broke telegraf/grafana/network+crypto influx sinks).
+    # This is an internal-only dev stack (minder-network; the security perimeter is
+    # Authelia/Traefik, #15), so disable authz here to unblock the observability
+    # pillar. PROD/Pi hardening = provision a real admin token
+    # (influxdb3 create token --admin --offline --output-file + --admin-token-file,
+    # token in .env alongside Authelia's secrets) — tracked in #109/#8/#15.
+    - --without-auth
     environment:
     - INFLUXDB3_LOG_FILTER=info
     - INFLUXDB3_LOG_FORMAT=json
