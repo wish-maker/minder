@@ -27,6 +27,44 @@ async def health_check():
     }
 
 
+def _sentence_transformers_available() -> bool:
+    """True if the cross-encoder's optional dependency is importable on this host."""
+    import importlib.util
+
+    return importlib.util.find_spec("sentence_transformers") is not None
+
+
+@router.get("/capabilities", tags=["System"])
+async def capabilities():
+    """Report which RAG methods/enhancers are active on THIS host.
+
+    The advanced modules self-degrade by hardware: the reranker uses a cross-encoder
+    when sentence-transformers (torch) is installed, otherwise a lightweight LLM
+    re-rank. This endpoint makes that choice transparent (see #45).
+    """
+    st_available = _sentence_transformers_available()
+    return {
+        "methods": {
+            "standard": True,
+            "conversational": state.conversation_repository is not None,
+            "hyde": state.hyde_expander is not None,
+            "self_rag": state.self_rag_pipeline is not None,
+            "auto": state.decision_engine is not None,
+            "corrective": state.corrective_pipeline is not None,
+        },
+        "enhancers": {
+            "rerank": {
+                "available": state.reranker is not None,
+                "backend": "cross_encoder" if st_available else "llm",
+            },
+            "compress": {"available": state.compressor is not None},
+        },
+        "optional_deps": {
+            "sentence_transformers": st_available,
+        },
+    }
+
+
 @router.post("/initialize", tags=["System"])
 async def initialize_ollama():
     """Initialize Ollama client"""

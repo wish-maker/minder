@@ -49,7 +49,11 @@ class QueryRequest(BaseModel):
     conversation_id: Optional[
         str
     ] = None  # For conversational RAG - enables conversation history
-    method: str = "standard"  # standard | hyde | self_rag | auto (decision engine)
+    # standard | hyde | self_rag | auto (decision engine) | corrective (CRAG)
+    method: str = "standard"
+    # Orthogonal, capability-adaptive post-retrieval enhancers (apply to any method):
+    rerank: bool = False  # re-rank sources (cross-encoder if available, else LLM)
+    compress: bool = False  # contextual compression of the retrieved context
 
 
 class QueryResponse(BaseModel):

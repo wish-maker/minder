@@ -288,6 +288,9 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         hyde_expander=state.hyde_expander,
         self_rag_pipeline=state.self_rag_pipeline,
         decision_engine=state.decision_engine,
+        corrective_pipeline=state.corrective_pipeline,
+        reranker=state.reranker,
+        compressor=state.compressor,
         conversation_repository=state.conversation_repository,
         gen_timer=state.llm_generation_duration,
     )
