@@ -8,6 +8,11 @@ Provides production-ready quality metrics:
 - Answer coherence and completeness
 """
 
+# PEP 563: make annotations lazy strings so method signatures referencing the
+# optional `SentenceTransformer` type don't raise NameError at class-definition time
+# when sentence-transformers isn't installed (see #101). Must be the first statement.
+from __future__ import annotations
+
 import logging
 from typing import Any, Dict, List, Optional
 
