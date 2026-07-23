@@ -5,7 +5,6 @@ Entity extraction and knowledge graph construction for RAG enhancement.
 This refactored version uses clean separation of concerns.
 """
 
-import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -36,11 +35,11 @@ from routes.api import (
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
 # Configure logging
-logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
-logger = logging.getLogger("minder.graph-rag")
+logger = setup_logging("graph-rag")
 
 # ============================================================================
 # Configuration

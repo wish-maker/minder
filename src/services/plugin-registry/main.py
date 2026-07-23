@@ -11,7 +11,6 @@ endpoints, and router inclusion.
 
 import asyncio
 import glob
-import logging
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -59,11 +58,11 @@ from routes.plugins import build_plugins_router  # noqa: E402
 from routes.proxy import ProxyRouter  # noqa: E402
 from routes.services import build_services_router  # noqa: E402
 
+from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
 # Configure logging
-logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
-logger = logging.getLogger("minder.plugin-registry")
+logger = setup_logging("plugin-registry", level=settings.LOG_LEVEL)
 
 # Proxy router for dynamic microservice routing (shares the services cache)
 proxy_router = ProxyRouter(services_db)

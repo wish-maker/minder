@@ -4,7 +4,6 @@ Manages base models, fine-tuning, and deployment
 Real Ollama integration for model lifecycle
 """
 
-import logging
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -24,10 +23,10 @@ from core.ollama_manager import (  # noqa: E402
     OllamaManager,
 )
 
+from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
-logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
-logger = logging.getLogger("minder.model-management")
+logger = setup_logging("model-management", level=settings.LOG_LEVEL)
 
 
 @asynccontextmanager

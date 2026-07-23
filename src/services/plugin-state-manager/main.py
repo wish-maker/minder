@@ -4,7 +4,6 @@ Plugin State Manager Service
 Central plugin management, state control, and AI tools execution
 """
 
-import logging
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -17,11 +16,11 @@ from config import settings
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 from shared.utils.cors import add_cors_middleware  # noqa: E402
 
-logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
-logger = logging.getLogger("minder.plugin-state-manager")
+logger = setup_logging("plugin-state-manager", level=settings.LOG_LEVEL)
 
 
 # ============================================================================
