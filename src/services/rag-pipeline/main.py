@@ -109,6 +109,21 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠️  Ollama not available, RAG features will be limited")
 
+    # Report active advanced-RAG methods on this host (see #45; GET /capabilities).
+    active = [
+        name
+        for name, obj in (
+            ("hyde", state.hyde_expander),
+            ("self_rag", state.self_rag_pipeline),
+            ("auto", state.decision_engine),
+            ("corrective", state.corrective_pipeline),
+            ("rerank", state.reranker),
+            ("compress", state.compressor),
+        )
+        if obj is not None
+    ]
+    logger.info(f"🧠 RAG methods active: standard, {', '.join(active)}")
+
     yield
 
 

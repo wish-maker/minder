@@ -10,13 +10,16 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, Optional
 
+from rag.methods import compress as compress_method
+from rag.methods import corrective as corrective_method
 from rag.methods import decision as decision_method
 from rag.methods import hyde as hyde_method
+from rag.methods import rerank as rerank_method
 from rag.methods import self_rag as self_rag_method
 
 logger = logging.getLogger(__name__)
 
-VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto"}
+VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto", "corrective"}
 
 # Conversational RAG is single-user today (see #45 / TODO in conversation repo).
 _DEFAULT_USER = "default"
@@ -34,6 +37,9 @@ class RagComponents:
     hyde_expander: Any = None
     self_rag_pipeline: Any = None
     decision_engine: Any = None
+    corrective_pipeline: Any = None
+    reranker: Any = None
+    compressor: Any = None
     conversation_repository: Any = None
     gen_timer: Any = None  # prometheus histogram (labels(...).time()) or None
 
@@ -126,6 +132,40 @@ async def run_query(
 
     context_result = await components.retrieve(pipeline, retrieval_query, request.top_k)
 
+    # Corrective RAG: grade the retrieval and re-retrieve with a refined query if weak.
+    if method == "corrective":
+        context_result, corr_details = await corrective_method.correct(
+            question,
+            context_result,
+            components.corrective_pipeline,
+            components.retrieve,
+            pipeline,
+            request.top_k,
+            components.ollama_manager,
+            llm_model,
+        )
+        if corr_details:
+            details["corrective"] = corr_details
+
+    # Optional adaptive re-ranking (cross-encoder if available, else LLM). Orthogonal
+    # to method — applies to whatever was retrieved above.
+    if getattr(request, "rerank", False):
+        context_result, rr_details = await rerank_method.apply(
+            question,
+            context_result,
+            components.reranker,
+            components.ollama_manager,
+            llm_model,
+        )
+        details.update(rr_details)
+
+    # Optional contextual compression of the retrieved context before generation.
+    if getattr(request, "compress", False):
+        context_result, cc_details = compress_method.apply(
+            question, context_result, components.compressor
+        )
+        details.update(cc_details)
+
     # Conversational RAG context.
     conv = await _load_conversation_context(
         components.conversation_repository, getattr(request, "conversation_id", None)
@@ -177,9 +217,12 @@ async def run_query(
             model_used = answer_result.get("model", llm_model)
             tokens_used = answer_result.get("tokens_used")
 
-    effective_method = (
-        "self_rag" if use_self_rag else "hyde" if use_hyde else "standard"
-    )
+    if method == "corrective":
+        effective_method = "corrective"
+    else:
+        effective_method = (
+            "self_rag" if use_self_rag else "hyde" if use_hyde else "standard"
+        )
 
     await _store_conversation_turn(
         components.conversation_repository,

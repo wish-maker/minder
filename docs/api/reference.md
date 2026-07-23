@@ -25,7 +25,7 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 | Plugin Registry | `minder-plugin-registry` | 8001 | Manifest install, health loop, service discovery, AI-tool aggregation |
 | Marketplace | `minder-marketplace` | 8002 | Discovery/search/featured, license tiers, dependency graph (Neo4j) |
 | Plugin State Manager | `minder-plugin-state-manager` | 8003 | Plugin state, tool discovery, tool execution, licensing |
-| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors; Standard/Conversational/HyDE/Self-RAG/auto RAG via the query `method` field (corrective/rerankers unwired — #45) |
+| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors; Standard/Conversational/HyDE/Self-RAG/auto RAG via the query `method` field (corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45) |
 | Model Management | `minder-model-management` | 8005 | Ollama list/pull/delete/test (some endpoints are placeholders) |
 | TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (gTTS), speech-to-text (`speech_recognition`) |
 | Graph-RAG | `minder-graph-rag` | 8008 | spaCy NER, Neo4j knowledge-graph construction and retrieval |

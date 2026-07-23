@@ -123,6 +123,32 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning(f"⚠️ Decision engine unavailable: {e}")
 
+# Corrective RAG (LLM-graded, no heavy deps), plus the capability-adaptive reranker
+# and contextual compressor. All instantiate cheaply (the cross-encoder loads its
+# torch model lazily and self-degrades to an LLM re-rank when sentence-transformers
+# is absent — e.g. on the Pi). See #45.
+corrective_pipeline = None
+reranker = None
+compressor = None
+try:
+    from domain.pipelines.corrective_rag import CorrectiveRAGPipeline
+
+    corrective_pipeline = CorrectiveRAGPipeline()
+except Exception as e:  # pragma: no cover
+    logger.warning(f"⚠️ Corrective RAG unavailable: {e}")
+try:
+    from domain.rerankers.cross_encoder import CrossEncoderReranker
+
+    reranker = CrossEncoderReranker()
+except Exception as e:  # pragma: no cover
+    logger.warning(f"⚠️ Reranker unavailable: {e}")
+try:
+    from domain.compressors.contextual import ContextualCompressor
+
+    compressor = ContextualCompressor()
+except Exception as e:  # pragma: no cover
+    logger.warning(f"⚠️ Compressor unavailable: {e}")
+
 # Query orchestration lives in the rag/ package (per-method strategy modules + runner).
 from rag.runner import RagComponents, run_query  # noqa: E402,F401
 

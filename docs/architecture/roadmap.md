@@ -28,7 +28,7 @@ authoritative service breakdown.
 - Plugin Registry (8001) — manifest-based plugin lifecycle (no code execution)
 - Marketplace (8002) — discovery/licensing, dependency graph in Neo4j
 - Plugin State Manager (8003) — plugin state + AI-tool execution
-- RAG Pipeline (8004) — ingestion, embeddings, retrieval; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective/rerankers unwired — #45)
+- RAG Pipeline (8004) — ingestion, embeddings, retrieval; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45)
 - Model Management (8005) — Ollama model lifecycle (constraints/metrics are placeholders)
 - TTS/STT (8006) — gTTS + speech_recognition, ~12 languages
 - Graph RAG (8008) — spaCy NER + Neo4j knowledge graph
