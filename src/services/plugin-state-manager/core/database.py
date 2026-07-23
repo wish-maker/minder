@@ -4,11 +4,18 @@ Database connection pool management
 """
 
 import logging
+import sys
 from typing import Optional
 
 import asyncpg
 
 from config import settings
+
+# Shared pool factory owns the create_pool + auto-create-DB boilerplate (#49).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.db.pool import create_pg_pool  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -37,52 +44,17 @@ async def get_db_pool() -> asyncpg.Pool:
     if _pool is None:
         config = get_db_config()
         logger.info(f"Creating database connection pool for {config['database']}")
-
-        try:
-            _pool = await asyncpg.create_pool(
-                host=config["host"],
-                port=config["port"],
-                user=config["user"],
-                password=config["password"],
-                database=config["database"],
-                min_size=2,
-                max_size=10,
-                command_timeout=60,
-            )
-            logger.info("Database connection pool created successfully")
-        except asyncpg.InvalidCatalogNameError:
-            # Database doesn't exist, create it first
-            logger.warning(f"Database {config['database']} does not exist, creating...")
-
-            # Connect to 'postgres' database to create new database
-            admin_conn = await asyncpg.connect(
-                host=config["host"],
-                port=config["port"],
-                user=config["user"],
-                password=config["password"],
-                database="postgres",
-            )
-
-            try:
-                await admin_conn.execute(f'CREATE DATABASE {config["database"]}')
-                logger.info(f"✅ Database {config['database']} created")
-            finally:
-                await admin_conn.close()
-
-            # Now create the pool to the new database
-            _pool = await asyncpg.create_pool(
-                host=config["host"],
-                port=config["port"],
-                user=config["user"],
-                password=config["password"],
-                database=config["database"],
-                min_size=2,
-                max_size=10,
-                command_timeout=60,
-            )
-            logger.info(
-                "Database connection pool created successfully after database creation"
-            )
+        _pool = await create_pg_pool(
+            host=config["host"],
+            port=config["port"],
+            user=config["user"],
+            password=config["password"],
+            database=config["database"],
+            min_size=2,
+            max_size=10,
+            command_timeout=60,
+            auto_create=True,
+        )
 
     return _pool
 
