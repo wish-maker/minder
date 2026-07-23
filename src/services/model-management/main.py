@@ -5,7 +5,6 @@ Real Ollama integration for model lifecycle
 """
 
 import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -13,6 +12,8 @@ from typing import Any, Dict
 
 from fastapi import FastAPI
 from prometheus_client import Gauge
+
+from config import settings
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
@@ -25,7 +26,7 @@ from core.ollama_manager import (  # noqa: E402
 
 from shared.metrics import setup_metrics  # noqa: E402
 
-logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
+logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.model-management")
 
 
@@ -100,7 +101,7 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "version": app.version,
-        "environment": os.getenv("ENVIRONMENT", "development"),
+        "environment": settings.ENVIRONMENT,
         "models_registered": len(models),
     }
 

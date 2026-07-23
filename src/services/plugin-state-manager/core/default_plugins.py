@@ -4,7 +4,6 @@ Default plugins bootstrap logic
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import Dict
 
@@ -12,12 +11,12 @@ import asyncpg
 import yaml
 from models.plugin_state import PluginState
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 
-DEFAULT_PLUGINS_CONFIG = os.getenv(
-    "DEFAULT_PLUGINS_CONFIG", "/app/src/core/config/default_plugins.yml"
-)
+DEFAULT_PLUGINS_CONFIG = settings.DEFAULT_PLUGINS_CONFIG
 
 
 async def load_default_plugins_config() -> Dict:

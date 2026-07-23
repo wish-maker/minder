@@ -13,32 +13,12 @@ from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
 from routes import licensing, state, tools
 
+from config import settings
+
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
-from shared.config import MinderBaseSettings  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 from shared.utils.cors import add_cors_middleware  # noqa: E402
-
-# ============================================================================
-# Settings
-# ============================================================================
-
-
-class Settings(MinderBaseSettings):
-    """Plugin State Manager settings.
-
-    Inherits common fields + the required-secret contract (DB_PASSWORD,
-    REDIS_PASSWORD, JWT_SECRET) from shared.config.MinderBaseSettings; only the
-    service-specific overrides live here.
-    """
-
-    APP_NAME: str = "Plugin State Manager"
-    VERSION: str = "2.1.0"
-    PORT: int = 8003
-    DB_NAME: str = "minder_marketplace"
-
-
-settings = Settings()
 
 logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
 logger = logging.getLogger("minder.plugin-state-manager")

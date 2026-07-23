@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 
 # Copy application
 COPY src/services/model-management/main.py .
+COPY src/services/model-management/config.py .
 COPY src/services/model-management/models.py .
 COPY src/services/model-management/core /app/core
 COPY src/services/model-management/routes /app/routes
