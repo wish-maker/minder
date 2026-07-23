@@ -4,19 +4,25 @@ Module-level singletons imported by the middleware, proxy routes, health check,
 and main's lifespan (which closes them on shutdown).
 """
 
+import sys
+
 import httpx
-import redis
 
 from config import settings
 
-# Redis client for rate limiting and caching
-redis_client = redis.Redis(
-    host=settings.REDIS_HOST,
-    port=settings.REDIS_PORT,
-    password=settings.REDIS_PASSWORD,
-    decode_responses=True,
-    db=0,
-)
+# Shared Redis factory is the single source of truth for client construction
+# (issue #49). api-gateway copies src/shared to /app/src/shared but does not put it
+# on sys.path by default, so add it here (same guard as middleware.py / core.auth).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.utils.redis_client import create_redis_client_from_settings  # noqa: E402
+
+# Redis client for rate limiting and caching. ping=False keeps the original lazy
+# behaviour (this is a module-level singleton created at import, before Redis is
+# guaranteed reachable) — redis.Redis connects on first command, unchanged from the
+# previous hand-rolled client. Same host/port/password/db=0/decode_responses.
+redis_client = create_redis_client_from_settings(settings, ping=False)
 
 # HTTP client for proxying requests (with connection pooling)
 http_client = httpx.AsyncClient(
