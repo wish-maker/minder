@@ -8,6 +8,7 @@ the in-memory caches live in ``core.state``.
 """
 
 import json
+import pathlib
 import sys
 
 from core.state import logger, plugins_db
@@ -21,6 +22,10 @@ if "/app/src" not in sys.path:
     sys.path.insert(0, "/app/src")
 
 from shared.db.pool import create_pg_pool  # noqa: E402
+from shared.db.schema import apply_schema  # noqa: E402
+
+# Declarative schema lives at the service root (schema.sql — #17).
+_SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "schema.sql"
 
 # Global connection pool (lazily created by get_postgres_connection)
 postgres_pool = None
@@ -75,31 +80,10 @@ async def get_postgres_connection():
 
 
 async def create_plugins_table_if_not_exists():
-    """Create plugins table if it doesn't exist"""
+    """Create the plugins table if absent (schema in schema.sql — #17)."""
     try:
         pool = await get_postgres_connection()
-
-        create_table_query = """
-            CREATE TABLE IF NOT EXISTS plugins (
-                name VARCHAR(255) PRIMARY KEY,
-                version VARCHAR(50) NOT NULL DEFAULT '1.0.0',
-                description TEXT,
-                author VARCHAR(255),
-                status VARCHAR(50) NOT NULL DEFAULT 'registered',
-                enabled BOOLEAN NOT NULL DEFAULT FALSE,
-                dependencies TEXT,
-                capabilities JSONB,
-                data_sources JSONB,
-                databases JSONB,
-                health_status VARCHAR(50) DEFAULT 'unknown',
-                last_health_check TIMESTAMP WITH TIME ZONE,
-                registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            )
-        """
-
-        async with pool.acquire() as conn:
-            await conn.execute(create_table_query)
-
+        await apply_schema(pool, _SCHEMA_PATH)
         logger.info("✅ Plugins table verified/created in PostgreSQL")
 
     except Exception as e:

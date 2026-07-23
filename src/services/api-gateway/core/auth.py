@@ -6,6 +6,7 @@ Real PostgreSQL + bcrypt implementation.
 """
 
 import logging
+import pathlib
 import sys
 from typing import Any, Dict, Optional
 
@@ -26,8 +27,11 @@ if "/app/src" not in sys.path:
 
 from shared.auth import jwt_middleware  # noqa: E402
 from shared.db.pool import create_pg_pool  # noqa: E402
+from shared.db.schema import apply_schema  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
+_SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "schema.sql"
 
 
 # ============================================================================
@@ -72,24 +76,10 @@ async def close_pg_pool():
 
 
 async def init_users_table():
-    """Create users table if not exists"""
+    """Create the users table if not present (schema in schema.sql — #17)."""
     pool = await get_pg_pool()
-    async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                username VARCHAR(50) UNIQUE NOT NULL,
-                email VARCHAR(100) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
-                role VARCHAR(20) DEFAULT 'user',
-                is_active BOOLEAN DEFAULT TRUE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """
-        )
-        logger.info("Users table ready")
+    await apply_schema(pool, _SCHEMA_PATH)
+    logger.info("Users table ready")
 
 
 async def create_user(

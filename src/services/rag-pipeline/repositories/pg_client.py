@@ -80,61 +80,23 @@ async def get_pg_connection():
 
 
 async def initialize_schema():
-    """Initialize database schema for RAG pipeline"""
+    """Initialize the RAG schema from schema.sql (#17). Returns False if PG absent."""
     try:
         conn = await get_pg_connection()
         if not conn:
             logger.warning("⚠️  PostgreSQL not available, skipping schema init")
             return False
 
-        schema_sql = """
-        -- Create tables if they don't exist (preserve existing data)
-        CREATE TABLE IF NOT EXISTS knowledge_bases (
-            id VARCHAR(255) PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            description TEXT,
-            embedding_model VARCHAR(100) NOT NULL DEFAULT 'nomic-embed-text',
-            llm_model VARCHAR(100) NOT NULL DEFAULT 'llama3',
-            chunk_size INTEGER NOT NULL DEFAULT 512,
-            chunk_overlap INTEGER NOT NULL DEFAULT 50,
-            chunking_strategy VARCHAR(50) DEFAULT 'basic',
-            parent_size INTEGER DEFAULT 2000,
-            document_count INTEGER NOT NULL DEFAULT 0,
-            vector_count INTEGER NOT NULL DEFAULT 0,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        );
+        # Imported here (not at module top) so this module still imports when asyncpg
+        # is absent — shared.db imports asyncpg. main.py puts /app/src on path; guard too.
+        import pathlib
+        import sys
 
-        CREATE TABLE IF NOT EXISTS rag_pipelines (
-            id VARCHAR(255) PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            knowledge_base_ids TEXT NOT NULL,
-            retrieval_config TEXT,
-            generation_config TEXT,
-            created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMP DEFAULT NOW()
-        );
+        if "/app/src" not in sys.path:
+            sys.path.insert(0, "/app/src")
+        from shared.db.schema import apply_schema
 
-        CREATE TABLE IF NOT EXISTS conversation_turns (
-            id SERIAL PRIMARY KEY,
-            user_id VARCHAR(255) NOT NULL,
-            conversation_id VARCHAR(255) NOT NULL,
-            question TEXT NOT NULL,
-            answer TEXT NOT NULL,
-            timestamp TIMESTAMP NOT NULL DEFAULT NOW(),
-            metadata JSONB DEFAULT '{}'::jsonb
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_conversation_turns_lookup
-        ON conversation_turns(user_id, conversation_id, timestamp DESC);
-        """
-
-        async with conn.acquire() as connection:
-            # Split and execute statements
-            statements = [s.strip() for s in schema_sql.split(";") if s.strip()]
-            for statement in statements:
-                await connection.execute(statement)
-
+        await apply_schema(conn, pathlib.Path(__file__).parent.parent / "schema.sql")
         logger.info("✅ Database schema initialized")
         return True
 

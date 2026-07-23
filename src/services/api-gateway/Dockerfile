@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 # (infrastructure layer) and ship with the core/ package below.
 COPY src/services/api-gateway/main.py .
 COPY src/services/api-gateway/config.py .
+COPY src/services/api-gateway/schema.sql .
 COPY src/services/api-gateway/core /app/core
 COPY src/services/api-gateway/routes /app/routes
 
