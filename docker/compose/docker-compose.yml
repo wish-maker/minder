@@ -20,7 +20,7 @@ services:
   # ==========================================================================
 
   traefik:
-    image: traefik:v3.7.7
+    image: traefik:v3.7.8
     container_name: minder-traefik
     restart: on-failure
     command:
@@ -253,7 +253,7 @@ services:
     networks:
     - minder-network
   ollama:
-    image: ollama/ollama:0.31.2
+    image: ollama/ollama:0.32.1
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
@@ -311,7 +311,7 @@ services:
     networks:
     - minder-network
   qdrant:
-    image: qdrant/qdrant:v1.18.2
+    image: qdrant/qdrant:v1.18.3
     container_name: minder-qdrant
     restart: on-failure
     volumes:
@@ -327,7 +327,7 @@ services:
     networks:
     - minder-network
   neo4j:
-    image: neo4j:2026.05.0-community
+    image: neo4j:2026.06.0-community
     container_name: minder-neo4j
     restart: on-failure
     environment:
@@ -667,7 +667,7 @@ services:
   # ==========================================================================
 
   influxdb:
-    image: influxdb:3.10.1-core
+    image: influxdb:3.10.3-core
     container_name: minder-influxdb
     restart: on-failure
     command:
@@ -1038,7 +1038,7 @@ services:
     - minder-network
     # PILLAR 4: Always active - removed monitoring profile
   redis-exporter:
-    image: oliver006/redis_exporter:v1.86.0
+    image: oliver006/redis_exporter:v1.87.0
     container_name: minder-redis-exporter
     restart: on-failure
     environment:
@@ -1079,7 +1079,7 @@ services:
 
   # Node Exporter (for host metrics - optional for production)
   node-exporter:
-    image: prom/node-exporter:v1.12.0
+    image: prom/node-exporter:v1.12.1
     container_name: minder-node-exporter
     restart: on-failure
     command:
