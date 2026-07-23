@@ -5,10 +5,11 @@
                          volumes too), behind a DESTRUCTIVE banner + (interactive
                          only) a typed-DELETE confirmation.
 
-The compose calls go through docker.compose_monitoring() → dry-run-gated, so both
-branches are non-destructive under DRY_RUN — which is how they are verified
-(scripts/gate/uninstall_verify.sh, incl. --purge under CI where the DELETE prompt
-is skipped). The interactive DELETE prompt is exercised by hand.
+The compose calls go through docker.compose_all() → all profiles active, so `down`
+also removes profile-gated containers (the internal-ollama container; #58). It is
+dry-run-gated, so both branches are non-destructive under DRY_RUN — which is how they
+are verified (scripts/gate/uninstall_verify.sh, incl. --purge under CI where the
+DELETE prompt is skipped). The interactive DELETE prompt is exercised by hand.
 """
 
 import sys
