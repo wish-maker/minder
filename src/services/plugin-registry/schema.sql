@@ -16,3 +16,11 @@ CREATE TABLE IF NOT EXISTS plugins (
     last_health_check TIMESTAMP WITH TIME ZONE,
     registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Central plugin configuration set over the API (persisted overrides of a plugin's
+-- CONFIG_SCHEMA defaults/env; applied to the running instance without a restart).
+CREATE TABLE IF NOT EXISTS plugin_configs (
+    plugin_name VARCHAR(255) PRIMARY KEY,
+    config JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);

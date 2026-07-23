@@ -64,7 +64,25 @@ class Plugin(Protocol):
     async def shutdown(self) -> None:
         ...
 
+    def apply_config(self, config: Dict) -> None:  # optional — see CONFIG_SCHEMA below
+        ...
 
+
+# Optional: a plugin MAY be configurable over the API (central plugin management, so
+# config isn't hard-wired to container env + a restart) by declaring a class attribute
+# ``CONFIG_SCHEMA`` — a list of field descriptors, each a plain dict:
+#   ``{"key": str, "type": "string|int|float|bool", "default": Any,
+#      "description": str, "secret": bool (optional)}``
+# The registry resolves each field as default → env[key] → persisted (API-set) value
+# (persisted wins), then calls ``apply_config(effective: dict)`` on the instance to
+# map config → runtime state (no restart). __init__ SHOULD build its initial config
+# the same way (defaults+env) and call apply_config, so there is one config→state path.
+# Exposed via:
+#   GET  /v1/plugins/<name>/config   → {schema, values}  (secret values masked)
+#   PUT  /v1/plugins/<name>/config   → validate against schema, persist (postgres
+#                                       plugin_configs), apply live (JWT-gated).
+# Persisted config survives restarts; a UI can render CONFIG_SCHEMA as a form.
+#
 # Optional: a plugin MAY expose write/execute actions over HTTP by declaring a
 # class attribute ``ACTIONS`` — a frozenset of method names invokable via
 # ``POST /v1/plugins/<name>/actions/<method>`` (JWT-gated; the JSON body is passed
