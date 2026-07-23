@@ -110,12 +110,15 @@ setup_metrics(app)
 ### Utilities — `utils/`
 
 **Redis client** (`utils/redis_client.py`) — factories that build a configured
-`redis.Redis` and **ping on creation** (fail-fast if Redis is unreachable):
+`redis.Redis`. By default they **ping on creation** (fail-fast if Redis is
+unreachable); pass `ping=False` for module-level singletons created at import time,
+where the client must stay lazy (connects on first command):
 
 ```python
 from shared.utils.redis_client import create_redis_client_from_settings, create_redis_client
 
-redis_client = create_redis_client_from_settings(settings)   # reads REDIS_HOST/PORT/PASSWORD
+redis_client = create_redis_client_from_settings(settings)              # eager ping
+redis_client = create_redis_client_from_settings(settings, ping=False)  # lazy (import-time singleton)
 # or explicit:
 redis_client = create_redis_client(host="redis", port=6379, password="secret")
 ```

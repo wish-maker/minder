@@ -43,7 +43,7 @@ plugin_manifests: Dict[str, Dict] = {}  # plugin_name -> manifest
 # Infrastructure clients
 # ============================================================================
 
-# Redis client for service discovery and caching. The shared factory pings on
-# creation, so this fails fast at startup if Redis is unreachable (compose guarantees
-# it via depends_on: redis service_healthy). Same host/port/password/db=0/decode.
-redis_client = create_redis_client_from_settings(settings)
+# Redis client for service discovery and caching. ping=False keeps the original lazy
+# behaviour (module-level singleton created at import) — redis.Redis connects on first
+# command, unchanged from the previous hand-rolled client. Same params/db=0/decode.
+redis_client = create_redis_client_from_settings(settings, ping=False)

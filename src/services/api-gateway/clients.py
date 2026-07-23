@@ -18,10 +18,11 @@ if "/app/src" not in sys.path:
 
 from shared.utils.redis_client import create_redis_client_from_settings  # noqa: E402
 
-# Redis client for rate limiting and caching. The shared factory pings on creation,
-# so this fails fast at startup if Redis is unreachable (compose guarantees it via
-# depends_on: redis service_healthy). Same host/port/password/db=0/decode_responses.
-redis_client = create_redis_client_from_settings(settings)
+# Redis client for rate limiting and caching. ping=False keeps the original lazy
+# behaviour (this is a module-level singleton created at import, before Redis is
+# guaranteed reachable) — redis.Redis connects on first command, unchanged from the
+# previous hand-rolled client. Same host/port/password/db=0/decode_responses.
+redis_client = create_redis_client_from_settings(settings, ping=False)
 
 # HTTP client for proxying requests (with connection pooling)
 http_client = httpx.AsyncClient(
