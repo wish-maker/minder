@@ -1,28 +1,33 @@
 """Cryptocurrency price plugin (first-party module plugin).
 
-Polls a public, **keyless** price API (CoinGecko by default) for the configured coins
-and fans the results into InfluxDB as a time series (measurement ``crypto_price``,
-tags ``coin``/``currency``, field ``price``) so Grafana can chart them. The registry
-drives ``collect_data`` on its hourly loop; ``get_price`` is exposed as an on-demand
-action + an Ollama function-calling tool ("what's the price of bitcoin?").
+Backfills daily close prices for the configured symbols from a public, **keyless**
+source (Yahoo Finance) — from the earliest available record (or a configured start
+date) up to today — into InfluxDB as a time series (measurement ``crypto_price``, tag
+``symbol``, field ``close``, one point per day at that day's timestamp). It is
+idempotent + incremental: each run resumes from the latest timestamp already in
+InfluxDB (queried via the v3 SQL API), so the first run does the full history and
+subsequent (registry-hourly) runs only fetch the new day(s). Financial data, so no
+gaps and no double-counting.
 
-Uses only deps already in the plugin-registry image (``httpx``) — InfluxDB is written
-over its HTTP ``/api/v2/write`` endpoint (line protocol), the same "reach backends over
-HTTP, no extra driver" approach as the network plugin. No image rebuild needed: it's
-bind-mounted, so edit + ``docker restart minder-plugin-registry``.
+``get_price`` is an on-demand action + Ollama tool returning the latest close.
 
-Config (env on plugin-registry; all optional — sensible keyless defaults):
-  CRYPTO_COINS         comma-sep CoinGecko coin ids (default "bitcoin,ethereum").
-  CRYPTO_VS_CURRENCY   quote currency (default "usd").
-  CRYPTO_API_BASE      price API base (default CoinGecko simple-price).
-  CRYPTO_SINK_INFLUXDB "1"/"0" — write each collection to InfluxDB (default "1").
-  CRYPTO_HTTP_TIMEOUT  per-request timeout seconds (default 10).
+Uses only deps already in the plugin-registry image (``httpx``) — Yahoo over its
+public chart API, InfluxDB over its HTTP write (line protocol) + v3 query APIs. No new
+dependency, bind-mounted (edit + ``docker restart minder-plugin-registry``).
+
+Config (env on plugin-registry; all optional — keyless defaults):
+  CRYPTO_SYMBOLS     Yahoo symbols, comma-sep (default "BTC-USD,ETH-USD"; use e.g.
+                     "BTC-EUR" for another quote currency).
+  CRYPTO_START_DATE  ISO date (YYYY-MM-DD) to backfill from when InfluxDB is empty;
+                     default earliest Yahoo provides.
+  CRYPTO_SINK_INFLUXDB "1"/"0" — write to InfluxDB (default "1").
+  CRYPTO_HTTP_TIMEOUT  per-request timeout seconds (default 20).
 """
 
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 
@@ -32,33 +37,37 @@ __all__ = ["CryptoPlugin"]
 
 logger = logging.getLogger("minder.plugin.crypto")
 
-_DEFAULT_API = "https://api.coingecko.com/api/v3/simple/price"
+_YAHOO_CHART = "https://query1.finance.yahoo.com/v8/finance/chart/"
+# earliest we'll ever ask Yahoo for (it returns from the symbol's real start anyway).
+_EARLIEST = date(2010, 1, 1)
+# Friendly coin-id → Yahoo symbol aliases for the get_price tool.
+_ALIASES = {
+    "bitcoin": "BTC-USD",
+    "ethereum": "ETH-USD",
+    "btc": "BTC-USD",
+    "eth": "ETH-USD",
+}
+_MEASUREMENT = "crypto_price"
 
 
 class CryptoPlugin:
-    """Poll a keyless price API for configured coins; sink the series into InfluxDB."""
+    """Backfill + daily-incremental crypto close prices (Yahoo, keyless) into InfluxDB."""
 
     ACTIONS = frozenset({"refresh", "get_price"})
 
-    # Ollama function-calling tools. Each maps to an ACTION (POST
-    # /v1/plugins/crypto/actions/<action>); aggregated by GET /v1/plugins/ai/tools.
     AI_TOOLS = [
         {
             "name": "get_crypto_price",
             "description": (
-                "Get the current price of a cryptocurrency (e.g. bitcoin, ethereum) "
-                "from a public price API."
+                "Get the latest daily close price of a cryptocurrency (e.g. bitcoin, "
+                "ethereum, or a Yahoo symbol like BTC-USD)."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "coin": {
                         "type": "string",
-                        "description": "CoinGecko coin id, e.g. 'bitcoin' or 'ethereum'.",
-                    },
-                    "currency": {
-                        "type": "string",
-                        "description": "Quote currency (default 'usd').",
+                        "description": "Coin name/symbol, e.g. 'bitcoin', 'ETH-USD'.",
                     },
                 },
                 "required": ["coin"],
@@ -69,15 +78,14 @@ class CryptoPlugin:
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
-        self.coins = [
-            c.strip()
-            for c in os.environ.get("CRYPTO_COINS", "bitcoin,ethereum").split(",")
-            if c.strip()
+        self.symbols = [
+            s.strip().upper()
+            for s in os.environ.get("CRYPTO_SYMBOLS", "BTC-USD,ETH-USD").split(",")
+            if s.strip()
         ]
-        self.vs_currency = os.environ.get("CRYPTO_VS_CURRENCY", "usd").strip() or "usd"
-        self.api_base = os.environ.get("CRYPTO_API_BASE", _DEFAULT_API)
+        self.start_date = os.environ.get("CRYPTO_START_DATE", "").strip()
         self.sink_influxdb = os.environ.get("CRYPTO_SINK_INFLUXDB", "1") == "1"
-        self.http_timeout = float(os.environ.get("CRYPTO_HTTP_TIMEOUT", "10"))
+        self.http_timeout = float(os.environ.get("CRYPTO_HTTP_TIMEOUT", "20"))
         self.status = "registered"
         self._last: Dict = {}
 
@@ -85,11 +93,11 @@ class CryptoPlugin:
     async def register(self) -> PluginMetadata:
         return PluginMetadata(
             name="crypto",
-            version="1.0.0",
-            description="Polls a keyless crypto price API and stores a time series in InfluxDB.",
+            version="2.0.0",
+            description="Backfills daily crypto close prices (Yahoo, keyless) into InfluxDB.",
             author="Minder <core@minder.local>",
-            capabilities=["collect", "analyze", "prices"],
-            data_sources=["coingecko"],
+            capabilities=["collect", "analyze", "prices", "backfill"],
+            data_sources=["yahoo-finance"],
             databases=["influxdb"],
         )
 
@@ -100,103 +108,183 @@ class CryptoPlugin:
         # MUST return {"healthy": <bool>} — the monitoring loop reads health["healthy"].
         return {
             "healthy": True,
-            "coins": self.coins,
-            "vs_currency": self.vs_currency,
+            "symbols": self.symbols,
             "influxdb_sink": self.sink_influxdb,
         }
 
     async def shutdown(self) -> None:
         self.status = "shutdown"
 
-    # ── price fetching ───────────────────────────────────────────────────────
-    async def _fetch_prices(self, coins: List[str]) -> Dict[str, float]:
-        """Return {coin: price} for the given coins in the configured currency.
+    # ── Yahoo Finance history ──────────────────────────────────────────────────
+    async def _fetch_history(
+        self, symbol: str, start: date, end: date
+    ) -> List[Tuple[int, float]]:
+        """Return [(unix_seconds, close)] daily points for symbol in [start, end].
 
-        Never raises — returns {} on any API/network error so a bad poll can't crash
-        the registry's collection loop.
+        Never raises — returns [] on any API/network error.
         """
-        if not coins:
-            return {}
-        params = {"ids": ",".join(coins), "vs_currencies": self.vs_currency}
-        try:
-            async with httpx.AsyncClient(timeout=self.http_timeout) as client:
-                resp = await client.get(self.api_base, params=params)
-                resp.raise_for_status()
-                data = resp.json()
-        except Exception as e:
-            logger.warning(f"⚠️ crypto price fetch failed: {type(e).__name__}: {e}")
-            return {}
-        prices: Dict[str, float] = {}
-        for coin in coins:
-            val = (data.get(coin) or {}).get(self.vs_currency)
-            if isinstance(val, (int, float)):
-                prices[coin] = float(val)
-        return prices
-
-    async def _write_influxdb(self, prices: Dict[str, float]) -> bool:
-        """Write prices to InfluxDB via the HTTP /api/v2/write API (line protocol)."""
-        cfg = self.config.get("influxdb") or {}
-        if not (self.sink_influxdb and cfg.get("enabled") and prices):
-            return False
-        host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
-        org, bucket = cfg.get("org", "minder"), cfg.get("bucket", "minder-metrics")
-        token = cfg.get("token", "")
-        lines = "\n".join(
-            f"crypto_price,coin={coin},currency={self.vs_currency} price={price}"
-            for coin, price in prices.items()
+        p1 = int(
+            datetime(
+                start.year, start.month, start.day, tzinfo=timezone.utc
+            ).timestamp()
         )
-        url = f"http://{host}:{port}/api/v2/write"
+        p2 = (
+            int(datetime(end.year, end.month, end.day, tzinfo=timezone.utc).timestamp())
+            + 86400
+        )
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.http_timeout, headers={"User-Agent": "Mozilla/5.0"}
+            ) as client:
+                resp = await client.get(
+                    _YAHOO_CHART + symbol,
+                    params={"period1": p1, "period2": p2, "interval": "1d"},
+                )
+                resp.raise_for_status()
+                res = ((resp.json() or {}).get("chart") or {}).get("result") or []
+        except Exception as e:
+            logger.warning(
+                f"⚠️ Yahoo fetch failed for {symbol}: {type(e).__name__}: {e}"
+            )
+            return []
+        if not res:
+            return []
+        ts = res[0].get("timestamp") or []
+        quote = (res[0].get("indicators") or {}).get("quote") or [{}]
+        closes = quote[0].get("close") or []
+        out: List[Tuple[int, float]] = []
+        for t, c in zip(ts, closes):
+            if isinstance(c, (int, float)):
+                # normalise to that day's 00:00 UTC so re-runs overwrite, not duplicate.
+                day = datetime.fromtimestamp(t, tz=timezone.utc).date()
+                out.append(
+                    (
+                        int(
+                            datetime(
+                                day.year, day.month, day.day, tzinfo=timezone.utc
+                            ).timestamp()
+                        ),
+                        float(c),
+                    )
+                )
+        return out
+
+    # ── InfluxDB (write history + query resume point) ──────────────────────────
+    def _influx_cfg(self) -> Optional[Dict]:
+        cfg = self.config.get("influxdb") or {}
+        return cfg if (self.sink_influxdb and cfg.get("enabled")) else None
+
+    async def _latest_influx_date(self, symbol: str) -> Optional[date]:
+        """Latest day already stored for symbol (v3 SQL query), or None if empty."""
+        cfg = self._influx_cfg()
+        if not cfg:
+            return None
+        host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
+        db = cfg.get("bucket", "minder-metrics")
+        q = f"SELECT max(time) AS t FROM {_MEASUREMENT} WHERE symbol = '{symbol}'"
         try:
             async with httpx.AsyncClient(timeout=self.http_timeout) as client:
                 resp = await client.post(
-                    url,
+                    f"http://{host}:{port}/api/v3/query_sql",
+                    json={"db": db, "q": q, "format": "json"},
+                    headers={"Authorization": f"Token {cfg.get('token', '')}"},
+                )
+                resp.raise_for_status()
+                rows = resp.json() or []
+        except Exception as e:
+            logger.warning(
+                f"⚠️ InfluxDB resume query failed for {symbol}: {type(e).__name__}"
+            )
+            return None
+        t = rows[0].get("t") if rows else None
+        if not t:
+            return None
+        try:
+            return datetime.fromisoformat(t.replace("Z", "")).date()
+        except ValueError:
+            return None
+
+    async def _write_history(self, symbol: str, points: List[Tuple[int, float]]) -> int:
+        """Write [(ts, close)] to InfluxDB; return count written (0 if sink off/empty)."""
+        cfg = self._influx_cfg()
+        if not (cfg and points):
+            return 0
+        host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
+        org, bucket = cfg.get("org", "minder"), cfg.get("bucket", "minder-metrics")
+        lines = "\n".join(
+            f"{_MEASUREMENT},symbol={symbol} close={close} {ts}" for ts, close in points
+        )
+        try:
+            async with httpx.AsyncClient(timeout=self.http_timeout) as client:
+                resp = await client.post(
+                    f"http://{host}:{port}/api/v2/write",
                     params={"org": org, "bucket": bucket, "precision": "s"},
-                    headers={"Authorization": f"Token {token}"},
+                    headers={"Authorization": f"Token {cfg.get('token', '')}"},
                     content=lines,
                 )
                 resp.raise_for_status()
-            return True
+            return len(points)
         except Exception as e:
-            logger.warning(f"⚠️ InfluxDB write failed: {type(e).__name__}")
-            return False
+            logger.warning(f"⚠️ InfluxDB write failed for {symbol}: {type(e).__name__}")
+            return 0
 
     # ── registry-driven reads ────────────────────────────────────────────────
     async def collect_data(self) -> Dict:
-        """Fetch all configured coins and (optionally) write the series to InfluxDB."""
-        prices = await self._fetch_prices(self.coins)
-        wrote = await self._write_influxdb(prices)
+        """Backfill/append each symbol's daily closes from the resume point to today."""
+        today = datetime.now(timezone.utc).date()
+        result: Dict[str, Dict] = {}
+        for symbol in self.symbols:
+            latest = await self._latest_influx_date(symbol)
+            if latest is not None:
+                start = latest + timedelta(days=1)  # incremental: only new days
+            elif self.start_date:
+                try:
+                    start = date.fromisoformat(self.start_date)
+                except ValueError:
+                    start = _EARLIEST
+            else:
+                start = _EARLIEST  # full history (Yahoo trims to the real start)
+            if start > today:
+                result[symbol] = {"written": 0, "up_to_date": True}
+                continue
+            points = await self._fetch_history(symbol, start, today)
+            wrote = await self._write_history(symbol, points)
+            result[symbol] = {
+                "written": wrote,
+                "from": start.isoformat(),
+                "latest_close": points[-1][1] if points else None,
+            }
         self._last = {
-            "prices": prices,
-            "currency": self.vs_currency,
-            "influxdb_written": wrote,
+            "symbols": result,
             "collected_at": datetime.now(timezone.utc).isoformat(),
         }
-        logger.info(f"💰 crypto collect: {len(prices)} price(s), influx_written={wrote}")
+        total = sum(r.get("written", 0) for r in result.values())
+        logger.info(
+            f"💰 crypto collect: {total} point(s) across {len(result)} symbol(s)"
+        )
         return self._last
 
     async def analyze(self) -> Dict:
-        """Return the most recent collection (prices + metadata)."""
+        """Return the most recent collection summary."""
         if not self._last:
-            return {"message": "no data collected yet", "coins": self.coins}
+            return {"message": "no data collected yet", "symbols": self.symbols}
         return self._last
 
     # ── actions (POST /v1/plugins/crypto/actions/<method>, JWT-gated) ──────────
     async def refresh(self) -> Dict:
-        """Force an immediate re-collection (same as the hourly loop)."""
+        """Force an immediate backfill/append (same as the hourly loop)."""
         return await self.collect_data()
 
-    async def get_price(self, coin: str, currency: Optional[str] = None) -> Dict:
-        """Return the current price of a single coin (backs the get_crypto_price tool)."""
+    async def get_price(self, coin: str) -> Dict:
+        """Return the latest daily close for a coin/symbol (backs get_crypto_price)."""
         if not coin:
             return {"error": "coin is required"}
-        prev = self.vs_currency
-        if currency:
-            self.vs_currency = currency.strip().lower()
-        try:
-            prices = await self._fetch_prices([coin.strip().lower()])
-        finally:
-            self.vs_currency = prev
-        price = prices.get(coin.strip().lower())
-        if price is None:
-            return {"coin": coin, "error": "price unavailable"}
-        return {"coin": coin, "currency": currency or self.vs_currency, "price": price}
+        key = coin.strip().lower()
+        symbol = _ALIASES.get(key, coin.strip().upper())
+        if "-" not in symbol:
+            symbol = f"{symbol}-USD"
+        today = datetime.now(timezone.utc).date()
+        points = await self._fetch_history(symbol, today - timedelta(days=7), today)
+        if not points:
+            return {"symbol": symbol, "error": "price unavailable"}
+        return {"symbol": symbol, "close": points[-1][1]}
