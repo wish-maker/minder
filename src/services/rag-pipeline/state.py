@@ -42,9 +42,11 @@ llm_generation_duration = Histogram(
 # PostgreSQL Persistence (Production Storage)
 # ============================================================================
 
-# Import PostgreSQL client functions
+# Import PostgreSQL client functions. pg_client lives in the repositories/ package
+# (persistence layer); the name `pg_client` is bound here so main.py can reach
+# state.pg_client.pg_pool. Falls back to in-memory storage if the module is absent.
 try:
-    from . import pg_client
+    from repositories import pg_client
 
     save_kb_to_postgres = pg_client.save_kb_to_postgres
     load_kb_from_postgres = pg_client.load_kb_from_postgres
@@ -56,21 +58,8 @@ try:
     PG_AVAILABLE = True
     logger.info("✅ PostgreSQL persistence available")
 except ImportError:
-    try:
-        import pg_client
-
-        save_kb_to_postgres = pg_client.save_kb_to_postgres
-        load_kb_from_postgres = pg_client.load_kb_from_postgres
-        delete_kb_from_postgres = pg_client.delete_kb_from_postgres
-        save_pipeline_to_postgres = pg_client.save_pipeline_to_postgres
-        load_pipelines_from_postgres = pg_client.load_pipelines_from_postgres
-        delete_pipeline_from_postgres = pg_client.delete_pipeline_from_postgres
-        initialize_schema = pg_client.initialize_schema
-        PG_AVAILABLE = True
-        logger.info("✅ PostgreSQL persistence available")
-    except ImportError:
-        PG_AVAILABLE = False
-        logger.warning("⚠️  pg_client not available, using in-memory storage")
+    PG_AVAILABLE = False
+    logger.warning("⚠️  pg_client not available, using in-memory storage")
 
 # Conversation Repository for conversational RAG
 try:

@@ -83,7 +83,7 @@ class SelfRAGPipeline:
         """
         if not self._evaluator_loaded:
             try:
-                from quality_evaluator import get_advanced_evaluator
+                from domain.quality_evaluator import get_advanced_evaluator
 
                 self.evaluator = get_advanced_evaluator()
                 self._evaluator_loaded = True
