@@ -7,10 +7,11 @@ and injects it into routes/models_api.py.
 """
 
 import logging
-import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
+
+from config import settings
 
 # Ollama client for real model management. Guarded so the module imports even when
 # the package is absent (e.g. lint/tests); OLLAMA_AVAILABLE gates real use.
@@ -24,7 +25,7 @@ except ImportError:
 
 logger = logging.getLogger("minder.model-management")
 
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_HOST = settings.OLLAMA_HOST
 
 
 class OllamaManager:

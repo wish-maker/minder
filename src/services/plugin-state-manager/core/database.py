@@ -4,10 +4,11 @@ Database connection pool management
 """
 
 import logging
-import os
 from typing import Optional
 
 import asyncpg
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,13 +17,13 @@ _pool: Optional[asyncpg.Pool] = None
 
 
 def get_db_config() -> dict:
-    """Get database configuration from environment"""
+    """Get database configuration from the centralized settings object."""
     return {
-        "host": os.getenv("DB_HOST", "postgres"),
-        "port": int(os.getenv("DB_PORT", "5432")),
-        "user": os.getenv("DB_USER", "minder"),
-        "password": os.getenv("DB_PASSWORD", "minder_pass"),
-        "database": os.getenv("DB_NAME", "minder_marketplace"),
+        "host": settings.DB_HOST,
+        "port": settings.DB_PORT,
+        "user": settings.DB_USER,
+        "password": settings.DB_PASSWORD,
+        "database": settings.DB_NAME,
     }
 
 
