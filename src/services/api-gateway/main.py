@@ -4,7 +4,6 @@ Central entry point for all API requests
 Handles authentication, rate limiting, request routing, and logging
 """
 
-import logging
 from contextlib import asynccontextmanager
 
 from core.auth import close_pg_pool, init_users_table
@@ -18,9 +17,10 @@ from routes.proxy import router as proxy_router
 
 from config import settings
 
-# Configure logging
-logging.basicConfig(level=getattr(logging, settings.LOG_LEVEL))
-logger = logging.getLogger("minder.api-gateway")
+# Shared logger setup (core imports above already put /app/src on sys.path).
+from shared.log import setup_logging  # noqa: E402
+
+logger = setup_logging("api-gateway", level=settings.LOG_LEVEL)
 
 
 @asynccontextmanager

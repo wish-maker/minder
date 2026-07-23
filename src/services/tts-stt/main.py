@@ -3,7 +3,6 @@ Minder TTS/STT Service - Minimal Working Version
 Simple text-to-speech and speech-to-text functionality
 """
 
-import logging
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -17,10 +16,10 @@ from routes.tts import router as tts_router
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
-logging.basicConfig(level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")))
-logger = logging.getLogger("minder.tts-stt")
+logger = setup_logging("tts-stt")
 
 
 # ============================================================================
