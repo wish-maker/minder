@@ -1,10 +1,9 @@
-"""Speech-to-Text routes (SpeechRecognition)."""
+"""Speech-to-Text routes (SpeechRecognition). Engine logic lives in core/stt_engine."""
 
 import asyncio
 import logging
-import os
-import tempfile
 
+from core.stt_engine import STT_AVAILABLE, transcribe
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from models import STTResponse
 from prometheus_client import Counter
@@ -12,15 +11,6 @@ from prometheus_client import Counter
 from config import DEFAULT_STT_LANG, SUPPORTED_LANGUAGES
 
 logger = logging.getLogger("minder.tts-stt")
-
-# STT library
-try:
-    import speech_recognition as sr
-
-    STT_AVAILABLE = True
-except ImportError:
-    STT_AVAILABLE = False
-    logging.warning("SpeechRecognition not installed")
 
 stt_requests_total = Counter(
     "stt_requests_total", "Total STT requests", ["language", "status"]
@@ -38,33 +28,11 @@ async def speech_to_text(
         raise HTTPException(status_code=503, detail="STT not available")
 
     try:
-        # Read audio file
         audio_bytes = await file.read()
 
-        # Save to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
-            temp_file.write(audio_bytes)
-            temp_path = temp_file.name
-
-        # Recording + Google recognition are blocking (CPU + network); run them
-        # off the event loop so a single transcription can't stall the service.
-        def _transcribe() -> tuple[str, float]:
-            recognizer = sr.Recognizer()
-            try:
-                with sr.AudioFile(temp_path) as source:
-                    audio_data = recognizer.record(source)
-                try:
-                    text = recognizer.recognize_google(audio_data, language=language)
-                    return text, 0.9
-                except sr.UnknownValueError:
-                    return "", 0.0
-                except sr.RequestError as e:
-                    logger.warning(f"Speech recognition API error: {e}")
-                    return f"[API Error: {str(e)}]", 0.0
-            finally:
-                os.unlink(temp_path)
-
-        text, confidence = await asyncio.to_thread(_transcribe)
+        # Transcription is blocking (CPU + network); run it off the event loop so a
+        # single request can't stall the service.
+        text, confidence = await asyncio.to_thread(transcribe, audio_bytes, language)
 
         stt_requests_total.labels(language=language, status="success").inc()
 

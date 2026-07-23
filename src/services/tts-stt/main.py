@@ -9,10 +9,10 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime
 
+from core.stt_engine import STT_AVAILABLE
+from core.tts_engine import TTS_AVAILABLE
 from fastapi import FastAPI
-from routes.stt import STT_AVAILABLE
 from routes.stt import router as stt_router
-from routes.tts import TTS_AVAILABLE
 from routes.tts import router as tts_router
 
 # Shared library (needs src/ on the path)

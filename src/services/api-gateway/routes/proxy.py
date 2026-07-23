@@ -7,8 +7,8 @@ SERVICE_REGISTRY); write operations on /v1/plugins/* require a valid JWT.
 import logging
 
 import httpx
-from clients import SERVICE_REGISTRY, http_client
 from core.auth import verify_jwt_token
+from core.clients import SERVICE_REGISTRY, http_client
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 

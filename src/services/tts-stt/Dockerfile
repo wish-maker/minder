@@ -25,6 +25,7 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 COPY src/services/tts-stt/main.py .
 COPY src/services/tts-stt/config.py .
 COPY src/services/tts-stt/models.py .
+COPY src/services/tts-stt/core /app/core
 COPY src/services/tts-stt/routes /app/routes
 
 # Shared library (shared.* imported via /app/src on sys.path)

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from clients import http_client, redis_client
+from core.clients import http_client, redis_client
 from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest

@@ -9,14 +9,14 @@ import sys
 import time
 import uuid
 
-from clients import redis_client
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from metrics import (
+from core.clients import redis_client
+from core.metrics import (
     http_request_duration_seconds,
     http_requests_in_progress,
     http_requests_total,
 )
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from config import settings
 

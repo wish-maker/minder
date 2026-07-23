@@ -7,10 +7,10 @@ Handles authentication, rate limiting, request routing, and logging
 import logging
 from contextlib import asynccontextmanager
 
-from clients import SERVICE_REGISTRY, http_client, redis_client
 from core.auth import close_pg_pool, init_users_table
+from core.clients import SERVICE_REGISTRY, http_client, redis_client
+from core.middleware import register_middleware
 from fastapi import FastAPI
-from middleware import register_middleware
 from routes.ai import router as ai_router
 from routes.auth import router as auth_router
 from routes.health import router as health_router
