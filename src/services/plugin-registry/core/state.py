@@ -12,12 +12,20 @@ therefore lives in `core.database`, which owns it.
 """
 
 import logging
+import sys
 from typing import Any, Dict
 
-import redis
 from models import PluginInfo, ServiceRegistration
 
 from config import settings
+
+# Shared Redis factory is the single source of truth for client construction
+# (issue #49). main.py inserts /app/src before importing this module, but guard
+# here too so import order can't break the shared import.
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.utils.redis_client import create_redis_client_from_settings  # noqa: E402
 
 logger = logging.getLogger("minder.plugin-registry")
 
@@ -35,11 +43,7 @@ plugin_manifests: Dict[str, Dict] = {}  # plugin_name -> manifest
 # Infrastructure clients
 # ============================================================================
 
-# Redis client for service discovery and caching
-redis_client = redis.Redis(
-    host=settings.REDIS_HOST,
-    port=settings.REDIS_PORT,
-    password=settings.REDIS_PASSWORD,
-    decode_responses=True,
-    db=0,
-)
+# Redis client for service discovery and caching. ping=False keeps the original lazy
+# behaviour (module-level singleton created at import) — redis.Redis connects on first
+# command, unchanged from the previous hand-rolled client. Same params/db=0/decode.
+redis_client = create_redis_client_from_settings(settings, ping=False)

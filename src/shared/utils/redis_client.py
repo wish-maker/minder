@@ -18,6 +18,7 @@ def create_redis_client(
     password: Optional[str] = None,
     db: int = 0,
     decode_responses: bool = True,
+    ping: bool = True,
     **kwargs,
 ) -> Redis:
     """
@@ -29,6 +30,10 @@ def create_redis_client(
         password: Optional Redis password
         db: Redis database number (default: 0)
         decode_responses: Whether to decode responses to strings
+        ping: If True (default), ping the server before returning to fail fast on a
+            bad connection. Pass ping=False for module-level singletons created at
+            import time, where the connection isn't available yet (redis.Redis is
+            lazy — it connects on first command, exactly like a hand-rolled client).
         **kwargs: Additional redis.Redis parameters
 
     Returns:
@@ -50,22 +55,25 @@ def create_redis_client(
             db=db,
             **kwargs,
         )
-        # Test connection
-        client.ping()
-        logger.info(f"✅ Redis client connected to {host}:{port}")
+        if ping:
+            # Test connection (eager fail-fast for runtime callers)
+            client.ping()
+            logger.info(f"✅ Redis client connected to {host}:{port}")
         return client
     except Exception as e:
         logger.error(f"❌ Failed to connect to Redis at {host}:{port}: {e}")
         raise
 
 
-def create_redis_client_from_settings(settings) -> Redis:
+def create_redis_client_from_settings(settings, ping: bool = True) -> Redis:
     """
     Create Redis client from a settings object with standard attributes
     Expects settings to have: REDIS_HOST, REDIS_PORT, REDIS_PASSWORD
 
     Args:
         settings: Settings object with Redis configuration
+        ping: Forwarded to create_redis_client — pass False for import-time
+            singletons that must stay lazy.
 
     Returns:
         Configured Redis client instance
@@ -76,4 +84,5 @@ def create_redis_client_from_settings(settings) -> Redis:
         password=getattr(settings, "REDIS_PASSWORD", None),
         decode_responses=True,
         db=0,
+        ping=ping,
     )
