@@ -1,10 +1,9 @@
-"""Text-to-Speech routes (gTTS)."""
+"""Text-to-Speech routes (gTTS). Engine logic lives in core/tts_engine."""
 
 import asyncio
 import logging
-import os
-import tempfile
 
+from core.tts_engine import TTS_AVAILABLE, synthesize
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from models import TTSRequest
@@ -13,15 +12,6 @@ from prometheus_client import Counter
 from config import DEFAULT_TTS_LANG, SUPPORTED_LANGUAGES
 
 logger = logging.getLogger("minder.tts-stt")
-
-# TTS library
-try:
-    from gtts import gTTS
-
-    TTS_AVAILABLE = True
-except ImportError:
-    TTS_AVAILABLE = False
-    logging.warning("gTTS not installed")
 
 tts_requests_total = Counter(
     "tts_requests_total", "Total TTS requests", ["language", "status"]
@@ -45,20 +35,11 @@ async def text_to_speech(request: TTSRequest):
     try:
         tts_requests_total.labels(language=request.language, status="success").inc()
 
-        # gTTS synthesis + file I/O are blocking; run off the event loop so
-        # concurrent requests aren't stalled.
-        def _synthesize() -> bytes:
-            tts = gTTS(text=request.text, lang=request.language, slow=request.slow)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-                tts.save(temp_file.name)
-                temp_path = temp_file.name
-            try:
-                with open(temp_path, "rb") as audio_file:
-                    return audio_file.read()
-            finally:
-                os.unlink(temp_path)
-
-        audio_bytes = await asyncio.to_thread(_synthesize)
+        # Synthesis + file I/O are blocking; run off the event loop so concurrent
+        # requests aren't stalled.
+        audio_bytes = await asyncio.to_thread(
+            synthesize, request.text, request.language, request.slow
+        )
 
         # Estimate duration
         duration = len(request.text) / 15  # Rough estimate
