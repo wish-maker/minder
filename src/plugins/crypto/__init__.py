@@ -55,6 +55,29 @@ class CryptoPlugin:
 
     ACTIONS = frozenset({"refresh", "get_price"})
 
+    # Central config (#34) — GET/PUT /v1/plugins/crypto/config, applied live (no restart).
+    _DEFAULT_SYMBOLS = "BTC-USD,ETH-USD"
+    CONFIG_SCHEMA = [
+        {
+            "key": "CRYPTO_SYMBOLS",
+            "type": "string",
+            "default": _DEFAULT_SYMBOLS,
+            "description": "Yahoo symbols to backfill, comma-separated (e.g. BTC-USD,ETH-USD,BTC-EUR).",
+        },
+        {
+            "key": "CRYPTO_START_DATE",
+            "type": "string",
+            "default": "",
+            "description": "ISO date to backfill from when InfluxDB is empty; blank = earliest available.",
+        },
+        {
+            "key": "CRYPTO_SINK_INFLUXDB",
+            "type": "bool",
+            "default": True,
+            "description": "Write the price series to InfluxDB.",
+        },
+    ]
+
     AI_TOOLS = [
         {
             "name": "get_crypto_price",
@@ -78,16 +101,40 @@ class CryptoPlugin:
 
     def __init__(self, config: Optional[Dict] = None):
         self.config = config or {}
-        self.symbols = [
-            s.strip().upper()
-            for s in os.environ.get("CRYPTO_SYMBOLS", "BTC-USD,ETH-USD").split(",")
-            if s.strip()
-        ]
-        self.start_date = os.environ.get("CRYPTO_START_DATE", "").strip()
-        self.sink_influxdb = os.environ.get("CRYPTO_SINK_INFLUXDB", "1") == "1"
-        self.http_timeout = float(os.environ.get("CRYPTO_HTTP_TIMEOUT", "20"))
+        self.http_timeout = float(
+            os.environ.get("CRYPTO_HTTP_TIMEOUT", "20")
+        )  # env-only
         self.status = "registered"
         self._last: Dict = {}
+        # Bootstrap schema-backed config (defaults+env) via the single config→state
+        # path; registry re-applies with persisted (API) overrides after load.
+        self.apply_config(
+            {
+                "CRYPTO_SYMBOLS": os.environ.get(
+                    "CRYPTO_SYMBOLS", self._DEFAULT_SYMBOLS
+                ),
+                "CRYPTO_START_DATE": os.environ.get("CRYPTO_START_DATE", ""),
+                "CRYPTO_SINK_INFLUXDB": os.environ.get("CRYPTO_SINK_INFLUXDB", "1"),
+            }
+        )
+
+    def apply_config(self, cfg: Dict) -> None:
+        """Map centrally-managed config → runtime state (no restart). See CONFIG_SCHEMA."""
+        if "CRYPTO_SYMBOLS" in cfg:
+            self.symbols = [
+                s.strip().upper()
+                for s in str(cfg["CRYPTO_SYMBOLS"] or "").split(",")
+                if s.strip()
+            ]
+        if "CRYPTO_START_DATE" in cfg:
+            self.start_date = str(cfg["CRYPTO_START_DATE"] or "").strip()
+        if "CRYPTO_SINK_INFLUXDB" in cfg:
+            v = cfg["CRYPTO_SINK_INFLUXDB"]
+            self.sink_influxdb = (
+                v
+                if isinstance(v, bool)
+                else str(v).lower() in ("1", "true", "yes", "on")
+            )
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     async def register(self) -> PluginMetadata:
