@@ -54,6 +54,9 @@ class QueryRequest(BaseModel):
     # Orthogonal, capability-adaptive post-retrieval enhancers (apply to any method):
     rerank: bool = False  # re-rank sources (cross-encoder if available, else LLM)
     compress: bool = False  # contextual compression of the retrieved context
+    # Retrieval strategy (#45): hybrid = dense + BM25 sparse (recall for keyword/rare
+    # terms). Needs rank-bm25; falls back to dense if unavailable.
+    hybrid: bool = False
 
 
 class QueryResponse(BaseModel):

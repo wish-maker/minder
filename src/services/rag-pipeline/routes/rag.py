@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict
 
 import state
+from domain.retrievers.hybrid import BM25_AVAILABLE, HybridSearchRetriever
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from models import (
     DocumentUploadResponse,
@@ -192,6 +193,10 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         points=points,
     )
 
+    # New chunks landed → drop any cached BM25 index so the next hybrid query
+    # rebuilds it over the full, current set (#45).
+    invalidate_hybrid_index(kb_id)
+
     # Update knowledge base stats
     kb["document_count"] += 1
     kb["vector_count"] += len(chunks)
@@ -282,9 +287,12 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
     pipeline = state.rag_pipelines[pipeline_id]
+    # Hybrid (dense + BM25) is a drop-in retrieve variant (same signature) — selected
+    # here so the runner/methods stay retrieval-agnostic (#45).
+    use_hybrid = getattr(request, "hybrid", False) and BM25_AVAILABLE
     components = state.RagComponents(
         ollama_manager=state.ollama_manager,
-        retrieve=retrieve_relevant_documents,
+        retrieve=retrieve_hybrid if use_hybrid else retrieve_relevant_documents,
         hyde_expander=state.hyde_expander,
         self_rag_pipeline=state.self_rag_pipeline,
         decision_engine=state.decision_engine,
@@ -363,3 +371,107 @@ async def retrieve_relevant_documents(
             for r in all_results
         ],
     }
+
+
+# ── Hybrid retrieval (dense + BM25 sparse), #45 ────────────────────────────────
+# One process-local HybridSearchRetriever holds the in-memory BM25 index per KB. The
+# index is built lazily from the chunks already stored in Qdrant (so it survives
+# restarts — it just rebuilds on the next hybrid query) and dropped when a KB gains
+# documents (see upload) so the next query rebuilds it fresh.
+_hybrid = HybridSearchRetriever()
+
+
+def invalidate_hybrid_index(kb_id: str) -> None:
+    """Drop the cached BM25 index for a KB so the next hybrid query rebuilds it."""
+    _hybrid.sparse_index.pop(kb_id, None)
+    _hybrid.documents.pop(kb_id, None)
+
+
+def _ensure_bm25_index(client, kb_id: str) -> None:
+    """Build the BM25 index for `kb_id` from stored Qdrant chunks if not cached."""
+    if kb_id in _hybrid.sparse_index:
+        return
+    docs = []
+    offset = None
+    while True:
+        points, offset = client.scroll(
+            collection_name=kb_id,
+            limit=256,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        for p in points:
+            docs.append(
+                {
+                    "_id": str(p.id),
+                    "text": p.payload.get("text", ""),
+                    "source": p.payload.get("source", ""),
+                }
+            )
+        if offset is None or len(docs) >= 10000:
+            break
+    if docs:
+        _hybrid.index_documents(kb_id, docs)
+
+
+async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
+    """Retrieve via dense + BM25 hybrid scoring (same shape as the dense retriever)."""
+    client = state.get_qdrant_client()
+    first_kb_id = pipeline["knowledge_base_ids"][0]
+    embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
+
+    try:
+        question_embeddings = await state.ollama_manager.generate_embeddings(
+            [question], model=embed_model
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Embedding backend unavailable — cannot answer query. Check that "
+                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
+            ),
+        )
+    question_embedding = question_embeddings[0]
+
+    merged: list = []
+    for kb_id in pipeline["knowledge_base_ids"]:
+        try:
+            dense = client.query_points(
+                collection_name=kb_id,
+                query=question_embedding,
+                limit=top_k * 3,  # wider candidate set so BM25 can surface keyword hits
+            ).points
+        except Exception as e:
+            logger.warning(f"⚠️  Hybrid search failed for KB {kb_id}: {e}")
+            continue
+
+        _ensure_bm25_index(client, kb_id)
+        docmap = {d["_id"]: d for d in _hybrid.documents.get(kb_id, [])}
+        for r in dense:  # dense-only hits may not be in the scrolled snapshot
+            did = r.payload.get("_id", str(r.id))
+            docmap.setdefault(
+                did,
+                {
+                    "text": r.payload.get("text", ""),
+                    "source": r.payload.get("source", ""),
+                },
+            )
+
+        pairs = await _hybrid.hybrid_search(
+            kb_id, question_embedding, question, dense, top_k
+        )
+        for did, score in pairs:
+            d = docmap.get(did, {})
+            merged.append(
+                {
+                    "text": d.get("text", ""),
+                    "source": d.get("source", ""),
+                    "score": float(score),
+                }
+            )
+
+    merged = sorted(merged, key=lambda s: s["score"], reverse=True)[:top_k]
+    context = "\n\n".join(s["text"] for s in merged)
+    return {"context": context, "sources": merged}

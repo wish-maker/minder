@@ -34,6 +34,13 @@ def _sentence_transformers_available() -> bool:
     return importlib.util.find_spec("sentence_transformers") is not None
 
 
+def _bm25_available() -> bool:
+    """True if rank-bm25 (the hybrid retriever's sparse backend) is installed."""
+    import importlib.util
+
+    return importlib.util.find_spec("rank_bm25") is not None
+
+
 @router.get("/capabilities", tags=["System"])
 async def capabilities():
     """Report which RAG methods/enhancers are active on THIS host.
@@ -59,8 +66,19 @@ async def capabilities():
             },
             "compress": {"available": state.compressor is not None},
         },
+        "retrievers": {
+            # Dense (Qdrant) is always on; hybrid adds BM25 sparse when rank-bm25 is
+            # present. Parent-child still needs ingest-time hierarchy (remaining #45).
+            "dense": {"available": True},
+            "hybrid": {"available": _bm25_available()},
+            "parent_child": {
+                "available": False,
+                "note": "needs ingest-time hierarchy (#45)",
+            },
+        },
         "optional_deps": {
             "sentence_transformers": st_available,
+            "rank_bm25": _bm25_available(),
         },
     }
 
