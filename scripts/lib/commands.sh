@@ -127,16 +127,20 @@ cmd_backup() {
         log_warn "PostgreSQL not running — skipped"
     fi
 
+    # Community edition has NO online `neo4j-admin dump` and NO STOP DATABASE, so
+    # export via APOC to the import dir, then cp out (#124). Password resolved inside
+    # the container from its own $NEO4J_AUTH (never on the host cmdline).
     if container_running neo4j; then
-        spinner_start "Dumping Neo4j…"
-        local neo4j_dump="${dest}/neo4j.dump"
+        spinner_start "Exporting Neo4j (APOC)…"
+        local neo4j_cypher="${dest}/neo4j.cypher"
         if run docker exec "$(container_name neo4j)" \
-               neo4j-admin database dump neo4j \
-               --to-stdout 2>/dev/null > "$neo4j_dump"; then
+               bash -c 'cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" "CALL apoc.export.cypher.all('"'"'neo4j.cypher'"'"',{format:'"'"'cypher-shell'"'"'})"' &>/dev/null 2>&1 && \
+           run docker cp "$(container_name neo4j):/var/lib/neo4j/import/neo4j.cypher" \
+               "$neo4j_cypher"; then
             spinner_stop
-            log_success "Neo4j  ($(du -sh "$neo4j_dump" | cut -f1))"
+            log_success "Neo4j  ($(du -sh "$neo4j_cypher" | cut -f1))"
         else
-            spinner_stop; log_warn "Neo4j dump failed"
+            spinner_stop; log_warn "Neo4j export failed"
         fi
     else
         log_warn "Neo4j not running — skipped"
@@ -301,6 +305,22 @@ cmd_restore() {
         spinner_stop
         (( pg_ok )) && log_success "PostgreSQL restored" \
                     || log_warn "PostgreSQL restore had errors (partial restore possible)"
+    fi
+
+    if [[ -f "${restore_dir}/neo4j.cypher" ]] && container_running neo4j; then
+        spinner_start "Restoring Neo4j…"
+        local n_cname; n_cname="$(container_name neo4j)"
+        local neo4j_ok=1
+        run docker cp "${restore_dir}/neo4j.cypher" "${n_cname}:/var/lib/neo4j/import/neo4j-restore.cypher"
+        if _is_dry_run; then
+            run docker exec "$n_cname" bash -c 'cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" -f /var/lib/neo4j/import/neo4j-restore.cypher'
+        elif ! docker exec "$n_cname" \
+                 bash -c 'cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" -f /var/lib/neo4j/import/neo4j-restore.cypher' &>/dev/null 2>&1; then
+            neo4j_ok=0
+        fi
+        spinner_stop
+        (( neo4j_ok )) && log_success "Neo4j restored" \
+                       || log_warn "Neo4j restore had errors"
     fi
 
     if [[ -f "${restore_dir}/qdrant.tar.gz" ]] && container_running qdrant; then

@@ -63,31 +63,6 @@ def _dump_to_file(argv: list[str], dest_file: Path) -> bool:
         return False
 
 
-def _run_to_file(argv: list[str], dest_file: Path) -> bool:
-    """bash `run <cmd> 2>/dev/null > file` (the Neo4j dump): dry-run-gated exactly
-    like docker.run(), but with stdout redirected to a file instead of the console.
-    Under DRY_RUN, run()'s `[dry-run] …` echo is what the caller's `> file` captures
-    (so it lands in the file, not on the console) and the call "succeeds" (exit 0);
-    under real mode the command streams its output to the file, stderr discarded."""
-    if config.DRY_RUN:
-        # run() joins args with newlines (setup.sh's IFS=$'\n\t'); mirror docker.run.
-        line = "[dry-run] " + "\n".join(argv)
-        text = f"{log._DIM}{line}{log._NC}" if log._colors_on() else line
-        try:
-            dest_file.write_text(text + "\n", encoding="utf-8")
-        except OSError:
-            return False
-        return True
-    try:
-        with open(dest_file, "wb") as fh:
-            return (
-                subprocess.run(argv, stdout=fh, stderr=subprocess.DEVNULL).returncode
-                == 0
-            )
-    except OSError:
-        return False
-
-
 def _make_archive(archive: Path, base_dir: Path, name: str) -> bool:
     """bash `tar czf "$archive" -C "$BACKUP_DIR" "minder-<ts>"` — NOT dry-run-gated
     (runs for real). Python `tarfile` (cross-OS) instead of shelling out to `tar`;
@@ -142,28 +117,43 @@ def run() -> int:
     else:
         log.warn("PostgreSQL not running — skipped")
 
-    # ── Neo4j (dry-run-gated run + redirect) ──────────────────────────────
+    # ── Neo4j (APOC cypher export → import dir → cp out) ──────────────────
+    # Community edition has NO online `neo4j-admin database dump` ("database is in
+    # use") and NO `STOP DATABASE`, so the hot path is an APOC export (#124). The
+    # password is resolved INSIDE the container from its own $NEO4J_AUTH so it never
+    # lands on the host cmdline / DRY_RUN echo. Relative filename → the import dir.
     if docker.container_running("neo4j"):
-        log.spinner_start("Dumping Neo4j…")
-        neo4j_dump = dest / "neo4j.dump"
-        ok = _run_to_file(
-            [
+        log.spinner_start("Exporting Neo4j (APOC)…")
+        nname = docker.container_name("neo4j")
+        neo4j_cypher = dest / "neo4j.cypher"
+        if (
+            docker.run(
                 "docker",
                 "exec",
-                docker.container_name("neo4j"),
-                "neo4j-admin",
-                "database",
-                "dump",
-                "neo4j",
-                "--to-stdout",
-            ],
-            neo4j_dump,
-        )
-        log.spinner_stop()
-        if ok:
-            log.success(f"Neo4j  ({_du_sh(neo4j_dump)})")
+                nname,
+                "bash",
+                "-c",
+                'cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" '
+                '"CALL apoc.export.cypher.all('
+                "'neo4j.cypher',{format:'cypher-shell'})\"",
+                quiet=True,
+            )
+            == 0
+            and docker.run(
+                "docker",
+                "cp",
+                f"{nname}:/var/lib/neo4j/import/neo4j.cypher",
+                # literal "/" (not str(Path)) so the dry-run echo matches bash on
+                # Windows too — mirrors the influx/qdrant cp dest below.
+                f"{dest}/neo4j.cypher",
+            )
+            == 0
+        ):
+            log.spinner_stop()
+            log.success(f"Neo4j  ({_du_sh(neo4j_cypher)})")
         else:
-            log.warn("Neo4j dump failed")
+            log.spinner_stop()
+            log.warn("Neo4j export failed")
     else:
         log.warn("Neo4j not running — skipped")
 

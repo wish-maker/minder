@@ -337,6 +337,9 @@ services:
       NEO4J_dbms_memory_heap_max__size: 1G
       NEO4J_dbms_security_procedures_unrestricted: apoc.*
       NEO4J_dbms_security_procedures_allowlist: apoc.*
+      # Community edition has no online `neo4j-admin dump` (offline-only) and no
+      # STOP DATABASE — so `setup.sh backup` exports via APOC to the import dir (#124).
+      NEO4J_apoc_export_file_enabled: 'true'
     volumes:
     - neo4j_data:/data
     # (init-cypher mount removed: the neo4j image doesn't run /docker-entrypoint-initdb.d
