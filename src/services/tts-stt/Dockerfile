@@ -24,9 +24,11 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 
 # Bundle Piper voices for OFFLINE TTS (#18) — downloaded at build so no runtime
 # network is needed on the Pi. en_US-lessac-low + tr_TR-dfki-medium (Turkish).
+# download_voices writes to the CWD, so switch there via WORKDIR (hadolint DL3003).
 ENV TTS_VOICES_DIR=/app/voices
-RUN mkdir -p /app/voices && cd /app/voices && \
-    python -m piper.download_voices en_US-lessac-low tr_TR-dfki-medium
+WORKDIR /app/voices
+RUN python -m piper.download_voices en_US-lessac-low tr_TR-dfki-medium
+WORKDIR /app
 
 # Copy application code
 COPY src/services/tts-stt/main.py .
