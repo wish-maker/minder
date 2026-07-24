@@ -17,20 +17,17 @@ modules** — a "RAG research lab" — that are **NOT wired into the live query 
 **mostly untested**: **HyDE**, **Self-RAG**, a **decision-engine**, Corrective RAG,
 Cross-Encoder re-ranking, Contextual Compression, Hybrid/BM25, Parent-Child, RAPTOR.
 
-> **⚠️ Correction (empirically verified 2026-07-10):** Only **Standard** and **Conversational**
-> RAG are reachable in the running service. Proof:
-> - The live `/openapi.json` lists these paths: `/`, `/health`, `/initialize`,
->   `/metrics`, `/knowledge-base`, `/knowledge-bases`, `/knowledge-base/{id}`,
->   `/knowledge-base/{id}/upload`, `/pipeline`, `/pipeline/{id}`, `/pipeline/{id}/query`
->   (KB create/list/get/delete + upload + pipeline create/delete/query) — no
->   HyDE/Self-RAG/agent routes. All such paths 404.
-> - The rag-pipeline **Dockerfile only COPYs** `main.py`, `pg_client.py`, `config.yaml`,
->   `repositories/`, and `src/core`. It does **not** ship `domain/` or `agent/`, so
->   HyDE / Self-RAG / decision-engine (and the Bucket-2 modules) **are not even present in the
->   image** — `find` for `hyde.py`/`self_rag.py`/`decision_engine.py` in the container returns
->   nothing. They exist only in the source tree.
+> **✅ Update (empirically verified 2026-07-24, supersedes the 2026-07-10 caveat — #45):**
+> HyDE, Self-RAG, auto, and corrective RAG — plus cross-encoder/LLM re-ranking and
+> contextual compression — ARE now wired into the running service. They're selected
+> via the `method` field (and the `rerank`/`compress` flags) on
+> `POST /pipeline/{id}/query`, **not** as separate routes, so the `/openapi.json` path
+> list is unchanged; `GET /capabilities` reports what's live (all six methods +
+> rerank/compress). The `domain/` and `agent/` packages ARE shipped in the image (see
+> the Dockerfile's `COPY … domain/ agent/ rag/`).
 >
-> So these are source-tree "research lab" code, not runtime features. Tracked in
+> Only the **Hybrid/BM25** and **Parent-Child** retrievers remain unwired — they need
+> ingest-time indexing, the remaining scope of
 > [#45](https://github.com/wish-maker/minder/issues/45).
 
 ---
