@@ -32,11 +32,19 @@ router = APIRouter()
 
 @router.get("/state", response_model=PluginStateListResponse)
 async def list_all_plugin_states(state: Optional[str] = Query(None)):
-    """List all plugin states"""
+    """List all plugin states (optional ?state= filter)."""
+    try:
+        state_filter = PluginState(state) if state else None
+    except ValueError:
+        valid = ", ".join(s.value for s in PluginState)
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid state '{state}'. Valid values: {valid}",
+        )
     db = await get_db_pool()
 
     async with db.acquire() as conn:
-        states = await list_plugin_states(conn, PluginState(state) if state else None)
+        states = await list_plugin_states(conn, state_filter)
 
         return PluginStateListResponse(
             plugins=[PluginStateResponse(**state) for state in states],
