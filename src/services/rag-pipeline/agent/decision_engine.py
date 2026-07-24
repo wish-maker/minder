@@ -332,8 +332,8 @@ Rules:
         if not self.decision_history:
             return {"total_decisions": 0}
 
-        strategy_counts = {}
-        complexity_counts = {}
+        strategy_counts: Dict[str, int] = {}
+        complexity_counts: Dict[str, int] = {}
 
         for record in self.decision_history:
             strategy = record["decision"]["retrieval_strategy"]

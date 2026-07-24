@@ -145,7 +145,9 @@ async def sync_plugin_ai_tools(
         logger.error(f"Error syncing AI tools for {plugin_name}: {e}")
 
 
-async def get_or_create_marketplace_plugin(plugin_name: str, manifest: dict) -> str:
+async def get_or_create_marketplace_plugin(
+    plugin_name: str, manifest: dict
+) -> Optional[str]:
     """
     Get existing plugin ID from marketplace or create a new entry
 

@@ -1,6 +1,6 @@
 # services/marketplace/routes/marketplace.py
 import uuid
-from typing import Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -37,7 +37,7 @@ async def list_plugins(
 
     # Build query conditions
     conditions = []
-    params = []
+    params: List[Any] = []
     param_count = 0
 
     if status:

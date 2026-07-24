@@ -391,9 +391,9 @@ async def save_conversation_turn_to_postgres(
     turn_id: str,
     question: str,
     answer: str,
-    sources: List[Dict] = None,
-    confidence: float = None,
-    embedding: List[float] = None,
+    sources: Optional[List[Dict]] = None,
+    confidence: Optional[float] = None,
+    embedding: Optional[List[float]] = None,
 ) -> bool:
     """Save conversation turn to PostgreSQL"""
     try:

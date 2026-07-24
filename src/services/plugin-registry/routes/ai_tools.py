@@ -8,6 +8,7 @@ Built via a factory with shared state (plugins_db, plugin_instances) injected by
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import yaml
 from fastapi import APIRouter, HTTPException
@@ -97,7 +98,7 @@ def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
     @router.get("/v1/plugins/{plugin_name}/analysis")
     async def get_plugin_analysis(
         plugin_name: str,
-        symbol: str = None,
+        symbol: Optional[str] = None,
         limit: int = 10,
         location: str = "Istanbul",
         fund_type: str = "YATIRIM",

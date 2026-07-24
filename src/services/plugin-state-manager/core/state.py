@@ -6,7 +6,7 @@ Plugin state management core logic
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import asyncpg
 from models.plugin_state import LicenseTier, PluginState
@@ -14,12 +14,12 @@ from models.plugin_state import LicenseTier, PluginState
 logger = logging.getLogger(__name__)
 
 
-def _record_to_dict(record) -> Dict:
+def _record_to_dict(record) -> Optional[Dict]:
     """Convert asyncpg Record to dict, handling JSONB and UUID fields"""
     if not record:
         return None
 
-    result = {}
+    result: Dict = {}
     for key, value in record.items():
         # Handle UUID fields - convert to string
         if key == "id" and hasattr(value, "__str__"):
@@ -251,7 +251,7 @@ async def list_plugin_states(
     else:
         rows = await conn.fetch("SELECT * FROM plugin_states ORDER BY plugin_name")
 
-    return [_record_to_dict(row) for row in rows]
+    return [d for row in rows if (d := _record_to_dict(row)) is not None]
 
 
 async def get_dependent_plugins(
@@ -268,7 +268,7 @@ async def get_dependent_plugins(
         """,
         plugin_name,
     )
-    return [_record_to_dict(row) for row in rows]
+    return [d for row in rows if (d := _record_to_dict(row)) is not None]
 
 
 async def resolve_dependencies(conn: asyncpg.Connection, plugin_name: str) -> List[str]:
@@ -279,7 +279,7 @@ async def resolve_dependencies(conn: asyncpg.Connection, plugin_name: str) -> Li
         Ordered list of plugin names to enable
     """
     # Build dependency graph
-    plugins = {}
+    plugins: Dict[str, Dict[str, Any]] = {}
 
     # Get all plugins and their dependencies
     rows = await conn.fetch(

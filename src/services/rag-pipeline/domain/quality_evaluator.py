@@ -60,9 +60,10 @@ class AdvancedQualityEvaluator:
         self.bertscore_model_name = bertscore_model
         self.use_gpu = use_gpu
 
-        # Lazy initialization (load models only when needed)
-        self._semantic_model = None
-        self._bertscore_model = None
+        # Lazy initialization (load models only when needed). Tri-state sentinel:
+        # None = not yet attempted, False = load failed (don't retry), else the model.
+        self._semantic_model: Any = None
+        self._bertscore_model: Any = None
 
         logger.info(
             f"✅ Advanced Quality Evaluator initialized (semantic: {semantic_model}, bertscore: {bertscore_model})"

@@ -9,9 +9,10 @@ Named ``log`` (not ``logging``) so it never shadows the stdlib module.
 
 import logging
 import os
+from typing import Optional
 
 
-def setup_logging(service_name: str, level: str = None) -> logging.Logger:
+def setup_logging(service_name: str, level: Optional[str] = None) -> logging.Logger:
     """Configure root logging and return the service's ``minder.<name>`` logger.
 
     Args:
@@ -19,6 +20,7 @@ def setup_logging(service_name: str, level: str = None) -> logging.Logger:
         level: explicit level name (e.g. settings.LOG_LEVEL). Defaults to the
             ``LOG_LEVEL`` env var, then INFO. Unknown names fall back to INFO.
     """
-    level_name = (level or os.getenv("LOG_LEVEL", "INFO")).upper()
+    env_level = os.getenv("LOG_LEVEL", "INFO")
+    level_name = (level or env_level).upper()
     logging.basicConfig(level=getattr(logging, level_name, logging.INFO))
     return logging.getLogger(f"minder.{service_name}")

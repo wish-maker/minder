@@ -8,7 +8,7 @@ This provides both precision (small chunks) and context (parent chunks).
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -142,7 +142,7 @@ class ParentChildRetriever:
         )
         return enhanced_results
 
-    def _find_parent(self, kb_id: str, child_id: str) -> Dict[str, Any]:
+    def _find_parent(self, kb_id: str, child_id: str) -> Optional[Dict[str, Any]]:
         """
         Find parent node for a given child ID
 

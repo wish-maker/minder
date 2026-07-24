@@ -53,6 +53,7 @@ class OllamaManager:
         if not self._initialized:
             await self.initialize()
 
+        assert self.client is not None
         try:
             response = await self.client.list()
             models = response.get("models", [])
@@ -71,6 +72,7 @@ class OllamaManager:
 
         try:
             logger.info(f"Pulling model: {model_id}")
+            assert self.client is not None
             response = await self.client.pull(model=model_id, stream=stream)
             return {"model": model_id, "status": "pulled", "details": response}
         except Exception as e:
@@ -84,6 +86,7 @@ class OllamaManager:
         if not self._initialized:
             await self.initialize()
 
+        assert self.client is not None
         try:
             response = await self.client.show(model=model_id)
             return response
@@ -98,6 +101,7 @@ class OllamaManager:
 
         try:
             logger.warning(f"Deleting model: {model_id}")
+            assert self.client is not None
             response = await self.client.delete(model=model_id)
             return {"model": model_id, "status": "deleted", "details": response}
         except Exception as e:
@@ -113,6 +117,7 @@ class OllamaManager:
         if not self._initialized:
             await self.initialize()
 
+        assert self.client is not None
         try:
             response = await self.client.generate(model=model_id, prompt=prompt)
             return {

@@ -1,6 +1,6 @@
 # services/marketplace/routes/ai_tools.py
 import logging
-from typing import Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -35,7 +35,7 @@ async def list_all_ai_tools(active_only: bool = Query(True), tier: str = Query(N
 
     # Build query conditions
     conditions = []
-    params = []
+    params: List[Any] = []
     param_count = 0
 
     if active_only:

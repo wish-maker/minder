@@ -174,7 +174,7 @@ async def update_plugin_license(
     plugin_name: str,
     license_tier: LicenseTier,
     license_key: Optional[str] = None,
-) -> dict:
+) -> Optional[dict]:
     """
     Update plugin's license information
 

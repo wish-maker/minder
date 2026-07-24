@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Query
 from models.plugin_state import (
     DisablePluginRequest,
     EnablePluginRequest,
+    PluginState,
     PluginStateListResponse,
     PluginStateResponse,
     UpdatePluginConfigRequest,
@@ -35,7 +36,7 @@ async def list_all_plugin_states(state: Optional[str] = Query(None)):
     db = await get_db_pool()
 
     async with db.acquire() as conn:
-        states = await list_plugin_states(conn, state)
+        states = await list_plugin_states(conn, PluginState(state) if state else None)
 
         return PluginStateListResponse(
             plugins=[PluginStateResponse(**state) for state in states],
@@ -128,7 +129,7 @@ async def update_plugin_config(plugin_name: str, request: UpdatePluginConfigRequ
         )
 
         updated_state = await get_plugin_state(conn, plugin_name)
-        return PluginStateResponse(**updated_state)
+        return PluginStateResponse(**(updated_state or {}))
 
 
 @router.get("/{plugin_name}/dependencies")

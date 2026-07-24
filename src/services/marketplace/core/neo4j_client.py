@@ -65,7 +65,7 @@ class Neo4jClient:
         """Close the database connection"""
         await self.driver.close()
 
-    async def create_plugin_node(self, plugin_data: Dict[str, Any]) -> str:
+    async def create_plugin_node(self, plugin_data: Dict[str, Any]) -> Optional[str]:
         """
         Create or update a plugin node in the graph
 
