@@ -26,9 +26,14 @@ Cross-Encoder re-ranking, Contextual Compression, Hybrid/BM25, Parent-Child, RAP
 > rerank/compress). The `domain/` and `agent/` packages ARE shipped in the image (see
 > the Dockerfile's `COPY … domain/ agent/ rag/`).
 >
-> Only the **Hybrid/BM25** and **Parent-Child** retrievers remain unwired — they need
-> ingest-time indexing, the remaining scope of
-> [#45](https://github.com/wish-maker/minder/issues/45).
+> As of **#45** the **Hybrid/BM25** (`"hybrid": true`) and **Parent-Child / small-to-big**
+> (`"parent_context": true`) retrievers are ALSO wired into `POST /pipeline/{id}/query`
+> — see `GET /capabilities` → `retrievers`. Hybrid needs `rank-bm25` (lazy BM25 index
+> built from the stored Qdrant chunks); parent-child reuses each chunk's stored
+> `chunk_index` to return a neighbour window (no ingest change). The per-method
+> "Bucket 2" tables below are **older detail that predates this wiring** (they still
+> mark several now-live methods as UNWIRED) — treat this top note as authoritative;
+> a full Bucket-table refresh is separate doc debt.
 
 ---
 
