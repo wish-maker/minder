@@ -102,8 +102,11 @@ def main(argv: list[str]) -> int:
         # setup.sh: cmd_start (no args) — full orchestration.
         return start_module.run()
     if cmd == "restart":
-        # setup.sh: cmd_restart — stop, sleep 3, start.
-        return restart_module.run()
+        # No arg: cmd_restart — stop, sleep 3, start. With a service: restart just
+        # that container (#123 — the documented per-service form was ignored).
+        pos = _positional(argv)
+        service = pos[1] if len(pos) > 1 else ""
+        return restart_module.run(service)
     if cmd == "status":
         # setup.sh: status --json (or global --json) → json; else human.
         return status_module.run(json_mode="--json" in argv)

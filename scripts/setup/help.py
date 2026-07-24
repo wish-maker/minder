@@ -21,7 +21,7 @@ _HELP_TEMPLATE = """
                             initial bundles; change later with `bundle enable/disable`.
     start                   Start all services
     stop [--clean]          Stop services; --clean prunes dangling images
-    restart                 Stop then start
+    restart [service]       Stop then start (all services, or just one)
     update                  Smart pull (latest compatible) + rebuild + rolling restart
     update --check          Show available updates without applying anything
 
