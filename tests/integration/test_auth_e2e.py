@@ -3,7 +3,7 @@ API Gateway Auth E2E Tests with Real PostgreSQL
 
 CRITICAL: These tests MUST pass before auth is considered complete.
 
-Run: docker compose -f docker-compose.test.yml up -d
+Run: docker compose -f docker/compose/docker-compose.test.yml up -d
      pytest tests/integration/test_auth_e2e.py -v
 """
 
@@ -15,7 +15,7 @@ import pytest_asyncio
 # Config is loaded by conftest.py BEFORE this file runs
 from config import settings
 
-# Comment out to run tests (requires docker-compose.test.yml up)
+# Comment out to run tests (requires docker/compose/docker-compose.test.yml up)
 # pytestmark = pytest.mark.skip(reason="Requires running Minder services")
 
 
@@ -23,7 +23,7 @@ from config import settings
 async def verify_postgres_running():
     """
     Verify PostgreSQL test container is running before any tests.
-    Run: docker compose -f docker-compose.test.yml up -d
+    Run: docker compose -f docker/compose/docker-compose.test.yml up -d
     """
     import asyncpg
 
@@ -46,7 +46,7 @@ async def verify_postgres_running():
             else:
                 pytest.fail(
                     f"PostgreSQL test container not ready after {max_attempts}s.\n"
-                    f"Run: docker compose -f docker-compose.test.yml up -d\n"
+                    f"Run: docker compose -f docker/compose/docker-compose.test.yml up -d\n"
                     f"Error: {e}"
                 )
 

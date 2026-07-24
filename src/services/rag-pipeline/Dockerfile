@@ -38,7 +38,6 @@ COPY src/services/rag-pipeline/agent /app/agent
 COPY src/services/rag-pipeline/rag /app/rag
 
 # Copy core + shared modules (shared.* imported via /app/src on sys.path)
-COPY src/core /app/src/core
 COPY src/shared /app/src/shared
 
 # Create non-root user

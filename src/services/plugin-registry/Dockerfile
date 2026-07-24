@@ -39,7 +39,6 @@ COPY src/services/plugin-registry/core /app/core
 COPY src/services/plugin-registry/schemas /app/schemas
 
 # Copy shared core library and plugins (from build context)
-COPY src/core /app/src/core
 COPY src/shared /app/src/shared
 COPY src/plugins /app/plugins
 

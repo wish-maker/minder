@@ -12,12 +12,12 @@ import json
 from datetime import datetime, timezone
 
 import yaml
+from core import plugin_config as cfgmod
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from models import PluginInfo
 from schemas.validator import validate_manifest
 
-from core import plugin_config as cfgmod
 from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
 
 

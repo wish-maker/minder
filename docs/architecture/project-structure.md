@@ -14,7 +14,6 @@ minder/                              # Project root
 ├── .env.example                     # Environment template (tracked)
 ├── .env                             # Single source of truth (gitignored; you edit this)
 ├── pyproject.toml                   # Python tooling config (black/isort/mypy/pytest)
-├── docker-compose.test.yml          # CI / test compose file
 │
 ├── docs/                            # Documentation
 │   ├── getting-started/             # Installation & first steps
@@ -30,10 +29,9 @@ minder/                              # Project root
 │   ├── compose/                     # Deployment dir (compose runs from here)
 │   │   ├── docker-compose.yml       # HAND-MAINTAINED source of truth (31 services)
 │   │   ├── docker-compose.override.yml
-│   │   ├── .env                     # Auto-generated mirror of root ./.env (gitignored; do not edit)
-│   │   ├── rabbitmq/                # rabbitmq config mounted from here
-│   │   └── traefik/                 # traefik dynamic config mounted from here
-│   └── services/                    # Per-service configs (source of truth)
+│   │   ├── docker-compose.test.yml  # local integration/e2e test deps (CI uses GH Actions services)
+│   │   └── .env                     # Auto-generated mirror of root ./.env (gitignored; do not edit)
+│   └── services/                    # Per-service configs mounted into containers (incl. rabbitmq/, traefik/)
 │       ├── postgres/                # DB init (init.sql)
 │       ├── prometheus/              # Metrics config
 │       ├── alertmanager/            # Alert routing
@@ -54,7 +52,7 @@ minder/                              # Project root
 │   │   ├── model-management/        # Model Management (port 8005)
 │   │   ├── tts-stt/                 # TTS / STT (port 8006)
 │   │   └── graph-rag/               # Graph RAG / knowledge graph (port 8008)
-│   ├── core/                        # Core framework (incl. config/default_plugins.yml stub)
+│   ├── bootstrap/                   # Bootstrap config data (config/default_plugins.yml stub)
 │   ├── plugins/                     # First-party module plugins (telegraf, network) + _contract.py
 │   ├── requirements/                # Shared Python dependency sets (see below)
 │   └── shared/                      # Shared utilities (ai, auth, config, models, utils)
@@ -112,17 +110,16 @@ services/api-gateway/
 ├── requirements.txt             # FastAPI, Redis, etc.
 ├── routes/
 │   ├── __init__.py
-│   ├── plugins.py              # Plugin routes
-│   ├── health.py               # Health check
-│   └── proxy.py               # Request proxy
-├── middleware/
-│   ├── __init__.py
-│   ├── auth.py                 # JWT authentication
-│   ├── rate_limit.py           # Rate limiting
-│   └── cors.py                 # CORS handling
-└── core/
+│   ├── auth.py                 # Login / refresh / JWT issuance
+│   ├── proxy.py                # Request proxy to downstream services
+│   ├── ai.py                   # AI tool-use chat proxy
+│   └── health.py               # Health check
+└── core/                       # Infrastructure layer
     ├── __init__.py
-    └── gateway.py              # Gateway logic
+    ├── auth.py                 # JWT verify (delegates to shared.auth)
+    ├── clients.py              # downstream httpx + redis clients
+    ├── metrics.py              # Prometheus collectors + request middleware
+    └── middleware.py           # rate limiting
 ```
 
 ## Infrastructure Components

@@ -13,13 +13,13 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+from core import plugin_config as cfgmod
 from core.database import load_plugin_config, update_plugin_in_database
 from core.marketplace_sync import sync_plugin_ai_tools
 from core.state import logger, plugin_instances, plugins_db
 from models import PluginInfo
 
 from config import settings
-from core import plugin_config as cfgmod
 
 
 async def load_plugins_from_disk():

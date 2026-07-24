@@ -6,7 +6,7 @@ Sets up test environment BEFORE any app code is imported
 import os
 import sys
 
-# Test environment - MUST match docker-compose.test.yml
+# Test environment - MUST match docker/compose/docker-compose.test.yml
 # IMPORTANT: Set env vars BEFORE importing any app code
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("POSTGRES_PORT", "5433")  # local default; CI sets via env

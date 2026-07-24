@@ -563,7 +563,7 @@ services:
       plugin-registry:
         condition: service_healthy
     volumes:
-    - ../../src/core/config/default_plugins.yml:/app/src/core/config/default_plugins.yml:ro
+    - ../../src/bootstrap/config/default_plugins.yml:/app/src/bootstrap/config/default_plugins.yml:ro
     healthcheck:
       test:
       - CMD

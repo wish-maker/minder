@@ -61,7 +61,7 @@ handler in the platform, and (b) declaring it via a manifest that the registry i
 
 ## Plugin Lifecycle
 
-The lifecycle implemented in code (see `src/core/`) is:
+The lifecycle implemented in code (see `src/plugins/_contract.py`) is:
 
 ```
 register() → initialize()  →  health_check()  →  collect_data()  →  shutdown()
