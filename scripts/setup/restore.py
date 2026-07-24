@@ -181,6 +181,44 @@ def run(archive: str = "") -> int:
         else:
             log.warn("PostgreSQL restore had errors (partial restore possible)")
 
+    # ── Neo4j (APOC cypher restore; #124 — restore was previously missing) ─
+    # Load the exported cypher via cypher-shell -f. Password resolved inside the
+    # container from its own $NEO4J_AUTH (never on the host cmdline). Assumes a
+    # fresh/empty graph (the export uses CREATE, not MERGE) — matches the
+    # "OVERWRITE current data" contract above.
+    if (
+        restore_dir
+        and (restore_dir / "neo4j.cypher").is_file()
+        and docker.container_running("neo4j")
+    ):
+        log.spinner_start("Restoring Neo4j…")
+        nname = docker.container_name("neo4j")
+        docker.run(
+            "docker",
+            "cp",
+            str(restore_dir / "neo4j.cypher"),
+            f"{nname}:/var/lib/neo4j/import/neo4j-restore.cypher",
+        )
+        restore_cmd = [
+            "docker",
+            "exec",
+            nname,
+            "bash",
+            "-c",
+            'cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" '
+            "-f /var/lib/neo4j/import/neo4j-restore.cypher",
+        ]
+        if config.DRY_RUN:
+            docker.run(*restore_cmd)
+            ok = True
+        else:
+            ok = _run_bare(restore_cmd, stderr_null=True) == 0
+        log.spinner_stop()
+        if ok:
+            log.success("Neo4j restored")
+        else:
+            log.warn("Neo4j restore had errors")
+
     # ── Qdrant (#56: copy in AND extract the same /tmp/qdrant.tar.gz) ──────
     if (
         restore_dir
