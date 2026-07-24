@@ -9,7 +9,7 @@ import logging
 from core.entity_extractor import EntityExtractor
 from core.graph_constructor import KnowledgeGraphConstructor
 from core.graph_retriever import GraphRetriever
-from fastapi import HTTPException
+from fastapi import APIRouter, HTTPException
 from models.schemas import (
     EntityContextRequest,
     EntityContextResponse,
@@ -217,3 +217,46 @@ async def get_entity_context_handler(
     except Exception as e:
         logger.error(f"❌ Entity context retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def build_graph_router(
+    *,
+    entity_extractor: EntityExtractor,
+    graph_constructor: KnowledgeGraphConstructor,
+    graph_retriever: GraphRetriever,
+) -> APIRouter:
+    """Assemble the Graph RAG business endpoints as an APIRouter with the service
+    instances injected — same factory pattern as the other services' route modules
+    (thin main + routes/). The handlers above hold the logic; this only wires them."""
+    router = APIRouter()
+
+    @router.post("/extract", tags=["Entity Extraction"])
+    async def extract_entities(request: EntityExtractionRequest):
+        """Extract entities and relationships from text"""
+        return await extract_entities_handler(request, entity_extractor)
+
+    @router.post("/construct-graph", tags=["Knowledge Graph"])
+    async def construct_knowledge_graph(request: KnowledgeGraphRequest):
+        """Build knowledge graph from document"""
+        return await construct_knowledge_graph_handler(
+            request, entity_extractor, graph_constructor
+        )
+
+    @router.delete("/graph/document/{document_id}", tags=["Knowledge Graph"])
+    async def delete_document_graph(document_id: str):
+        """Delete a document's knowledge-graph nodes/relationships from Neo4j."""
+        return await delete_document_graph_handler(document_id, graph_constructor)
+
+    @router.post("/retrieve", tags=["Graph Retrieval"])
+    async def retrieve_with_graph(request: GraphRetrievalRequest):
+        """Graph-based retrieval for RAG enhancement"""
+        return await retrieve_with_graph_handler(
+            request, entity_extractor, graph_retriever
+        )
+
+    @router.post("/entity-context", tags=["Entity Context"])
+    async def get_entity_context(request: EntityContextRequest):
+        """Get detailed context for an entity"""
+        return await get_entity_context_handler(request, graph_retriever)
+
+    return router
