@@ -63,6 +63,7 @@ class OllamaManager:
     async def ensure_model(self, model_name: str):
         """Ensure model is available, pull if necessary"""
         try:
+            assert self.client is not None
             models = await self.client.list()
             available = [m["name"] for m in models.get("models", [])]
 
@@ -75,6 +76,7 @@ class OllamaManager:
 
             if not model_exists:
                 logger.info(f"📥 Pulling model: {model_name}")
+                assert self.client is not None
                 await self.client.pull(model_name)
                 logger.info(f"✅ Model pulled: {model_name}")
             else:
@@ -95,6 +97,7 @@ class OllamaManager:
         embeddings = []
         for text in texts:
             try:
+                assert self.embed_client is not None
                 response = await self.embed_client.embeddings(model=model, prompt=text)
                 embedding = response.get("embedding", [])
             except Exception as e:
@@ -131,6 +134,7 @@ class OllamaManager:
         full_prompt = self._build_rag_prompt(prompt, context)
 
         try:
+            assert self.client is not None
             response = await self.client.generate(
                 model=model,
                 prompt=full_prompt,

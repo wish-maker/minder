@@ -46,7 +46,21 @@ jobs:
         run: flake8 src/services/ src/shared/ scripts/setup/ tests/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run MyPy
-        run: mypy src/services/ src/shared/ scripts/setup/ --ignore-missing-imports || true
+        # A REAL gate now (#33) — no `|| true`. Each service runs with its OWN dir as
+        # the import root (WORKDIR=/app at runtime → core/routes/config are top-level
+        # per service), so they must be checked one at a time or the same top-level
+        # module names collide ("Duplicate module"). types-PyYAML (requirements-dev)
+        # supplies the yaml stubs.
+        run: |
+          set -e
+          for d in src/services/*/; do
+            echo "── mypy ${d} ──"
+            ( cd "${d}" && mypy . --ignore-missing-imports )
+          done
+          echo "── mypy src/shared/ ──"
+          ( cd src/shared && mypy . --ignore-missing-imports )
+          echo "── mypy scripts/setup/ ──"
+          mypy scripts/setup/ --ignore-missing-imports
 
   shell-lint:
     name: Shell Lint (setup.sh shim + setup.bash.sh + scripts/lib)

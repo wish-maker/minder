@@ -16,6 +16,7 @@ slowapi>=0.1.9,<0.2.0
 
 # Code Quality
 mypy>=1.8.0,<2.0.0
+types-PyYAML>=6.0.0  # yaml stubs so the real mypy gate (#33) resolves plugin-registry's yaml imports
 flake8>=6.1.0,<7.0.0
 black>=23.12.0,<24.0.0
 isort>=5.13.0,<6.0.0

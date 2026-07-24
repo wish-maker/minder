@@ -1,0 +1,3 @@
+"""
+Plugin Registry Schemas Package
+"""

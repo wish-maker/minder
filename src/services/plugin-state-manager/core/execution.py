@@ -6,7 +6,7 @@ Tool execution engine
 import json
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 from fastapi import HTTPException
@@ -139,7 +139,7 @@ async def execute_tool(
 
 
 async def discover_tools(
-    active_only: bool = True, tier_filter: str = None
+    active_only: bool = True, tier_filter: Optional[str] = None
 ) -> ToolDiscoveryResponse:
     """
     Discover all available AI tools

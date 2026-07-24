@@ -5,6 +5,7 @@ Handles authentication, rate limiting, request routing, and logging
 """
 
 from contextlib import asynccontextmanager
+from typing import Any
 
 from core.auth import close_pg_pool, init_users_table
 from core.clients import SERVICE_REGISTRY, http_client, redis_client
@@ -57,7 +58,7 @@ async def lifespan(app: FastAPI):
 # Configure API documentation based on environment.
 # Disable docs in production for security.
 if settings.ENVIRONMENT == "production":
-    docs_config = {
+    docs_config: dict[str, Any] = {
         "docs_url": None,  # Disable Swagger UI
         "redoc_url": None,  # Disable ReDoc
     }

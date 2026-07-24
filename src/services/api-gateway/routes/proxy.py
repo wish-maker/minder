@@ -86,7 +86,7 @@ def _require_jwt_for_writes(request: Request) -> None:
 @router.get("/v1/plugins")
 async def list_plugins(request: Request):
     """Proxy GET /v1/plugins to Plugin Registry"""
-    service_url = SERVICE_REGISTRY.get("plugin_registry")
+    service_url = SERVICE_REGISTRY["plugin_registry"]
     return await proxy_request(service_url, "v1/plugins", request)
 
 
@@ -99,7 +99,7 @@ async def proxy_to_plugin_registry(path: str, request: Request):
     Authentication required for POST/PUT/DELETE/PATCH methods
     """
     _require_jwt_for_writes(request)
-    service_url = SERVICE_REGISTRY.get("plugin_registry")
+    service_url = SERVICE_REGISTRY["plugin_registry"]
     return await proxy_request(service_url, f"v1/plugins/{path}", request)
 
 
@@ -114,7 +114,7 @@ async def proxy_to_plugin_registry(path: str, request: Request):
 async def proxy_to_rag_pipeline(path: str, request: Request):
     """Proxy all /v1/rag/* requests to RAG Pipeline service (writes require JWT)."""
     _require_jwt_for_writes(request)
-    service_url = SERVICE_REGISTRY.get("rag_pipeline")
+    service_url = SERVICE_REGISTRY["rag_pipeline"]
     return await proxy_request(service_url, path, request)
 
 
@@ -129,5 +129,5 @@ async def proxy_to_rag_pipeline(path: str, request: Request):
 async def proxy_to_model_management(path: str, request: Request):
     """Proxy all /v1/models/* requests to Model Management service (writes require JWT)."""
     _require_jwt_for_writes(request)
-    service_url = SERVICE_REGISTRY.get("model_management")
+    service_url = SERVICE_REGISTRY["model_management"]
     return await proxy_request(service_url, path, request)

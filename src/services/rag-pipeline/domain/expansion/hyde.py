@@ -8,7 +8,7 @@ This is a domain component with NO external dependencies on infrastructure.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class HyDEQueryExpander:
         query: str,
         llm_manager: Any,
         model: str = "llama3",
-        query_embedding: List[float] = None,
+        query_embedding: Optional[List[float]] = None,
     ) -> Dict[str, Any]:
         """
         Expand query using HyDE technique

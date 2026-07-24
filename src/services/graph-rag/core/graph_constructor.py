@@ -5,7 +5,7 @@ Manages Neo4j knowledge graph construction and operations.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from neo4j import AsyncGraphDatabase
 
@@ -29,9 +29,9 @@ class KnowledgeGraphConstructor:
     async def create_document_node(
         self,
         document_id: str,
-        title: str = None,
-        source: str = None,
-        metadata: Dict[str, Any] = None,
+        title: Optional[str] = None,
+        source: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Create a document node in Neo4j

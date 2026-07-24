@@ -8,7 +8,10 @@ This is a domain component with NO external dependencies on infrastructure.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from domain.quality_evaluator import AdvancedQualityEvaluator
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,7 @@ class SelfRAGPipeline:
 
         self.max_iterations = max_iterations
         self.quality_threshold = quality_threshold
-        self.evaluator = None
+        self.evaluator: Optional["AdvancedQualityEvaluator"] = None
         self._evaluator_loaded = False
 
         logger.info(
