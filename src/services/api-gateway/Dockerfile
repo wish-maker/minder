@@ -24,7 +24,6 @@ COPY src/services/api-gateway/core /app/core
 COPY src/services/api-gateway/routes /app/routes
 
 # Copy shared libraries
-COPY src/core /app/src/core
 COPY src/shared /app/src/shared
 
 # Create non-root user

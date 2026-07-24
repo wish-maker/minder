@@ -29,10 +29,10 @@ app** — the web UI is **OpenWebUI**.
 minder/
 ├── setup.sh                       # single entry point for all lifecycle commands
 ├── pyproject.toml                 # Python tooling config (black, isort, pytest, mypy)
-├── docker-compose.test.yml        # test dependencies
 ├── docker/
 │   └── compose/
-│       └── docker-compose.yml     # hand-maintained source of truth for services
+│       ├── docker-compose.yml     # hand-maintained source of truth for services
+│       └── docker-compose.test.yml # local integration/e2e test deps (CI uses GH Actions services)
 ├── src/
 │   ├── services/                  # one FastAPI app per service (see below)
 │   ├── core/                      # shared core logic (plugin interface, loaders)
@@ -199,7 +199,7 @@ See [testing.md](testing.md) for the full guide. Quick reference:
 
 ```bash
 pytest tests/unit/ -v          # unit tests
-pytest tests/integration/ -v   # integration tests (needs docker-compose.test.yml deps)
+pytest tests/integration/ -v   # integration tests (needs docker/compose/docker-compose.test.yml deps)
 pytest --cov=src --cov-report=term-missing
 ```
 

@@ -29,7 +29,7 @@ class Settings(MinderBaseSettings):
     VERSION: str = "2.1.0"
     PORT: int = 8003
     DB_NAME: str = "minder_marketplace"
-    DEFAULT_PLUGINS_CONFIG: str = "/app/src/core/config/default_plugins.yml"
+    DEFAULT_PLUGINS_CONFIG: str = "/app/src/bootstrap/config/default_plugins.yml"
 
 
 settings = Settings()

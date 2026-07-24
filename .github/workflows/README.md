@@ -60,8 +60,8 @@ bash -n setup.sh setup.bash.sh scripts/lib/*.sh
 shellcheck --shell=bash --severity=error setup.sh setup.bash.sh scripts/lib/*.sh
 
 # Python (matches the Quality Gate + CI workflows)
-black --check src/services/ src/core/ scripts/setup/
-flake8 src/services/ src/core/ scripts/setup/ --max-line-length=120
+black --check src/services/ scripts/setup/
+flake8 src/services/ scripts/setup/ --max-line-length=120
 mypy src/services/ scripts/setup/ --ignore-missing-imports
 pytest tests/ -v --cov=src
 ```
