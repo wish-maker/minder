@@ -1,7 +1,7 @@
-fastapi==0.115.0
-uvicorn==0.30.0
-pydantic==2.9.0
+fastapi==0.139.2
+uvicorn==0.51.0
+pydantic==2.13.4
 spacy>=3.7.0
-neo4j==5.26.0
+neo4j==6.2.0
 python-multipart==0.0.32
-prometheus-client==0.20.0
+prometheus-client==0.25.0

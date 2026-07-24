@@ -1,44 +1,44 @@
 # Core Application Requirements
-fastapi==0.115.0
-pydantic==2.9.0
-httpx==0.25.2
-asyncpg==0.29.0
-redis==5.0.1
+fastapi==0.139.2
+pydantic==2.13.4
+httpx==0.28.1
+asyncpg==0.31.0
+redis==8.0.1
 
 # AI/ML Libraries
-ollama==0.1.7
-qdrant-client==1.17.1
-neo4j==5.26.0
+ollama==0.6.2
+qdrant-client==1.18.0
+neo4j==6.2.0
 
 # Server
-uvicorn==0.30.0
+uvicorn==0.51.0
 
 # Configuration & Settings
-pydantic-settings==2.6.0
-python-dotenv==1.0.0
+pydantic-settings==2.14.2
+python-dotenv==1.2.2
 
 # Utilities
 python-multipart==0.0.32
-python-jose[cryptography]==3.4.0
+python-jose[cryptography]==3.5.0
 
 # Monitoring
-prometheus-client==0.19.0
+prometheus-client==0.25.0
 
 # Database
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.12
 
 # File & Data Handling
-aiofiles==23.2.1
-aiohttp==3.9.1
-pyyaml==6.0.1
-pyjwt==2.8.0
+aiofiles==25.1.0
+aiohttp==3.14.3
+pyyaml==6.0.3
+pyjwt==2.13.0
 
 # HTTP Client (test dependency)
-requests==2.31.0
+requests==2.34.2
 
 # System & Performance Testing
-psutil==5.9.6
-locust==2.15.1
+psutil==7.2.2
+locust==2.46.1
 
 # Password Hashing
 passlib[bcrypt]==1.7.4
