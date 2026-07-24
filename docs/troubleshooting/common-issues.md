@@ -154,8 +154,9 @@ grep NEO4J .env
 
 ## Plugin Not Loading
 
-Plugins are managed by the plugin-registry service (`:8001`). Note that **no default
-plugins are shipped** — an empty plugin list is expected on a clean install.
+Plugins are managed by the plugin-registry service (`:8001`). Six first-party module plugins
+ship and are disk-loaded on startup (`telegraf`, `network`, `crypto`, `weather`, `news`,
+`tefas`) — so `GET /v1/plugins` should list them on a clean install, not an empty set.
 
 ```bash
 # Registry health and plugin list

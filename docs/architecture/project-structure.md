@@ -53,7 +53,7 @@ minder/                              # Project root
 │   │   ├── tts-stt/                 # TTS / STT (port 8006)
 │   │   └── graph-rag/               # Graph RAG / knowledge graph (port 8008)
 │   ├── bootstrap/                   # Bootstrap config data (config/default_plugins.yml stub)
-│   ├── plugins/                     # First-party module plugins (telegraf, network) + _contract.py
+│   ├── plugins/                     # First-party module plugins (telegraf, network, crypto, weather, news, tefas) + _contract.py
 │   ├── requirements/                # Shared Python dependency sets (see below)
 │   └── shared/                      # Shared utilities (ai, auth, config, models, utils)
 │

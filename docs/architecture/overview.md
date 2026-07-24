@@ -24,7 +24,7 @@ redis-exporter, rabbitmq-exporter). See [Service Bundles](bundles.md).
 ## Architecture Overview
 
 Minder is a local AI orchestration platform providing JWT-authenticated APIs, RAG pipelines
-(Standard/Conversational/HyDE/Self-RAG/auto via the query `method`; corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45), a knowledge-graph service, a manifest-based plugin system, and a
+(Standard/Conversational/HyDE/Self-RAG/auto via the query `method`; corrective wired + adaptive rerank/compress flags + hybrid/parent-child retrieval strategies — all wired, #45), a knowledge-graph service, a manifest-based plugin system, and a
 full observability stack. All services run in Docker and are provisioned by a single `setup.sh`
 entrypoint — a thin shim over the native-Python setup CLI (`python -m scripts.setup`; the
 original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
@@ -32,11 +32,11 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 ### System Capabilities
 
 - **Plugin Management** - Manifest-based plugins with a defined lifecycle (no arbitrary code execution)
-- **RAG** - Document ingestion, chunking, embeddings, vector retrieval; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45)
+- **RAG** - Document ingestion, chunking, embeddings, vector retrieval; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective wired + adaptive rerank/compress flags + hybrid/parent-child retrieval strategies — all wired, #45)
 - **Knowledge Graph** - spaCy NER entity extraction and Neo4j graph construction/retrieval (graph-rag)
 - **Authentication** - JWT-based auth (bcrypt password hashing) on core services
 - **Observability** - Prometheus, Grafana, InfluxDB, Alertmanager, Jaeger, OpenTelemetry collector
-- **Speech** - TTS (gTTS) and STT (speech_recognition), ~12 languages, Turkish default
+- **Speech** - TTS (Piper offline default, gTTS fallback) and STT (speech_recognition), ~12 languages, Turkish default
 
 ## Service Architecture Diagram
 
@@ -130,14 +130,14 @@ All eight core APIs are FastAPI services with real implementations.
 
 #### RAG Pipeline (Port 8004)
 - Knowledge bases, document upload (PDF/TXT/MD via pypdf + LangChain splitter), Qdrant vectors,
-  Ollama embeddings + LLM; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45)
+  Ollama embeddings + LLM; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective wired + adaptive rerank/compress flags + hybrid/parent-child retrieval strategies — all wired, #45)
 
 #### Model Management (Port 8005)
 - Ollama model list / pull / delete / test (real). `/models/{id}/constraints` and
   `/models/{id}/metrics` are placeholders; fine-tuning delegates out.
 
 #### TTS/STT (Port 8006)
-- Text-to-speech via gTTS (MP3), speech-to-text via speech_recognition (Google), ~12 languages,
+- Text-to-speech via Piper (offline, WAV) with gTTS (MP3) fallback, speech-to-text via speech_recognition (Google), ~12 languages,
   Turkish default
 
 #### Graph RAG (Port 8008)

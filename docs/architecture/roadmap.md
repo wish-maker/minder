@@ -28,9 +28,9 @@ authoritative service breakdown.
 - Plugin Registry (8001) — manifest-based plugin lifecycle (no code execution)
 - Marketplace (8002) — discovery/licensing, dependency graph in Neo4j
 - Plugin State Manager (8003) — plugin state + AI-tool execution
-- RAG Pipeline (8004) — ingestion, embeddings, retrieval; Standard/Conversational/HyDE/Self-RAG/auto RAG live via the query `method` field (corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45)
+- RAG Pipeline (8004) — ingestion, embeddings, retrieval; Standard/Conversational/HyDE/Self-RAG/auto/corrective RAG live via the query `method` field + adaptive rerank/compress flags + hybrid/parent-child retrieval strategies (all wired — #45)
 - Model Management (8005) — Ollama model lifecycle (constraints/metrics are placeholders)
-- TTS/STT (8006) — gTTS + speech_recognition, ~12 languages
+- TTS/STT (8006) — Piper offline (default) + gTTS fallback + speech_recognition, ~12 languages
 - Graph RAG (8008) — spaCy NER + Neo4j knowledge graph
 
 **Storage (internal-only):** PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.05, MinIO,
@@ -46,7 +46,7 @@ collector, plus six exporters.
 - Standalone `ai-service` — **removed**
 - Custom frontend app (Next.js/React) — there is none; the UI is OpenWebUI
 - RBAC — only JWT auth exists
-- Default domain plugins (crypto/weather/network/news/tefas) — aspirational, none shipped
+- Default domain plugins (crypto/weather/network/news/tefas) — SHIPPED as first-party module plugins in `src/plugins/`, on the central plugin-config API (#34 done)
 - Authelia SSO/2FA — defined but **disabled** (commented out in compose)
 
 ---
@@ -61,9 +61,10 @@ ARM deployment hardening: image/version pinning, Traefik router completion, reso
 per-service config landmines, and clean-install reliability on the Pi.
 
 ### 2. RAG Enhancements
-Continued work on the retrieval pipeline. HyDE and Self-RAG are implemented as modules but are
-**not yet wired into the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45));
-wiring them in (plus further retrieval-quality work) is tracked on the backlog.
+HyDE, Self-RAG, auto (decision engine), corrective RAG, adaptive rerank/compress, and the
+hybrid (dense+BM25) + parent-child (small-to-big) retrieval strategies are all now **wired into
+the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)); `GET /capabilities`
+reports what's active. Only RAPTOR remains unwired.
 
 ### 3. Authelia Decision
 Authelia is currently disabled. Whether to finish wiring it (DB auto-init + NTP) or drop it is an
@@ -75,12 +76,14 @@ native Python** under `scripts/setup/` (Stage 2, issue #7 — closed). `setup.sh
 thin shim that execs `python -m scripts.setup`; the original bash lives on as
 `setup.bash.sh` + `scripts/lib/*.sh`, used only as the parity reference for the behavior
 gate (`scripts/gate/`). No bash dependency remains in the setup path (Linux/macOS/Windows).
-Remaining tooling work: deriving image versions from the compose file (issue #12).
+Image versions are derived from the compose file by the native-Python version engine
+(`scripts/setup/versions.py`, via `update --check`) — #12 done.
 
 ### 5. CI Quality Gates
-CI is consolidated into a fast quality gate, a test workflow, a deep security workflow, and a
-Docker image-update workflow. Evaluating stricter gates (mypy, coverage thresholds, bandit) is on
-the backlog.
+CI is consolidated into a fast quality gate (black/isort/flake8/**mypy — now a REAL gate, run
+per-service, no `|| true`**/bandit/safety/shellcheck/hadolint), a test workflow, a deep security
+workflow, and Docker-image + Python-dependency update workflows. mypy strictness was adopted
+(#33 done); coverage-fail-under remains optional/backlog.
 
 ### 6. Config Consolidation
 Per-service config lives under `docker/services/`; `docker/compose/docker-compose.yml` is the
@@ -88,11 +91,13 @@ hand-maintained source of truth. Reconciling remaining mounted config dirs (trae
 rabbitmq definitions) is tracked on the backlog.
 
 ### 7. Plugin Implementations
-Deciding whether to implement the aspirational domain plugins or formally drop them. Until real
-implementations exist, `default_plugins.yml` stays an empty stub.
+Done (#34): crypto, weather, news, tefas, network ship as first-party module plugins with a
+central plugin-config API. (The plugin-state-manager bootstrap `default_plugins.yml` stays an
+empty stub — a separate mechanism.) Remaining: TEFAS data fetch is TR-egress-blocked (#120).
 
 ### 8. Speech (Offline TTS)
-Evaluating offline TTS (Piper) to reduce dependence on gTTS/network.
+Done (#18): Piper is the **default** offline TTS engine (WAV, bundled en+tr voices), with gTTS
+as the online fallback for non-bundled languages.
 
 ---
 

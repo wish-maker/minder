@@ -27,9 +27,9 @@ bash setup.sh restore
 The full `setup.sh` command set:
 
 ```
-install | start | stop | restart | status | logs | shell | migrate |
-backup | restore | doctor | update | ollama-mode |
-sync-postgres-password | uninstall
+install [--profile] | start | stop | restart [service] | status [--json|--watch|--report|--fix] |
+logs | shell | migrate | backup | restore | doctor | update [--check] |
+bundle {status|enable|disable} | ollama-mode | sync-postgres-password | uninstall [--purge]
 ```
 
 Compose is always invoked as
@@ -48,11 +48,11 @@ that hold real state include:
 |---|---|---|
 | `postgres_data` | PostgreSQL (`postgres:18.4-trixie`) | Users, sessions, metadata + aux DBs (marketplace, tefas/weather/news/crypto, schema-registry) |
 | `redis_data` | Redis (`redis:8.8.0-alpine`) | Cache, rate-limit state, sessions |
-| `neo4j_data` | Neo4j (`neo4j:2026.05.0-community`) | Graph relationships (marketplace + graph-rag) |
-| `qdrant_data` | Qdrant (`qdrant/qdrant:v1.18.2`) | Vector embeddings for RAG |
+| `neo4j_data` | Neo4j (`neo4j:2026.06.0-community`) | Graph relationships (marketplace + graph-rag) |
+| `qdrant_data` | Qdrant (`qdrant/qdrant:v1.18.3`) | Vector embeddings for RAG |
 | `minio_data` | MinIO object store | See buckets below |
 | `rabbitmq_data` | RabbitMQ (`rabbitmq:4.3.2-management`) | Queues, pipeline triggers |
-| `influxdb_data` | InfluxDB (`influxdb:3.10.1-core`) | Time-series metrics |
+| `influxdb_data` | InfluxDB (`influxdb:3.10.3-core`) | Time-series metrics |
 | `ollama_data` | Ollama model storage | Pulled models under `/root/.ollama/models` |
 
 > Volume names are prefixed by the Compose project at runtime (e.g.
@@ -113,7 +113,11 @@ docker exec minder-postgres pg_dump -U "$POSTGRES_USER" -d minder | gzip > minde
 ### Neo4j
 
 ```bash
-docker exec minder-neo4j neo4j-admin database dump neo4j --to-path=/backups
+# Community edition rejects an online `neo4j-admin database dump` ("database is in use"),
+# which is why setup.sh backup uses APOC cypher export. Manual equivalent:
+docker exec minder-neo4j cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" \
+  "CALL apoc.export.cypher.all('neo4j.cypher',{format:'cypher-shell'})"
+docker cp minder-neo4j:/var/lib/neo4j/import/neo4j.cypher ./neo4j.cypher
 docker cp minder-neo4j:/backups ./neo4j-backup-$(date +%Y%m%d)
 ```
 

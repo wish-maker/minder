@@ -284,8 +284,8 @@ black --check src/
 # Import order
 isort --check-only src/
 
-# Type check
-mypy src/
+# Type check — per-service ("mypy src/" collides on duplicate top-level modules)
+(cd src/services/<service> && mypy . --ignore-missing-imports)
 ```
 
 ---
@@ -294,10 +294,11 @@ mypy src/
 
 CI runs across a small set of workflows:
 
-- **`quality.yml`** — fast gate: Black, isort, mypy, plus light bandit/safety scans.
-- **`ci.yml`** — the test suite (pytest).
+- **`quality.yml`** — fast gate: Black, isort, **flake8**, **mypy (real gate, per-service, no `|| true`)**, bandit, safety, shellcheck, hadolint, secret scan.
+- **`ci.yml`** — the test suite (pytest: unit/integration/e2e; deps via GitHub Actions `services:`).
 - **`security.yml`** — deeper scans (CodeQL, Trivy).
 - **`docker-image-update.yml`** — third-party image update automation.
+- **`dependency-update.yml`** — weekly Python-dependency (pip) update issue.
 
 Tests run on Python 3.11 / 3.12 to match the service runtimes.
 
@@ -326,7 +327,7 @@ def test_with_logging(caplog):
 - [ ] Tests pass (`pytest`)
 - [ ] Formatted (`black --check src/`)
 - [ ] Imports sorted (`isort --check-only src/`)
-- [ ] Type checked (`mypy src/`)
+- [ ] Type checked (per-service: `cd src/services/<svc> && mypy .`)
 
 ### Before Merging
 - [ ] CI green (quality + tests + security)

@@ -115,9 +115,10 @@ The `setup.sh` entrypoint (thin shim → `python -m scripts.setup`) provides com
 The full command set is:
 
 ```
-install | start | stop | restart | status | logs | shell | migrate |
-backup | restore | doctor | update | ollama-mode | sync-postgres-password | uninstall |
-version | help
+install [--profile minimal|standard|full] | start | stop | restart [service] |
+status [--json|--watch|--report|--fix] | logs | shell | migrate | backup | restore |
+doctor | update [--check] | bundle {status|enable|disable} | ollama-mode |
+sync-postgres-password | uninstall [--purge] | version | help
 ```
 
 Global flags (pass as `--flag` or set the env var): `--dry-run`/`DRY_RUN=1`,

@@ -117,8 +117,10 @@ POST /v1/plugins/{plugin_name}/enable
 Authorization: Bearer <token>
 ```
 
-> No default plugins ship with the platform today. The registry manages whatever
-> plugins are installed; the shipped configuration is an intentional empty stub.
+> Six first-party module plugins ship in `src/plugins/` and are loaded from disk by
+> the registry on startup (`crypto`, `weather`, `news`, `tefas`, `network`, `telegraf`)
+> — listed at `GET /v1/plugins`. (The separate plugin-state-manager bootstrap
+> `default_plugins.yml` stays an empty stub.)
 
 ---
 
@@ -134,7 +136,7 @@ GET /health
 
 #### List / search plugins
 ```http
-GET /plugins?page=1&page_size=10
+GET /v1/marketplace/plugins?page=1&page_size=10
 ```
 
 See `/docs` for the full set of discovery, search, featured, and dependency
@@ -158,10 +160,11 @@ GET /health
 
 Retrieval-augmented generation. Manages knowledge bases, ingests documents
 (PDF/TXT/MD via `pypdf` + a LangChain splitter), stores vectors in Qdrant, and
-uses Ollama for embeddings and generation. The live query endpoint does Standard and
-Conversational RAG (`conversation_id`). HyDE, Self-RAG, and a decision engine exist as
-modules but are **not wired into the live endpoint**
-([#45](https://github.com/wish-maker/minder/issues/45)).
+uses Ollama for embeddings and generation. The live query endpoint supports Standard,
+Conversational (`conversation_id`), **HyDE**, **Self-RAG**, **auto** (decision engine),
+and **corrective** RAG via the `method` field, plus orthogonal `rerank`/`compress`
+flags and `hybrid`/`parent_context` retrieval strategies. `GET /capabilities` reports
+what's live. See [rag-methods.md](../rag-methods.md).
 
 #### Health
 ```http
@@ -221,9 +224,10 @@ GET /models
 
 ### 7. TTS/STT (`http://localhost:8006`)
 
-Text-to-speech via gTTS (returns MP3) and speech-to-text via
-`speech_recognition` (Google backend). Around 12 languages supported; Turkish is
-the default.
+Text-to-speech via **Piper** (offline, on-device; returns WAV) with a **gTTS** fallback
+(online, returns MP3) for languages without a bundled Piper voice; speech-to-text via
+`speech_recognition` (Google backend). Around 12 languages supported; Turkish is the
+default and ships a bundled Piper voice.
 
 #### Text-to-Speech
 ```http
@@ -232,7 +236,7 @@ Content-Type: application/json
 
 { "text": "Merhaba dünya", "language": "tr" }
 ```
-**Response:** audio (`audio/mpeg`)
+**Response:** audio — `audio/wav` (Piper) or `audio/mpeg` (gTTS fallback)
 
 #### Speech-to-Text
 ```http
