@@ -9,7 +9,7 @@
 ## How the Roadmap Works
 
 This document is intentionally **conceptual**. The detailed, up-to-date backlog lives as GitHub
-issues (`wish-maker/minder`, currently roughly #7–#36) grouped under the "ARM Pi Production
+issues (`wish-maker/minder`, running through ~#120; open set concentrated in #8/#11/#15/#21/#25/#28/#36/#65/#120) grouped under the "ARM Pi Production
 Deploy" milestone. When this file and the issue tracker disagree, **the tracker wins**.
 
 Use the tracker for concrete, actionable items; use this document for the shape of the platform

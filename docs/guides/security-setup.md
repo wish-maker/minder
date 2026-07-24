@@ -39,12 +39,19 @@ security posture of the Minder platform.
 
 ## 🚨 Critical Security Issues
 
-The following default credentials are present in the codebase and **MUST be replaced**:
+Secrets now live in a **single source of truth — the root `.env`** (seeded from
+`.env.example`; compose reads them via `${VAR}` interpolation, so there is no longer
+per-service duplication). Replace these placeholder defaults **once** in `.env` before
+any non-local deployment:
 
-- **POSTGRES_PASSWORD:** `dev_password_change_me` (14 instances)
-- **REDIS_PASSWORD:** `dev_password_change_me` (14 instances)
-- **JWT_SECRET:** `dev_jwt_secret_change_me` (2 instances)
-- **INFLUXDB_TOKEN:** `minder-super-secret-token-change-me-in-production` (2 instances)
+- **POSTGRES_PASSWORD:** `dev_password_change_me`
+- **REDIS_PASSWORD:** `dev_password_change_me`
+- **JWT_SECRET:** `dev_jwt_secret_change_me`
+- **INFLUXDB_TOKEN:** `minder-super-secret-token-change-me-in-production`
+
+(`setup.sh` self-heals missing secrets into `.env` and chmods it 600. A couple of
+in-code fallbacks to these dev values remain as last-resort defaults — the real fix is
+setting them in `.env`, which overrides them.)
 
 **Risk Level:** CRITICAL
 - Default credentials allow unauthorized access
