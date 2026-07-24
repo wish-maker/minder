@@ -21,7 +21,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             ollama_models = await ollama_manager.list_models()
             result = []
             for model in ollama_models:
-                model_name = model.get("name", "")
+                # ollama>=0.5 renamed the list-entry field "name" -> "model"
+                # (typed ListResponse.Model); .get("name") now silently yields "".
+                model_name = model.get("model", "")
                 model_size = model.get("size", 0)
                 size_str = (
                     f"{model_size / (1024**3):.2f} GB" if model_size else "Unknown"
@@ -54,7 +56,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         """Register and pull a model from the Ollama library (may download a lot)."""
         try:
             for model in await ollama_manager.list_models():
-                if model.get("name") == model_id:
+                if model.get("model") == model_id:
                     logger.warning(f"Model {model_id} already exists locally")
                     return {
                         "message": f"Model '{model_id}' already exists",
@@ -96,7 +98,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         """Permanently delete a model from local Ollama storage."""
         try:
             exists = any(
-                m.get("name") == model_id for m in await ollama_manager.list_models()
+                m.get("model") == model_id for m in await ollama_manager.list_models()
             )
             if not exists:
                 raise HTTPException(
@@ -156,7 +158,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         """Fine-tune request. **Placeholder** — training is not performed here."""
         try:
             exists = any(
-                m.get("name") == request.base_model
+                m.get("model") == request.base_model
                 for m in await ollama_manager.list_models()
             )
             if not exists:

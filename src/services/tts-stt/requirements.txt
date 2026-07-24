@@ -1,12 +1,12 @@
-fastapi==0.115.0
-uvicorn==0.30.0
-pydantic==2.9.0
+fastapi==0.139.2
+uvicorn==0.51.0
+pydantic==2.13.4
 python-multipart==0.0.32
-aiofiles==23.2.1
-prometheus-client==0.20.0
-python-dotenv==1.0.0
+aiofiles==25.1.0
+prometheus-client==0.25.0
+python-dotenv==1.2.2
 
 # TTS/STT (Minimal working set)
-gtts==2.5.0  # Google TTS - simple and reliable
-SpeechRecognition==3.10.0
-httpx==0.25.2
+gtts==2.5.4  # Google TTS - simple and reliable
+SpeechRecognition==3.17.0
+httpx==0.28.1
