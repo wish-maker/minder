@@ -30,9 +30,9 @@ Everything is provisioned by a single script and a single hand-maintained compos
 ## `setup.sh` Commands
 
 ```
-install | start | stop | restart | status | logs | shell | migrate |
-backup | restore | doctor | update | ollama-mode |
-sync-postgres-password | uninstall
+install [--profile] | start | stop | restart [service] | status [--json|--watch|--report|--fix] |
+logs | shell | migrate | backup | restore | doctor | update [--check] |
+bundle {status|enable|disable} | ollama-mode | sync-postgres-password | uninstall [--purge]
 ```
 
 Compose is always invoked as
@@ -109,7 +109,7 @@ storage backends are **internal-only** and reached over the Docker network or vi
 
 ### Inference
 
-- `minder-ollama` — `ollama/ollama:0.31.2`, internal 11434 (not host-exposed). Profile
+- `minder-ollama` — `ollama/ollama:0.32.1`, internal 11434 (not host-exposed). Profile
   `internal-ollama`: runs only when `OLLAMA_BASE_URL` is empty (local mode). If
   `OLLAMA_BASE_URL` is set, inference is offloaded to an external/native host and the
   container is inactive. Switch with `bash setup.sh ollama-mode`.
@@ -122,8 +122,8 @@ storage backends are **internal-only** and reached over the Docker network or vi
 |---|---|---|
 | PostgreSQL | `minder-postgres` | `postgres:18.4-trixie` |
 | Redis | `minder-redis` | `redis:8.8.0-alpine` |
-| Qdrant (vectors) | `minder-qdrant` | `qdrant/qdrant:v1.18.2` |
-| Neo4j (graph) | `minder-neo4j` | `neo4j:2026.05.0-community` |
+| Qdrant (vectors) | `minder-qdrant` | `qdrant/qdrant:v1.18.3` |
+| Neo4j (graph) | `minder-neo4j` | `neo4j:2026.06.0-community` |
 | MinIO (objects) | `minder-minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` |
 | RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.2-management` |
 | Schema Registry | `minder-schema-registry` | `apicurio/apicurio-registry-sql:2.6.13.Final` |
@@ -136,7 +136,7 @@ See `monitoring.md` for the full stack and instrumentation details.
 
 ### Reverse proxy & auth
 
-- **Traefik** (`traefik:v3.7.7`) — the reverse proxy, TLS termination, and router. Routing
+- **Traefik** (`traefik:v3.7.8`) — the reverse proxy, TLS termination, and router. Routing
   is via Docker labels (`exposedByDefault: false`). Host ports 80/443 and 8081 (dashboard,
   IP-whitelisted). **Minder does not use Nginx.**
 - **Authelia** — **disabled** (commented out in compose) due to a crash loop; the
@@ -259,7 +259,7 @@ Persistent state lives in Docker named volumes (`postgres_data`, `neo4j_data`,
 ## Upgrades
 
 Image versions are pinned in `docker/compose/docker-compose.yml` (hand-maintained).
-`versions.sh` derives the list from the `image:` lines and reports drift; CI
+`scripts/setup/versions.py` (the native-Python version engine, via `update --check`) derives the list from the `image:` lines and reports drift; CI
 (`docker-image-update.yml`) proposes bumps via PR. Apply with `bash setup.sh update`. Full
 procedure — including PostgreSQL major-version migration — is in
 `docker-upgrade-runbook.md`.

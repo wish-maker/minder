@@ -19,10 +19,10 @@ The loader supports **two plugin flavours** (see `src/plugins/README.md`):
 Plugin lifecycle and discovery are handled by the **Plugin Registry** service (`:8001`), with
 runtime state and AI-tool execution handled by the **Plugin State Manager** (`:8003`).
 
-> **Two module plugins ship today** (`telegraf`, `network` — see [Shipped Plugins](#shipped-plugins)).
-> The remaining domain plugins (crypto, weather, news, tefas) are still aspirational — not
-> implemented, not registered (issue #34). `default_plugins.yml` remains an empty stub; populating
-> it would try to register non-existent manifest plugins.
+> **Six module plugins ship today** (`telegraf`, `network`, `crypto`, `weather`, `news`, `tefas`
+> — see [Shipped Plugins](#shipped-plugins)); #34 is done. They're loaded from disk on registry
+> startup and declare a central `CONFIG_SCHEMA` (`GET/PUT /v1/plugins/{name}/config`). The
+> plugin-state-manager bootstrap `default_plugins.yml` remains an empty stub — a separate mechanism.
 
 ## Plugin Lifecycle
 
@@ -58,8 +58,9 @@ network, not host ports):
 
 ## Shipped Plugins
 
-Two first-party **module plugins** ship in `src/plugins/` and load on registry startup. Both are
-fixed handlers — not user uploads. See `src/plugins/README.md` for the full contract.
+Six first-party **module plugins** ship in `src/plugins/` and load on registry startup
+(`telegraf`, `network`, `crypto`, `weather`, `news`, `tefas`) — all fixed handlers, not user
+uploads. See `src/plugins/README.md` for the full contract.
 
 ### `telegraf` — config-manager (reference implementation)
 
@@ -149,8 +150,8 @@ GET /api/v1/plugins/{name}/health
 # List plugins via the gateway
 curl http://localhost:8000/api/v1/plugins | jq
 
-# Returns the two shipped module plugins (telegraf, network). No manifest
-# plugins are seeded — default_plugins.yml is an empty stub.
+# Returns the six shipped module plugins (telegraf, network, crypto, weather, news, tefas).
+# No manifest plugins are seeded — default_plugins.yml is an empty stub.
 ```
 
 ## Why Manifest-Based (No Code Execution)
@@ -162,8 +163,7 @@ curl http://localhost:8000/api/v1/plugins | jq
 
 ## Roadmap
 
-The `telegraf` and `network` module plugins are implemented (see [Shipped Plugins](#shipped-plugins)).
-The remaining domain plugins (crypto/weather/news/tefas) — or formally dropping the aspiration —
-are tracked as a GitHub issue (#34) in `wish-maker/minder`. Until real implementations exist,
-`default_plugins.yml` must remain empty (populating it would try to register non-existent
-manifest plugins). See `roadmap.md`.
+All six module plugins (`telegraf`, `network`, `crypto`, `weather`, `news`, `tefas`) are
+implemented and shipped (#34 done) — see [Shipped Plugins](#shipped-plugins). Remaining: the
+TEFAS data fetch is blocked from non-TR egress (#120). The plugin-state-manager bootstrap
+`default_plugins.yml` stays an empty stub (a separate mechanism). See `roadmap.md`.

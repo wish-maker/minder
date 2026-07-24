@@ -40,7 +40,7 @@ that carry Traefik router labels are exposed through it (`exposedByDefault: fals
 ```yaml
 # Only Traefik binds the public host ports
 traefik:
-  image: traefik:v3.7.7
+  image: traefik:v3.7.8
   ports:
     - "80:80"
     - "443:443"

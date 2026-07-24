@@ -25,9 +25,9 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 | Plugin Registry | `minder-plugin-registry` | 8001 | Manifest install, health loop, service discovery, AI-tool aggregation |
 | Marketplace | `minder-marketplace` | 8002 | Discovery/search/featured, license tiers, dependency graph (Neo4j) |
 | Plugin State Manager | `minder-plugin-state-manager` | 8003 | Plugin state, tool discovery, tool execution, licensing |
-| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors; Standard/Conversational/HyDE/Self-RAG/auto RAG via the query `method` field (corrective wired + adaptive rerank/compress flags; only hybrid/parent-child retrievers pending — #45) |
+| RAG Pipeline | `minder-rag-pipeline` | 8004 | Knowledge bases, doc ingest, Qdrant vectors; Standard/Conversational/HyDE/Self-RAG/auto/corrective RAG via the query `method` field + adaptive `rerank`/`compress` flags + `hybrid`/`parent_context` retrieval strategies (all wired — see `GET /capabilities`) |
 | Model Management | `minder-model-management` | 8005 | Ollama list/pull/delete/test (some endpoints are placeholders) |
-| TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (gTTS), speech-to-text (`speech_recognition`) |
+| TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (Piper offline default, WAV; gTTS fallback, MP3), speech-to-text (`speech_recognition`) |
 | Graph-RAG | `minder-graph-rag` | 8008 | spaCy NER, Neo4j knowledge-graph construction and retrieval |
 
 **Conventions used below**
@@ -168,8 +168,10 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | GET | `/health` | Service health + plugin/service counts |
 | GET | `/metrics` | Prometheus metrics |
 
-> **Note:** No default plugins ship with the platform. The commonly referenced
-> crypto/weather/network/news/tefas plugins are aspirational and **not implemented**.
+> **Note:** Six first-party module plugins ship in `src/plugins/` and are loaded by
+> the registry on startup — `crypto`, `weather`, `news`, `tefas`, `network`, `telegraf`
+> (see `GET /v1/plugins`). (The plugin-state-manager bootstrap `default_plugins.yml`
+> remains an intentional empty stub — that's a separate mechanism.)
 
 ---
 
@@ -281,10 +283,12 @@ Plugin state control, AI-tool discovery/execution, and per-plugin licensing.
 Chunking, embedding, retrieval, and generation. Documents are embedded into **Qdrant**;
 embeddings and generation run through **Ollama**. The live query endpoint supports
 **Standard** and **Conversational** RAG (set `conversation_id` for multi-turn history).
-Standard, Conversational, **HyDE**, **Self-RAG**, and an **auto** decision-engine are
-all selectable via the `method` field on `POST /pipeline/{id}/query`
-(`standard`/`hyde`/`self_rag`/`auto`). Corrective-RAG and rerankers/compressors exist
-as modules but are **not yet wired** ([#45](https://github.com/wish-maker/minder/issues/45)).
+Standard, Conversational, **HyDE**, **Self-RAG**, **auto** (decision engine), and
+**corrective** RAG are all selectable via the `method` field on
+`POST /pipeline/{id}/query` (`standard`/`hyde`/`self_rag`/`auto`/`corrective`).
+Orthogonal `rerank` and `compress` flags, and the `hybrid` (dense+BM25) and
+`parent_context` (small-to-big) retrieval strategies, are also wired. `GET /capabilities`
+reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -343,7 +347,7 @@ Speech synthesis and recognition. ~12 languages supported; **Turkish is the defa
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/tts` | Text-to-speech via gTTS (returns MP3) |
+| POST | `/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages |
 | GET | `/tts/languages` | Supported TTS languages |
 | POST | `/stt` | Speech-to-text via `speech_recognition` (Google backend) |
 | GET | `/stt/languages` | Supported STT languages |

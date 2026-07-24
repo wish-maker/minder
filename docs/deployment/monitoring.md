@@ -16,12 +16,12 @@ The platform ships a full observability stack. Only the services listed with a
 
 | Component | Container | Image | Host Port | Role |
 |---|---|---|---|---|
-| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.0` | 9090 | Metrics collection + storage |
+| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.1` | 9090 | Metrics collection + storage |
 | Grafana | `minder-grafana` | `grafana/grafana:13.1` | 3000 | Dashboards / visualization |
 | Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 | Alert routing |
 | Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | 16686 (UI) | Distributed tracing (all-in-one) |
 | OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.156.0` | 14317 / 14318 / 18888 | OpenTelemetry pipeline |
-| InfluxDB | `minder-influxdb` | `influxdb:3.10.1-core` | 8086 | Time-series data |
+| InfluxDB | `minder-influxdb` | `influxdb:3.10.3-core` | 8086 | Time-series data |
 | Telegraf | `minder-telegraf` | `telegraf:1.39.1` | — | Metrics collection agent |
 
 ### Exporters (all internal, scraped by Prometheus)

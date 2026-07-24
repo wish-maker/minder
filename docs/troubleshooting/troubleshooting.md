@@ -164,7 +164,7 @@ name (`minder-<service>`).
 docker network ls | grep minder
 
 # Inspect
-docker network inspect minder-network
+docker network inspect docker_minder-network   # compose maps key "minder-network" → name "docker_minder-network"
 
 # Service-to-service reachability (from inside a container)
 docker exec minder-api-gateway curl -s http://minder-rag-pipeline:8004/health

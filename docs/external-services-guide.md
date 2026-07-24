@@ -28,7 +28,7 @@ in some cases via a Traefik route).
 
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
-| Ollama | `minder-ollama` | `ollama/ollama:0.31.2` | 11434 (internal) | Profile-gated `internal-ollama`; runs only when `OLLAMA_BASE_URL` is empty (local mode). Models auto-pulled via `OLLAMA_PULL_MODELS`, stored in the `/root/.ollama/models` volume |
+| Ollama | `minder-ollama` | `ollama/ollama:0.32.1` | 11434 (internal) | Profile-gated `internal-ollama`; runs only when `OLLAMA_BASE_URL` is empty (local mode). Models auto-pulled via `OLLAMA_PULL_MODELS`, stored in the `/root/.ollama/models` volume |
 | OpenWebUI | `minder-openwebui` | `ghcr.io/open-webui/open-webui:v0.10.2` | 8080 (internal) | LLM chat UI; reached via Traefik (`chat.minder.local`) |
 
 ### Storage
@@ -37,8 +37,8 @@ in some cases via a Traefik route).
 |---------|-----------|-------|-------|-------|
 | PostgreSQL | `minder-postgres` | `postgres:18.4-trixie` | 5432 (internal) | Main DB + aux: `minder_marketplace`, `tefas_db`, `weather_db`, `news_db`, `crypto_db`, `minder_schemaregistry` |
 | Redis | `minder-redis` | `redis:8.8.0-alpine` | 6379 (internal) | Cache, rate-limit, sessions |
-| Qdrant | `minder-qdrant` | `qdrant/qdrant:v1.18.2` | 6333 (internal) | Vector DB for RAG |
-| Neo4j | `minder-neo4j` | `neo4j:2026.05.0-community` | 7687 / 7474 (internal) | Graph DB (marketplace + graph-rag); 7474 Traefik-routed (IP-whitelisted) |
+| Qdrant | `minder-qdrant` | `qdrant/qdrant:v1.18.3` | 6333 (internal) | Vector DB for RAG |
+| Neo4j | `minder-neo4j` | `neo4j:2026.06.0-community` | 7687 / 7474 (internal) | Graph DB (marketplace + graph-rag); 7474 Traefik-routed (IP-whitelisted) |
 | MinIO | `minder-minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | 9000 / 9001 (internal) | **Real running container.** Buckets: rag-documents, tts-artifacts, fine-tuning-datasets, model-checkpoints, plugin-packages, backup-archives. Console (9001) Traefik-routed |
 | RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.2-management` | 5672 / 15672 (internal) | Queue + mgmt UI; 15672 Traefik-routed (IP-whitelisted) |
 | Schema Registry | `minder-schema-registry` | `apicurio/apicurio-registry-sql:2.6.13.Final` | 8080 (internal) | Backed by the isolated `minder_schemaregistry` PostgreSQL DB |
@@ -47,10 +47,10 @@ in some cases via a Traefik route).
 
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
-| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.0` | 9090 (host) | Metrics collection |
+| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.1` | 9090 (host) | Metrics collection |
 | Grafana | `minder-grafana` | `grafana/grafana:13.1` | 3000 (host) | Dashboards; Traefik-routed |
 | Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 (host) | Alert routing |
-| InfluxDB | `minder-influxdb` | `influxdb:3.10.1-core` | 8086 (host) | Time-series |
+| InfluxDB | `minder-influxdb` | `influxdb:3.10.3-core` | 8086 (host) | Time-series |
 | Telegraf | `minder-telegraf` | `telegraf:1.39.1` | — | Metrics agent |
 | Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | 16686 (host, UI) + OTLP/thrift/zipkin | Distributed tracing |
 | OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.156.0` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) | No healthcheck by design |
@@ -70,7 +70,7 @@ in some cases via a Traefik route).
 
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
-| Traefik | `minder-traefik` | `traefik:v3.7.7` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
+| Traefik | `minder-traefik` | `traefik:v3.7.8` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
 | Authelia | `minder-authelia` | — | — | **DISABLED** — commented out in compose (crash loop / decision deferred). Traefik forward-auth is wired on a few routers but not enforced. Not counted in the 31 containers |
 
 > **Healthchecks:** 28 of 31 containers have healthchecks. `otel-collector`, `redis-exporter`,

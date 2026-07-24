@@ -10,3 +10,4 @@ aiofiles==25.1.0
 prometheus-client==0.25.0
 langchain-text-splitters==1.1.2
 asyncpg==0.31.0
+rank-bm25==0.2.2  # sparse BM25 index for the hybrid retriever (#45); pulls numpy

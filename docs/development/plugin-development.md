@@ -2,7 +2,7 @@
 
 > **Last Updated:** 2026-07-10
 > **Platform Version:** 1.0.0
-> **Plugins shipped:** none (no default plugins are implemented — see [Status](#status))
+> **Plugins shipped:** six module plugins — telegraf, network, crypto, weather, news, tefas (see [Status](#status))
 
 ---
 
@@ -33,14 +33,13 @@ plugin state and tool discovery/execution.
 
 ## Status
 
-**No default plugins are implemented or shipped.** The `crypto`, `weather`, `network`,
-`news`, and `tefas` plugins referred to in older material and in aspirational config are
-**not working examples** — they do not exist as running plugins. `default_plugins.yml` is
-an intentional empty stub.
-
-Everything in this guide is therefore **illustrative**: it describes the intended plugin
-contract and how a plugin *would* be structured. Do not treat the example names as shipped
-plugins, and do not populate `default_plugins.yml` until real implementations exist.
+**Six module plugins ship** in `src/plugins/` and load on registry startup (#34 done):
+`crypto`, `weather`, `network`, `news`, `tefas`, `telegraf`. They are real, working fixed
+handlers (no arbitrary code execution) that declare a central `CONFIG_SCHEMA`
+(`GET/PUT /v1/plugins/{name}/config`) and write to the platform's storage backends. Use them
+as reference implementations of the contract described below. (The plugin-state-manager
+bootstrap `default_plugins.yml` remains an empty stub — a separate mechanism, orthogonal to
+these disk-loaded module plugins.)
 
 ## Design Principles
 

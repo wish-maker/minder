@@ -44,9 +44,11 @@ following against the codebase:
 |------|---------|---------------|
 | **Black** | Code formatting | `[tool.black]` in root `pyproject.toml` |
 | **isort** | Import ordering | `[tool.isort]` in root `pyproject.toml` |
-| **mypy** | Static type checking | root `pyproject.toml` |
+| **mypy** | Static type checking — **blocking**, run per-service (each service dir is its own import root) | CI (`quality.yml`) |
+| **flake8** | Lint — **blocking** (`--max-line-length=120`) | CI (`quality.yml`) |
 | **bandit** | Security linting (light scan) | CI |
 | **safety** | Dependency vulnerability scan | CI |
+| **hadolint / shellcheck / TruffleHog** | Dockerfile lint / shell lint / secret scan | CI |
 
 **Key config values (root `pyproject.toml`):**
 
@@ -73,8 +75,8 @@ isort src/
 # Check import order without writing
 isort --check-only src/
 
-# Type check
-mypy src/
+# Type check — per-service ("mypy src/" collides on duplicate top-level modules)
+(cd src/services/<service> && mypy . --ignore-missing-imports)
 ```
 
 ---

@@ -143,7 +143,7 @@ All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
 - `POST /pipeline/{pipeline_id}/query` — query (retrieval + generation)
 
 **Pipeline**: query → embed (Ollama) → search (Qdrant) → retrieve context → generate (Ollama LLM).
-The live query endpoint selects the RAG method via the `method` field: `standard`, `hyde` (HyDE), `self_rag` (Self-RAG), or `auto` (decision engine) — plus Conversational via `conversation_id`. Corrective-RAG and rerankers exist as modules but are not yet wired (#45).
+The live query endpoint selects the RAG method via the `method` field: `standard`, `hyde` (HyDE), `self_rag` (Self-RAG), `auto` (decision engine), or `corrective` (CRAG) — plus Conversational via `conversation_id`. Orthogonal `rerank`/`compress` flags and the `hybrid` (dense+BM25) / `parent_context` (small-to-big) retrieval strategies are also wired (#45). `GET /capabilities` reports what's active.
 
 #### Model Management (Port 8005)
 **Purpose**: Model registry and lifecycle over Ollama
@@ -158,7 +158,7 @@ The live query endpoint selects the RAG method via the `method` field: `standard
 **Purpose**: Text-to-speech and speech-to-text
 
 **Endpoints (representative)**:
-- `POST /v1/tts` — text to speech (gTTS, MP3)
+- `POST /v1/tts` — text to speech (Piper offline WAV default, gTTS MP3 fallback)
 - `POST /v1/stt` — speech to text (speech_recognition, Google)
 
 **Languages**: ~12, Turkish default

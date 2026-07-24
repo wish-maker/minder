@@ -35,9 +35,10 @@ minder/
 │       └── docker-compose.test.yml # local integration/e2e test deps (CI uses GH Actions services)
 ├── src/
 │   ├── services/                  # one FastAPI app per service (see below)
-│   ├── core/                      # shared core logic (plugin interface, loaders)
-│   ├── plugins/                   # plugin implementations
-│   ├── shared/                    # shared helpers/utilities
+│   ├── shared/                    # shared libs (config, log, metrics, auth, db, utils)
+│   ├── plugins/                   # first-party module plugins + _contract.py
+│   ├── bootstrap/                 # bootstrap config data (config/default_plugins.yml)
+│   ├── requirements/              # shared Python dependency sets
 │   └── requirements/              # shared dependency pins
 └── tests/                         # unit / integration / e2e / performance / manual
 ```
@@ -98,8 +99,9 @@ LOG_LEVEL=DEBUG
 `setup.sh` is the single entry point:
 
 ```
-install | start | stop | restart | status | logs | shell | migrate |
-backup | restore | doctor | update | ollama-mode | sync-postgres-password | uninstall
+install [--profile] | start | stop | restart [service] | status [--json|--watch|--report|--fix] |
+logs | shell | migrate | backup | restore | doctor | update [--check] | bundle {status|enable|disable} |
+ollama-mode | sync-postgres-password | uninstall [--purge]
 ```
 
 Common usage:
@@ -214,7 +216,9 @@ Config lives in the **root `pyproject.toml`**; CI (`quality.yml`) enforces it. S
 ```bash
 black src/                 # format (line length 88)
 isort src/                 # sort imports (black profile)
-mypy src/                  # type check
+# mypy runs PER-SERVICE (each service dir is its own import root; "mypy src/" collides on
+# duplicate top-level modules like config/main). e.g.:
+(cd src/services/rag-pipeline && mypy . --ignore-missing-imports)
 ```
 
 ## Debugging
@@ -303,7 +307,7 @@ ci: consolidate workflows
 1. Branch from `main`
 2. Make focused changes
 3. Run tests: `pytest tests/unit/ -v`
-4. Run formatters/linters: `black src/ && isort src/ && mypy src/`
+4. Run formatters/linters: `black src/ && isort src/ && flake8 src/services src/shared` (mypy runs per-service — see above)
 5. Push and open a PR
 6. Address review feedback and merge
 
