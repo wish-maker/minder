@@ -109,7 +109,28 @@ def main(argv: list[str]) -> int:
         return restart_module.run(service)
     if cmd == "status":
         # setup.sh: status --json (or global --json) → json; else human.
-        return status_module.run(json_mode="--json" in argv)
+        # #71 opt-in operator flags: --watch [secs] / --report [path] / --fix.
+        watch = 0
+        if "--watch" in argv:
+            wi = argv.index("--watch")
+            watch = (
+                int(argv[wi + 1])
+                if wi + 1 < len(argv) and argv[wi + 1].isdigit()
+                else 30
+            )
+        report = "--report" in argv
+        report_path = ""
+        if report:
+            ri = argv.index("--report")
+            if ri + 1 < len(argv) and not argv[ri + 1].startswith("-"):
+                report_path = argv[ri + 1]
+        return status_module.run(
+            json_mode="--json" in argv,
+            watch=watch,
+            report=report,
+            report_path=report_path,
+            fix="--fix" in argv,
+        )
     if cmd == "update":
         # setup.sh: cmd_update "${arg1:-}" (optional --check).
         pos = _positional(argv)

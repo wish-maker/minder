@@ -27,6 +27,8 @@ _HELP_TEMPLATE = """
 
 {bold}OPERATIONS{nc}
     status [--json]         Health overview; --json for machine-readable output
+                            --watch [secs] live refresh · --report [path] snapshot
+                            to a file · --fix restart unhealthy/stopped containers
     logs [service] [lines]  Tail logs (all or specific service)
     shell [service]         Open an interactive shell in a container
     migrate [target]        Run Alembic migrations (default: head)
