@@ -22,7 +22,7 @@ router = APIRouter()
 
 @router.post("/tts", tags=["TTS"])
 async def text_to_speech(request: TTSRequest):
-    """Convert text to speech (MP3 format)"""
+    """Convert text to speech (Piper → WAV offline, or gTTS → MP3 fallback)."""
     if not TTS_AVAILABLE:
         raise HTTPException(status_code=503, detail="TTS not available")
 
@@ -36,8 +36,9 @@ async def text_to_speech(request: TTSRequest):
         tts_requests_total.labels(language=request.language, status="success").inc()
 
         # Synthesis + file I/O are blocking; run off the event loop so concurrent
-        # requests aren't stalled.
-        audio_bytes = await asyncio.to_thread(
+        # requests aren't stalled. media_type/ext depend on the engine (Piper=WAV,
+        # gTTS=MP3), chosen inside synthesize().
+        audio_bytes, media_type, ext = await asyncio.to_thread(
             synthesize, request.text, request.language, request.slow
         )
 
@@ -46,9 +47,9 @@ async def text_to_speech(request: TTSRequest):
 
         return Response(
             content=audio_bytes,
-            media_type="audio/mpeg",
+            media_type=media_type,
             headers={
-                "Content-Disposition": "attachment; filename=speech.mp3",
+                "Content-Disposition": f"attachment; filename=speech.{ext}",
                 "X-Duration": str(duration),
                 "X-Language": request.language,
             },
