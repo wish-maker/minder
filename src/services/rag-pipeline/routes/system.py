@@ -68,12 +68,12 @@ async def capabilities():
         },
         "retrievers": {
             # Dense (Qdrant) is always on; hybrid adds BM25 sparse when rank-bm25 is
-            # present. Parent-child still needs ingest-time hierarchy (remaining #45).
+            # present; parent_context = small-to-big (child match + neighbour window).
             "dense": {"available": True},
             "hybrid": {"available": _bm25_available()},
             "parent_child": {
-                "available": False,
-                "note": "needs ingest-time hierarchy (#45)",
+                "available": True,
+                "note": "small-to-big neighbour expansion via chunk_index",
             },
         },
         "optional_deps": {

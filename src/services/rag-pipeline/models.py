@@ -57,6 +57,10 @@ class QueryRequest(BaseModel):
     # Retrieval strategy (#45): hybrid = dense + BM25 sparse (recall for keyword/rare
     # terms). Needs rank-bm25; falls back to dense if unavailable.
     hybrid: bool = False
+    # parent_context (#45, small-to-big): match precise child chunks, but return each
+    # with its neighbouring chunks (parent window) for fuller context. Takes
+    # precedence over hybrid when both set.
+    parent_context: bool = False
 
 
 class QueryResponse(BaseModel):

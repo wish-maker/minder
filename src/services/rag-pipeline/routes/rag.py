@@ -16,7 +16,15 @@ from models import (
     QueryResponse,
     RAGPipelineCreate,
 )
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    Range,
+    VectorParams,
+)
 from rag.text_utils import chunk_text, extract_text_from_file
 
 from config import DEFAULT_LLM_MODEL, EMBEDDING_DIMENSIONS
@@ -287,12 +295,18 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
     pipeline = state.rag_pipelines[pipeline_id]
-    # Hybrid (dense + BM25) is a drop-in retrieve variant (same signature) — selected
-    # here so the runner/methods stay retrieval-agnostic (#45).
-    use_hybrid = getattr(request, "hybrid", False) and BM25_AVAILABLE
+    # Retrieval strategy is chosen here as a drop-in retrieve variant (same signature)
+    # so the runner/methods stay retrieval-agnostic (#45). parent_context > hybrid >
+    # dense.
+    if getattr(request, "parent_context", False):
+        retrieve_fn = retrieve_parent_child
+    elif getattr(request, "hybrid", False) and BM25_AVAILABLE:
+        retrieve_fn = retrieve_hybrid
+    else:
+        retrieve_fn = retrieve_relevant_documents
     components = state.RagComponents(
         ollama_manager=state.ollama_manager,
-        retrieve=retrieve_hybrid if use_hybrid else retrieve_relevant_documents,
+        retrieve=retrieve_fn,
         hyde_expander=state.hyde_expander,
         self_rag_pipeline=state.self_rag_pipeline,
         decision_engine=state.decision_engine,
@@ -475,3 +489,98 @@ async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
     merged = sorted(merged, key=lambda s: s["score"], reverse=True)[:top_k]
     context = "\n\n".join(s["text"] for s in merged)
     return {"context": context, "sources": merged}
+
+
+# ── Parent-child / small-to-big retrieval (#45) ────────────────────────────────
+# Match precise (small) child chunks via dense search, then RETURN each with its
+# neighbouring chunks (same source, adjacent chunk_index) so the LLM gets fuller
+# "parent" context. Reuses the chunk_index already stored in every payload — no
+# special ingest-time hierarchy needed.
+PARENT_WINDOW = 1  # neighbours on each side → a 2*W+1 chunk parent
+
+
+async def retrieve_parent_child(pipeline: Dict, question: str, top_k: int) -> Dict:
+    """Retrieve child chunks, expand each to its neighbour window (same doc/source)."""
+    client = state.get_qdrant_client()
+    first_kb_id = pipeline["knowledge_base_ids"][0]
+    embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
+
+    try:
+        question_embeddings = await state.ollama_manager.generate_embeddings(
+            [question], model=embed_model
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Embedding backend unavailable — cannot answer query. Check that "
+                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
+            ),
+        )
+    question_embedding = question_embeddings[0]
+
+    sources: list = []
+    seen: set = (
+        set()
+    )  # (kb_id, source, center chunk_index) → dedupe overlapping windows
+    for kb_id in pipeline["knowledge_base_ids"]:
+        try:
+            hits = client.query_points(
+                collection_name=kb_id, query=question_embedding, limit=top_k
+            ).points
+        except Exception as e:
+            logger.warning(f"⚠️  Parent-child search failed for KB {kb_id}: {e}")
+            continue
+
+        for h in hits:
+            src = h.payload.get("source", "")
+            ci = h.payload.get("chunk_index")
+            if ci is None:  # older doc without chunk_index → return the child as-is
+                sources.append(
+                    {"text": h.payload.get("text", ""), "source": src, "score": h.score}
+                )
+                continue
+            key = (kb_id, src, ci)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # Fetch the neighbour window (same source, chunk_index within ±W).
+            flt = Filter(
+                must=[
+                    FieldCondition(key="source", match=MatchValue(value=src)),
+                    FieldCondition(
+                        key="chunk_index",
+                        range=Range(gte=ci - PARENT_WINDOW, lte=ci + PARENT_WINDOW),
+                    ),
+                ]
+            )
+            try:
+                neighbours, _ = client.scroll(
+                    collection_name=kb_id,
+                    scroll_filter=flt,
+                    limit=2 * PARENT_WINDOW + 1,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            except Exception as e:
+                logger.warning(f"⚠️  Neighbour fetch failed ({src}#{ci}): {e}")
+                neighbours = []
+
+            ordered = sorted(
+                neighbours or [h], key=lambda p: p.payload.get("chunk_index", 0)
+            )
+            parent_text = "\n".join(p.payload.get("text", "") for p in ordered)
+            sources.append(
+                {
+                    "text": parent_text,
+                    "source": src,
+                    "score": h.score,
+                    "context_type": "parent",
+                    "child_chunk_index": ci,
+                }
+            )
+
+    sources = sorted(sources, key=lambda s: s["score"], reverse=True)[:top_k]
+    context = "\n\n".join(s["text"] for s in sources)
+    return {"context": context, "sources": sources}
