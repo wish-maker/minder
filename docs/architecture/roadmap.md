@@ -33,7 +33,7 @@ authoritative service breakdown.
 - TTS/STT (8006) — Piper offline (default) + gTTS fallback + speech_recognition, ~12 languages
 - Graph RAG (8008) — spaCy NER + Neo4j knowledge graph
 
-**Storage (internal-only):** PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.05, MinIO,
+**Storage (internal-only):** PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.06, MinIO,
 RabbitMQ 4.3, Apicurio schema registry.
 
 **Inference & UI:** Ollama (profile-gated), OpenWebUI (chat frontend).

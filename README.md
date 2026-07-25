@@ -97,7 +97,7 @@ bash setup.sh start           # auto-fills remaining secrets, sets perms, starts
 
 - Database passwords (PostgreSQL, Redis, RabbitMQ)
 - JWT secrets for API authentication
-- Encryption keys for Authelia SSO
+- Encryption keys for Authelia SSO (generated, but Authelia is currently disabled)
 - Service credentials (Neo4j, InfluxDB, MinIO, Grafana)
 
 **📝 Key configuration options:**
@@ -181,7 +181,7 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 - `plugin-registry` (:8001) — Plugin lifecycle, webhooks, service discovery
 - `marketplace` (:8002) — Plugin/tool catalog, license tiers, dependency graph
 - `plugin-state-manager` (:8003) — Plugin state + AI-tool execution
-- `rag-pipeline` (:8004) — Chunking, embedding, retrieval (Standard + Conversational RAG live; HyDE/Self-RAG modules present but not wired — [#45](https://github.com/wish-maker/minder/issues/45))
+- `rag-pipeline` (:8004) — Chunking, embedding, retrieval. Standard/Conversational/HyDE/Self-RAG/auto/corrective RAG all wired (`method` field) + `rerank`/`compress` flags and `hybrid`/`parent_context` retrievers; `GET /capabilities` reports what's active
 - `model-management` (:8005) — Ollama model lifecycle (partial)
 - `tts-stt` (:8006) — Text-to-speech / speech-to-text
 - `graph-rag` (:8008) — spaCy NER + Neo4j knowledge-graph construction
@@ -427,11 +427,11 @@ minder/
 │   ├── compose/         # docker-compose files (hand-maintained source of truth)
 │   └── services/        # Per-service mounted config (postgres, grafana, traefik, …)
 ├── src/                  # Source code
-│   ├── core/            # Shared core config
 │   ├── services/        # Microservices (api-gateway, rag-pipeline, etc.)
 │   ├── shared/          # Shared libraries and utilities
-│   ├── plugins/         # Plugin implementations (none ship yet)
-│   └── requirements/    # Per-service Python dependency sets
+│   ├── plugins/         # First-party module plugins (crypto, network, news, tefas, weather, telegraf)
+│   ├── bootstrap/       # Bootstrap config data (config/default_plugins.yml)
+│   └── requirements/    # Shared Python dependency sets
 ├── scripts/              # Setup and utility scripts
 │   ├── setup/          # Native-Python setup CLI (python -m scripts.setup)
 │   ├── lib/            # Bash reference modules (behavior-gate parity only)

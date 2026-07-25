@@ -1,0 +1,42 @@
+# Type-check dependencies (mypy gate, #33)
+# ----------------------------------------------------------------------------
+# Installed by quality.yml so mypy sees REAL library types at the service
+# boundaries instead of collapsing them to `Any`. Without these, the gate is
+# theatre: FastAPI/Pydantic/httpx surfaces become Any and Optional-boundary bugs
+# (UploadFile.filename: str | None, Request.client: Address | None) slip through.
+#
+# Pins mirror the per-service requirements.txt so the checked types match runtime.
+#
+# DELIBERATELY EXCLUDED (stay Any via ignore_missing_imports in pyproject):
+#   * torch / transformers / accelerate / peft / bitsandbytes / spacy / piper-tts
+#     / gtts / SpeechRecognition — heavy or fragile wheels; huge CI cost for no
+#     boundary-type payoff.
+#   * qdrant-client / neo4j — their overloaded/loosely-typed clients emit
+#     library-signature false positives (ScoredPoint.payload, AsyncSession.run
+#     kwargs) that need casts, not real fixes. Not worth the noise.
+# Add a lib here only if it demonstrably catches a real bug and stays quiet.
+
+fastapi==0.139.2
+pydantic==2.13.4
+pydantic-settings==2.14.2
+httpx==0.28.1
+redis==8.0.1
+asyncpg==0.31.0
+python-jose[cryptography]==3.5.0
+pyjwt==2.13.0
+slowapi==0.1.10
+email-validator==2.3.0
+prometheus-client==0.25.0
+python-multipart==0.0.32
+aiofiles==25.1.0
+jsonschema==4.26.0
+aiohttp==3.14.3
+psutil==7.2.2
+importlib-metadata==9.0.0
+python-json-logger==4.1.0
+influxdb-client==1.50.0
+langchain-text-splitters==1.1.2
+pypdf==6.14.2
+sqlalchemy==2.0.51
+ollama==0.6.2
+rank-bm25==0.2.2

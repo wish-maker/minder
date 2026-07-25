@@ -60,9 +60,9 @@ in some cases via a Traefik route).
 | Service | Image | Port | Notes |
 |---------|-------|------|-------|
 | postgres-exporter | `v0.20.1` | 9187 | |
-| redis-exporter | `v1.86.0` | 9121 | No healthcheck (by design) |
+| redis-exporter | `v1.87.0` | 9121 | No healthcheck (by design) |
 | rabbitmq-exporter | `v1.0.0-RC9` | 9090 | Healthcheck disabled |
-| node-exporter | `v1.11.1` | 9100 | |
+| node-exporter | `v1.12.1` | 9100 | |
 | cadvisor | `gcr.io/cadvisor/cadvisor:v0.55.1` | 8080 | Container metrics |
 | blackbox-exporter | `v0.28.0` | 9115 | Endpoint probing |
 

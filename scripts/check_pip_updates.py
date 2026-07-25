@@ -20,7 +20,9 @@ import sys
 import urllib.request
 from typing import Dict, List, Optional, Tuple
 
-PIN_RE = re.compile(r"^([A-Za-z0-9_.\-]+)(\[[^\]]+\])?==([0-9][0-9A-Za-z.\-]*)\s*(#.*)?$")
+PIN_RE = re.compile(
+    r"^([A-Za-z0-9_.\-]+)(\[[^\]]+\])?==([0-9][0-9A-Za-z.\-]*)\s*(#.*)?$"
+)
 
 
 def find_requirements() -> List[str]:
@@ -51,9 +53,7 @@ def latest_stable(package: str, timeout: float = 15.0) -> Optional[str]:
         return None
     releases = data.get("releases") or {}
     stable = [
-        v
-        for v in releases
-        if re.fullmatch(r"[0-9]+(\.[0-9]+)*", v) and releases[v]
+        v for v in releases if re.fullmatch(r"[0-9]+(\.[0-9]+)*", v) and releases[v]
     ]
     if stable:
         return max(stable, key=lambda v: [int(p) for p in v.split(".")])
@@ -86,8 +86,10 @@ def build_report() -> str:
     pkgs: Dict[str, Dict[str, List[str]]] = {}
     extras: Dict[str, str] = {}
     for path in find_requirements():
-        short = path.replace("\\", "/").replace("src/services/", "").replace(
-            "/requirements.txt", ""
+        short = (
+            path.replace("\\", "/")
+            .replace("src/services/", "")
+            .replace("/requirements.txt", "")
         )
         for pkg, extra, ver in parse_pins(path):
             key = pkg.lower()
@@ -102,7 +104,9 @@ def build_report() -> str:
         for ver, files in sorted(pkgs[key].items()):
             where = ", ".join(sorted(set(files)))
             if latest is None:
-                unknown.append(f"- **{display}** `{ver}` — PyPI lookup failed ({where})")
+                unknown.append(
+                    f"- **{display}** `{ver}` — PyPI lookup failed ({where})"
+                )
             elif _tuple(ver) < _tuple(latest):
                 outdated.append(
                     f"- **{display}**: `{ver}` → `{latest}` "

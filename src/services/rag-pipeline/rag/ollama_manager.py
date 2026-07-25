@@ -122,7 +122,6 @@ class OllamaManager:
         model: str = DEFAULT_LLM_MODEL,
         context: str = "",
         temperature: float = 0.7,
-        stream: bool = False,
     ) -> Dict[str, Any]:
         """Generate response using Ollama LLM"""
         if not self._initialized:
@@ -138,7 +137,7 @@ class OllamaManager:
             response = await self.client.generate(
                 model=model,
                 prompt=full_prompt,
-                stream=stream,
+                stream=False,
                 options={
                     "temperature": temperature,
                     "num_predict": 2000,  # Max tokens

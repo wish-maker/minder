@@ -45,7 +45,7 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │                        SECURITY / EDGE                          │
 │  ┌──────────────┐              ┌──────────────────────────────┐ │
 │  │   Traefik    │ (80/443)     │  Authelia (9091) — DISABLED  │ │
-│  │ Reverse Proxy│ v3.7.7       │  (commented out in compose)  │ │
+│  │ Reverse Proxy│ v3.7.8       │  (commented out in compose)  │ │
 │  └──────────────┘              └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                  │
@@ -101,7 +101,7 @@ Total: 31 containers across core APIs, inference, storage, and observability
 #### Traefik (Host 80/443, dashboard 8081)
 - Reverse proxy, TLS termination, routing via Docker labels (`exposedByDefault: false`)
 - The only host-facing entry point besides directly-exposed monitoring services
-- Version: `traefik:v3.7.7`
+- Version: `traefik:v3.7.8`
 
 #### Authelia (9091) — ⏸️ DISABLED
 - Would provide SSO and 2FA, but is **commented out** in `docker-compose.yml`
@@ -182,7 +182,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 
 ### Backend
 - **Framework**: FastAPI on Python 3.11/3.12 (services use `python:3.12-slim`; graph-rag uses `python:3.11-slim`)
-- **Databases**: PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.05 (community)
+- **Databases**: PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.06 (community)
 - **Object store**: MinIO · **Message bus**: RabbitMQ 4.3 · **Schema registry**: Apicurio (SQL)
 - **LLM**: Ollama with local models
 - **Authentication**: JWT (bcrypt). No RBAC. Authelia is present but disabled.

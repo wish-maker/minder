@@ -41,7 +41,7 @@ backed by internal data stores and a monitoring stack. All services are Python 3
 
 **Responsibilities**: request routing, TLS, security headers, `forwardauth` integration
 
-**Version**: `traefik:v3.7.7`
+**Version**: `traefik:v3.7.8`
 
 **Configuration**: `docker/services/traefik/`
 
@@ -68,10 +68,10 @@ Keep-vs-drop is an open decision.
 #### Redis (`redis:8.8.0-alpine`)
 **Purpose**: Caching, sessions, rate limiting, service-discovery records (internal port 6379)
 
-#### Qdrant (`qdrant/qdrant:v1.18.2`)
+#### Qdrant (`qdrant/qdrant:v1.18.3`)
 **Purpose**: Vector database for RAG embeddings and semantic search (internal port 6333)
 
-#### Neo4j (`neo4j:2026.05.0-community`)
+#### Neo4j (`neo4j:2026.06.0-community`)
 **Purpose**: Graph database (internal 7687/7474). Used by the marketplace (plugin dependency
 graph) and graph-rag (knowledge graph). The browser is routed via Traefik with an IP whitelist.
 
@@ -90,7 +90,7 @@ PostgreSQL database.
 
 ### Inference
 
-#### Ollama (`ollama/ollama:0.31.2`)
+#### Ollama (`ollama/ollama:0.32.1`)
 **Purpose**: Local LLM inference (internal port 11434). Profile-gated `internal-ollama`: runs
 only when `OLLAMA_BASE_URL` is empty (local mode); when set, an external/native host is used and
 the container stays inactive. Models auto-pulled via `OLLAMA_PULL_MODELS` into the
@@ -98,7 +98,9 @@ the container stays inactive. Models auto-pulled via `OLLAMA_PULL_MODELS` into t
 
 ### Core APIs
 
-All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
+All core APIs expose a `/health` endpoint. Route prefixes vary per service (e.g.
+`/v1/plugins`, `/v1/marketplace`, bare `/models`, bare `/tts`) — see
+[`docs/api/reference.md`](../api/reference.md) for the code-verified route tables.
 
 #### API Gateway (Port 8000)
 **Purpose**: Single entry point for all API requests
@@ -110,26 +112,28 @@ All core APIs expose `/api/v1/*` routes and a `/health` endpoint.
 **Purpose**: Plugin discovery and lifecycle management (manifest-based, no code execution)
 
 **Endpoints (representative)**:
-- `POST /api/v1/plugins/register` — register a plugin manifest
-- `GET /api/v1/plugins` — list plugins
-- `GET /api/v1/plugins/{id}` — plugin details
-- `POST /api/v1/plugins/{name}/enable` / `.../disable` — toggle a plugin
-- `GET /api/v1/plugins/{name}/health` — plugin health
+- `POST /v1/plugins/install` — install/register a plugin
+- `GET /v1/plugins` — list plugins (legacy alias `GET /plugins`)
+- `GET /v1/plugins/{name}` — plugin details
+- `POST /v1/plugins/{name}/enable` / `.../disable` — toggle a plugin
+- `GET /v1/plugins/{name}/health` — plugin health
+- `GET`/`PUT /v1/plugins/{name}/config` — central plugin config (PUT is JWT-gated)
 
 #### Marketplace (Port 8002)
 **Purpose**: Plugin/tool discovery and licensing
 
 **Endpoints (representative)**:
-- `GET /api/v1/marketplace/plugins` — discovery / search / featured
-- `GET /api/v1/marketplace/licenses` — license tiers (community / pro / enterprise)
-- Dependency graph is maintained in Neo4j
+- `GET /v1/marketplace/plugins` — discovery / search / featured
+- `GET /v1/marketplace/licenses` — license tiers (community / pro / enterprise)
+- `GET /v1/graph/...` — dependency graph (maintained in Neo4j)
 
 #### Plugin State Manager (Port 8003)
 **Purpose**: Plugin state and AI-tool execution
 
 **Endpoints (representative)**:
-- `GET /api/v1/state/plugins/{id}` — plugin state
-- tool discovery and tool execution (with license validation)
+- `GET /v1/plugins/state` · `GET /v1/plugins/state/{plugin_name}` — plugin state
+- `POST /v1/plugins/state/{plugin_name}/enable` / `.../disable` — state toggles
+- `/v1/tools/...` — tool discovery and execution (with license validation)
 
 #### RAG Pipeline (Port 8004)
 **Purpose**: Retrieval-augmented generation
@@ -149,17 +153,19 @@ The live query endpoint selects the RAG method via the `method` field: `standard
 **Purpose**: Model registry and lifecycle over Ollama
 
 **Endpoints (representative)**:
-- `GET /v1/models` — list models
-- `POST /v1/models` — register a model
-- model list / pull / delete / test are real; `/models/{id}/constraints` and
-  `/models/{id}/metrics` are placeholders
+- `GET /models` — list models
+- `POST /models` — register a model
+- `GET`/`DELETE /models/{model_id}`, `POST /models/{model_id}/test` — get / delete / test
+- model list / pull / delete / test are real; `/models/{model_id}/constraints` and
+  `/models/{model_id}/metrics` are placeholders
 
 #### TTS/STT Service (Port 8006)
 **Purpose**: Text-to-speech and speech-to-text
 
 **Endpoints (representative)**:
-- `POST /v1/tts` — text to speech (Piper offline WAV default, gTTS MP3 fallback)
-- `POST /v1/stt` — speech to text (speech_recognition, Google)
+- `POST /tts` — text to speech (Piper offline WAV default, gTTS MP3 fallback)
+- `POST /stt` — speech to text (speech_recognition, Google)
+- `GET /tts/languages` · `GET /stt/languages` — supported language lists
 
 **Languages**: ~12, Turkish default
 
@@ -184,14 +190,14 @@ frontend framework.
 
 ### Monitoring
 
-#### Prometheus (`prom/prometheus:v3.13.0`, host 9090)
+#### Prometheus (`prom/prometheus:v3.13.1`, host 9090)
 Metrics storage and querying. Scrapes core services and the exporters below.
 
 #### Grafana (`grafana/grafana:13.1`, host 3000)
 Dashboards. Traefik route has an Authelia `forwardauth` middleware, but since Authelia is
 disabled that auth is not currently enforced.
 
-#### InfluxDB (`influxdb:3.10.1-core`, host 8086)
+#### InfluxDB (`influxdb:3.10.3-core`, host 8086)
 Time-series storage (fed by Telegraf).
 
 #### Telegraf (`telegraf:1.39.1`, no host port)
@@ -207,8 +213,8 @@ Distributed tracing UI plus OTLP/thrift/zipkin ingest ports.
 OTLP gRPC 14317 / HTTP 14318, metrics 18888. No healthcheck (image lacks the tooling).
 
 #### Exporters (internal, scraped by Prometheus)
-postgres-exporter (v0.20.1), redis-exporter (v1.86.0, no healthcheck), rabbitmq-exporter
-(v1.0.0-RC9, healthcheck disabled), node-exporter (v1.11.1), cadvisor (v0.55.1),
+postgres-exporter (v0.20.1), redis-exporter (v1.87.0, no healthcheck), rabbitmq-exporter
+(v1.0.0-RC9, healthcheck disabled), node-exporter (v1.12.1), cadvisor (v0.55.1),
 blackbox-exporter (v0.28.0).
 
 ## Service Dependencies
@@ -289,7 +295,7 @@ limits in `docker-compose.yml`.
 healthcheck because their images cannot run one.
 
 ### Restart Policies
-Services use `restart: unless-stopped`.
+Services use `restart: on-failure`.
 
 ## Security
 
@@ -319,5 +325,5 @@ Services use `restart: unless-stopped`.
 ## Future Improvements
 
 Forward work is tracked as GitHub issues in `wish-maker/minder` (see `roadmap.md`). Themes under
-consideration include stricter CI gates, offline TTS (Piper), completing the Traefik
-dynamic/access config, and Authelia keep-vs-drop.
+consideration include the ARM/Pi deployment, completing the Traefik dynamic/access config, and
+Authelia keep-vs-drop. (Offline TTS via Piper and the stricter mypy CI gate are already done.)

@@ -35,32 +35,37 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r src/requirements/requirements-dev.txt
+          # Real library types at the service boundaries so mypy isn't checking Any.
+          pip install -r src/requirements/requirements-typecheck.txt
 
       - name: Run Black
-        run: black --check src/services/ src/shared/ scripts/setup/ tests/
+        run: black --check src/services/ src/shared/ scripts/ tests/
 
       - name: Run isort
-        run: isort --check-only src/services/ src/shared/ scripts/setup/ tests/
+        run: isort --check-only src/services/ src/shared/ scripts/ tests/
 
       - name: Run Flake8
-        run: flake8 src/services/ src/shared/ scripts/setup/ tests/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+        run: flake8 src/services/ src/shared/ scripts/ tests/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run MyPy
         # A REAL gate now (#33) — no `|| true`. Each service runs with its OWN dir as
         # the import root (WORKDIR=/app at runtime → core/routes/config are top-level
         # per service), so they must be checked one at a time or the same top-level
-        # module names collide ("Duplicate module"). types-PyYAML (requirements-dev)
-        # supplies the yaml stubs.
+        # module names collide ("Duplicate module"). Config (pydantic plugin +
+        # ignore_missing_imports) lives in the root pyproject.toml; it must be passed
+        # explicitly with --config-file because each `cd` moves off the repo root.
+        # requirements-typecheck.txt supplies the real FastAPI/Pydantic/etc. types.
         run: |
           set -e
+          CFG="${GITHUB_WORKSPACE}/pyproject.toml"
           for d in src/services/*/; do
             echo "── mypy ${d} ──"
-            ( cd "${d}" && mypy . --ignore-missing-imports )
+            ( cd "${d}" && mypy . --config-file "${CFG}" )
           done
           echo "── mypy src/shared/ ──"
-          ( cd src/shared && mypy . --ignore-missing-imports )
+          ( cd src/shared && mypy . --config-file "${CFG}" )
           echo "── mypy scripts/setup/ ──"
-          mypy scripts/setup/ --ignore-missing-imports
+          mypy scripts/setup/ --config-file "${CFG}"
 
   shell-lint:
     name: Shell Lint (setup.sh shim + setup.bash.sh + scripts/lib)

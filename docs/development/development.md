@@ -38,8 +38,7 @@ minder/
 │   ├── shared/                    # shared libs (config, log, metrics, auth, db, utils)
 │   ├── plugins/                   # first-party module plugins + _contract.py
 │   ├── bootstrap/                 # bootstrap config data (config/default_plugins.yml)
-│   ├── requirements/              # shared Python dependency sets
-│   └── requirements/              # shared dependency pins
+│   └── requirements/              # shared Python dependency sets (dev, typecheck, per-service pins)
 └── tests/                         # unit / integration / e2e / performance / manual
 ```
 
@@ -186,7 +185,7 @@ if __name__ == "__main__":
 ```python
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/api/v1/plugins", tags=["plugins"])
+router = APIRouter(prefix="/v1/example", tags=["example"])
 
 
 @router.post("/")

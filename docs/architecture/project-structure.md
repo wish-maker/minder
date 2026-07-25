@@ -134,7 +134,7 @@ services/api-gateway/
 - PostgreSQL 18.4 - Primary database
 - Redis 8.8 - Cache, sessions, rate limiting
 - Qdrant 1.18 - Vector database for embeddings
-- Neo4j 2026.05 (community) - Graph database
+- Neo4j 2026.06 (community) - Graph database
 - MinIO - S3-compatible object store
 - RabbitMQ 4.3 - Async message bus
 - Apicurio schema-registry

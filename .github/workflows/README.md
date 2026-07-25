@@ -1,6 +1,6 @@
 # Minder CI/CD Pipeline
 
-GitHub Actions workflows for this repository. Four workflows, each a single
+GitHub Actions workflows for this repository. Five workflows, each a single
 concern. There is **no** build/push or deploy workflow — this is a self-hosted
 Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 
@@ -13,8 +13,12 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 ### 1. Quality Gate — `quality.yml`
 **Triggers:** push & PR to `main`/`develop`, manual dispatch.
 **Jobs (all parallel — the fast gate):**
-- Python lint: Black, isort, Flake8, MyPy (on `src/` **and** `scripts/setup/` — the
-  native-Python setup CLI).
+- Python lint: Black, isort, Flake8 (on `src/services/`, `src/shared/`, `scripts/`,
+  `tests/`) + MyPy. MyPy is a **real gate** (#33): it runs per-service (each service
+  dir is its own import root) with the pydantic plugin and installs
+  `requirements-typecheck.txt` so FastAPI/Pydantic/httpx/etc. are checked with real
+  types instead of `Any`. Config lives in the root `pyproject.toml` (`[tool.mypy]`),
+  passed via `--config-file`. Also covers `src/shared/` and `scripts/setup/`.
 - Shell lint: `bash -n` + `shellcheck --shell=bash --severity=error` (**blocking**)
   on `setup.sh` (the thin shim) + `setup.bash.sh` (the frozen bash reference) + all
   `scripts/lib/*.sh`; full-severity shellcheck is informational (`continue-on-error`).
@@ -52,6 +56,13 @@ tracking **issue** — it does not open PRs or modify files.
 > a PR was **retired** — it was superseded by the issue-only engine above (the
 > PR approach edited compose without a rebuild, a "deploy illusion").
 
+### 5. Dependency Update — `dependency-update.yml`
+**Triggers:** weekly cron, manual dispatch.
+**Behavior:** **issue-only** Python-dependency engine. Runs
+`scripts/check_pip_updates.py` (stdlib `urllib`) to scan every `src/**/requirements*.txt`
+against PyPI, classifies updates as major/minor/patch, and opens (or updates) a single
+`[dependencies, python]` tracking **issue**. The Docker-image counterpart is `#4`.
+
 ## Local checks
 
 ```bash
@@ -60,9 +71,12 @@ bash -n setup.sh setup.bash.sh scripts/lib/*.sh
 shellcheck --shell=bash --severity=error setup.sh setup.bash.sh scripts/lib/*.sh
 
 # Python (matches the Quality Gate + CI workflows)
-black --check src/services/ scripts/setup/
-flake8 src/services/ scripts/setup/ --max-line-length=120
-mypy src/services/ scripts/setup/ --ignore-missing-imports
+pip install -r src/requirements/requirements-dev.txt -r src/requirements/requirements-typecheck.txt
+black --check src/services/ src/shared/ scripts/ tests/
+isort --check-only src/services/ src/shared/ scripts/ tests/
+flake8 src/services/ src/shared/ scripts/ tests/ --max-line-length=120
+# mypy is per-service (config in pyproject.toml, passed explicitly because we cd in)
+for d in src/services/*/; do (cd "$d" && mypy . --config-file "$PWD/../../../pyproject.toml"); done
 pytest tests/ -v --cov=src
 ```
 
