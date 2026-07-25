@@ -30,6 +30,7 @@ markers = [
     "e2e: end-to-end tests across multiple services",
     "slow: tests that take a long time to run",
     "security: security-focused tests",
+    "load: load / performance tests (not run in the default CI suite)",
 ]
 filterwarnings = [
     # All pydantic v2 class-based `Config` was migrated to ConfigDict (#75). Guard
