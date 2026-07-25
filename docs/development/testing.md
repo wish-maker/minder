@@ -95,10 +95,13 @@ pytest tests/e2e/ -v
 
 ### 4. Performance Tests (`tests/performance/`)
 
-Measure throughput / latency under load. These are the slowest tests.
+Home for throughput / latency tests (mark them `@pytest.mark.load`/`@pytest.mark.slow`;
+not part of the default CI suite). No harness ships by default — see
+[`tests/performance/README.md`](../../tests/performance/README.md) for the external
+Locust approach.
 
 ```bash
-pytest tests/performance/ -v
+pytest tests/performance/ -v -m load
 ```
 
 ### 5. Manual Tests (`tests/manual/`)
