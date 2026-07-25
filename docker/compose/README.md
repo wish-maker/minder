@@ -10,6 +10,7 @@ into a container.
 |------|------|
 | `docker-compose.yml` | The stack definition. **The source of truth — hand-maintained; edit it directly.** |
 | `docker-compose.override.yml` | Dev-only convenience (exposes some service ports directly for local testing). |
+| `docker-compose.test.yml` | Isolated dependencies for local integration/e2e tests (CI uses GitHub Actions service containers instead). |
 | `.env` | Runtime env for `docker compose`. **Mirrored** from the repo-root `.env` (the source of truth) on every `setup.sh` run — do not edit here. |
 | `README.md` | This file. |
 

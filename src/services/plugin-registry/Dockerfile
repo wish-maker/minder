@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 # Copy application code
 COPY src/services/plugin-registry/main.py .
 COPY src/services/plugin-registry/config.py .
-COPY src/services/plugin-registry/models.py .
+COPY src/services/plugin-registry/models ./models
 COPY src/services/plugin-registry/schema.sql .
 COPY src/services/plugin-registry/routes /app/routes
 COPY src/services/plugin-registry/core /app/core

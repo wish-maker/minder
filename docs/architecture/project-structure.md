@@ -248,7 +248,7 @@ pytest tests/unit/ -v
 pytest tests/ --cov=src --cov-report=html
 
 # Specific test
-pytest tests/unit/test_module_management.py -v
+pytest tests/unit/test_setup_bundles.py -v
 
 # Integration tests
 pytest tests/integration/ -v
@@ -259,9 +259,9 @@ pytest tests/integration/ -v
 ### Python Files
 - `main.py` - Application entry point
 - `config.py` - Configuration
-- `models.py` - Pydantic models
+- `models/` - Pydantic models (package; single-file services keep them in `models/__init__.py`)
 - `routes/` - API route handlers
-- `core/` - Business logic
+- `core/` - Business logic / app state (e.g. `core/state.py`)
 - `utils.py` - Utility functions
 
 ### Configuration Files

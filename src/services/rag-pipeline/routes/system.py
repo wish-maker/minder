@@ -3,7 +3,7 @@
 import os
 from datetime import datetime
 
-import state
+from core import state
 from fastapi import APIRouter, HTTPException
 
 from config import APP_VERSION

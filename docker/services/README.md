@@ -11,7 +11,8 @@ into the container by `docker/compose/docker-compose.yml`):
 | Dir | Mounted into | Contents |
 |-----|--------------|----------|
 | `postgres/`        | postgres        | `init.sql` (DB + aux-DB bootstrap) |
-| `prometheus/`      | prometheus      | scrape config, alert rules, blackbox targets |
+| `prometheus/`      | prometheus      | scrape config, alert rules |
+| `blackbox-exporter/` | blackbox-exporter | `blackbox.yml` (probe module config) |
 | `alertmanager/`    | alertmanager    | alert routing |
 | `grafana/`         | grafana         | provisioned dashboards + datasources |
 | `telegraf/`        | telegraf        | `telegraf.conf` (+ runtime managed region) |

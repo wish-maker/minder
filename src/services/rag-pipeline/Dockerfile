@@ -22,18 +22,19 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 # Copy application
 COPY src/services/rag-pipeline/main.py .
 COPY src/services/rag-pipeline/config.py .
-COPY src/services/rag-pipeline/models.py .
-COPY src/services/rag-pipeline/state.py .
+COPY src/services/rag-pipeline/models ./models
 COPY src/services/rag-pipeline/schema.sql .
 COPY src/services/rag-pipeline/routes /app/routes
+# App-level state + wiring lives in core/ (was a root state.py).
+COPY src/services/rag-pipeline/core /app/core
 # pg_client.py now lives in repositories/ (persistence) and quality_evaluator.py in
 # domain/ — both copied with their packages below, no standalone COPY needed.
 COPY src/services/rag-pipeline/repositories /app/repositories
 
 # Advanced RAG method modules (HyDE, Self-RAG, decision engine) — wired into the
-# query endpoint via the `method` field (see #45).
+# query endpoint via the `method` field (see #45). The decision engine now lives in
+# domain/decision_engine.py (was a standalone agent/ package).
 COPY src/services/rag-pipeline/domain /app/domain
-COPY src/services/rag-pipeline/agent /app/agent
 # Query orchestration (per-method strategies + runner)
 COPY src/services/rag-pipeline/rag /app/rag
 
