@@ -161,7 +161,8 @@ pstats.Stats(profiler).sort_stats("time").print_stats(10)
 If you want throughput numbers, generate them against your own deployment with
 a tool like [Locust](https://locust.io/) — and remember the LLM will usually be
 the limiting factor, so test the RAG/query paths realistically (with the model
-you actually run).
+you actually run). Write a small `locustfile.py` that exercises your real
+endpoints (e.g. `POST /pipeline/{id}/query`), then:
 
 ```bash
 pip install locust
