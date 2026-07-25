@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Dict
 
-import state
+from core import state
 from domain.retrievers.hybrid import BM25_AVAILABLE, HybridSearchRetriever
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from models import (

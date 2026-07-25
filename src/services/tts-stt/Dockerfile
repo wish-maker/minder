@@ -33,7 +33,7 @@ WORKDIR /app
 # Copy application code
 COPY src/services/tts-stt/main.py .
 COPY src/services/tts-stt/config.py .
-COPY src/services/tts-stt/models.py .
+COPY src/services/tts-stt/models ./models
 COPY src/services/tts-stt/core /app/core
 COPY src/services/tts-stt/routes /app/routes
 

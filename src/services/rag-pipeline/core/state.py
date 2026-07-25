@@ -63,17 +63,12 @@ except ImportError:
 
 # Conversation Repository for conversational RAG
 try:
-    from .repositories.conversation_repository import ConversationRepository
+    from repositories.conversation_repository import ConversationRepository
 
     CONVERSATION_REPO_AVAILABLE = True
 except ImportError:
-    try:
-        from repositories.conversation_repository import ConversationRepository
-
-        CONVERSATION_REPO_AVAILABLE = True
-    except ImportError:
-        CONVERSATION_REPO_AVAILABLE = False
-        logger.warning("⚠️  ConversationRepository not available")
+    CONVERSATION_REPO_AVAILABLE = False
+    logger.warning("⚠️  ConversationRepository not available")
 
 # ============================================================================
 # In-memory stores
@@ -113,7 +108,7 @@ try:
 except Exception as e:  # pragma: no cover
     logger.warning(f"⚠️ Self-RAG unavailable: {e}")
 try:
-    from agent.decision_engine import AgentDecisionEngine
+    from domain.decision_engine import AgentDecisionEngine
 
     _ollama_host = (
         OLLAMA_HOST.replace("http://", "").replace("https://", "").rstrip("/")

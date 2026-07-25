@@ -58,7 +58,7 @@ candidate — see Bucket 2).
 | Attribute | Value |
 |-----------|-------|
 | **Status** | ✅ **LIVE** — `method: "hyde" \| "self_rag" \| "auto" \| "corrective"` |
-| **Implementation** | `rag/methods/` (hyde, self_rag, decision, corrective) + `domain/` (expansion, pipelines) + `agent/decision_engine.py`, orchestrated by `rag/runner.py` |
+| **Implementation** | `rag/methods/` (hyde, self_rag, decision, corrective) + `domain/` (expansion, pipelines, `decision_engine.py`), orchestrated by `rag/runner.py` |
 | **HyDE** | Retrieve using an LLM-generated hypothetical answer instead of the raw question |
 | **Self-RAG** | Self-critique / quality-graded generation loop |
 | **auto** | The decision engine picks HyDE/Self-RAG per query |

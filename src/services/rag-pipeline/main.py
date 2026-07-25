@@ -8,7 +8,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-import state
+from core import state
 from fastapi import FastAPI
 from routes.rag import router as rag_router
 from routes.system import router as system_router
@@ -39,9 +39,9 @@ if not logger.handlers:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(_LOG_LEVEL)
-    # Surface logs from the RAG method packages (rag/, domain/, agent/) with the
-    # same handler, so the extracted modules log consistently with main.
-    for _pkg in ("rag", "domain", "agent"):
+    # Surface logs from the RAG method packages (rag/, domain/) with the same
+    # handler, so the extracted modules log consistently with main.
+    for _pkg in ("rag", "domain"):
         _pkg_logger = logging.getLogger(_pkg)
         if not _pkg_logger.handlers:
             _pkg_logger.addHandler(handler)
