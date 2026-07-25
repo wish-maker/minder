@@ -133,10 +133,12 @@ pytest --cov=src --cov-report=html
 
 ### Before Submitting
 
-1. Run linters: `flake8 src/`
-2. Run type checking: `mypy src/`
+1. Run linters: `flake8 src/services/ src/shared/ scripts/ tests/ --max-line-length=120`
+2. Run type checking **per service** (each service dir is its own import root):
+   `for d in src/services/*/; do (cd "$d" && mypy . --config-file "$PWD/../../../pyproject.toml"); done`
+   (checking all of `src/` at once fails with "Duplicate module" — see `docs/development/`)
 3. Run tests: `pytest`
-4. Check code formatting: `black src/`
+4. Check code formatting: `black --check src/services/ src/shared/ scripts/ tests/` and `isort --check-only ...`
 5. Update documentation
 6. Write tests
 
@@ -161,11 +163,10 @@ cd minder
 python -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install development dependencies
-pip install -r requirements-dev.txt
+# Install development + type-check dependencies (there are no root requirements files;
+# the pinned sets live under src/requirements/)
+pip install -r src/requirements/requirements-dev.txt
+pip install -r src/requirements/requirements-typecheck.txt
 
 # Run tests
 pytest
@@ -214,15 +215,15 @@ Add endpoint to filter plugins by name, category, and status.
 ```
 minder/
 ├── src/                  # Application source
-│   ├── core/             # Core framework
-│   ├── services/         # Microservices
-│   ├── plugins/          # Plugin implementations
-│   ├── config/           # Configuration modules
-│   └── shared/           # Shared utilities
+│   ├── services/         # Microservices (8 FastAPI apps)
+│   ├── shared/           # Shared libraries (config, log, metrics, auth, db, utils)
+│   ├── plugins/          # First-party module plugins (crypto, network, news, tefas, weather, telegraf)
+│   ├── bootstrap/        # Bootstrap config data (config/default_plugins.yml)
+│   └── requirements/     # Shared Python dependency sets
 ├── docker/               # Docker configuration (compose, services, templates)
 ├── tests/                # Test suite
 ├── docs/                 # Documentation
-└── scripts/              # Setup & utility scripts
+└── scripts/              # Setup & utility scripts (setup/, lib/, gate/)
 ```
 
 ## 🎯 Development Priorities

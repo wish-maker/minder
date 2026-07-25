@@ -32,7 +32,7 @@ async def proxy_request(service_url: str, path: str, request: Request):
     headers = dict(request.headers)
     headers.pop("host", None)
     headers.pop("connection", None)
-    headers["X-Forwarded-For"] = request.client.host
+    headers["X-Forwarded-For"] = request.client.host if request.client else "unknown"
     headers["X-Request-ID"] = request.state.request_id
 
     # Proxy request

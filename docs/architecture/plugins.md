@@ -128,27 +128,27 @@ Plugins are managed through the Plugin Registry (`:8001`), typically reached via
 (`:8000`). Representative endpoints:
 
 ```bash
-# List plugins
-GET /api/v1/plugins
+# List plugins (legacy alias: GET /plugins)
+GET /v1/plugins
 
-# Register a plugin manifest
-POST /api/v1/plugins/register
+# Install / register a plugin
+POST /v1/plugins/install
 
 # Plugin details
-GET /api/v1/plugins/{id}
+GET /v1/plugins/{name}
 
 # Enable / disable
-POST /api/v1/plugins/{name}/enable
-POST /api/v1/plugins/{name}/disable
+POST /v1/plugins/{name}/enable
+POST /v1/plugins/{name}/disable
 
 # Plugin health
-GET /api/v1/plugins/{name}/health
+GET /v1/plugins/{name}/health
 ```
 
 ### Example
 ```bash
 # List plugins via the gateway
-curl http://localhost:8000/api/v1/plugins | jq
+curl http://localhost:8000/v1/plugins | jq
 
 # Returns the six shipped module plugins (telegraf, network, crypto, weather, news, tefas).
 # No manifest plugins are seeded — default_plugins.yml is an empty stub.

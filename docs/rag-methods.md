@@ -22,8 +22,9 @@ Minder splits retrieval-augmented generation across two services:
 These methods **self-degrade by hardware**: e.g. the re-ranker uses a cross-encoder
 only when `sentence-transformers`/torch is installed (otherwise a lightweight LLM
 re-rank), and hybrid needs `rank-bm25`. `GET /capabilities` makes that choice
-transparent. The only retrieval technique still **not wired** is **RAPTOR** (see
-Bucket 2); everything else below is reachable through the live endpoint.
+transparent. Every technique in Bucket 1 is reachable through the live endpoint;
+**RAPTOR** is the one commonly-cited technique that is **not implemented** here (a
+candidate — see Bucket 2).
 
 > How methods/enhancers are requested (all on `POST /pipeline/{id}/query`):
 > `{"question": "...", "top_k": 5, "method": "standard|hyde|self_rag|auto|corrective",
@@ -90,30 +91,21 @@ Precedence when multiple retrieval flags are set: `parent_context` > `hybrid` > 
 
 ---
 
-## Bucket 2: Implemented but NOT wired
+## Bucket 2: Candidate techniques (not implemented)
 
-### RAPTOR (Recursive Abstractive Processing for Tree-Organized Retrieval)
-
-| Attribute | Value |
-|-----------|-------|
-| **Status** | 🔶 **UNWIRED MODULE** — implemented + tested, not integrated |
-| **Implementation** | `src/services/rag-pipeline/raptor_rag.py` (+ `test_raptor.py`) |
-| **What it does** | Hierarchical clustering of chunks → LLM summaries → tree → level-aware retrieval |
-| **What's missing** | No API/ingest wiring (would need tree construction on upload + tree storage + a retrieve variant). Not currently on the roadmap. |
-
----
-
-## Bucket 3: Buildable on the current architecture (not implemented)
+None of these ship today — there is **no `raptor_rag.py`** (or equivalent) anywhere in
+the tree. They are all buildable on the current architecture:
 
 | Method | What would be needed | Feasibility |
 |--------|----------------------|-------------|
+| **RAPTOR** | Hierarchical chunk clustering → LLM tree summaries → level-aware retrieval; needs tree construction on upload, tree storage, and a retrieve variant | MEDIUM |
 | **Multi-Query RAG** | LLM query expansion (Ollama) + fusion | MEDIUM |
 | **Decomposition RAG** | Query decomposition + sub-question routing | MEDIUM |
 | **Metadata Filtering** | Qdrant supports it — expose filter params on the query endpoint | HIGH |
 
 ---
 
-## Bucket 4: Out of scope / major rework
+## Bucket 3: Out of scope / major rework
 
 | Method | Why out of scope |
 |--------|------------------|
@@ -129,15 +121,14 @@ Precedence when multiple retrieval flags are set: `parent_context` > `hybrid` > 
 | Bucket | Count | Methods |
 |--------|-------|---------|
 | **Live (wired)** | 8 methods + 2 enhancers + 2 retrievers | Standard, Conversational, HyDE, Self-RAG, auto, Corrective, Graph RAG (+ rerank, compress; + hybrid, parent-child) |
-| **Implemented, unwired** | 1 | RAPTOR |
-| **Buildable** | 3 | Multi-Query, Decomposition, Metadata Filtering |
+| **Buildable (not implemented)** | 4 | RAPTOR, Multi-Query, Decomposition, Metadata Filtering |
 | **Out of scope** | 4 | Agentic, Streaming, Federated, Long-Context |
 
 > **Takeaway**: `minder-rag-pipeline` now serves a full method set (Standard +
 > Conversational + HyDE/Self-RAG/auto/Corrective, with optional rerank/compress and
 > hybrid/parent-child retrieval), and `minder-graph-rag` serves spaCy-NER + Neo4j
 > graph RAG. `GET /capabilities` is the source of truth for what's active on a given
-> host. RAPTOR remains the one implemented-but-unwired technique.
+> host. RAPTOR is **not** implemented — it is a candidate technique (Bucket 2).
 
 ---
 

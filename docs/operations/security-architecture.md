@@ -14,7 +14,7 @@
 
 ## Summary of the Current Posture
 
-- **Reverse proxy:** Traefik v3.7.7 (TLS termination, routing via Docker labels,
+- **Reverse proxy:** Traefik v3.7.8 (TLS termination, routing via Docker labels,
   `exposedByDefault: false`). There is **no Nginx** in this stack.
 - **Authentication:** The **API Gateway** implements real JWT (HS256) authentication with
   bcrypt-hashed credentials, plus Redis-backed rate limiting (60s window, fail-open).
@@ -65,13 +65,13 @@ Capabilities in use:
 
 The API Gateway is the only service with application-level authentication:
 
-- JWT bearer tokens (HS256), issued at `POST /auth/login`.
+- JWT bearer tokens (HS256), issued at `POST /v1/auth/login`.
 - Credentials stored as bcrypt hashes.
 - Redis-backed rate limiting: 60-second window, **fail-open** (if Redis is unreachable,
   requests are allowed through).
 
 ```bash
-curl -X POST http://localhost:8000/auth/login \
+curl -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "..."}'
 

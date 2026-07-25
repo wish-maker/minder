@@ -147,8 +147,12 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     # Read file
     content = await file.read()
 
+    # UploadFile.filename is Optional; normalise to a real string so extension
+    # sniffing (.pdf/.txt/.md) and the stored payload never see None.
+    filename = file.filename or "upload"
+
     # Extract text
-    text = await extract_text_from_file(content, file.filename)
+    text = await extract_text_from_file(content, filename)
 
     # Chunk text
     chunks = chunk_text(
@@ -188,7 +192,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
                 vector=embedding,
                 payload={
                     "text": chunk,
-                    "source": file.filename,
+                    "source": filename,
                     "chunk_index": i,
                     "kb_id": kb_id,
                 },
@@ -217,7 +221,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         except Exception as e:
             logger.warning(f"⚠️  Failed to update KB in PostgreSQL: {e}")
 
-    logger.info(f"✅ Uploaded {file.filename} to KB {kb_id}: {len(chunks)} chunks")
+    logger.info(f"✅ Uploaded {filename} to KB {kb_id}: {len(chunks)} chunks")
 
     state.documents_processed_total.labels(status="success").inc()
 
@@ -225,7 +229,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         message="Document uploaded successfully",
         chunks_processed=len(chunks),
         vectors_created=len(chunks),
-        filename=file.filename,
+        filename=filename,
     )
 
 

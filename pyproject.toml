@@ -11,6 +11,18 @@ skip = [".git", "__pycache__", "venv", "env"]
 # top-level src/config/ directory (removed in the src/config→src/requirements rename).
 known_first_party = ["config"]
 
+[tool.mypy]
+# The mypy gate (#33) runs per-service (each service dir is its own import root,
+# matching the container WORKDIR=/app). CI installs src/requirements/requirements-
+# typecheck.txt so the FastAPI/Pydantic/httpx/redis/asyncpg boundary is checked with
+# REAL types instead of collapsing to Any — this is what catches Optional-boundary
+# bugs (e.g. UploadFile.filename, Request.client). The pydantic plugin makes model /
+# BaseSettings constructors type-check correctly (no spurious "missing named argument"
+# call-arg noise). Heavy/quirky libs (torch, spacy, piper, qdrant-client, neo4j) stay
+# Any via ignore_missing_imports — see requirements-typecheck.txt for the rationale.
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 markers = [

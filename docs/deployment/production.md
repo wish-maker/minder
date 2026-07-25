@@ -237,7 +237,7 @@ services:
 On a single 8 GB Pi, size any additional limits conservatively — Ollama and Neo4j are the
 largest RAM consumers. See `hardware-optimization.md`.
 
-All services use `restart: unless-stopped`.
+All services use `restart: on-failure`.
 
 ---
 

@@ -38,9 +38,11 @@ on constrained ARM hardware.
 
 - Models are pulled via `OLLAMA_PULL_MODELS` (set in the root `./.env`).
 - Ollama storage lives in the `/root/.ollama/models` volume.
-- List what is loaded:
+- List what is loaded (11434 is internal-only, so query it from inside the container):
   ```bash
-  curl http://localhost:11434/api/tags   # when running the local ollama container
+  docker exec minder-ollama ollama list
+  # or, from another container on minder-network:
+  #   curl http://minder-ollama:11434/api/tags
   ```
 
 ### 2. Local vs. external Ollama

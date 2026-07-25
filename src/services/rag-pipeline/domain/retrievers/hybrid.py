@@ -234,9 +234,10 @@ class HybridSearchRetriever:
             # Get BM25 scores
             scores = self.sparse_index[kb_id].get_scores(query_tokens)
 
-            # Find top-k indices
+            # Find top-k indices (as a plain list of ints either way)
+            top_indices: list[int]
             if NUMPY_AVAILABLE:
-                top_indices = np.argsort(scores)[::-1][:k]
+                top_indices = np.argsort(scores)[::-1][:k].tolist()
             else:
                 # Python fallback
                 top_indices = sorted(

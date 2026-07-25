@@ -65,7 +65,7 @@ class OllamaManager:
                 status_code=503, detail=f"Failed to list models: {str(e)}"
             )
 
-    async def pull_model(self, model_id: str, stream: bool = False) -> Dict[str, Any]:
+    async def pull_model(self, model_id: str) -> Dict[str, Any]:
         """Pull/download a model from Ollama library"""
         if not self._initialized:
             await self.initialize()
@@ -73,7 +73,7 @@ class OllamaManager:
         try:
             logger.info(f"Pulling model: {model_id}")
             assert self.client is not None
-            response = await self.client.pull(model=model_id, stream=stream)
+            response = await self.client.pull(model=model_id, stream=False)
             return {"model": model_id, "status": "pulled", "details": response}
         except Exception as e:
             logger.error(f"❌ Failed to pull model {model_id}: {e}")
@@ -89,7 +89,9 @@ class OllamaManager:
         assert self.client is not None
         try:
             response = await self.client.show(model=model_id)
-            return response
+            # show() returns a pydantic ShowResponse; normalise to a plain dict
+            # to match the annotated return type and keep JSON serialisation stable.
+            return response.model_dump()
         except Exception as e:
             logger.error(f"❌ Failed to show model {model_id}: {e}")
             raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
