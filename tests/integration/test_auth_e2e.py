@@ -108,7 +108,7 @@ class TestAuthFlowE2E:
     CRITICAL: Complete authentication flow tests
 
     Flow:
-    1. Register new user -> 200
+    1. Register new user -> 201
     2. Login with correct password -> JWT token
     3. Login with wrong password -> 401
     4. Use JWT to access protected endpoint -> 200
@@ -127,7 +127,7 @@ class TestAuthFlowE2E:
             },
         )
 
-        assert response.status_code == 200, f"Register failed: {response.text}"
+        assert response.status_code == 201, f"Register failed: {response.text}"
         data = response.json()
         assert data["user"]["username"] == "e2euser"
         assert data["user"]["email"] == "e2e@example.com"
@@ -195,8 +195,8 @@ class TestAuthFlowE2E:
             "invalid" in data["detail"].lower() or "incorrect" in data["detail"].lower()
         )
 
-    async def test_4_duplicate_username_returns_400(self, api_client):
-        """Step 4: Duplicate username is rejected"""
+    async def test_4_duplicate_username_returns_409(self, api_client):
+        """Step 4: Duplicate username is rejected with 409 Conflict (#146)"""
         # First create a user
         await api_client.post(
             "/v1/auth/register",
@@ -217,12 +217,12 @@ class TestAuthFlowE2E:
             },
         )
 
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
+        assert response.status_code == 409, f"Expected 409, got {response.status_code}"
         data = response.json()
         assert "already exists" in data["detail"].lower()
 
-    async def test_5_duplicate_email_returns_400(self, api_client):
-        """Step 5: Duplicate email is rejected"""
+    async def test_5_duplicate_email_returns_409(self, api_client):
+        """Step 5: Duplicate email is rejected with 409 Conflict (#146)"""
         # First create a user
         await api_client.post(
             "/v1/auth/register",
@@ -243,12 +243,12 @@ class TestAuthFlowE2E:
             },
         )
 
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
+        assert response.status_code == 409, f"Expected 409, got {response.status_code}"
         data = response.json()
         assert "already exists" in data["detail"].lower()
 
-    async def test_6_weak_password_returns_400(self, api_client):
-        """Step 6: Weak password (< 8 chars) is rejected"""
+    async def test_6_weak_password_returns_422(self, api_client):
+        """Step 6: Weak password (< 8 chars) is rejected with 422 (#146)"""
         response = await api_client.post(
             "/v1/auth/register",
             json={
@@ -258,12 +258,9 @@ class TestAuthFlowE2E:
             },
         )
 
-        assert response.status_code == 400, f"Expected 400, got {response.status_code}"
-        data = response.json()
-        assert (
-            "at least 8 characters" in data["detail"]
-            or "password" in data["detail"].lower()
-        )
+        # Pydantic field validation → 422 (detail is a list of error objects).
+        assert response.status_code == 422, f"Expected 422, got {response.status_code}"
+        assert "password" in response.text.lower()
 
 
 @pytest.mark.e2e

@@ -67,9 +67,9 @@ function-calling bridge.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/auth/register` | Create a user (bcrypt-hashed credentials) |
-| POST | `/v1/auth/login` | Obtain a JWT access token (username/password → bearer token) |
-| POST | `/v1/auth/refresh` | Refresh an access token |
+| POST | `/v1/auth/register` | Create a user — body `{username, email, password (≥8), role?}`. **201** on success, **409** if the username/email exists, **422** on a bad body |
+| POST | `/v1/auth/login` | Obtain a JWT — body `{username, password}` → `{access_token, token_type, expires_in, user}` (**401** on bad creds) |
+| POST | `/v1/auth/refresh` | Refresh an access token (bearer token in the `Authorization` header) → `{access_token, token_type, expires_in}` |
 
 ### Proxy routes
 

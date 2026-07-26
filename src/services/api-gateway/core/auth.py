@@ -124,11 +124,12 @@ async def create_user(
             return dict(user)
 
     except asyncpg.UniqueViolationError as e:
+        # A duplicate username/email is a conflict, not a bad request (#146).
         if "username" in str(e):
-            raise HTTPException(status_code=400, detail="Username already exists")
+            raise HTTPException(status_code=409, detail="Username already exists")
         elif "email" in str(e):
-            raise HTTPException(status_code=400, detail="Email already exists")
-        raise HTTPException(status_code=400, detail="User creation failed")
+            raise HTTPException(status_code=409, detail="Email already exists")
+        raise HTTPException(status_code=409, detail="User already exists")
 
 
 async def verify_user_credentials(
