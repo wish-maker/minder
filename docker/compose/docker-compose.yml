@@ -65,6 +65,7 @@ services:
     - minder-network
     # PILLAR 1: Traefik labels for dashboard access (with IP whitelist middleware)
     labels:
+    - minder.bundle=core
     - traefik.enable=true
     - traefik.http.routers.traefik-dashboard.rule=Host(`traefik.minder.local`)
     - traefik.http.routers.traefik-dashboard.service=api@internal
@@ -112,6 +113,8 @@ services:
   #   - traefik.http.routers.authelia.entrypoints=websecure
   #   - traefik.http.services.authelia.loadbalancer.server.port=9091
   postgres:
+    labels:
+    - minder.bundle=core
     image: postgres:18.4-trixie
     container_name: minder-postgres
     restart: on-failure
@@ -134,6 +137,8 @@ services:
     networks:
     - minder-network
   redis:
+    labels:
+    - minder.bundle=core
     image: redis:8.8.0-alpine
     container_name: minder-redis
     restart: on-failure
@@ -189,6 +194,7 @@ services:
     - minder-network
     # PILLAR 1: Expose management UI via Traefik with IP whitelist
     labels:
+    - minder.bundle=core
     - traefik.enable=true
     - traefik.http.routers.rabbitmq.rule=Host(`rabbitmq.minder.local`)
     - traefik.http.routers.rabbitmq.service=rabbitmq
@@ -208,6 +214,7 @@ services:
     - minio_data:/data
     # PILLAR 1: Expose via Traefik with Authelia authentication
     labels:
+    - minder.bundle=core
     - traefik.enable=true
     - traefik.http.routers.minio.rule=Host(`minio.minder.local`)
     - traefik.http.routers.minio.service=minio
@@ -227,6 +234,8 @@ services:
     networks:
     - minder-network
   schema-registry:
+    labels:
+    - minder.bundle=core
     image: apicurio/apicurio-registry-sql:2.6.13.Final
     container_name: minder-schema-registry
     restart: on-failure
@@ -253,6 +262,8 @@ services:
     networks:
     - minder-network
   ollama:
+    labels:
+    - minder.bundle=inference,rag,chat
     image: ollama/ollama:0.32.1
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
@@ -311,6 +322,8 @@ services:
     networks:
     - minder-network
   qdrant:
+    labels:
+    - minder.bundle=rag
     image: qdrant/qdrant:v1.18.3
     container_name: minder-qdrant
     restart: on-failure
@@ -359,6 +372,7 @@ services:
     - minder-network
     # PILLAR 1: Expose Neo4j Browser via Traefik with IP whitelist
     labels:
+    - minder.bundle=core
     - traefik.enable=true
     - traefik.http.routers.neo4j.rule=Host(`neo4j.minder.local`)
     - traefik.http.routers.neo4j.service=neo4j
@@ -423,6 +437,7 @@ services:
           cpus: '0.5'
     # PILLAR 1: Expose API via Traefik with Authelia authentication
     labels:
+    - minder.bundle=core
     - traefik.enable=true
     - traefik.http.routers.api-gateway.rule=Host(`api.minder.local`) || PathPrefix(`/api`)
     - traefik.http.routers.api-gateway.service=api-gateway
@@ -432,6 +447,8 @@ services:
     - traefik.http.middlewares.api-gateway-ratelimit.ratelimit.average=${RATE_LIMIT_PER_MINUTE:-60}
     - traefik.http.services.api-gateway.loadbalancer.server.port=8000
   plugin-registry:
+    labels:
+    - minder.bundle=core
     build:
       context: ../../
       dockerfile: src/services/plugin-registry/Dockerfile
@@ -531,6 +548,8 @@ services:
     networks:
     - minder-network
   plugin-state-manager:
+    labels:
+    - minder.bundle=core
     build:
       context: ../../
       dockerfile: src/services/plugin-state-manager/Dockerfile
@@ -579,6 +598,8 @@ services:
     networks:
     - minder-network
   rag-pipeline:
+    labels:
+    - minder.bundle=rag,chat
     build:
       context: ../../
       dockerfile: src/services/rag-pipeline/Dockerfile
@@ -623,6 +644,8 @@ services:
     networks:
     - minder-network
   model-management:
+    labels:
+    - minder.bundle=inference
     build:
       context: ../../
       dockerfile: src/services/model-management/Dockerfile
@@ -670,6 +693,8 @@ services:
   # ==========================================================================
 
   influxdb:
+    labels:
+    - minder.bundle=monitoring
     image: influxdb:3.10.3-core
     container_name: minder-influxdb
     restart: on-failure
@@ -704,6 +729,8 @@ services:
     networks:
     - minder-network
   telegraf:
+    labels:
+    - minder.bundle=monitoring
     image: telegraf:1.39.1
     container_name: minder-telegraf
     restart: on-failure
@@ -751,6 +778,8 @@ services:
     pid: host
     user: root
   prometheus:
+    labels:
+    - minder.bundle=monitoring
     image: prom/prometheus:v3.13.1
     container_name: minder-prometheus
     restart: on-failure
@@ -783,6 +812,8 @@ services:
     - --web.enable-lifecycle
     - --web.enable-admin-api
   alertmanager:
+    labels:
+    - minder.bundle=monitoring
     image: prom/alertmanager:v0.33.1
     container_name: minder-alertmanager
     restart: on-failure
@@ -837,6 +868,7 @@ services:
     # PILLAR 4: Always active - removed monitoring profile
     # PILLAR 1: Expose via Traefik with Authelia authentication
     labels:
+    - minder.bundle=monitoring
     - traefik.enable=true
     - traefik.http.routers.grafana.rule=Host(`grafana.minder.local`)
     - traefik.http.routers.grafana.service=grafana
@@ -892,6 +924,7 @@ services:
     - minder-network
     # PILLAR 1: Expose via Traefik with Authelia authentication
     labels:
+    - minder.bundle=chat
     - traefik.enable=true
     - traefik.http.routers.openwebui.rule=Host(`chat.minder.local`)
     - traefik.http.routers.openwebui.service=openwebui
@@ -899,6 +932,8 @@ services:
     - traefik.http.routers.openwebui.middlewares=authelia-forwardauth@file
     - traefik.http.services.openwebui.loadbalancer.server.port=8080
   marketplace:
+    labels:
+    - minder.bundle=core
     build:
       context: ../../
       dockerfile: src/services/marketplace/Dockerfile
@@ -945,6 +980,8 @@ services:
     networks:
     - minder-network
   tts-stt:
+    labels:
+    - minder.bundle=voice
     build:
       context: ../../
       dockerfile: src/services/tts-stt/Dockerfile
@@ -991,6 +1028,8 @@ services:
   # ==========================================================================
 
   graph-rag:
+    labels:
+    - minder.bundle=graph-rag
     build:
       context: ../../
       dockerfile: src/services/graph-rag/Dockerfile
@@ -1025,6 +1064,8 @@ services:
   # ==========================================================================
 
   postgres-exporter:
+    labels:
+    - minder.bundle=monitoring
     image: prometheuscommunity/postgres-exporter:v0.20.1
     container_name: minder-postgres-exporter
     restart: on-failure
@@ -1049,6 +1090,8 @@ services:
     - minder-network
     # PILLAR 4: Always active - removed monitoring profile
   redis-exporter:
+    labels:
+    - minder.bundle=monitoring
     image: oliver006/redis_exporter:v1.87.0
     container_name: minder-redis-exporter
     restart: on-failure
@@ -1070,6 +1113,8 @@ services:
 
   # RabbitMQ Management Exporter (for RabbitMQ metrics)
   rabbitmq-exporter:
+    labels:
+    - minder.bundle=monitoring
     image: kbudde/rabbitmq-exporter:v1.0.0-RC9
     container_name: minder-rabbitmq-exporter
     restart: on-failure
@@ -1090,6 +1135,8 @@ services:
 
   # Node Exporter (for host metrics - optional for production)
   node-exporter:
+    labels:
+    - minder.bundle=monitoring
     image: prom/node-exporter:v1.12.1
     container_name: minder-node-exporter
     restart: on-failure
@@ -1117,6 +1164,8 @@ services:
 
   # cAdvisor (for Docker container metrics)
   cadvisor:
+    labels:
+    - minder.bundle=monitoring
     image: gcr.io/cadvisor/cadvisor:v0.55.1
     container_name: minder-cadvisor
     restart: on-failure
@@ -1145,6 +1194,8 @@ services:
 
   # Blackbox Exporter (for remote endpoint monitoring - e.g., remote Ollama)
   blackbox-exporter:
+    labels:
+    - minder.bundle=monitoring
     image: prom/blackbox-exporter:v0.28.0
     container_name: minder-blackbox-exporter
     restart: on-failure
@@ -1200,6 +1251,7 @@ services:
     - minder-network
     # PILLAR 1: Expose via Traefik with authentication
     labels:
+    - minder.bundle=monitoring
     - traefik.enable=true
     - traefik.http.routers.jaeger.rule=Host(`jaeger.minder.local`)
     - traefik.http.routers.jaeger.service=jaeger
@@ -1208,6 +1260,8 @@ services:
     - traefik.http.services.jaeger.loadbalancer.server.port=16686
 
   otel-collector:
+    labels:
+    - minder.bundle=monitoring
     image: otel/opentelemetry-collector:0.156.0
     container_name: minder-otel-collector
     restart: on-failure
