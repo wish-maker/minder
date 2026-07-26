@@ -116,14 +116,15 @@ async def root():
 async def global_exception_handler(request, exc):
     """Global exception handler"""
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    # Match the platform's default {"detail": ...} envelope — was the only service
+    # emitting a custom {"error", "detail"} shape (#147/C3).
     return JSONResponse(
         status_code=500,
         content={
-            "error": "Internal server error",
             "detail": (
                 str(exc)
                 if settings.ENVIRONMENT == "development"
-                else "An error occurred"
+                else "Internal server error"
             ),
         },
     )

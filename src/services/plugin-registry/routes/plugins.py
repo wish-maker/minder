@@ -77,7 +77,9 @@ def build_plugins_router(
 
         is_valid, errors = validate_manifest(manifest)
         if not is_valid:
-            raise HTTPException(status_code=422, detail={"errors": errors})
+            # One platform-wide error envelope: {"detail": ...} like FastAPI's own
+            # validation errors, not a nested {"detail": {"errors": [...]}} (#147/C3).
+            raise HTTPException(status_code=422, detail=errors)
 
         plugin_name = manifest.get("metadata", {}).get("name")
         if not plugin_name:
@@ -188,7 +190,9 @@ def build_plugins_router(
 
         is_valid, errors = validate_manifest(manifest)
         if not is_valid:
-            raise HTTPException(status_code=422, detail={"errors": errors})
+            # One platform-wide error envelope: {"detail": ...} like FastAPI's own
+            # validation errors, not a nested {"detail": {"errors": [...]}} (#147/C3).
+            raise HTTPException(status_code=422, detail=errors)
 
         plugin_name = manifest.get("metadata", {}).get("name")
         if not plugin_name:
