@@ -53,9 +53,9 @@ async def construct_knowledge_graph_handler(
 ) -> KnowledgeGraphResponse:
     """Handle knowledge graph construction requests"""
     try:
-        # Extract entities first
+        # Extract entities first (honour the request's flag instead of forcing True).
         extraction_result = entity_extractor.extract_entities(
-            text=request.text, extract_relationships=True
+            text=request.text, extract_relationships=request.extract_relationships
         )
 
         # Create document node
@@ -204,10 +204,17 @@ async def get_entity_context_handler(
         if "error" in context_result:
             raise HTTPException(status_code=404, detail=context_result["error"])
 
+        # Honour include_neighbors (was accepted but ignored, #147): drop connected
+        # entities when the caller doesn't want them.
+        related = (
+            context_result.get("related_entities", [])
+            if request.include_neighbors
+            else []
+        )
         return EntityContextResponse(
             success=True,
             entity=context_result.get("entity", {}),
-            related_entities=context_result.get("related_entities", []),
+            related_entities=related,
             documents=context_result.get("documents", []),
             context_window=context_result.get("context_window", 3),
         )
@@ -230,12 +237,20 @@ def build_graph_router(
     (thin main + routes/). The handlers above hold the logic; this only wires them."""
     router = APIRouter()
 
-    @router.post("/extract", tags=["Entity Extraction"])
+    @router.post(
+        "/extract",
+        response_model=EntityExtractionResponse,
+        tags=["Entity Extraction"],
+    )
     async def extract_entities(request: EntityExtractionRequest):
         """Extract entities and relationships from text"""
         return await extract_entities_handler(request, entity_extractor)
 
-    @router.post("/construct-graph", tags=["Knowledge Graph"])
+    @router.post(
+        "/construct-graph",
+        response_model=KnowledgeGraphResponse,
+        tags=["Knowledge Graph"],
+    )
     async def construct_knowledge_graph(request: KnowledgeGraphRequest):
         """Build knowledge graph from document"""
         return await construct_knowledge_graph_handler(
@@ -247,14 +262,22 @@ def build_graph_router(
         """Delete a document's knowledge-graph nodes/relationships from Neo4j."""
         return await delete_document_graph_handler(document_id, graph_constructor)
 
-    @router.post("/retrieve", tags=["Graph Retrieval"])
+    @router.post(
+        "/retrieve",
+        response_model=GraphRetrievalResponse,
+        tags=["Graph Retrieval"],
+    )
     async def retrieve_with_graph(request: GraphRetrievalRequest):
         """Graph-based retrieval for RAG enhancement"""
         return await retrieve_with_graph_handler(
             request, entity_extractor, graph_retriever
         )
 
-    @router.post("/entity-context", tags=["Entity Context"])
+    @router.post(
+        "/entity-context",
+        response_model=EntityContextResponse,
+        tags=["Entity Context"],
+    )
     async def get_entity_context(request: EntityContextRequest):
         """Get detailed context for an entity"""
         return await get_entity_context_handler(request, graph_retriever)
