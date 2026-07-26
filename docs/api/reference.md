@@ -163,6 +163,12 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | GET | `/v1/proxy` | List services that can be proxied |
 | ANY | `/v1/proxy/{service_name}/{path:path}` | Dynamic proxy to a registered service |
 
+### Bundles (read-only)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/bundles` | The bundle model: each capability bundle, whether it's enabled, its claimed services, and per-service active/orphaned status. Derived from the Compose `minder.bundle=` labels + the secret-free enable-state via the shared brain (`shared.bundle_graph`). Read-only — enable/disable/reconcile need the docker-socket-proxy (Phase 3, #8). `503` if the compose file isn't mounted |
+
 ### Ops
 
 | Method | Path | Description |

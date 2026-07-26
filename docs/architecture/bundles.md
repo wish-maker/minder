@@ -1,8 +1,9 @@
 # ADR: Bundle Model — Capability-Oriented Service Control-Plane
 
 > **Status:** Accepted — Phases 0-2 shipped (#62), Phase-3 slices shipped: ollama
-> external binding (#64), **Compose-label-derived bundle map (#65 item 3)**, and the
-> **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**;
+> external binding (#64), **Compose-label-derived bundle map (#65 item 3)**, the
+> **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**, and the
+> **read-only `GET /v1/bundles` registry API (#65 item 2, read-only slice)**;
 > remaining Phase 3 tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
 > `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`, renamed
 > to the bundle model in Phase 1 and merged as `feat/bundles`).
@@ -190,11 +191,15 @@ Same operations, two front-ends over one shared brain:
   `setup.sh bundle enable|disable|status|reconcile <name> [--stop-orphans]` and
   `setup.sh install --profile <name>`. (`setup.sh bundle profile <name>` for a
   post-install re-apply is planned — not yet implemented.)
-- **Registry API (Phase 3):** `GET /v1/bundles`, `POST /v1/bundles/{name}/enable|disable`,
-  `POST /v1/bundles/reconcile`, `POST /v1/bundles/profile/{name}`. The
-  container-orchestration privilege runs through a **docker-socket-proxy**
-  (whitelist start/stop/restart) behind **Authelia**. This also enables
-  marketplace-triggered auto-enable of a bundle on plugin install.
+- **Registry API (Phase 3):** **`GET /v1/bundles` is shipped** (#65 item 2, read-only)
+  — it reports the bundle model (enabled state + claims + per-service active/orphaned)
+  by importing the same `shared.bundle_graph` brain, over a read-only mount of the
+  compose file (map) + the secret-free `bundles.state.json` (state). The **mutating**
+  endpoints `POST /v1/bundles/{name}/enable|disable`, `POST /v1/bundles/reconcile`,
+  `POST /v1/bundles/profile/{name}` are still pending: their container-orchestration
+  privilege runs through a **docker-socket-proxy** (whitelist start/stop/restart) behind
+  **Authelia** (couples with the Pi deploy #8). This also enables marketplace-triggered
+  auto-enable of a bundle on plugin install.
 
 `disable` never deletes data (`stop`, not `down`; volumes persist). There is **no
 per-bundle purge**; the only purge is the existing platform-wide `uninstall
