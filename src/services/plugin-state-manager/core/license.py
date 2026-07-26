@@ -11,6 +11,8 @@ import asyncpg
 import httpx
 from models.plugin_state import LicenseTier
 
+from shared.models.tiers import TIER_RANK, normalize_tier, tier_rank
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,11 +66,21 @@ async def validate_tool_access(
     # `user_id` / `conn` are accepted now for a forward-compatible signature.
     user_tier = "community"
 
-    # Define tier hierarchy
-    tier_hierarchy = {"free": 0, "community": 1, "pro": 2, "enterprise": 3}
-
-    user_level = tier_hierarchy.get(user_tier, 0)
-    required_level = tier_hierarchy.get(required_tier, 0)
+    # Rank comparison via the shared tier vocabulary (#142). normalize_tier maps the
+    # legacy "professional" spelling to "pro"; a genuinely unknown required tier now
+    # fails CLOSED (deny) instead of the old dict-default of 0, which fail-OPENED a
+    # paid tool (unknown tier → required_level 0 → everyone allowed).
+    user_level = tier_rank(user_tier)
+    try:
+        required_tier = normalize_tier(required_tier).value
+        required_level = tier_rank(required_tier)
+    except ValueError:
+        logger.warning(
+            "Unknown required_tier %r for tool %s — denying (fail closed)",
+            required_tier,
+            tool_name,
+        )
+        required_level = max(TIER_RANK.values()) + 1
 
     allowed = user_level >= required_level
 
@@ -94,7 +106,9 @@ async def get_plugin_license_tier(
     )
 
     if row:
-        return LicenseTier(row["license_tier"])
+        # normalize_tier tolerates a legacy "professional" row → "pro" instead of
+        # raising ValueError (which would 500 the request) (#142).
+        return normalize_tier(row["license_tier"])
 
     # Check default plugins
     default_row = await conn.fetchrow(
@@ -102,7 +116,7 @@ async def get_plugin_license_tier(
     )
 
     if default_row:
-        return LicenseTier(default_row["min_tier"])
+        return normalize_tier(default_row["min_tier"])
 
     return LicenseTier.COMMUNITY
 

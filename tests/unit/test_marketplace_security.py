@@ -7,7 +7,7 @@ def test_generate_license_key():
     generator = LicenseGenerator()
 
     license_key = generator.generate_license_key(
-        user_id="user-123", plugin_id="plugin-456", tier="professional"
+        user_id="user-123", plugin_id="plugin-456", tier="pro"
     )
 
     # Should be in format XXXX-XXXX-XXXX-XXXX
@@ -16,7 +16,7 @@ def test_generate_license_key():
 
     # Should be different each time
     license_key2 = generator.generate_license_key(
-        user_id="user-123", plugin_id="plugin-456", tier="professional"
+        user_id="user-123", plugin_id="plugin-456", tier="pro"
     )
     assert license_key != license_key2
 
@@ -27,7 +27,7 @@ def test_validate_license_key():
 
     # Generate valid license
     license_key = generator.generate_license_key(
-        user_id="user-123", plugin_id="plugin-456", tier="professional"
+        user_id="user-123", plugin_id="plugin-456", tier="pro"
     )
 
     # Validate it
@@ -36,7 +36,7 @@ def test_validate_license_key():
     assert result["valid"] is True
     assert result["user_id"] == "user-123"
     assert result["plugin_id"] == "plugin-456"
-    assert result["tier"] == "professional"
+    assert result["tier"] == "pro"
 
 
 def test_validate_invalid_license_key():
@@ -56,7 +56,7 @@ def test_validate_tampered_license_key():
 
     # Generate valid license
     license_key = generator.generate_license_key(
-        user_id="user-123", plugin_id="plugin-456", tier="professional"
+        user_id="user-123", plugin_id="plugin-456", tier="pro"
     )
 
     # Tamper with it

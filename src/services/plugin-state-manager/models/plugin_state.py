@@ -3,11 +3,19 @@
 Plugin state models for API requests/responses
 """
 
+import sys
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+# shared.models lives under /app/src; guard the path so this module imports cleanly
+# regardless of import order (main.py/config.py also insert it).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.models.tiers import LicenseTier  # noqa: E402,F401  (re-exported below)
 
 
 class PluginState(str, Enum):
@@ -19,13 +27,9 @@ class PluginState(str, Enum):
     ERROR = "error"
 
 
-class LicenseTier(str, Enum):
-    """License tier enumeration"""
-
-    FREE = "free"
-    COMMUNITY = "community"
-    PRO = "pro"
-    ENTERPRISE = "enterprise"
+# LicenseTier is the canonical enum from shared.models.tiers, re-exported here so the
+# existing `from models.plugin_state import LicenseTier` call sites keep working while
+# the vocabulary stays single-sourced across services (#142).
 
 
 class PluginStateResponse(BaseModel):

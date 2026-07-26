@@ -2,7 +2,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from shared.models.tiers import normalize_tier
 
 
 class LicenseCreate(BaseModel):
@@ -16,8 +18,20 @@ class LicenseCreate(BaseModel):
         ...,
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
-    tier: str = Field(..., pattern="^(community|professional|enterprise)$")
+    # Canonical tiers: free|community|pro|enterprise. "professional" is accepted as a
+    # deprecated alias and normalised to "pro" so a license never gets stored with a
+    # spelling the plugin-state-manager's tier gate can't match (#142).
+    tier: str = Field(
+        ...,
+        description="License tier (free|community|pro|enterprise; "
+        "'professional' → 'pro' alias)",
+    )
     valid_until: Optional[datetime] = None
+
+    @field_validator("tier")
+    @classmethod
+    def _normalize_tier(cls, v: str) -> str:
+        return normalize_tier(v).value
 
 
 class LicenseValidate(BaseModel):
