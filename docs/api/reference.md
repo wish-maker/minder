@@ -190,6 +190,7 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | GET | `/v1/marketplace/plugins/featured` | Featured plugins |
 | GET | `/v1/marketplace/plugins/{plugin_id}` | Plugin details |
 | POST | `/v1/marketplace/plugins` | Create a catalog entry (called by plugin-registry) |
+| PUT | `/v1/marketplace/plugins/{plugin_id}` | Update catalog metadata (partial; display_name/description/pricing_model/base_tier/status/featured). 404 if unknown, 422 if empty |
 
 ### Installation management (`/v1/marketplace/plugins`)
 
