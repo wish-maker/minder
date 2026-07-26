@@ -53,6 +53,8 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
     # Get embedding dimension
     embed_dim = EMBEDDING_DIMENSIONS.get(request.embedding_model, 768)
 
+    # Stamp once so the stored and returned created_at match (#140).
+    created_at = datetime.now().isoformat()
     state.knowledge_bases[kb_id] = {
         "id": kb_id,
         "name": request.name,
@@ -63,7 +65,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
         "chunk_overlap": request.chunk_overlap,
         "document_count": 0,
         "vector_count": 0,
-        "created_at": datetime.now().isoformat(),
+        "created_at": created_at,
     }
 
     # Create Qdrant collection
@@ -97,7 +99,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
         llm_model=request.llm_model,
         document_count=0,
         vector_count=0,
-        created_at=datetime.now().isoformat(),
+        created_at=created_at,
     )
 
 
