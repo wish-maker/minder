@@ -20,7 +20,20 @@ tts_requests_total = Counter(
 router = APIRouter()
 
 
-@router.post("/tts", tags=["TTS"])
+@router.post(
+    "/tts",
+    tags=["TTS"],
+    responses={
+        200: {
+            "content": {"audio/wav": {}, "audio/mpeg": {}},
+            "description": (
+                "Synthesised audio — WAV (Piper, offline) or MP3 (gTTS fallback). "
+                "The engine/format is reported in the X-Language header and the "
+                "Content-Type. Binary body, so there is no JSON response_model (#147/C9)."
+            ),
+        }
+    },
+)
 async def text_to_speech(request: TTSRequest):
     """Convert text to speech (Piper → WAV offline, or gTTS → MP3 fallback)."""
     if not TTS_AVAILABLE:
