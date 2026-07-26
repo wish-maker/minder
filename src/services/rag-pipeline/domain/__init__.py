@@ -14,11 +14,10 @@ from .compressors import ContextualCompressor
 from .expansion import HyDEQueryExpander
 from .pipelines import SelfRAGPipeline
 from .rerankers import CrossEncoderReranker
-from .retrievers import HybridSearchRetriever, ParentChildRetriever
+from .retrievers import HybridSearchRetriever
 
 __all__ = [
     "HybridSearchRetriever",
-    "ParentChildRetriever",
     "CrossEncoderReranker",
     "ContextualCompressor",
     "SelfRAGPipeline",
