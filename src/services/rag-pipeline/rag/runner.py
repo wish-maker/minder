@@ -114,18 +114,37 @@ async def run_query(
     # method_details.degraded so a client can detect a downgrade without diffing (#138).
     degraded: List[str] = []
 
-    # method=auto: let the decision engine choose.
+    # method=auto: let the decision engine choose. It decides more than HyDE/Self-RAG
+    # (top_k, reranking, retrieval strategy); the runner now applies the parts it can
+    # control here rather than discarding them (#139).
+    auto_top_k: Optional[int] = None
+    auto_rerank = False
     if method == "auto":
         use_hyde, use_self_rag, dec = await decision_method.route(
             question, components.decision_engine
         )
         if dec:
             details["decision"] = dec
+            auto_top_k = dec.get("top_k")
+            auto_rerank = bool(dec.get("use_reranking"))
+            # The retriever (dense/hybrid/parent) is selected per-request upstream in
+            # the route and can't be swapped in the runner — so a non-dense strategy
+            # the engine picks is advisory only. Say so instead of pretending (#139).
+            strat = dec.get("retrieval_strategy")
+            if strat and strat not in ("basic", "dense"):
+                degraded.append(
+                    f"auto: engine suggested retrieval_strategy={strat!r}, but the "
+                    "retriever is chosen per-request (hybrid/parent_context flags) — "
+                    "not auto-switched"
+                )
         else:
             degraded.append(
                 "auto: decision engine unavailable — used standard retrieval/generation"
             )
         details["requested"] = "auto"
+
+    # Effective retrieval depth: the engine's top_k in auto mode, else the request's.
+    effective_top_k = auto_top_k if (method == "auto" and auto_top_k) else request.top_k
 
     # HyDE: retrieve using a hypothetical answer rather than the raw question.
     retrieval_query = question
@@ -142,7 +161,9 @@ async def run_query(
                 "hyde: expander unavailable or empty rewrite — retrieved on raw query"
             )
 
-    context_result = await components.retrieve(pipeline, retrieval_query, request.top_k)
+    context_result = await components.retrieve(
+        pipeline, retrieval_query, effective_top_k
+    )
 
     # Corrective RAG: grade the retrieval and re-retrieve with a refined query if weak.
     if method == "corrective":
@@ -152,7 +173,7 @@ async def run_query(
             components.corrective_pipeline,
             components.retrieve,
             pipeline,
-            request.top_k,
+            effective_top_k,
             components.ollama_manager,
             llm_model,
         )
@@ -165,8 +186,9 @@ async def run_query(
             )
 
     # Optional adaptive re-ranking (cross-encoder if available, else LLM). Orthogonal
-    # to method — applies to whatever was retrieved above.
-    if getattr(request, "rerank", False):
+    # to method — applies to whatever was retrieved above. In auto mode the decision
+    # engine can also request it (#139).
+    if getattr(request, "rerank", False) or auto_rerank:
         context_result, rr_details = await rerank_method.apply(
             question,
             context_result,
@@ -244,7 +266,18 @@ async def run_query(
             model_used = answer_result.get("model", llm_model)
             tokens_used = answer_result.get("tokens_used")
 
-    if method == "corrective":
+    if method == "auto":
+        # Report "auto" honestly (was previously relabeled to its sub-method); the
+        # decision + what was applied live in method_details.decision (#139).
+        effective_method = "auto"
+        if details.get("decision"):
+            details["decision"]["applied"] = {
+                "hyde": use_hyde,
+                "self_rag": use_self_rag,
+                "top_k": effective_top_k,
+                "rerank": bool(getattr(request, "rerank", False) or auto_rerank),
+            }
+    elif method == "corrective":
         # Only claim "corrective" if grading actually ran (details recorded). If the
         # pipeline was unavailable the grade never happened → report standard (#138).
         effective_method = "corrective" if details.get("corrective") else "standard"
