@@ -32,11 +32,3 @@ class ServiceRegistration(BaseModel):
     port: int
     health_check_url: str = "/health"
     metadata: Dict = {}
-
-
-class PluginInstallationRequest(BaseModel):
-    """Request to install 3rd party plugin"""
-
-    repository: str
-    branch: str = "main"
-    version: Optional[str] = None
