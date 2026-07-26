@@ -7,7 +7,7 @@ from typing import Dict, List
 
 from core import state
 from domain.retrievers.hybrid import BM25_AVAILABLE, HybridSearchRetriever
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from models import (
     DocumentUploadResponse,
     KnowledgeBaseCreate,
@@ -108,9 +108,12 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
     response_model=List[KnowledgeBaseResponse],
     tags=["Knowledge Base"],
 )
-async def list_knowledge_bases():
-    """List all knowledge bases"""
-    return list(state.knowledge_bases.values())
+async def list_knowledge_bases(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """List knowledge bases (paginated via limit/offset, #147/C6)."""
+    return list(state.knowledge_bases.values())[offset : offset + limit]
 
 
 @router.get(
