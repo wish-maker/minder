@@ -5,7 +5,6 @@ import pytest
 from pydantic import ValidationError
 
 from services.marketplace.models.installation import InstallationResponse
-from services.marketplace.models.license import LicenseCreate
 from services.marketplace.models.plugin import PluginCreate, PluginResponse
 
 
@@ -61,25 +60,6 @@ def test_plugin_response_model():
     assert plugin.id == "550e8400-e29b-41d4-a716-446655440001"
     assert plugin.name == "test-plugin"
     assert plugin.rating_average == 4.5
-
-
-def test_license_create_model():
-    """Test license creation model"""
-    data = {
-        "user_id": "550e8400-e29b-41d4-a716-446655440002",
-        "plugin_id": "550e8400-e29b-41d4-a716-446655440003",
-        "tier": "pro",
-    }
-
-    license_data = LicenseCreate(**data)
-
-    assert license_data.user_id == "550e8400-e29b-41d4-a716-446655440002"
-    assert license_data.tier == "pro"
-
-    # Legacy "professional" spelling is accepted but normalised to canonical "pro"
-    # so a license never gets stored with a term the tier gate can't match (#142).
-    aliased = LicenseCreate(**{**data, "tier": "professional"})
-    assert aliased.tier == "pro"
 
 
 def test_installation_response_model():

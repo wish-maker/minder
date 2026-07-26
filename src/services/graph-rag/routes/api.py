@@ -252,7 +252,12 @@ def build_graph_router(
         tags=["Knowledge Graph"],
     )
     async def construct_knowledge_graph(request: KnowledgeGraphRequest):
-        """Build knowledge graph from document"""
+        """Build a knowledge graph from a document.
+
+        Idempotent on `document_id`: the document, entity, and relationship writes all
+        use Cypher MERGE, so re-POSTing the same id upserts rather than duplicating
+        nodes/edges (#147).
+        """
         return await construct_knowledge_graph_handler(
             request, entity_extractor, graph_constructor
         )
