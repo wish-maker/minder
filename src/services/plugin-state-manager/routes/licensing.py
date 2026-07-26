@@ -28,6 +28,13 @@ class UpdateLicenseRequest(BaseModel):
     license_key: Optional[str] = None
 
 
+class ValidateLicenseRequest(BaseModel):
+    """Validate-license request. license_key lives in the body, not the URL query,
+    so a secret isn't logged in access logs / proxies (#147/C7)."""
+
+    license_key: Optional[str] = None
+
+
 class LicenseValidationResponse(BaseModel):
     """License validation response"""
 
@@ -53,7 +60,9 @@ async def get_plugin_tier(plugin_name: str):
 
 
 @router.post("/plugins/{plugin_name}/license/validate")
-async def validate_plugin_license(plugin_name: str, license_key: Optional[str] = None):
+async def validate_plugin_license(
+    plugin_name: str, request: ValidateLicenseRequest = ValidateLicenseRequest()
+):
     """
     Validate plugin license key
 
@@ -63,7 +72,7 @@ async def validate_plugin_license(plugin_name: str, license_key: Optional[str] =
 
     try:
         async with db.acquire() as conn:
-            result = await check_plugin_license(conn, plugin_name, license_key)
+            result = await check_plugin_license(conn, plugin_name, request.license_key)
             return LicenseValidationResponse(**result)
     except Exception as e:
         logger.error(f"Failed to validate license for {plugin_name}: {e}")
