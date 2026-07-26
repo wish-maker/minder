@@ -1,7 +1,8 @@
 # ADR: Bundle Model — Capability-Oriented Service Control-Plane
 
 > **Status:** Accepted — Phases 0-2 shipped (#62), Phase-3 slices shipped: ollama
-> external binding (#64) and **Compose-label-derived bundle map (#65 item 3)**;
+> external binding (#64), **Compose-label-derived bundle map (#65 item 3)**, and the
+> **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**;
 > remaining Phase 3 tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
 > `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`, renamed
 > to the bundle model in Phase 1 and merged as `feat/bundles`).
@@ -239,9 +240,10 @@ separated from tracked config.
   ```
   Recreated by `setup.sh start` (prepare) if deleted — same self-heal as `.env`.
   (Move is a dedicated small step, since it touches mount paths.)
-- **Control-plane:** `scripts/setup/bundles.py` (verb + brain). In Phase 3 the pure
-  brain moves to `shared/` so the host CLI and the registry API import the same
-  logic (giving the ~unused `shared/` a real purpose).
+- **Control-plane:** `scripts/setup/bundles.py` holds the verbs + I/O; the **pure
+  claim-graph brain lives in `src/shared/bundle_graph.py`** (map/state parsing +
+  refcount logic) so the host CLI and the registry API import the same logic
+  (shipped, #65 item 1 — the CLI puts `src/` on its path via `scripts/setup/__init__.py`).
 
 ## Decisions
 

@@ -4,9 +4,10 @@ A **bundle** is a named group of services delivering a capability (monitoring,
 rag, …); it is the enable/disable + refcount unit. See docs/architecture/bundles.md.
 
 The full bundle map (core/inference/rag/…) is **derived from Compose `minder.bundle=`
-labels** — the compose file is the single source of truth (#65). Still deferred:
-moving the pure brain to `shared/` so the registry API and host CLI share it
-(bundles.md Phase 3).
+labels** — the compose file is the single source of truth (#65). The pure claim-graph
+brain (map/state parsing + refcount logic) lives in `shared.bundle_graph` so the host
+CLI (here) and the future registry API import the SAME logic; this module keeps the
+I/O + `docker compose` verbs and delegates the computation.
 
 Enable-state lives in a dedicated, secret-free JSON file (`config.BUNDLES_STATE`,
 `bundles.state.json`) — NOT `.env`, which carries secrets the network-facing
@@ -23,9 +24,10 @@ funnels through `docker compose` — compose stays the single source of truth.
 
 import json
 import os
-import re
 
-from . import config, docker, env, log
+from shared.bundle_graph import ClaimGraph, parse_bundle_labels, parse_state
+
+from . import config, docker, env, log  # config inserts src/ on the path (below)
 
 SCRIPT_NAME = config.SCRIPT_NAME
 STATE_FILE = config.BUNDLES_STATE
@@ -50,59 +52,35 @@ def external_binding(service: str) -> "str | None":
     return (os.environ.get(var) or env.get(var)) or None
 
 
-# The bundle → claims map is DERIVED from Compose `minder.bundle=<comma-list>` labels
-# — the compose file is the single source of truth, so the map can never drift from
-# what actually runs (docs/architecture/bundles.md, #65). A service's label value is a
-# comma-list so one service can be claimed by several bundles (ollama ∈
-# inference,rag,chat; rag-pipeline ∈ rag,chat — the shared claims the refcount relies
-# on so disabling one bundle can't orphan a service another still needs).
-_TOPLEVEL_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*(#.*)?$")  # 0-indent section key
-_SERVICE_RE = re.compile(r"^  ([A-Za-z0-9._-]+):\s*(#.*)?$")  # 2-indent service key
-_BUNDLE_LABEL_RE = re.compile(r"minder\.bundle=([A-Za-z0-9,_-]+)")
+# The always-on kernel bundle — never disabled, always a claimant.
+CORE_BUNDLE = "core"
 
 
-def _derive_bundles_from_compose() -> dict:
-    """Build ``{bundle: {"claims": (services...)}}`` from the Compose labels.
-
-    Stdlib-only line scan (the ``versions.py`` regex-line-extraction precedent — the
-    setup CLI ships no YAML lib): walk the ``services:`` section tracking the current
-    2-indent service key, and attribute each ``minder.bundle=`` label (comma-split) to
-    it. Order within a bundle follows compose order; it is display-only (the refcount
-    uses set membership).
-    """
-    text = config.COMPOSE_FILE.read_text(encoding="utf-8")
-    claims: dict = {}
-    in_services = False
-    current = None
-    for line in text.splitlines():
-        if _TOPLEVEL_RE.match(line):
-            in_services = line.split(":", 1)[0] == "services"
-            current = None
-            continue
-        if not in_services:
-            continue
-        svc = _SERVICE_RE.match(line)
-        if svc:
-            current = svc.group(1)
-            continue
-        label = _BUNDLE_LABEL_RE.search(line)
-        if current and label:
-            for bundle in label.group(1).split(","):
-                svcs = claims.setdefault(bundle, [])
-                if current not in svcs:
-                    svcs.append(current)
-    if "core" not in claims:
+def _load_claims() -> dict:
+    """Derive ``{bundle: (services...)}`` from the Compose `minder.bundle=` labels via
+    the shared brain (compose = single source of truth, #65). Raises if no labels are
+    present so the map never silently becomes empty."""
+    claims = parse_bundle_labels(config.COMPOSE_FILE.read_text(encoding="utf-8"))
+    if CORE_BUNDLE not in claims:
         raise RuntimeError(
             f"No minder.bundle labels found in {config.COMPOSE_FILE}; the bundle map "
             "is derived from Compose labels (#65) — the compose file must carry them."
         )
-    return {bundle: {"claims": tuple(svcs)} for bundle, svcs in claims.items()}
+    return claims
 
 
-BUNDLES: dict = _derive_bundles_from_compose()
+# service-claims map (bundle → tuple of services) + the display-shaped BUNDLES facade
+# (``{bundle: {"claims": (...)}}``) kept for existing callers (lifecycle/status/verbs).
+_CLAIMS: dict = _load_claims()
+BUNDLES: dict = {bundle: {"claims": claims} for bundle, claims in _CLAIMS.items()}
 
-# The always-on kernel bundle — never disabled, always a claimant.
-CORE_BUNDLE = "core"
+
+def _graph() -> ClaimGraph:
+    """A fresh claim-graph over the current enable-state (read each call, so a
+    disable/enable within one verb is reflected immediately — matches prior behaviour).
+    """
+    return ClaimGraph(_CLAIMS, _load_state(), CORE_BUNDLE)
+
 
 # Optional bundles (everything but core) and install profiles = the optional
 # bundles a fresh install turns ON. `standard` (the default) is the AI experience;
@@ -118,77 +96,48 @@ _ACTIONS = ("enable", "disable", "status", "reconcile")
 
 
 def _load_state() -> dict:
-    """Parse bundles.state.json → {bundle: {enabled: bool}}. Missing/corrupt file
-    → {} (everything defaults to enabled), matching the absent-key semantics.
-
-    The file is documented as hand-editable, so a plausible mis-edit — a per-bundle
-    value that is valid JSON but not the `{enabled: bool}` shape, e.g. `{"rag": false}`
-    instead of `{"rag": {"enabled": false}}` — must NOT crash callers (is_enabled /
-    _set_enabled index into these values). Non-dict entries are dropped so they
-    degrade to the documented "defaults to enabled" instead of raising, and get
-    self-healed on the next `_set_enabled` write."""
+    """Read bundles.state.json and parse it via the shared brain. Missing file → {}
+    (everything enabled); corrupt/wrong-shape handled by ``parse_state`` (drops bad
+    entries → degrade to enabled). This is the enable-state the CLI I/O owns; the pure
+    logic over it lives in ``shared.bundle_graph``."""
     try:
-        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        text = STATE_FILE.read_text(encoding="utf-8")
+    except OSError:
         return {}
-    if not isinstance(data, dict):
-        return {}
-    return {k: v for k, v in data.items() if isinstance(v, dict)}
+    return parse_state(text)
 
 
 def is_enabled(name: str) -> bool:
-    """True unless bundles.state.json explicitly disables the bundle. The `core`
-    bundle is always enabled (the kernel — cannot be disabled). Absent file/key →
-    enabled, so the default start path (and thus the setup gate) is unchanged."""
-    if name == CORE_BUNDLE:
-        return True
-    return bool(_load_state().get(name, {}).get("enabled", True))
+    """True unless bundles.state.json disables the bundle (`core` is always on)."""
+    return _graph().is_enabled(name)
 
 
 def service_active(service: str) -> bool:
-    """Should `service` run? Yes iff a bundle that claims it is enabled (core is
-    always enabled). An unclaimed service (not in the map) defaults to active so a
-    gap never silently drops a service. This is what `start` filters each group by;
-    with everything enabled the filter is a no-op → the setup gate stays identical."""
-    claimants = [b for b in BUNDLES if service in BUNDLES[b]["claims"]]
-    if not claimants:
-        return True
-    return any(is_enabled(b) for b in claimants)
+    """Should `service` run? Yes iff a bundle claiming it is enabled (an unclaimed
+    service defaults to active). This is what `start` filters each group by — all
+    enabled → no-op → the setup gate stays identical."""
+    return _graph().service_active(service)
 
 
 def _enabled_bundles(exclude: "str | None" = None) -> "set[str]":
-    return {n for n in BUNDLES if n != exclude and is_enabled(n)}
+    return _graph().enabled_bundles(exclude)
 
 
 def _claimants(service: str, enabled: "set[str]") -> "set[str]":
-    """Enabled bundles that claim `service` — everything keeping it alive. Empty →
-    the service is orphaned. (Phase 2 folds in core-bundle + cross-bundle claims.)"""
-    return {b for b in enabled if service in BUNDLES[b]["claims"]}
+    """Enabled bundles (from the passed set) that claim `service`. Pure over the claim
+    map — no state read (the hot path in `status`)."""
+    return {b for b in enabled if service in _CLAIMS.get(b, ())}
 
 
 def _orphans_after(disabling: str) -> "list[str]":
-    """Services of `disabling` that no OTHER enabled bundle claims — safe to stop
-    once this bundle is off. Deterministic order."""
-    remaining = _enabled_bundles(exclude=disabling)
-    return sorted(
-        s for s in BUNDLES[disabling]["claims"] if not _claimants(s, remaining)
-    )
+    """Services of `disabling` no OTHER enabled bundle claims — safe to stop."""
+    return _graph().orphans_after(disabling)
 
 
 def orphaned_services() -> "list[str]":
-    """Every service claimed by NO enabled bundle — safe to stop. This is what
-    `start`/`restart` converge on: a bundle disabled while its services were running
-    is brought down (state = desired). Deterministic order."""
-    enabled = _enabled_bundles()
-    return sorted(
-        {
-            s
-            for b in BUNDLES
-            if not is_enabled(b)
-            for s in BUNDLES[b]["claims"]
-            if not _claimants(s, enabled)
-        }
-    )
+    """Every service claimed by NO enabled bundle — what `start`/`reconcile` converge
+    on (a bundle disabled while running is brought down; state = desired)."""
+    return _graph().orphaned_services()
 
 
 def _set_enabled(name: str, on: bool) -> None:
