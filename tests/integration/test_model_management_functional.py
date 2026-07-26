@@ -3,7 +3,7 @@ Functional tests for the model-management service (Ollama-backed).
 
 Covers the endpoints that moved into routes/models_api.py during the 2026-07-10
 refactor: health, list, test (real inference), and the constraints/metrics
-placeholders. Skips automatically if the service is unreachable.
+not-implemented (501) endpoints. Skips automatically if the service is unreachable.
 """
 
 import os
@@ -43,7 +43,8 @@ def test_list_models_returns_local_models():
         assert {"id", "name", "provider", "status"} <= set(m)
 
 
-def test_constraints_is_placeholder():
+def test_constraints_not_implemented_501():
+    # Placeholder endpoints now return 501 instead of a fake 200 (#145).
     r = httpx.post(
         f"{BASE}/models/anything/constraints",
         json={
@@ -55,16 +56,14 @@ def test_constraints_is_placeholder():
         },
         timeout=8.0,
     )
-    assert r.status_code == 200
-    assert "placeholder" in r.json().get("message", "").lower()
+    assert r.status_code == 501
+    assert "not implemented" in r.json().get("detail", "").lower()
 
 
-def test_metrics_placeholder_returns_zeros():
+def test_metrics_not_implemented_501():
     r = httpx.get(f"{BASE}/models/anything/metrics", timeout=8.0)
-    assert r.status_code == 200
-    body = r.json()
-    assert body["total_requests"] == 0
-    assert "not yet implemented" in body["note"].lower()
+    assert r.status_code == 501
+    assert "not implemented" in r.json().get("detail", "").lower()
 
 
 def test_root():

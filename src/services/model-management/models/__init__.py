@@ -2,7 +2,7 @@
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # Constrained vocabularies so an invalid value is a 422 at the edge (and shows in
 # /docs) instead of a free string (#143). These match the values the service actually
@@ -20,6 +20,26 @@ class ModelInfo(BaseModel):
     provider: str
     size: str
     status: ModelStatus
+
+
+class ModelPullRequest(BaseModel):
+    """Request body for ``POST /models`` — just the Ollama model id to pull.
+
+    Replaces the old design that required a whole (ignored) ModelInfo body plus a
+    ``model_id`` query param (#145). ``protected_namespaces=()`` silences pydantic's
+    ``model_`` namespace warning for the ``model_id`` field.
+    """
+
+    model_config = ConfigDict(protected_namespaces=())
+
+    model_id: str
+
+
+class ModelTestRequest(BaseModel):
+    """Request body for ``POST /models/{model_id}/test`` (prompt moved out of the
+    query string, #145)."""
+
+    prompt: str = "Hello, test."
 
 
 class ModelConstraints(BaseModel):
