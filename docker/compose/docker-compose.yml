@@ -519,6 +519,11 @@ services:
     volumes:
     - ../../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
+    # Read-only compose file so the registry can derive the bundle map from the
+    # minder.bundle= labels for GET /v1/bundles (#65). The bundles.state.json mount is
+    # deferred (absent source → empty-dir footgun; until then an absent state file
+    # reads as "everything enabled", which is the documented default).
+    - ./docker-compose.yml:/app/bundles/docker-compose.yml:ro
     # Writable mount of the SAME runtime telegraf.conf the telegraf container reads
     # (:ro there). This is the gitignored RUNTIME copy seeded from the tracked
     # template by setup.sh (sync_telegraf_config) — the plugin rewrites it in-place

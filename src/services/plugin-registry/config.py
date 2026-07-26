@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     PLUGINS_PATH: str = "/app/plugins"
     PLUGINS_DATA_PATH: str = "/app/plugins-data"
 
+    # Bundles (read-only view, #65 item 2). The compose file (bundle map source of
+    # truth via minder.bundle= labels) and the secret-free enable-state are mounted
+    # read-only; the state file may be absent (→ everything enabled).
+    BUNDLES_COMPOSE_PATH: str = "/app/bundles/docker-compose.yml"
+    BUNDLES_STATE_PATH: str = "/app/bundles/bundles.state.json"
+
     # Health Monitoring
     HEALTH_CHECK_INTERVAL_SECONDS: int = 30
     HEALTH_CHECK_TIMEOUT_SECONDS: int = 10
