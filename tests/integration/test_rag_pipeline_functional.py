@@ -86,11 +86,24 @@ def test_standard_query_grounded(pipeline_id):
     assert body["sources"], "no sources returned"
 
 
-def test_invalid_method_falls_back_to_standard(pipeline_id):
+def test_invalid_method_rejected_with_422(pipeline_id):
+    # An unknown method must fail loudly rather than silently running standard, so the
+    # caller learns what they actually asked for (#138). 422 lists the valid values.
     r = httpx.post(
         f"{BASE}/pipeline/{pipeline_id}/query",
         json={"question": "What is the sentinel token?", "top_k": 2, "method": "bogus"},
         timeout=180.0,
     )
+    assert r.status_code == 422, r.text
+    assert "valid values" in r.text.lower()
+
+
+def test_retrieval_strategy_reported(pipeline_id):
+    # A standard query reports the retrieval strategy it actually used (#138).
+    r = httpx.post(
+        f"{BASE}/pipeline/{pipeline_id}/query",
+        json={"question": "What is the sentinel token?", "top_k": 2},
+        timeout=180.0,
+    )
     assert r.status_code == 200, r.text
-    assert r.json()["method"] == "standard"
+    assert r.json()["method_details"]["retrieval"] == "dense"

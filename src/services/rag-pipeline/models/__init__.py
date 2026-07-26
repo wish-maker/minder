@@ -2,9 +2,16 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL
+
+# Canonical set of selectable generation/retrieval-rewrite strategies (the `method`
+# field). "conversational" is NOT here — it is activated by passing `conversation_id`,
+# not by `method`. Retrieval strategies (hybrid/parent_context) are separate boolean
+# flags, not methods. Kept here (not in rag/runner) so the request model can reject an
+# unknown method with a 422 at the API edge instead of silently coercing to standard.
+VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto", "corrective"}
 
 
 class KnowledgeBaseCreate(BaseModel):
@@ -61,6 +68,24 @@ class QueryRequest(BaseModel):
     # with its neighbouring chunks (parent window) for fuller context. Takes
     # precedence over hybrid when both set.
     parent_context: bool = False
+
+    @field_validator("method")
+    @classmethod
+    def _validate_method(cls, v: str) -> str:
+        """Reject unknown methods with a 422 instead of silently running standard.
+
+        Normalises case so callers may send e.g. "Self_RAG". Unknown values
+        (typos, "raptor", "conversational", "parent_child", …) fail loudly with the
+        valid set — the caller learns what they actually asked for. (#138)
+        """
+        normalized = (v or "standard").lower()
+        if normalized not in VALID_RAG_METHODS:
+            raise ValueError(
+                f"invalid method '{v}'; valid values: {sorted(VALID_RAG_METHODS)}. "
+                "(conversational RAG is enabled via conversation_id, not method; "
+                "hybrid/parent_context are separate boolean flags.)"
+            )
+        return normalized
 
 
 class QueryResponse(BaseModel):

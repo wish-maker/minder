@@ -301,13 +301,28 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     pipeline = state.rag_pipelines[pipeline_id]
     # Retrieval strategy is chosen here as a drop-in retrieve variant (same signature)
     # so the runner/methods stay retrieval-agnostic (#45). parent_context > hybrid >
-    # dense.
-    if getattr(request, "parent_context", False):
+    # dense. The runner can't see this choice, so record it (and any silent downgrade)
+    # here and fold it into method_details after the query runs (#138).
+    want_parent = bool(getattr(request, "parent_context", False))
+    want_hybrid = bool(getattr(request, "hybrid", False))
+    retrieval_notes: list[str] = []
+    if want_parent:
+        retrieval_strategy = "parent_context"
         retrieve_fn = retrieve_parent_child
-    elif getattr(request, "hybrid", False) and BM25_AVAILABLE:
+        if want_hybrid:
+            retrieval_notes.append(
+                "parent_context takes precedence — hybrid flag ignored"
+            )
+    elif want_hybrid and BM25_AVAILABLE:
+        retrieval_strategy = "hybrid"
         retrieve_fn = retrieve_hybrid
     else:
+        retrieval_strategy = "dense"
         retrieve_fn = retrieve_relevant_documents
+        if want_hybrid and not BM25_AVAILABLE:
+            retrieval_notes.append(
+                "hybrid requested but rank_bm25 unavailable — used dense retrieval"
+            )
     components = state.RagComponents(
         ollama_manager=state.ollama_manager,
         retrieve=retrieve_fn,
@@ -328,6 +343,12 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         generation_config=pipeline.get("generation_config", {}),
         components=components,
     )
+    # Annotate the retrieval strategy the runner is blind to, plus any silent downgrade.
+    method_details = dict(result.get("method_details") or {})
+    method_details["retrieval"] = retrieval_strategy
+    if retrieval_notes:
+        method_details.setdefault("degraded", []).extend(retrieval_notes)
+    result["method_details"] = method_details
     return QueryResponse(**result)
 
 
