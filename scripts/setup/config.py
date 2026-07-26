@@ -13,6 +13,8 @@ from pathlib import Path
 # bash SCRIPT_DIR = the setup.sh dir = repo root (this file is scripts/setup/config.py).
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIR = REPO_ROOT
+# NOTE: `src/` is put on sys.path in scripts/setup/__init__.py (runs before any
+# submodule) so setup modules can import the shared bundle brain (#65).
 
 # Mirrors setup.sh:30-31.
 SCRIPT_VERSION = "1.0.0"
