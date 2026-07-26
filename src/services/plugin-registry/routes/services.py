@@ -8,8 +8,10 @@ acyclic and mirrors the modular pattern used elsewhere in the codebase.
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from models import ServiceRegistration
+
+from shared.pagination import paginate
 
 
 def build_services_router(
@@ -39,9 +41,19 @@ def build_services_router(
         }
 
     @router.get("/v1/services")
-    async def list_services():
-        """List all registered services"""
-        return {"services": list(services_db.values()), "count": len(services_db)}
+    async def list_services(
+        limit: int = Query(50, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+    ):
+        """List all registered services, paginated (#147/C6)."""
+        page, total = paginate(list(services_db.values()), limit, offset)
+        return {
+            "services": page,
+            "count": len(page),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
     @router.get("/v1/services/{service_name}")
     async def get_service(service_name: str):

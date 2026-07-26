@@ -31,8 +31,12 @@ router = APIRouter()
 
 
 @router.get("/state", response_model=PluginStateListResponse)
-async def list_all_plugin_states(state: Optional[str] = Query(None)):
-    """List all plugin states (optional ?state= filter)."""
+async def list_all_plugin_states(
+    state: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """List all plugin states (optional ?state= filter), paginated (#147/C6)."""
     try:
         state_filter = PluginState(state) if state else None
     except ValueError:
@@ -46,9 +50,13 @@ async def list_all_plugin_states(state: Optional[str] = Query(None)):
     async with db.acquire() as conn:
         states = await list_plugin_states(conn, state_filter)
 
+        page = states[offset : offset + limit]
         return PluginStateListResponse(
-            plugins=[PluginStateResponse(**state) for state in states],
-            count=len(states),
+            plugins=[PluginStateResponse(**s) for s in page],
+            count=len(page),
+            total=len(states),
+            limit=limit,
+            offset=offset,
         )
 
 
