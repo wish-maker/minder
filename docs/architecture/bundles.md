@@ -1,6 +1,7 @@
 # ADR: Bundle Model — Capability-Oriented Service Control-Plane
 
-> **Status:** Accepted — Phases 0-2 shipped (#62), first Phase-3 slice shipped (#64);
+> **Status:** Accepted — Phases 0-2 shipped (#62), Phase-3 slices shipped: ollama
+> external binding (#64) and **Compose-label-derived bundle map (#65 item 3)**;
 > remaining Phase 3 tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
 > `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`, renamed
 > to the bundle model in Phase 1 and merged as `feat/bundles`).
@@ -83,7 +84,10 @@ The claim graph has three sources, merged into one `service → claimants` map:
 | **chat** | openwebui, rag-pipeline, ollama | ON |
 | **voice** | tts-stt | **OFF** |
 
-> The `core` map above is `bundles.BUNDLES["core"]["claims"]` as shipped. **authelia**
+> The map above is `bundles.BUNDLES`, now **derived at load time from the
+> `minder.bundle=<comma-list>` Compose labels** on each service (single source of truth,
+> #65 item 3) — no hardcoded map. A unit test pins the derived map to this reviewed
+> spec. **authelia**
 > is NOT in the claim map yet (it's disabled — issue #15); the design intent is for it
 > to join `core` when #15 re-enables it. `rag`/`chat` share `ollama` (and `chat` shares
 > `rag-pipeline`) so the refcount can't orphan a service another enabled bundle needs.

@@ -3,10 +3,10 @@
 A **bundle** is a named group of services delivering a capability (monitoring,
 rag, …); it is the enable/disable + refcount unit. See docs/architecture/bundles.md.
 
-The full bundle map (core/inference/rag/…) is wired and `start` honours every
-bundle. Still deferred: Compose-label derivation of the map (needs a YAML parser in
-the stdlib-only CLI — see BUNDLES below) and moving the pure brain to `shared/` so
-the registry API and host CLI share it (bundles.md Phase 3).
+The full bundle map (core/inference/rag/…) is **derived from Compose `minder.bundle=`
+labels** — the compose file is the single source of truth (#65). Still deferred:
+moving the pure brain to `shared/` so the registry API and host CLI share it
+(bundles.md Phase 3).
 
 Enable-state lives in a dedicated, secret-free JSON file (`config.BUNDLES_STATE`,
 `bundles.state.json`) — NOT `.env`, which carries secrets the network-facing
@@ -23,6 +23,7 @@ funnels through `docker compose` — compose stays the single source of truth.
 
 import json
 import os
+import re
 
 from . import config, docker, env, log
 
@@ -49,37 +50,56 @@ def external_binding(service: str) -> "str | None":
     return (os.environ.get(var) or env.get(var)) or None
 
 
-# bundle name → services it claims (docs/architecture/bundles.md). `core` is the
-# always-on kernel and cannot be disabled. Hardcoded here for now; deriving this
-# from Compose `minder.bundle=` labels needs a YAML parser in the stdlib-only CLI,
-# so it is deferred (this reviewed map is the single source until then).
-BUNDLES: dict[str, dict[str, tuple[str, ...]]] = {
-    "core": {
-        "claims": (
-            "traefik",
-            "postgres",
-            "redis",
-            "rabbitmq",
-            "neo4j",
-            "minio",
-            "schema-registry",
-            "api-gateway",
-            "plugin-registry",
-            "plugin-state-manager",
-            "marketplace",
+# The bundle → claims map is DERIVED from Compose `minder.bundle=<comma-list>` labels
+# — the compose file is the single source of truth, so the map can never drift from
+# what actually runs (docs/architecture/bundles.md, #65). A service's label value is a
+# comma-list so one service can be claimed by several bundles (ollama ∈
+# inference,rag,chat; rag-pipeline ∈ rag,chat — the shared claims the refcount relies
+# on so disabling one bundle can't orphan a service another still needs).
+_TOPLEVEL_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*(#.*)?$")  # 0-indent section key
+_SERVICE_RE = re.compile(r"^  ([A-Za-z0-9._-]+):\s*(#.*)?$")  # 2-indent service key
+_BUNDLE_LABEL_RE = re.compile(r"minder\.bundle=([A-Za-z0-9,_-]+)")
+
+
+def _derive_bundles_from_compose() -> dict:
+    """Build ``{bundle: {"claims": (services...)}}`` from the Compose labels.
+
+    Stdlib-only line scan (the ``versions.py`` regex-line-extraction precedent — the
+    setup CLI ships no YAML lib): walk the ``services:`` section tracking the current
+    2-indent service key, and attribute each ``minder.bundle=`` label (comma-split) to
+    it. Order within a bundle follows compose order; it is display-only (the refcount
+    uses set membership).
+    """
+    text = config.COMPOSE_FILE.read_text(encoding="utf-8")
+    claims: dict = {}
+    in_services = False
+    current = None
+    for line in text.splitlines():
+        if _TOPLEVEL_RE.match(line):
+            in_services = line.split(":", 1)[0] == "services"
+            current = None
+            continue
+        if not in_services:
+            continue
+        svc = _SERVICE_RE.match(line)
+        if svc:
+            current = svc.group(1)
+            continue
+        label = _BUNDLE_LABEL_RE.search(line)
+        if current and label:
+            for bundle in label.group(1).split(","):
+                svcs = claims.setdefault(bundle, [])
+                if current not in svcs:
+                    svcs.append(current)
+    if "core" not in claims:
+        raise RuntimeError(
+            f"No minder.bundle labels found in {config.COMPOSE_FILE}; the bundle map "
+            "is derived from Compose labels (#65) — the compose file must carry them."
         )
-    },
-    "monitoring": {"claims": (*config.MONITORING_SERVICES, *config.EXPORTER_SERVICES)},
-    "inference": {"claims": ("ollama", "model-management")},
-    # rag-pipeline needs ollama (embeddings); chat's openwebui depends_on both
-    # rag-pipeline and ollama — so those are shared claims (compose depends_on made
-    # explicit). Disabling one of rag/chat/inference then can't orphan a service
-    # another still needs; the refcount handles it.
-    "rag": {"claims": ("rag-pipeline", "qdrant", "ollama")},
-    "graph-rag": {"claims": ("graph-rag",)},
-    "chat": {"claims": ("openwebui", "rag-pipeline", "ollama")},
-    "voice": {"claims": ("tts-stt",)},
-}
+    return {bundle: {"claims": tuple(svcs)} for bundle, svcs in claims.items()}
+
+
+BUNDLES: dict = _derive_bundles_from_compose()
 
 # The always-on kernel bundle — never disabled, always a claimant.
 CORE_BUNDLE = "core"
