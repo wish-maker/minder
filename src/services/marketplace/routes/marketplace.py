@@ -9,8 +9,58 @@ from services.marketplace.models.plugin import (
     PluginCreate,
     PluginListResponse,
     PluginResponse,
+    PluginUpdate,
 )
 from shared.auth.jwt_middleware import get_current_user_or_service
+
+# Columns returned by the plugin SELECT/RETURNING clauses, shared by get/update.
+_PLUGIN_COLUMNS = """id, name, display_name, description, author,
+                 repository_url, distribution_type, docker_image,
+                 current_version, pricing_model, base_tier, status,
+                 featured, download_count, rating_average, rating_count,
+                 created_at, updated_at, published_at, developer_id, category_id"""
+
+# Fields a PUT /plugins/{id} may change (whitelist → safe to interpolate as column
+# names; values always go through bound parameters).
+_PLUGIN_UPDATABLE = {
+    "display_name",
+    "description",
+    "pricing_model",
+    "base_tier",
+    "status",
+    "featured",
+}
+
+
+def _row_to_plugin_response(row) -> PluginResponse:
+    """Map a marketplace_plugins row to the PluginResponse model."""
+    return PluginResponse(
+        id=str(row["id"]),
+        name=row["name"],
+        display_name=row["display_name"],
+        description=row["description"],
+        author=row["author"],
+        author_email=None,
+        repository_url=row["repository_url"],
+        distribution_type=row["distribution_type"],
+        docker_image=row["docker_image"],
+        current_version=row["current_version"],
+        pricing_model=row["pricing_model"],
+        base_tier=row["base_tier"],
+        status=row["status"],
+        featured=row["featured"],
+        download_count=row["download_count"],
+        rating_average=(
+            float(row["rating_average"]) if row["rating_average"] else None
+        ),
+        rating_count=row["rating_count"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        published_at=row["published_at"],
+        developer_id=str(row["developer_id"]) if row["developer_id"] else None,
+        category_id=str(row["category_id"]) if row["category_id"] else None,
+    )
+
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
 
@@ -85,35 +135,7 @@ async def list_plugins(
             *params,
         )
 
-        plugins = [
-            PluginResponse(
-                id=str(row["id"]),
-                name=row["name"],
-                display_name=row["display_name"],
-                description=row["description"],
-                author=row["author"],
-                author_email=None,
-                repository_url=row["repository_url"],
-                distribution_type=row["distribution_type"],
-                docker_image=row["docker_image"],
-                current_version=row["current_version"],
-                pricing_model=row["pricing_model"],
-                base_tier=row["base_tier"],
-                status=row["status"],
-                featured=row["featured"],
-                download_count=row["download_count"],
-                rating_average=(
-                    float(row["rating_average"]) if row["rating_average"] else None
-                ),
-                rating_count=row["rating_count"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-                published_at=row["published_at"],
-                developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None,
-            )
-            for row in rows
-        ]
+        plugins = [_row_to_plugin_response(row) for row in rows]
 
         total_pages = (total_count + page_size - 1) // page_size
 
@@ -171,35 +193,7 @@ async def search_plugins(
             offset,
         )
 
-        plugins = [
-            PluginResponse(
-                id=str(row["id"]),
-                name=row["name"],
-                display_name=row["display_name"],
-                description=row["description"],
-                author=row["author"],
-                author_email=None,
-                repository_url=row["repository_url"],
-                distribution_type=row["distribution_type"],
-                docker_image=row["docker_image"],
-                current_version=row["current_version"],
-                pricing_model=row["pricing_model"],
-                base_tier=row["base_tier"],
-                status=row["status"],
-                featured=row["featured"],
-                download_count=row["download_count"],
-                rating_average=(
-                    float(row["rating_average"]) if row["rating_average"] else None
-                ),
-                rating_count=row["rating_count"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-                published_at=row["published_at"],
-                developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None,
-            )
-            for row in rows
-        ]
+        plugins = [_row_to_plugin_response(row) for row in rows]
 
         total_pages = (total_count + page_size - 1) // page_size
 
@@ -263,32 +257,7 @@ async def create_plugin(
                 plugin_data.category_id,
             )
 
-            return PluginResponse(
-                id=str(row["id"]),
-                name=row["name"],
-                display_name=row["display_name"],
-                description=row["description"],
-                author=row["author"],
-                author_email=None,
-                repository_url=row["repository_url"],
-                distribution_type=row["distribution_type"],
-                docker_image=row["docker_image"],
-                current_version=row["current_version"],
-                pricing_model=row["pricing_model"],
-                base_tier=row["base_tier"],
-                status=row["status"],
-                featured=row["featured"],
-                download_count=row["download_count"],
-                rating_average=(
-                    float(row["rating_average"]) if row["rating_average"] else None
-                ),
-                rating_count=row["rating_count"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-                published_at=row["published_at"],
-                developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None,
-            )
+            return _row_to_plugin_response(row)
 
     except Exception as e:
         raise HTTPException(
@@ -317,35 +286,7 @@ async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
             limit,
         )
 
-        plugins = [
-            PluginResponse(
-                id=str(row["id"]),
-                name=row["name"],
-                display_name=row["display_name"],
-                description=row["description"],
-                author=row["author"],
-                author_email=None,
-                repository_url=row["repository_url"],
-                distribution_type=row["distribution_type"],
-                docker_image=row["docker_image"],
-                current_version=row["current_version"],
-                pricing_model=row["pricing_model"],
-                base_tier=row["base_tier"],
-                status=row["status"],
-                featured=row["featured"],
-                download_count=row["download_count"],
-                rating_average=(
-                    float(row["rating_average"]) if row["rating_average"] else None
-                ),
-                rating_count=row["rating_count"],
-                created_at=row["created_at"],
-                updated_at=row["updated_at"],
-                published_at=row["published_at"],
-                developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-                category_id=str(row["category_id"]) if row["category_id"] else None,
-            )
-            for row in rows
-        ]
+        plugins = [_row_to_plugin_response(row) for row in rows]
 
         return PluginListResponse(
             plugins=plugins, count=len(plugins), page=1, page_size=limit, total_pages=1
@@ -374,29 +315,45 @@ async def get_plugin(plugin_id: str):
         if not row:
             raise HTTPException(status_code=404, detail="Plugin not found")
 
-        return PluginResponse(
-            id=str(row["id"]),
-            name=row["name"],
-            display_name=row["display_name"],
-            description=row["description"],
-            author=row["author"],
-            author_email=None,
-            repository_url=row["repository_url"],
-            distribution_type=row["distribution_type"],
-            docker_image=row["docker_image"],
-            current_version=row["current_version"],
-            pricing_model=row["pricing_model"],
-            base_tier=row["base_tier"],
-            status=row["status"],
-            featured=row["featured"],
-            download_count=row["download_count"],
-            rating_average=(
-                float(row["rating_average"]) if row["rating_average"] else None
-            ),
-            rating_count=row["rating_count"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-            published_at=row["published_at"],
-            developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-            category_id=str(row["category_id"]) if row["category_id"] else None,
-        )
+        return _row_to_plugin_response(row)
+
+
+@router.put("/plugins/{plugin_id}", response_model=PluginResponse)
+async def update_plugin(
+    plugin_id: str,
+    plugin_update: PluginUpdate,
+    current_user: dict = Depends(get_current_user_or_service),
+):
+    """Partially update a plugin's marketplace metadata.
+
+    Only the fields present in the body are changed (the `PluginUpdate` model existed
+    but had no route — #147). 404 if the plugin is unknown, 422 if the body is empty.
+    """
+    # mode="json" serialises the PricingModel/PluginStatus enums to their string values
+    # for the SQL params.
+    updates = {
+        k: v
+        for k, v in plugin_update.model_dump(mode="json", exclude_unset=True).items()
+        if k in _PLUGIN_UPDATABLE
+    }
+    if not updates:
+        raise HTTPException(status_code=422, detail="No updatable fields provided")
+
+    # Column names come from the _PLUGIN_UPDATABLE whitelist (never user input);
+    # values are always bound parameters.
+    set_clause = ", ".join(f"{col} = ${i}" for i, col in enumerate(updates, start=1))
+    params = list(updates.values())
+    query = (
+        f"UPDATE marketplace_plugins SET {set_clause}, updated_at = NOW() "
+        f"WHERE id = ${len(params) + 1} "
+        f"RETURNING {_PLUGIN_COLUMNS}"
+    )
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(query, *params, plugin_id)
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    return _row_to_plugin_response(row)
