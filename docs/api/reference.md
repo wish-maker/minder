@@ -294,11 +294,13 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/initialize` | Initialize the Ollama client / warm the pipeline |
-| POST | `/knowledge-base` | Create a knowledge base (`name` + `description` required; pick embedding + LLM model) |
+| POST | `/knowledge-bases` | Create a knowledge base (`name` required, `description` optional; pick embedding + LLM model) |
 | GET | `/knowledge-bases` | List knowledge bases |
-| GET | `/knowledge-base/{kb_id}` | Get a single knowledge base (404 if unknown) |
-| DELETE | `/knowledge-base/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
-| POST | `/knowledge-base/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector) |
+| GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
+| DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
+| POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector) |
+
+> The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
 | DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
@@ -307,11 +309,11 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 
 ```bash
 # Create a knowledge base, then upload a document into it
-KB=$(curl -s -X POST http://localhost:8004/knowledge-base \
+KB=$(curl -s -X POST http://localhost:8004/knowledge-bases \
   -H 'Content-Type: application/json' \
   -d '{"name":"My Docs","description":"my documents"}' | jq -r '.id')
 
-curl -X POST "http://localhost:8004/knowledge-base/$KB/upload" -F "file=@doc.pdf"
+curl -X POST "http://localhost:8004/knowledge-bases/$KB/upload" -F "file=@doc.pdf"
 
 # Query: create a pipeline over the KB, then query it
 PIPE=$(curl -s -X POST http://localhost:8004/pipeline \
@@ -440,7 +442,7 @@ the full observability port map.
   prefixes and HTTP methods (marketplace, plugin-state-manager, plugin-registry service
   discovery, and the gateway `/v1/ai` bridge were previously undocumented).
 - Fixed the API Gateway auth paths (`/v1/auth/*`, not `/auth/*`) and removed the fictional
-  `POST /8004/ingest` example (the real flow is `/knowledge-base` → `/knowledge-base/{id}/upload`).
+  `POST /8004/ingest` example (the real flow is `/knowledge-bases` → `/knowledge-bases/{id}/upload`).
 - Documented interactive OpenAPI docs at `http://localhost:<port>/docs` for every service.
 - Clarified that Authelia SSO is currently disabled and the API Gateway's own JWT auth is the
   real authentication mechanism; forward-auth is wired on five Traefik routers but not enforced.

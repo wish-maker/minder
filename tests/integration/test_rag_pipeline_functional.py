@@ -32,8 +32,10 @@ pytestmark = [
 @pytest.fixture(scope="module")
 def pipeline_id():
     """Create a KB, upload a small doc, and build a pipeline; return its id."""
+    # Canonical plural collection path (#144); the singular form still works as a
+    # deprecated alias.
     kb = httpx.post(
-        f"{BASE}/knowledge-base",
+        f"{BASE}/knowledge-bases",
         json={"name": f"test-func-{os.getpid()}", "description": "functional test"},
         timeout=20.0,
     )
@@ -45,7 +47,7 @@ def pipeline_id():
         b"Embeddings are stored in Qdrant and generation uses a local Llama model."
     )
     up = httpx.post(
-        f"{BASE}/knowledge-base/{kb_id}/upload",
+        f"{BASE}/knowledge-bases/{kb_id}/upload",
         files={"file": ("fact.txt", doc, "text/plain")},
         timeout=60.0,
     )

@@ -174,14 +174,15 @@ GET /health
 #### Knowledge bases
 ```http
 GET    /knowledge-bases
-GET    /knowledge-base/{id}
-POST   /knowledge-base
-DELETE /knowledge-base/{id}
+GET    /knowledge-bases/{id}
+POST   /knowledge-bases
+DELETE /knowledge-bases/{id}
 ```
+> Singular `/knowledge-base[...]` forms still work as deprecated aliases (#144).
 
 #### Upload a document into a knowledge base
 ```http
-POST /knowledge-base/{id}/upload
+POST /knowledge-bases/{id}/upload
 Content-Type: multipart/form-data
 
 file: <document_file>

@@ -3,7 +3,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import Dict
+from typing import Dict, List
 
 from core import state
 from domain.retrievers.hybrid import BM25_AVAILABLE, HybridSearchRetriever
@@ -15,6 +15,7 @@ from models import (
     QueryRequest,
     QueryResponse,
     RAGPipelineCreate,
+    RAGPipelineResponse,
 )
 from qdrant_client.models import (
     Distance,
@@ -34,8 +35,16 @@ logger = logging.getLogger("minder.rag-pipeline")
 router = APIRouter()
 
 
+# Canonical paths use the plural collection `/knowledge-bases`; the singular
+# `/knowledge-base[...]` forms are kept as hidden, deprecated aliases so the existing
+# documented flow and clients don't break (#144).
 @router.post(
-    "/knowledge-base", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"]
+    "/knowledge-bases", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"]
+)
+@router.post(
+    "/knowledge-base",
+    response_model=KnowledgeBaseResponse,
+    include_in_schema=False,
 )
 async def create_knowledge_base(request: KnowledgeBaseCreate):
     """Create a new knowledge base"""
@@ -92,13 +101,26 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
     )
 
 
-@router.get("/knowledge-bases", tags=["Knowledge Base"])
+@router.get(
+    "/knowledge-bases",
+    response_model=List[KnowledgeBaseResponse],
+    tags=["Knowledge Base"],
+)
 async def list_knowledge_bases():
     """List all knowledge bases"""
     return list(state.knowledge_bases.values())
 
 
-@router.get("/knowledge-base/{kb_id}", tags=["Knowledge Base"])
+@router.get(
+    "/knowledge-bases/{kb_id}",
+    response_model=KnowledgeBaseResponse,
+    tags=["Knowledge Base"],
+)
+@router.get(
+    "/knowledge-base/{kb_id}",
+    response_model=KnowledgeBaseResponse,
+    include_in_schema=False,
+)
 async def get_knowledge_base(kb_id: str):
     """Get a single knowledge base by id."""
     kb = state.knowledge_bases.get(kb_id)
@@ -107,7 +129,8 @@ async def get_knowledge_base(kb_id: str):
     return kb
 
 
-@router.delete("/knowledge-base/{kb_id}", tags=["Knowledge Base"])
+@router.delete("/knowledge-bases/{kb_id}", tags=["Knowledge Base"])
+@router.delete("/knowledge-base/{kb_id}", include_in_schema=False)
 async def delete_knowledge_base(kb_id: str):
     """Delete a knowledge base: its Qdrant collection, its PostgreSQL row, and the
     in-memory entry. Idempotent-ish — 404 if the KB is unknown."""
@@ -133,9 +156,14 @@ async def delete_knowledge_base(kb_id: str):
 
 
 @router.post(
-    "/knowledge-base/{kb_id}/upload",
+    "/knowledge-bases/{kb_id}/upload",
     response_model=DocumentUploadResponse,
     tags=["Knowledge Base"],
+)
+@router.post(
+    "/knowledge-base/{kb_id}/upload",
+    response_model=DocumentUploadResponse,
+    include_in_schema=False,
 )
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
     """Upload document to knowledge base"""
@@ -233,7 +261,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     )
 
 
-@router.post("/pipeline", tags=["Pipeline"])
+@router.post("/pipeline", response_model=RAGPipelineResponse, tags=["Pipeline"])
 async def create_rag_pipeline(request: RAGPipelineCreate):
     """Create a RAG pipeline"""
     pipeline_id = str(uuid.uuid4())
@@ -266,10 +294,12 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
 
     logger.info(f"✅ Created RAG pipeline: {pipeline_id}")
 
-    return {
-        "message": "RAG pipeline created successfully",
-        "pipeline_id": pipeline_id,
-    }
+    return RAGPipelineResponse(
+        pipeline_id=pipeline_id,
+        name=request.name,
+        knowledge_base_ids=request.knowledge_base_ids,
+        created_at=state.rag_pipelines[pipeline_id]["created_at"],
+    )
 
 
 @router.delete("/pipeline/{pipeline_id}", tags=["Pipeline"])
