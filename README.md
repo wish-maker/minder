@@ -138,10 +138,10 @@ Your complete AI platform is now running with:
 
 ### 📚 **"I want to chat with my documents privately"**
 ```bash
-# Create a knowledge base (name AND description required), then upload documents
-curl -X POST http://localhost:8004/knowledge-base \
+# Create a knowledge base (name required; description optional), then upload documents
+curl -X POST http://localhost:8004/knowledge-bases \
   -H "Content-Type: application/json" -d '{"name":"My Docs","description":"my documents"}'
-curl -X POST http://localhost:8004/knowledge-base/<kb_id>/upload \
+curl -X POST http://localhost:8004/knowledge-bases/<kb_id>/upload \
   -F "file=@report.pdf"
 
 # Then create a pipeline over the KB and query it
@@ -213,7 +213,7 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 - **Zero Configuration**: Works out of the box
 
 #### **RAG Pipeline**
-- **Multi-Format Support**: PDF, DOCX, TXT, CSV, and more
+- **Multi-Format Support**: PDF, TXT, and Markdown
 - **Vector Search**: Qdrant-powered semantic similarity search
 - **Knowledge Graphs**: Neo4j entity relationships and discovery
 - **Smart Retrieval**: Intelligent document ranking and context
@@ -316,8 +316,8 @@ bash setup.sh status
 # Create full backup
 bash setup.sh backup
 
-# Scale specific services
-docker compose --file docker/compose/docker-compose.yml up -d --scale api-gateway=3
+# Restart one service (or the whole stack with no argument)
+bash setup.sh restart rag-pipeline
 ```
 
 ### 📊 **Monitoring Dashboards**
