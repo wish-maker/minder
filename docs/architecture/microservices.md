@@ -139,10 +139,11 @@ All core APIs expose a `/health` endpoint. Route prefixes vary per service (e.g.
 **Purpose**: Retrieval-augmented generation
 
 **Endpoints (representative)**:
-- `POST /knowledge-base` — create a knowledge base (name + description)
-- `GET /knowledge-bases` · `GET /knowledge-base/{kb_id}` — list / get one
-- `DELETE /knowledge-base/{kb_id}` — delete a KB (Qdrant collection + PostgreSQL row)
-- `POST /knowledge-base/{kb_id}/upload` — ingest a document (PDF/TXT/MD via pypdf + LangChain splitter; 503 if the embedding backend is unreachable — no silent zero-vector)
+- `POST /knowledge-bases` — create a knowledge base (name required, description optional)
+- `GET /knowledge-bases` · `GET /knowledge-bases/{kb_id}` — list / get one
+- `DELETE /knowledge-bases/{kb_id}` — delete a KB (Qdrant collection + PostgreSQL row)
+- `POST /knowledge-bases/{kb_id}/upload` — ingest a document (PDF/TXT/MD via pypdf + LangChain splitter; 503 if the embedding backend is unreachable — no silent zero-vector)
+- The singular `/knowledge-base[...]` paths remain as deprecated, hidden aliases (#144)
 - `POST /pipeline` · `DELETE /pipeline/{pipeline_id}` — create / delete a RAG pipeline over one or more KBs
 - `POST /pipeline/{pipeline_id}/query` — query (retrieval + generation)
 

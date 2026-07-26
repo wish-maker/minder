@@ -18,7 +18,8 @@ class KnowledgeBaseCreate(BaseModel):
     """Knowledge base creation request"""
 
     name: str
-    description: str
+    # Optional — a description shouldn't be required to create a KB (#144).
+    description: str = ""
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
     llm_model: str = DEFAULT_LLM_MODEL
     chunk_size: int = 512
@@ -45,6 +46,16 @@ class RAGPipelineCreate(BaseModel):
     knowledge_base_ids: List[str]
     retrieval_config: Dict[str, Any] = {}
     generation_config: Dict[str, Any] = {}
+
+
+class RAGPipelineResponse(BaseModel):
+    """RAG pipeline creation response (typed instead of a raw dict, #144)."""
+
+    pipeline_id: str
+    name: str
+    knowledge_base_ids: List[str]
+    created_at: str
+    message: str = "RAG pipeline created successfully"
 
 
 class QueryRequest(BaseModel):
