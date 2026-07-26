@@ -48,10 +48,13 @@ candidate — see Bucket 2).
   `false` when no quality evaluator ran (a plain single pass), and `threshold_met` is
   `null` rather than a bogus `true` for a threshold that was never measured.
 
-> Still on the roadmap: **`auto` currently applies only HyDE/Self-RAG toggles** — the
-> decision engine's `retrieval_strategy`/`top_k`/`rerank` choices are not yet wired
-> through (#139), and a request with `method:"auto"` reports its effective sub-method,
-> not `"auto"`.
+> **`auto` (decision engine) — what it applies (#139):** the engine's `top_k`,
+> `use_reranking`, and HyDE/Self-RAG toggles are honoured; `method_details.decision`
+> reports the full decision plus an `applied` summary, and a request with
+> `method:"auto"` now returns `method:"auto"`. The engine's `retrieval_strategy`
+> (hybrid/hierarchical/…) is **advisory only** — the retriever is selected per-request
+> via the `hybrid`/`parent_context` flags, so a non-dense strategy the engine picks is
+> reported under `method_details.degraded` rather than silently ignored.
 
 ---
 
