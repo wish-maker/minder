@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from prometheus_client import Gauge
 
 from config import settings
@@ -23,6 +24,7 @@ from core.ollama_manager import (  # noqa: E402
     OllamaManager,
 )
 
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
@@ -93,16 +95,27 @@ app.include_router(
 # Health check
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Service health check"""
+    """Health check — 503 when Ollama (the runtime this service manages) is down."""
     models_registered_total.set(len(models))
-    return {
-        "service": "model-management",
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": app.version,
-        "environment": settings.ENVIRONMENT,
-        "models_registered": len(models),
-    }
+
+    async def _ollama():
+        await ollama_manager.list_models()
+
+    status, code, checks = await evaluate_dependencies(
+        [DependencyCheck("ollama", _ollama, critical=True)]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "model-management",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": app.version,
+            "environment": settings.ENVIRONMENT,
+            "models_registered": len(models),
+            "checks": checks,
+        },
+    )
 
 
 # Root endpoint

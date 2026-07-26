@@ -1,7 +1,7 @@
 # Minder Platform — API Reference
 
 **Version:** 1.0.0
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-07-26
 **Base URL (via API Gateway):** `http://localhost:8000`
 
 ---
@@ -34,6 +34,7 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 - `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
 - `{path:path}` = a catch-all path segment (everything after the prefix is forwarded verbatim).
 - Ports are the host-published ports; internally each service also sits behind Traefik.
+- **`GET /health`** returns `200` (`healthy`/`degraded`) when the service is serviceable and **`503`** (`unhealthy`) when a *critical* dependency (its Postgres/Redis/Qdrant/Neo4j/Ollama) is unreachable. Each body carries a `status` field and a per-dependency `checks` map plus service-specific fields.
 
 ---
 

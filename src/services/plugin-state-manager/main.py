@@ -10,12 +10,14 @@ from datetime import datetime
 
 from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from routes import licensing, state, tools
 
 from config import settings
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 from shared.utils.cors import add_cors_middleware  # noqa: E402
@@ -80,16 +82,30 @@ setup_metrics(app)
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    pool = await get_db_pool()
-    return {
-        "service": "plugin-state-manager",
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": settings.VERSION,
-        "environment": settings.ENVIRONMENT,
-        "database": "connected" if pool else "disconnected",
-    }
+    """Health check — 503 when Postgres (the sole datastore) is unreachable."""
+
+    async def _postgres():
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+
+    status, code, checks = await evaluate_dependencies(
+        [DependencyCheck("postgres", _postgres, critical=True)]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "plugin-state-manager",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": settings.VERSION,
+            "environment": settings.ENVIRONMENT,
+            "database": "connected"
+            if checks.get("postgres") == "healthy"
+            else "disconnected",
+            "checks": checks,
+        },
+    )
 
 
 # ============================================================================

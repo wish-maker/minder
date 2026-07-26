@@ -17,6 +17,7 @@ from datetime import datetime
 
 import yaml
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge
 
 from config import settings
@@ -60,6 +61,7 @@ from routes.plugins import build_plugins_router  # noqa: E402
 from routes.proxy import ProxyRouter  # noqa: E402
 from routes.services import build_services_router  # noqa: E402
 
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
@@ -211,16 +213,36 @@ app.include_router(
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "service": "plugin-registry",
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": app.version,
-        "environment": settings.ENVIRONMENT,
-        "plugins_loaded": len(plugins_db),
-        "services_registered": len(services_db),
-    }
+    """Health check — 503 when Postgres or Redis (both required) is unreachable."""
+
+    async def _postgres():
+        pool = await get_postgres_connection()
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+
+    def _redis():
+        # redis_client is a sync client; ping() is a brief blocking call.
+        redis_client.ping()
+
+    status, code, checks = await evaluate_dependencies(
+        [
+            DependencyCheck("postgres", _postgres, critical=True),
+            DependencyCheck("redis", _redis, critical=True),
+        ]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "plugin-registry",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": app.version,
+            "environment": settings.ENVIRONMENT,
+            "plugins_loaded": len(plugins_db),
+            "services_registered": len(services_db),
+            "checks": checks,
+        },
+    )
 
 
 @app.post("/force-webhooks")
