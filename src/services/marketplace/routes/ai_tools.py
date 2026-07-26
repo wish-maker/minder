@@ -23,13 +23,19 @@ class AIToolsSyncRequest(BaseModel):
 
 
 @router.get("/tools")
-async def list_all_ai_tools(active_only: bool = Query(True), tier: str = Query(None)):
+async def list_all_ai_tools(
+    active_only: bool = Query(True),
+    tier: str = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
     """
-    List all AI tools from all plugins
+    List all AI tools from all plugins (paginated, #147/C6)
 
     Args:
         active_only: Only return active tools
         tier: Filter by required tier
+        limit/offset: Pagination window
     """
     pool = await get_pool()
 
@@ -51,6 +57,15 @@ async def list_all_ai_tools(active_only: bool = Query(True), tier: str = Query(N
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
     async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            f"""
+            SELECT COUNT(*)
+            FROM marketplace_ai_tools at
+            JOIN marketplace_plugins p ON at.plugin_id = p.id
+            WHERE {where_clause}
+            """,
+            *params,
+        )
         rows = await conn.fetch(
             f"""
             SELECT
@@ -71,8 +86,11 @@ async def list_all_ai_tools(active_only: bool = Query(True), tier: str = Query(N
             JOIN marketplace_plugins p ON at.plugin_id = p.id
             WHERE {where_clause}
             ORDER BY p.name, at.tool_name
+            LIMIT ${param_count + 1} OFFSET ${param_count + 2}
             """,
             *params,
+            limit,
+            offset,
         )
 
         tools = []
@@ -95,7 +113,13 @@ async def list_all_ai_tools(active_only: bool = Query(True), tier: str = Query(N
                 }
             )
 
-        return {"tools": tools, "count": len(tools)}
+        return {
+            "tools": tools,
+            "count": len(tools),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
 
 @router.get("/plugins/{plugin_id}/tools")

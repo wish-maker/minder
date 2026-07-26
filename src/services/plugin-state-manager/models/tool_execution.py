@@ -35,7 +35,10 @@ class ToolDiscoveryResponse(BaseModel):
     """Tool discovery response"""
 
     tools: list[ToolSchema]
-    count: int
+    count: int  # items on this page
+    total: int = 0  # total across all pages (#147/C6)
+    limit: int = 0
+    offset: int = 0
 
 
 class ToolExecutionRequest(BaseModel):

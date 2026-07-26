@@ -21,16 +21,30 @@ router = APIRouter()
 
 
 @router.get("", response_model=ToolDiscoveryResponse)
-async def list_all_tools(active_only: bool = Query(True), tier: str = Query(None)):
+async def list_all_tools(
+    active_only: bool = Query(True),
+    tier: str = Query(None),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
     """
-    List all available AI tools
+    List all available AI tools (paginated, #147/C6)
 
     Args:
         active_only: Only return active tools
         tier: Filter by required tier
+        limit/offset: Pagination window
     """
     try:
-        return await discover_tools(active_only=active_only, tier_filter=tier)
+        result = await discover_tools(active_only=active_only, tier_filter=tier)
+        page = result.tools[offset : offset + limit]
+        return ToolDiscoveryResponse(
+            tools=page,
+            count=len(page),
+            total=len(result.tools),
+            limit=limit,
+            offset=offset,
+        )
     except Exception as e:
         logger.error(f"Failed to discover tools: {e}")
         raise HTTPException(status_code=500, detail=f"Tool discovery failed: {str(e)}")
