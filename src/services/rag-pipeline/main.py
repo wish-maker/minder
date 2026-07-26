@@ -3,8 +3,6 @@ Minder RAG Pipeline Service - Production Ready
 Real Ollama integration with proper embedding generation and LLM inference
 """
 
-import logging
-import os
 import sys
 from contextlib import asynccontextmanager
 
@@ -24,28 +22,13 @@ from config import (
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
-_LOG_LEVEL = getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
-logger = logging.getLogger("minder.rag-pipeline")
-
-# Configure logging to output logs to stdout at the configured level
-if not logger.handlers:
-    handler = logging.StreamHandler()
-    handler.setLevel(_LOG_LEVEL)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    logger.setLevel(_LOG_LEVEL)
-    # Surface logs from the RAG method packages (rag/, domain/) with the same
-    # handler, so the extracted modules log consistently with main.
-    for _pkg in ("rag", "domain"):
-        _pkg_logger = logging.getLogger(_pkg)
-        if not _pkg_logger.handlers:
-            _pkg_logger.addHandler(handler)
-            _pkg_logger.setLevel(_LOG_LEVEL)
+# Standardised on shared.log like the other 7 services (#49). basicConfig configures
+# the root logger, so the rag/domain package loggers propagate to it and log
+# consistently — no manual per-package handler wiring needed.
+logger = setup_logging("rag-pipeline")
 
 
 # ============================================================================

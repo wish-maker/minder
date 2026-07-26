@@ -18,7 +18,6 @@ from datetime import datetime
 import yaml
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from prometheus_client import Counter, Gauge
 
 from config import settings
 
@@ -169,20 +168,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Prometheus metrics: request-tracking middleware + /metrics endpoint
+# Prometheus metrics: request-tracking middleware + /metrics endpoint (shared.metrics).
+# HTTP request metrics come from setup_metrics; no domain counters here — the two that
+# used to be declared (plugins_total, health_check_failures_total) were never
+# incremented anywhere, so they always read 0 (misleading). Removed (#49).
 setup_metrics(app)
-
-# ============================================================================
-# Prometheus Metrics (domain-specific; HTTP request metrics from shared.metrics)
-# ============================================================================
-
-plugins_total = Gauge(
-    "plugins_total", "Total number of plugins", ["status"]
-)  # registered, enabled, disabled, error
-
-health_check_failures_total = Counter(
-    "health_check_failures_total", "Total health check failures", ["plugin"]
-)
 
 # ============================================================================
 # Routers — service discovery / dynamic proxy + AI-tool aggregation
