@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from config import NEO4J_PASSWORD, NEO4J_USER, settings
 
@@ -20,6 +21,7 @@ from core.graph_constructor import KnowledgeGraphConstructor  # noqa: E402
 from core.graph_retriever import GraphRetriever  # noqa: E402
 from routes.api import build_graph_router  # noqa: E402
 
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
@@ -70,25 +72,46 @@ app.include_router(
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Health check — service status + component availability."""
+    """Health check — 503 when Neo4j (the graph store) is unreachable.
+
+    Previously this computed ``degraded`` but always returned 200 and never actually
+    pinged Neo4j — it just echoed the configured URI (#141).
+    """
+
+    async def _neo4j():
+        if (
+            graph_constructor is None
+            or getattr(graph_constructor, "driver", None) is None
+        ):
+            raise RuntimeError("graph_constructor/driver not initialized")
+        await graph_constructor.driver.verify_connectivity()
+
+    status, code, dep_checks = await evaluate_dependencies(
+        [DependencyCheck("neo4j", _neo4j, critical=True)]
+    )
     checks = {
         "entity_extractor": "initialized" if entity_extractor else "not_initialized",
         "graph_constructor": "initialized" if graph_constructor else "not_initialized",
         "graph_retriever": "initialized" if graph_retriever else "not_initialized",
-        "neo4j": settings.NEO4J_URI,
         "spacy_model": settings.SPACY_MODEL,
+        **dep_checks,  # live neo4j probe (was previously just the echoed URI)
     }
-    overall_status = "healthy"
-    if not all([entity_extractor, graph_constructor, graph_retriever]):
-        overall_status = "degraded"
-    return {
-        "service": "graph-rag",
-        "status": overall_status,
-        "timestamp": datetime.now().isoformat(),
-        "version": app.version,
-        "environment": settings.ENVIRONMENT,
-        "checks": checks,
-    }
+    # An uninitialized in-process component also means the service can't function.
+    if status != "unhealthy" and not all(
+        [entity_extractor, graph_constructor, graph_retriever]
+    ):
+        status, code = "degraded", 200
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "graph-rag",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": app.version,
+            "environment": settings.ENVIRONMENT,
+            "checks": checks,
+        },
+    )
 
 
 @app.get("/", tags=["Root"])

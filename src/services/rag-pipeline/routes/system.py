@@ -5,26 +5,51 @@ from datetime import datetime
 
 from core import state
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from config import APP_VERSION
+from shared.health import DependencyCheck, evaluate_dependencies
 
 router = APIRouter()
 
 
 @router.get("/health", tags=["Health"])
 async def health_check():
-    """Service health check"""
-    return {
-        "service": "rag-pipeline",
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": APP_VERSION,
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "knowledge_bases": len(state.knowledge_bases),
-        "rag_pipelines": len(state.rag_pipelines),
-        "ollama_available": state.OLLAMA_AVAILABLE,
-        "ollama_initialized": state.ollama_manager._initialized,
-    }
+    """Health check — 503 when Qdrant (the vector store) is unreachable.
+
+    Ollama is treated as non-critical: without it queries can't generate, but the
+    service and its stored vectors are still up, so it reports ``degraded`` not down.
+    Postgres persistence is optional (in-memory fallback) and not probed here.
+    """
+
+    def _qdrant():
+        state.get_qdrant_client().get_collections()
+
+    def _ollama():
+        if not (state.OLLAMA_AVAILABLE and state.ollama_manager._initialized):
+            raise RuntimeError("ollama not initialized")
+
+    status, code, checks = await evaluate_dependencies(
+        [
+            DependencyCheck("qdrant", _qdrant, critical=True),
+            DependencyCheck("ollama", _ollama, critical=False),
+        ]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "rag-pipeline",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": APP_VERSION,
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "knowledge_bases": len(state.knowledge_bases),
+            "rag_pipelines": len(state.rag_pipelines),
+            "ollama_available": state.OLLAMA_AVAILABLE,
+            "ollama_initialized": state.ollama_manager._initialized,
+            "checks": checks,
+        },
+    )
 
 
 def _sentence_transformers_available() -> bool:

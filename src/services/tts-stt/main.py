@@ -11,11 +11,13 @@ from datetime import datetime
 from core.stt_engine import STT_AVAILABLE
 from core.tts_engine import TTS_AVAILABLE
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from routes.stt import router as stt_router
 from routes.tts import router as tts_router
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
@@ -57,16 +59,43 @@ app.include_router(stt_router)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    """Service health check"""
-    return {
-        "service": "tts-stt",
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": app.version,
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "tts_available": TTS_AVAILABLE,
-        "stt_available": STT_AVAILABLE,
-    }
+    """Health check — degraded if one engine is unavailable, 503 if BOTH are.
+
+    tts-stt has no remote backend; its "dependencies" are the two offline engines.
+    """
+
+    def _tts():
+        if not TTS_AVAILABLE:
+            raise RuntimeError("TTS engine unavailable")
+
+    def _stt():
+        if not STT_AVAILABLE:
+            raise RuntimeError("STT engine unavailable")
+
+    def _any_engine():
+        if not (TTS_AVAILABLE or STT_AVAILABLE):
+            raise RuntimeError("no speech engine available")
+
+    status, code, checks = await evaluate_dependencies(
+        [
+            DependencyCheck("tts_engine", _tts, critical=False),
+            DependencyCheck("stt_engine", _stt, critical=False),
+            DependencyCheck("engines", _any_engine, critical=True),
+        ]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "tts-stt",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": app.version,
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "tts_available": TTS_AVAILABLE,
+            "stt_available": STT_AVAILABLE,
+            "checks": checks,
+        },
+    )
 
 
 @app.get("/", tags=["Root"])

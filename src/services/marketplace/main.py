@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse  # noqa: E402
 
 from services.marketplace.config import settings  # noqa: E402
 from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 from shared.utils.cors import add_cors_middleware  # noqa: E402
@@ -75,14 +76,27 @@ setup_metrics(app)
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "service": "marketplace",
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": app.version,
-        "environment": settings.ENVIRONMENT,
-    }
+    """Health check endpoint — 503 when Postgres (the core store) is unreachable."""
+
+    async def _postgres():
+        pool = await get_pool()
+        async with pool.acquire() as conn:
+            await conn.fetchval("SELECT 1")
+
+    status, code, checks = await evaluate_dependencies(
+        [DependencyCheck("postgres", _postgres, critical=True)]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={
+            "service": "marketplace",
+            "status": status,
+            "timestamp": datetime.now().isoformat(),
+            "version": app.version,
+            "environment": settings.ENVIRONMENT,
+            "checks": checks,
+        },
+    )
 
 
 # Root endpoint
