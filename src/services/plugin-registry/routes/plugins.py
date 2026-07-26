@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 import yaml
 from core import plugin_config as cfgmod
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
 from models import PluginInfo
 from schemas.validator import validate_manifest
 
@@ -37,14 +36,14 @@ def build_plugins_router(
 ) -> APIRouter:
     router = APIRouter(tags=["Plugins"])
 
-    @router.get("/plugins")
-    async def list_plugins_redirect():
-        """Redirect /plugins to /v1/plugins for backward compatibility"""
-        return RedirectResponse(url="/v1/plugins", status_code=301)
-
     @router.get("/v1/plugins")
+    @router.get("/plugins", include_in_schema=False)  # deprecated unversioned alias
     async def list_plugins():
-        """List all registered plugins (public endpoint)"""
+        """List all registered plugins (public endpoint).
+
+        Served at both /v1/plugins and the legacy /plugins directly — the old /plugins
+        used a 301 redirect, which drops the method/body on non-GET clients (#147).
+        """
         return {"plugins": list(plugins_db.values()), "count": len(plugins_db)}
 
     @router.get("/v1/plugins/{plugin_name}")
