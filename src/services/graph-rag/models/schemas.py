@@ -28,6 +28,11 @@ class KnowledgeGraphRequest(BaseModel):
     metadata: Dict[str, Any] = Field(
         default_factory=dict, description="Additional document metadata"
     )
+    # Exposed instead of hard-coded True in the handler, matching
+    # EntityExtractionRequest (#147).
+    extract_relationships: bool = Field(
+        default=True, description="Whether to extract relationships between entities"
+    )
 
 
 class GraphRetrievalRequest(BaseModel):
