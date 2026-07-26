@@ -68,13 +68,18 @@ def test_license_create_model():
     data = {
         "user_id": "550e8400-e29b-41d4-a716-446655440002",
         "plugin_id": "550e8400-e29b-41d4-a716-446655440003",
-        "tier": "professional",
+        "tier": "pro",
     }
 
     license_data = LicenseCreate(**data)
 
     assert license_data.user_id == "550e8400-e29b-41d4-a716-446655440002"
-    assert license_data.tier == "professional"
+    assert license_data.tier == "pro"
+
+    # Legacy "professional" spelling is accepted but normalised to canonical "pro"
+    # so a license never gets stored with a term the tier gate can't match (#142).
+    aliased = LicenseCreate(**{**data, "tier": "professional"})
+    assert aliased.tier == "pro"
 
 
 def test_installation_response_model():

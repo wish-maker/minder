@@ -1,6 +1,6 @@
 # services/marketplace/routes/licensing.py
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from services.marketplace.core.licensing import (
     create_license,
@@ -8,6 +8,7 @@ from services.marketplace.core.licensing import (
     validate_license,
 )
 from shared.auth.jwt_middleware import get_current_user
+from shared.models.tiers import normalize_tier
 
 router = APIRouter(prefix="/v1/marketplace/licenses", tags=["Licensing"])
 
@@ -24,7 +25,13 @@ class LicenseActivateRequest(BaseModel):
 
     user_id: str
     plugin_id: str
+    # Canonical tier; "professional" accepted as a deprecated alias for "pro" (#142).
     tier: str
+
+    @field_validator("tier")
+    @classmethod
+    def _normalize_tier(cls, v: str) -> str:
+        return normalize_tier(v).value
 
 
 @router.post("/validate")
