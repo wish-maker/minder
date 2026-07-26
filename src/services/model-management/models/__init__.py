@@ -1,8 +1,14 @@
 """Pydantic request/response models for the model-management service."""
 
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
+
+# Constrained vocabularies so an invalid value is a 422 at the edge (and shows in
+# /docs) instead of a free string (#143). These match the values the service actually
+# produces (`type="local"`, `status="ready"` in GET /models).
+ModelType = Literal["local", "remote"]
+ModelStatus = Literal["ready", "loading", "error"]
 
 
 class ModelInfo(BaseModel):
@@ -10,10 +16,10 @@ class ModelInfo(BaseModel):
 
     id: str
     name: str
-    type: str  # "local" or "remote"
+    type: ModelType
     provider: str
     size: str
-    status: str
+    status: ModelStatus
 
 
 class ModelConstraints(BaseModel):

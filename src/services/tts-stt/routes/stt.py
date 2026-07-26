@@ -27,6 +27,16 @@ async def speech_to_text(
     if not STT_AVAILABLE:
         raise HTTPException(status_code=503, detail="STT not available")
 
+    # Mirror TTS's language validation — STT previously accepted any string (#143).
+    if language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"unsupported language '{language}'; valid values: "
+                f"{sorted(SUPPORTED_LANGUAGES)}"
+            ),
+        )
+
     try:
         audio_bytes = await file.read()
 

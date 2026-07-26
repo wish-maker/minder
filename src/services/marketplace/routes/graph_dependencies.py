@@ -9,6 +9,7 @@ Neo4j graph database integration for managing:
 """
 
 import logging
+from enum import Enum
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,6 +20,19 @@ from shared.auth.jwt_middleware import get_current_user
 logger = logging.getLogger("minder.graph_dependencies")
 
 router = APIRouter(prefix="/v1/graph", tags=["graph-dependencies"])
+
+
+class DependencyType(str, Enum):
+    """Allowed plugin-dependency relationship types.
+
+    Typing the route param with this enum makes FastAPI reject an invalid value with a
+    422 (listing the allowed values in /docs) instead of the old free string that only
+    failed deep in add_dependency as a caught ValueError → 400 (#143).
+    """
+
+    REQUIRES = "requires"
+    SUGGESTS = "suggests"
+    CONFLICTS_WITH = "conflicts_with"
 
 
 @router.get("/dependencies/{plugin_id}")
@@ -50,7 +64,7 @@ async def get_plugin_dependencies(
 async def add_plugin_dependency(
     plugin_id: str,
     depends_on: str,
-    dependency_type: str = "requires",
+    dependency_type: DependencyType = DependencyType.REQUIRES,
     neo4j: Neo4jClient = Depends(get_neo4j_client),
     current_user: dict = Depends(get_current_user),
 ):
@@ -66,7 +80,9 @@ async def add_plugin_dependency(
         Success status
     """
     try:
-        success = await neo4j.add_dependency(plugin_id, depends_on, dependency_type)
+        success = await neo4j.add_dependency(
+            plugin_id, depends_on, dependency_type.value
+        )
         if not success:
             raise HTTPException(status_code=400, detail="Failed to add dependency")
 
@@ -74,10 +90,11 @@ async def add_plugin_dependency(
             "status": "success",
             "plugin_id": plugin_id,
             "depends_on": depends_on,
-            "type": dependency_type,
+            "type": dependency_type.value,
         }
     except ValueError as e:
-        # Invalid dependency_type (rejected by the allowlist in add_dependency)
+        # Defensive: add_dependency's allowlist is a backstop (the enum already 422s
+        # invalid values at the edge).
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise

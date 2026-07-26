@@ -26,12 +26,7 @@ async def text_to_speech(request: TTSRequest):
     if not TTS_AVAILABLE:
         raise HTTPException(status_code=503, detail="TTS not available")
 
-    # Validate language
-    if request.language not in SUPPORTED_LANGUAGES:
-        raise HTTPException(
-            status_code=400, detail=f"Unsupported language: {request.language}"
-        )
-
+    # Language is validated by TTSRequest (422 with the valid set) before we get here.
     try:
         tts_requests_total.labels(language=request.language, status="success").inc()
 
