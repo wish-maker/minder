@@ -42,6 +42,9 @@ class ToolExecutionRequest(BaseModel):
     """Tool execution request"""
 
     parameters: Dict[str, Any] = Field(default_factory=dict)
+    # Moved out of the query string into the body (#147/C7). No per-user auth exists in
+    # this service yet, so it defaults to the single "default" principal.
+    user_id: str = "default"
 
 
 class ToolExecutionResponse(BaseModel):

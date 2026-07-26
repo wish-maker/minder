@@ -63,9 +63,7 @@ async def get_tool_details(tool_name: str):
 
 
 @router.post("/{tool_name}/execute", response_model=ToolExecutionResponse)
-async def execute_tool_endpoint(
-    tool_name: str, request: ToolExecutionRequest, user_id: str = Query("default")
-):
+async def execute_tool_endpoint(tool_name: str, request: ToolExecutionRequest):
     """
     Execute an AI tool
 
@@ -73,7 +71,9 @@ async def execute_tool_endpoint(
     """
     try:
         return await execute_tool(
-            tool_name=tool_name, parameters=request.parameters, user_id=user_id
+            tool_name=tool_name,
+            parameters=request.parameters,
+            user_id=request.user_id,
         )
     except HTTPException:
         raise
