@@ -79,8 +79,9 @@ Forwarded over the internal Docker network via httpx to the backing service.
 |--------|------|--------|
 | GET | `/v1/plugins` | plugin-registry (list) |
 | ANY | `/v1/plugins/{path:path}` | plugin-registry |
-| ANY | `/v1/rag/{path:path}` | rag-pipeline |
-| ANY | `/v1/models/{path:path}` | model-management |
+| ANY | `/v1/rag/{path:path}` | rag-pipeline (prefix maps to the service root) |
+| GET/POST | `/v1/models` | model-management `/models` (list / pull) |
+| ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
 
 ### AI / OpenWebUI integration (`/v1/ai`)
 

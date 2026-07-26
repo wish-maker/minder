@@ -123,11 +123,26 @@ async def proxy_to_rag_pipeline(path: str, request: Request):
 # ============================================================================
 
 
+@router.api_route("/v1/models", methods=["GET", "POST"])
+async def model_management_root(request: Request):
+    """List (GET) or pull (POST) models.
+
+    `/v1/models` maps to the service's `/models` resource, removing the old
+    `/v1/models/models` doubling — the gateway prefix and the resource collided because
+    the service is *named* "models" (#147/C1).
+    """
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["model_management"]
+    return await proxy_request(service_url, "models", request)
+
+
 @router.api_route(
     "/v1/models/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
 )
 async def proxy_to_model_management(path: str, request: Request):
-    """Proxy all /v1/models/* requests to Model Management service (writes require JWT)."""
+    """Proxy `/v1/models/{id}[/...]` to the service's `/models/{id}[/...]` (writes
+    require JWT). The gateway prepends the `models/` resource segment so callers use a
+    clean `/v1/models/{id}` instead of `/v1/models/models/{id}` (#147/C1)."""
     _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY["model_management"]
-    return await proxy_request(service_url, path, request)
+    return await proxy_request(service_url, f"models/{path}", request)
