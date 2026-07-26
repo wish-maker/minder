@@ -13,11 +13,12 @@ from datetime import datetime, timezone
 
 import yaml
 from core import plugin_config as cfgmod
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from models import PluginInfo
 from schemas.validator import validate_manifest
 
 from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
+from shared.pagination import paginate
 
 
 def build_plugins_router(
@@ -38,13 +39,23 @@ def build_plugins_router(
 
     @router.get("/v1/plugins")
     @router.get("/plugins", include_in_schema=False)  # deprecated unversioned alias
-    async def list_plugins():
-        """List all registered plugins (public endpoint).
+    async def list_plugins(
+        limit: int = Query(50, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+    ):
+        """List all registered plugins (public endpoint), paginated (#147/C6).
 
         Served at both /v1/plugins and the legacy /plugins directly — the old /plugins
         used a 301 redirect, which drops the method/body on non-GET clients (#147).
         """
-        return {"plugins": list(plugins_db.values()), "count": len(plugins_db)}
+        page, total = paginate(list(plugins_db.values()), limit, offset)
+        return {
+            "plugins": page,
+            "count": len(page),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
 
     @router.get("/v1/plugins/{plugin_name}")
     async def get_plugin(plugin_name: str):

@@ -1,5 +1,5 @@
 # services/marketplace/routes/management.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from services.marketplace.core.database import get_pool
 from services.marketplace.models.installation import InstallationResponse
@@ -202,18 +202,29 @@ async def disable_plugin(
 
 
 @router.get("/{plugin_id}/installations")
-async def get_plugin_installations(plugin_id: str):
-    """Get all installations for a plugin (admin endpoint)"""
+async def get_plugin_installations(
+    plugin_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """Get a plugin's installations (admin endpoint), paginated (#147/C6)."""
     pool = await get_pool()
 
     async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            "SELECT COUNT(*) FROM marketplace_installations WHERE plugin_id = $1",
+            plugin_id,
+        )
         rows = await conn.fetch(
             """
             SELECT * FROM marketplace_installations
             WHERE plugin_id = $1
             ORDER BY installed_at DESC
+            LIMIT $2 OFFSET $3
             """,
             plugin_id,
+            limit,
+            offset,
         )
 
         installations = [
@@ -229,4 +240,10 @@ async def get_plugin_installations(plugin_id: str):
             for row in rows
         ]
 
-        return {"installations": installations, "count": len(installations)}
+        return {
+            "installations": installations,
+            "count": len(installations),
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
