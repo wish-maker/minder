@@ -61,7 +61,8 @@ class TestAPIGatewayIntegration:
 
     def test_proxy_to_model_management(self, gateway_test_client):
         """Test proxy to model management"""
-        response = gateway_test_client.get("/models/v1/models")
+        # /v1/models maps to the service's /models (no /v1/models/models doubling, #147)
+        response = gateway_test_client.get("/v1/models")
         # Should proxy to model management
         assert response.status_code in [200, 404, 502]
 
@@ -281,7 +282,7 @@ class TestAPIGatewayE2E:
             ("/registry/v1/plugins", "Plugin Registry"),
             ("/marketplace/v1/plugins", "Marketplace"),
             ("/rag/v1/query", "RAG Pipeline"),
-            ("/models/v1/models", "Model Management"),
+            ("/v1/models", "Model Management"),
         ]
 
         for path, service_name in services:
