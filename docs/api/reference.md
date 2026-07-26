@@ -330,13 +330,13 @@ Model lifecycle over the Ollama runtime.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/models` | List local models (live from Ollama) |
-| POST | `/models` | Register / pull a model from the Ollama library |
-| GET | `/models/{model_id}` | Model details |
-| DELETE | `/models/{model_id}` | Delete a local model |
-| POST | `/models/{model_id}/test` | Quick test-prompt inference |
-| POST | `/models/{model_id}/constraints` | Set rate limits — **placeholder, not implemented** |
-| GET | `/models/{model_id}/metrics` | Usage metrics — **placeholder, returns zeros** |
-| POST | `/models/fine-tune` | Fine-tune request — **delegated out; not performed here** |
+| POST | `/models` | Pull a model — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists |
+| GET | `/models/{model_id}` | Model details (**404** if unknown) |
+| DELETE | `/models/{model_id}` | Delete a local model (**404** if unknown) |
+| POST | `/models/{model_id}/test` | Quick test-prompt inference — body `{"prompt": "..."}` |
+| POST | `/models/{model_id}/constraints` | Set rate limits — **not implemented (501)** |
+| GET | `/models/{model_id}/metrics` | Usage metrics — **not implemented (501)** |
+| POST | `/models/fine-tune` | Fine-tune request — **not implemented (501)** |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
 

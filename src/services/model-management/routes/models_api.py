@@ -4,11 +4,16 @@ Built via a factory with the Ollama manager, the in-memory cache dict, and the l
 injected by ``main`` — same pattern as the other services' route modules.
 """
 
-from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, HTTPException
-from models import FineTuneRequest, ModelConstraints, ModelInfo
+from fastapi import APIRouter, HTTPException, Response
+from models import (
+    FineTuneRequest,
+    ModelConstraints,
+    ModelInfo,
+    ModelPullRequest,
+    ModelTestRequest,
+)
 
 
 def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
@@ -51,13 +56,20 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
                 status_code=503, detail=f"Failed to list models: {str(e)}"
             )
 
-    @router.post("/models")
-    async def register_model(model_id: str, model_info: ModelInfo):
-        """Register and pull a model from the Ollama library (may download a lot)."""
+    @router.post("/models", status_code=201)
+    async def register_model(request: ModelPullRequest, response: Response):
+        """Pull a model from the Ollama library (may download a lot).
+
+        Body is just ``{"model_id": "..."}`` — the old design also demanded an ignored
+        ModelInfo body and a query param (#145). Returns 201 on a fresh pull, 200 when
+        the model already exists locally.
+        """
+        model_id = request.model_id
         try:
             for model in await ollama_manager.list_models():
                 if model.get("model") == model_id:
                     logger.warning(f"Model {model_id} already exists locally")
+                    response.status_code = 200
                     return {
                         "message": f"Model '{model_id}' already exists",
                         "model": model_id,
@@ -83,6 +95,16 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     async def get_model(model_id: str):
         """Get detailed model information from Ollama."""
         try:
+            exists = any(
+                m.get("model") == model_id for m in await ollama_manager.list_models()
+            )
+            if not exists:
+                # 404 for an unknown model instead of the old blanket 503 — distinguish
+                # "not found" from a real Ollama outage (#145). delete_model already
+                # did this; get_model now matches.
+                raise HTTPException(
+                    status_code=404, detail=f"Model '{model_id}' not found"
+                )
             details = await ollama_manager.show_model(model_id)
             return {"id": model_id, "details": details, "status": "ready"}
         except HTTPException:
@@ -121,10 +143,13 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             )
 
     @router.post("/models/{model_id}/test")
-    async def test_model(model_id: str, prompt: str = "Hello, test."):
-        """Quick test-prompt generation to verify a model works."""
+    async def test_model(model_id: str, request: ModelTestRequest):
+        """Quick test-prompt generation to verify a model works.
+
+        Prompt is a JSON body (``{"prompt": "..."}``) rather than a query string (#145).
+        """
         try:
-            result = await ollama_manager.test_model(model_id, prompt)
+            result = await ollama_manager.test_model(model_id, request.prompt)
             logger.info(f"✅ Model tested: {model_id}")
             return result
         except HTTPException:
@@ -137,52 +162,35 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
 
     @router.post("/models/{model_id}/constraints")
     async def set_model_constraints(model_id: str, constraints: ModelConstraints):
-        """Set constraints for a model. **Placeholder** — not yet implemented."""
-        logger.info(f"Constraints set for model: {model_id} (placeholder)")
-        return {"message": f"Constraints set for model '{model_id}' (placeholder)"}
+        """Set constraints for a model. **Not implemented** — returns 501 (#145).
+
+        The ModelConstraints body is kept so /docs documents the intended shape.
+        """
+        raise HTTPException(
+            status_code=501,
+            detail="Model constraints are not implemented in this service",
+        )
 
     @router.get("/models/{model_id}/metrics")
     async def get_model_metrics(model_id: str):
-        """Model performance metrics. **Placeholder** — returns zeros."""
-        return {
-            "model_id": model_id,
-            "total_requests": 0,
-            "average_latency_ms": 0,
-            "error_rate": 0.0,
-            "cost_usd": 0.0,
-            "note": "Metrics tracking not yet implemented",
-        }
+        """Model performance metrics. **Not implemented** — returns 501 (#145).
+
+        Previously returned a 200 body of zeros, which read as real data in /docs.
+        """
+        raise HTTPException(
+            status_code=501,
+            detail="Metrics tracking is not implemented in this service",
+        )
 
     @router.post("/models/fine-tune")
     async def fine_tune_model(request: FineTuneRequest):
-        """Fine-tune request. **Placeholder** — training is not performed here."""
-        try:
-            exists = any(
-                m.get("model") == request.base_model
-                for m in await ollama_manager.list_models()
-            )
-            if not exists:
-                raise HTTPException(status_code=404, detail="Base model not found")
-            fine_tuned_id = (
-                f"{request.base_model}_fine_tuned_"
-                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            )
-            logger.info(
-                f"Fine-tune request (placeholder): {request.base_model} -> {fine_tuned_id}"
-            )
-            return {
-                "message": "Fine-tuning is not implemented in this service",
-                "fine_tuned_model_id": fine_tuned_id,
-                "base_model": request.base_model,
-                "status": "not_implemented",
-                "note": "Placeholder endpoint kept for API compatibility",
-            }
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ Failed to process fine-tune request: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to process fine-tune request: {str(e)}"
-            )
+        """Fine-tune request. **Not implemented** — returns 501 (#145).
+
+        The FineTuneRequest body is kept so /docs documents the intended shape.
+        """
+        raise HTTPException(
+            status_code=501,
+            detail="Fine-tuning is not implemented in this service",
+        )
 
     return router
