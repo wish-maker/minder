@@ -142,6 +142,8 @@ class SelfRAGPipeline:
         current_answer = None
         current_context = context
         iteration = 0
+        evaluated = False  # did the quality evaluator actually run at least once?
+        threshold_met = False  # did an evaluation meet the quality threshold?
 
         logger.info(f"🔄 Starting Self-RAG with max {self.max_iterations} iterations")
 
@@ -153,7 +155,10 @@ class SelfRAGPipeline:
 
             current_answer = result["text"]
 
-            # Skip quality evaluation if evaluator not available
+            # Skip quality evaluation if evaluator not available. This is the common Pi
+            # path (no sentence-transformers): we generate a single pass with NO
+            # refinement — record evaluated=False so the caller isn't told a quality
+            # threshold was checked when it wasn't (#138).
             if self.evaluator is None:
                 logger.info("ℹ️ Quality evaluator unavailable, using first iteration")
                 break
@@ -166,6 +171,7 @@ class SelfRAGPipeline:
                     context=current_context,
                     context_sources=sources,
                 )
+                evaluated = True
 
                 overall_quality = quality_result.get("overall_quality", 0.0)
                 logger.info(
@@ -174,6 +180,7 @@ class SelfRAGPipeline:
 
                 # Check if quality is sufficient
                 if overall_quality >= self.quality_threshold:
+                    threshold_met = True
                     logger.info(
                         f"✅ Quality threshold met: {overall_quality:.3f} >= "
                         f"{self.quality_threshold}"
@@ -195,12 +202,20 @@ class SelfRAGPipeline:
                 logger.warning(f"⚠️ Quality evaluation failed: {e}")
                 break
 
-        logger.info(f"✅ Self-RAG completed after {iteration + 1} iterations")
+        iterations = iteration + 1
+        logger.info(f"✅ Self-RAG completed after {iterations} iterations")
 
         return {
             "answer": current_answer,
             "quality": {
-                "iterations": iteration + 1,
-                "threshold_met": iteration < self.max_iterations,
+                "iterations": iterations,
+                # Whether the quality evaluator actually ran. False → this was a plain
+                # single pass (evaluator absent/failed), NOT true self-refinement.
+                "evaluated": evaluated,
+                # None when no evaluation happened (unknown), so we never report
+                # threshold_met=True for a threshold that was never measured (#138).
+                "threshold_met": threshold_met if evaluated else None,
+                # Did more than one generation actually run (i.e. real refinement)?
+                "refined": iterations > 1,
             },
         }

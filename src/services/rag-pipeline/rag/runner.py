@@ -8,8 +8,11 @@ and returns a plain dict of response fields. It depends only on the objects pass
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from models import (
+    VALID_RAG_METHODS,  # single source of truth (also enforced at the edge)
+)
 from rag.methods import compress as compress_method
 from rag.methods import corrective as corrective_method
 from rag.methods import decision as decision_method
@@ -18,8 +21,6 @@ from rag.methods import rerank as rerank_method
 from rag.methods import self_rag as self_rag_method
 
 logger = logging.getLogger(__name__)
-
-VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto", "corrective"}
 
 # Conversational RAG is single-user today (see #45 / TODO in conversation repo).
 _DEFAULT_USER = "default"
@@ -108,6 +109,10 @@ async def run_query(
     use_hyde = method == "hyde"
     use_self_rag = method == "self_rag"
     details: Dict[str, Any] = {}
+    # Human-readable notes about anything the caller asked for that quietly did NOT
+    # happen (component missing, empty result, precedence). Surfaced as
+    # method_details.degraded so a client can detect a downgrade without diffing (#138).
+    degraded: List[str] = []
 
     # method=auto: let the decision engine choose.
     if method == "auto":
@@ -116,6 +121,10 @@ async def run_query(
         )
         if dec:
             details["decision"] = dec
+        else:
+            degraded.append(
+                "auto: decision engine unavailable — used standard retrieval/generation"
+            )
         details["requested"] = "auto"
 
     # HyDE: retrieve using a hypothetical answer rather than the raw question.
@@ -129,6 +138,9 @@ async def run_query(
             details["hyde"] = {"hypothetical_chars": len(hypothetical)}
         else:
             use_hyde = False
+            degraded.append(
+                "hyde: expander unavailable or empty rewrite — retrieved on raw query"
+            )
 
     context_result = await components.retrieve(pipeline, retrieval_query, request.top_k)
 
@@ -146,6 +158,11 @@ async def run_query(
         )
         if corr_details:
             details["corrective"] = corr_details
+        else:
+            # Empty details = pipeline unavailable or it raised → nothing corrective ran.
+            degraded.append(
+                "corrective: pipeline unavailable — used standard retrieval (no grading)"
+            )
 
     # Optional adaptive re-ranking (cross-encoder if available, else LLM). Orthogonal
     # to method — applies to whatever was retrieved above.
@@ -206,8 +223,18 @@ async def run_query(
             )
             if answer_text:
                 details["self_rag"] = quality
+                # Evaluator absent → a single pass ran, not true self-refinement.
+                # Say so instead of letting method="self_rag" imply refinement (#138).
+                if not quality.get("evaluated"):
+                    degraded.append(
+                        "self_rag: quality evaluator unavailable — single pass, "
+                        "no refinement"
+                    )
             else:
                 use_self_rag = False  # fell back
+                degraded.append(
+                    "self_rag: pipeline unavailable or errored — used standard generation"
+                )
 
         if not answer_text:  # standard path (default or any fallback above)
             answer_result = await components.ollama_manager.generate_response(
@@ -218,11 +245,16 @@ async def run_query(
             tokens_used = answer_result.get("tokens_used")
 
     if method == "corrective":
-        effective_method = "corrective"
+        # Only claim "corrective" if grading actually ran (details recorded). If the
+        # pipeline was unavailable the grade never happened → report standard (#138).
+        effective_method = "corrective" if details.get("corrective") else "standard"
     else:
         effective_method = (
             "self_rag" if use_self_rag else "hyde" if use_hyde else "standard"
         )
+
+    if degraded:
+        details["degraded"] = degraded
 
     await _store_conversation_turn(
         components.conversation_repository,

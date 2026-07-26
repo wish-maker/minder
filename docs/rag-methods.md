@@ -1,6 +1,6 @@
 # RAG Methods in Minder
 
-**Status as of 2026-07-24** (verified against the running `minder-rag-pipeline` +
+**Status as of 2026-07-26** (verified against the running `minder-rag-pipeline` +
 `GET /capabilities`; supersedes the earlier 2026-07-10 "research lab" framing).
 
 ## Executive Summary
@@ -30,6 +30,28 @@ candidate — see Bucket 2).
 > `{"question": "...", "top_k": 5, "method": "standard|hyde|self_rag|auto|corrective",
 > "conversation_id": "...", "rerank": false, "compress": false, "hybrid": false,
 > "parent_context": false}`.
+
+### Method validation & honest degradation (#138)
+
+- **Unknown `method` → 422.** Only `standard|hyde|self_rag|auto|corrective` are valid
+  (case-insensitive). Anything else — a typo, `raptor`, `parent_child`, or
+  `conversational` (which is enabled via `conversation_id`, **not** `method`) — is
+  rejected with a `422` listing the valid values, instead of silently running standard.
+- **The response tells the truth about what ran.** `method` is the *effective* method.
+  When a requested capability quietly couldn't run, `method_details.degraded` lists why
+  (e.g. `"hybrid requested but rank_bm25 unavailable — used dense retrieval"`,
+  `"self_rag: quality evaluator unavailable — single pass, no refinement"`,
+  `"corrective: pipeline unavailable — used standard retrieval"`).
+  `method_details.retrieval` reports the retrieval strategy actually used
+  (`dense|hybrid|parent_context`).
+- **Self-RAG quality metrics are honest.** `method_details.self_rag.evaluated` is
+  `false` when no quality evaluator ran (a plain single pass), and `threshold_met` is
+  `null` rather than a bogus `true` for a threshold that was never measured.
+
+> Still on the roadmap: **`auto` currently applies only HyDE/Self-RAG toggles** — the
+> decision engine's `retrieval_strategy`/`top_k`/`rerank` choices are not yet wired
+> through (#139), and a request with `method:"auto"` reports its effective sub-method,
+> not `"auto"`.
 
 ---
 
@@ -132,4 +154,4 @@ the tree. They are all buildable on the current architecture:
 
 ---
 
-**Last Updated:** 2026-07-24
+**Last Updated:** 2026-07-26
