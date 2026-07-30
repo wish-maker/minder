@@ -83,6 +83,14 @@ def run() -> int:
 
     log.section(f"💾  Platform Backup  →  {dest}")
 
+    # Datastores that are RUNNING but did NOT make it into the archive (export
+    # failed, or skipped for a missing credential). Surfaced loudly in the final
+    # line so a partial backup can't read as a complete one (#177 — InfluxDB was
+    # silently dropped in dev --without-auth mode while the run still said
+    # "Backup complete"). Not-running stores are a deliberate state (already
+    # warned per-store) and are left out of this list.
+    skipped: list[str] = []
+
     # ── .env ──────────────────────────────────────────────────────────────
     if config.ENV_FILE.is_file():
         shutil.copy(config.ENV_FILE, dest / "env.backup")
@@ -114,6 +122,7 @@ def run() -> int:
             log.success(f"PostgreSQL  ({_du_sh(dump)})")
         else:
             log.warn("PostgreSQL dump failed")
+            skipped.append("PostgreSQL")
     else:
         log.warn("PostgreSQL not running — skipped")
 
@@ -154,6 +163,7 @@ def run() -> int:
         else:
             log.spinner_stop()
             log.warn("Neo4j export failed")
+            skipped.append("Neo4j")
     else:
         log.warn("Neo4j not running — skipped")
 
@@ -188,9 +198,11 @@ def run() -> int:
             else:
                 log.spinner_stop()
                 log.warn("InfluxDB backup failed")
+                skipped.append("InfluxDB")
         else:
             log.spinner_stop()
             log.warn("INFLUXDB_ADMIN_TOKEN not set — skipping InfluxDB backup")
+            skipped.append("InfluxDB")
     else:
         log.warn("InfluxDB not running — skipped")
 
@@ -223,6 +235,7 @@ def run() -> int:
         else:
             log.spinner_stop()
             log.warn("Qdrant snapshot failed")
+            skipped.append("Qdrant")
     else:
         log.warn("Qdrant not running — skipped")
 
@@ -253,6 +266,7 @@ def run() -> int:
         else:
             log.spinner_stop()
             log.warn("RabbitMQ definitions export failed")
+            skipped.append("RabbitMQ")
     else:
         log.warn("RabbitMQ not running — skipped")
 
@@ -277,5 +291,8 @@ def run() -> int:
                 pass
         log.detail("Pruned old backups (keeping last 7)")
 
-    log.success("Backup complete")
+    if skipped:
+        log.warn("Backup complete — NOT captured: " + ", ".join(skipped))
+    else:
+        log.success("Backup complete")
     return 0
