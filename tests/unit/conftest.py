@@ -3,9 +3,15 @@ Unit test configuration for Minder services.
 Provides fixtures for unit tests without external dependencies.
 """
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
+
+# shared.auth.jwt_middleware fails fast at IMPORT if JWT_SECRET is unset, and unit
+# tests that load a registry route (e.g. the bundles endpoints) import it. Set a
+# throwaway secret at collection time so those modules load without a real secret.
+os.environ.setdefault("JWT_SECRET", "unit-test-secret")
 
 
 class MockDBResult:

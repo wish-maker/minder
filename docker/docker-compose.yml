@@ -473,12 +473,12 @@ services:
     - -listenip=0.0.0.0
     - -allowfrom=0.0.0.0/0
     - -loglevel=INFO
-    # LEAST PRIVILEGE — the telegraf plugin needs exactly these two: container
-    # inspect (GET …/json) + restart (POST …/restart). Anything not matched here is
-    # DENIED, including create/exec/start/stop/kill/volumes/images/networks/swarm.
-    # PR2 (bundle enable/disable) will add POST …/(start|stop).
+    # LEAST PRIVILEGE — the registry needs only: container inspect (GET …/json) +
+    # restart (telegraf fallback) + start/stop (bundle enable/disable, #65 item-2
+    # PR2). Anything not matched here is DENIED, including create/exec/kill/volumes/
+    # images/networks/swarm — so a compromised registry still can't host-takeover.
     - -allowGET=(/v[0-9.]+)?/containers/[^/]+/json
-    - -allowPOST=(/v[0-9.]+)?/containers/[^/]+/restart
+    - -allowPOST=(/v[0-9.]+)?/containers/[^/]+/(restart|start|stop)
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -555,10 +555,13 @@ services:
     - ../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
     # Read-only compose file so the registry can derive the bundle map from the
-    # minder.bundle= labels for GET /v1/bundles (#65). The bundles.state.json mount is
-    # deferred (absent source → empty-dir footgun; until then an absent state file
-    # reads as "everything enabled", which is the documented default).
+    # minder.bundle= labels for GET /v1/bundles (#65).
     - ./docker-compose.yml:/app/bundles/docker-compose.yml:ro
+    # Read-WRITE bundles.state.json for the mutating endpoints (#65 item-2 PR2:
+    # enable/disable/reconcile persist intent here — the SAME file the host CLI
+    # writes). setup seeds it 0666 before `up` (missing source → empty-dir footgun;
+    # non-root registry appuser must be able to write it). Secret-free by design.
+    - ../bundles.state.json:/app/bundles/bundles.state.json:rw
     # Writable mount of the SAME runtime telegraf.conf the telegraf container reads
     # (:ro there). This is the gitignored RUNTIME copy seeded from the tracked
     # template by setup.sh (sync_telegraf_config) — the plugin rewrites it in-place

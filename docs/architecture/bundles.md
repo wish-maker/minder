@@ -2,9 +2,11 @@
 
 > **Status:** Accepted — Phases 0-2 shipped (#62), Phase-3 slices shipped: ollama
 > external binding (#64), **Compose-label-derived bundle map (#65 item 3)**, the
-> **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**, and the
-> **read-only `GET /v1/bundles` registry API (#65 item 2, read-only slice)**;
-> remaining Phase 3 tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
+> **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**, the
+> **`GET /v1/bundles` registry API (#65 item 2, read-only)**, the **least-privilege
+> docker-socket-proxy (#65 item-2 PR1)**, and the **mutating `POST /v1/bundles/*`
+> registry endpoints (#65 item-2 PR2)**; remaining Phase 3 (binding model, plugin
+> manifest schema) tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
 > `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`, renamed
 > to the bundle model in Phase 1 and merged as `feat/bundles`).
 
@@ -193,13 +195,18 @@ Same operations, two front-ends over one shared brain:
 - **Registry API (Phase 3):** **`GET /v1/bundles` is shipped** (#65 item 2, read-only)
   — it reports the bundle model (enabled state + claims + per-service active/orphaned)
   by importing the same `shared.bundle_graph` brain, over a read-only mount of the
-  compose file (map) + the secret-free `bundles.state.json` (state). The **docker-socket-proxy**
-  the mutating side needs is **now in place** (#65 item-2 PR1 — least-privilege
-  container inspect + start/stop/restart, replacing the registry's raw `docker.sock:rw`).
-  The **mutating** endpoints `POST /v1/bundles/{name}/enable|disable`,
-  `POST /v1/bundles/reconcile`, `POST /v1/bundles/profile/{name}` are still pending
-  (PR2): they orchestrate containers via the proxy, behind **Authelia**. This also
-  enables marketplace-triggered auto-enable of a bundle on plugin install.
+  compose file (map) + the secret-free `bundles.state.json` (state). The **mutating** endpoints
+  `POST /v1/bundles/{name}/enable|disable` and `POST /v1/bundles/reconcile` are
+  **shipped** (#65 item-2 PR2, JWT-gated): they persist intent to `bundles.state.json`
+  (RW-mounted, the same file the CLI writes) and orchestrate containers via the
+  least-privilege docker-socket-proxy (start/stop only). Because the proxy cannot
+  *create* (by design — create-with-host-mount = takeover), a claimed service never
+  materialised (e.g. enabling a bundle off since install) is reported as
+  `pending_create` and comes up on the next host `start`/`restart` converge — the
+  GitOps split (API sets desired state; the privileged host reconciler materialises
+  it). This also enables marketplace-triggered auto-enable on plugin install.
+  (`POST /v1/bundles/profile/{name}` — post-install profile re-apply — is still
+  future, as on the CLI side.)
 
 `disable` never deletes data (`stop`, not `down`; volumes persist). There is **no
 per-bundle purge**; the only purge is the existing platform-wide `uninstall
