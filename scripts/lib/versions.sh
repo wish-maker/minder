@@ -415,6 +415,14 @@ pull_image_with_fallback() {
     if run docker pull "$target_ref" &>/dev/null 2>&1; then
         spinner_stop
         log_success "${target_ref}"
+        # Point the compose-pinned ref at the freshly-pulled newer image so the
+        # rolling `compose up` (which references the PINNED tag) actually RUNS it.
+        # Without this the resolved image is pulled into cache and orphaned, and
+        # update silently keeps the pinned version (#178). Guarded so the
+        # SKIP_VERSION_CHECK path (target == pin) stays a plain pull.
+        if [[ "$target_ref" != "$pinned_ref" ]]; then
+            run docker tag "$target_ref" "$pinned_ref" &>/dev/null 2>&1
+        fi
         return 0
     fi
     spinner_stop

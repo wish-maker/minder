@@ -370,8 +370,8 @@ def resolve_image_tag(spec: str) -> str:
 
 
 def pull_image_with_fallback(spec: str) -> int:
-    """bash pull_image_with_fallback: resolve, pull; on failure pull the pin.
-    Non-fatal (always returns 0)."""
+    """bash pull_image_with_fallback: resolve, pull, retag to the pin; on failure
+    pull the pin. Non-fatal (always returns 0)."""
     pinned_ref = spec.split("|", 1)[0]
     target_ref = resolve_image_tag(spec)
 
@@ -379,6 +379,13 @@ def pull_image_with_fallback(spec: str) -> int:
     if docker.run("docker", "pull", target_ref, quiet=True) == 0:
         log.spinner_stop()
         log.success(target_ref)
+        # Point the compose-pinned ref at the freshly-pulled newer image so the
+        # rolling `compose up` (which references the PINNED tag) actually RUNS it.
+        # Without this the resolved image is pulled into cache and orphaned, and
+        # `update` silently keeps the pinned version (#178). Guarded so the
+        # SKIP_VERSION_CHECK path (target == pin) stays a plain pull.
+        if target_ref != pinned_ref:
+            docker.run("docker", "tag", target_ref, pinned_ref, quiet=True)
         return 0
     log.spinner_stop()
 
