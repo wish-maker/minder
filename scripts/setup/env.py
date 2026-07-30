@@ -315,6 +315,40 @@ def write_default_env() -> None:
     log.success("Generated .env with secure random secrets (fallback mode)")
 
 
+def _upsert_env_key(key: str, value: str) -> None:
+    """Set KEY=value in .env — replace the line if present, else append. Silent."""
+    try:
+        lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    out, found = [], False
+    for ln in lines:
+        if ln.split("=", 1)[0] == key:
+            out.append(f"{key}={value}")
+            found = True
+        else:
+            out.append(ln)
+    if not found:
+        out.append(f"{key}={value}")
+    ENV_FILE.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def ensure_docker_gid() -> None:
+    """Record the host 'docker' group's gid in .env as DOCKER_GID (#11) so compose's
+    `group_add: ${DOCKER_GID:-0}` actually grants telegraf/plugin-registry read
+    access to a root:docker docker.sock when they run non-root. Silent; a no-op off
+    POSIX / when there's no docker group / when already correct — the `:-0` fallback
+    covers those (dev hosts where docker.sock isn't group-gated the same way)."""
+    try:
+        import grp  # POSIX-only; ImportError on Windows
+
+        gid = str(grp.getgrnam("docker").gr_gid)  # type: ignore[attr-defined]
+    except (ImportError, KeyError, OSError):
+        return
+    if get("DOCKER_GID") != gid:
+        _upsert_env_key("DOCKER_GID", gid)
+
+
 def prepare_env() -> None:
     """bash prepare_env: self-healing provisioning (install/start/restart). Create
     .env from .env.example (or the fallback), heal missing secrets, chmod 600,
@@ -329,6 +363,7 @@ def prepare_env() -> None:
             write_default_env()
 
     fill_env_secrets()
+    ensure_docker_gid()
     _chmod_600(ENV_FILE)
     sync_compose_env()
     sync_telegraf_config()

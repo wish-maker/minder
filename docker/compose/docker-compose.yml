@@ -736,6 +736,11 @@ services:
     - /proc:/host/proc:ro
     - /sys:/host/sys:ro
     - /var/run/docker.sock:/var/run/docker.sock:ro
+    # inputs.docker reads docker.sock (root:docker on the Pi) — join the docker
+    # group so the plugin works even if telegraf runs non-root (#11). DOCKER_GID is
+    # auto-detected into .env by setup; :-0 is the safe dev-host fallback.
+    group_add:
+    - ${DOCKER_GID:-0}
     environment:
     - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-my-super-secret-auth-token}
     - HOSTNAME=minder-server
