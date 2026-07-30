@@ -9,6 +9,15 @@ log:
 authentication_backend:
   file:
     path: /config/users_database.yml
+    # Low-memory argon2 profile (Pi-friendly, #15). Bounds per-auth RAM to ~32 MiB
+    # (default is 64 MiB) for both verification and any portal password reset.
+    password:
+      algorithm: argon2
+      argon2:
+        variant: argon2id
+        memory: 32768
+        iterations: 3
+        parallelism: 2
 
 session:
   name: authelia_session
@@ -45,29 +54,14 @@ notifier:
 access_control:
   default_policy: one_factor
   rules:
-    - domain:
-        - public.minder.local
+    # Health/readiness probes bypass auth on every host (container/Traefik probes).
+    - domain: ["*.minder.local"]
+      resources: ["^/health(.*)"]
       policy: bypass
-
-    - domain:
-        - "*.minder.local"
-      resources:
-        - "^/health(.*)"
-      policy: bypass
-
-    - domain:
-        - admin.minder.local
-      subject:
-        - ["group:admins"]
-      policy: two_factor
-
-    - domain:
-        - api.minder.local
-      policy: two_factor
-
-    - domain:
-        - app.minder.local
-      policy: one_factor
+  # The forward-auth-protected hosts (minio / api / grafana / chat / jaeger
+  # .minder.local — the 5 routers using authelia-forwardauth@file) inherit
+  # default_policy: one_factor. Per-service two_factor hardening (api, admin) is
+  # deferred to the Pi: TOTP enrollment needs the portal reachable (DNS + TLS).
 
 identity_validation:
   reset_password:

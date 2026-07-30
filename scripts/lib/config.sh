@@ -29,7 +29,7 @@ readonly CONTAINER_PREFIX="minder"
 readonly NETWORK_NAME="docker_minder-network"
 readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
-readonly -a SECURITY_SERVICES=(traefik)
+readonly -a SECURITY_SERVICES=(traefik authelia)
 readonly -a CORE_SERVICES=(postgres redis qdrant neo4j rabbitmq minio schema-registry )
 # minio + schema-registry are wired here so `start` brings them up too — previously minio
 # was started only by `install` (initialize_minio) [#43] and schema-registry by nothing at
@@ -64,7 +64,7 @@ declare -A SERVICE_PORTS=(
     [influxdb]="8086"
     [traefik]="8081/dashboard/"
     # RabbitMQ management UI port not exposed (Traefik only), skipping direct health check
-    # authelia disabled pending proper configuration
+    # authelia is Traefik-only (no host port) → not host-health-checked (like openwebui/rabbitmq)
     # [authelia]="9091/api/health"
     [minio]="9000/minio/health/live"
     [jaeger]="16686"
@@ -112,7 +112,7 @@ declare -A THIRD_PARTY_IMAGE_META=(
     ["prom/prometheus"]="v3|none"
     ["grafana/grafana"]="13|none"
     ["prom/alertmanager"]="v0|none"
-    # authelia disabled pending proper configuration (restore when it returns)
+    # authelia enabled + core (#15) but pinned in compose — not smart-resolved yet
     # ["authelia/authelia"]="4|none"
     ["traefik"]="v3|none"
     ["influxdb"]="3|none"

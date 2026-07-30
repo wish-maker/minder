@@ -1,31 +1,16 @@
 # Authelia Users Database
 # https://www.authelia.com/configuration/authentication/file/
+#
+# Passwords are argon2id, low-memory profile (m=32768,t=3,p=2) — Pi-friendly (#15).
+# Rotate: authelia crypto hash generate argon2 --memory 32768 -i 3 -p 2 --password '<pw>'
+# then paste the $argon2id$… hash below and restart authelia.
 
 users:
-  # Default Admin User
   admin:
     disabled: false
-    displayname: Admin User
-    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
+    displayname: Admin
+    password: "$argon2id$v=19$m=32768,t=3,p=2$8A1kyTJysQE36yhIUrTnvA$xhgjuxh/6/Y6d9LB0HQ7txS2BUEnR1+idmvx7PcnrS8"
     email: admin@minder.local
     groups:
       - admins
       - developers
-
-  # Developer User
-  developer:
-    disabled: false
-    displayname: Developer User
-    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
-    email: developer@minder.local
-    groups:
-      - developers
-
-  # Regular User
-  user:
-    disabled: false
-    displayname: Regular User
-    password: "$argon2id$v=19$m=65536,t=4,p=4$TEvVYk1YWE1HZmNHRU5oUQ$RQDZk3Z7F3M8YQKz9M9cEQ"  # Password: admin123 (CHANGE THIS!)
-    email: user@minder.local
-    groups:
-      - users

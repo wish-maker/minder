@@ -73,45 +73,35 @@ services:
     # PILLAR 1: Expanded IP whitelist for local network access (LAN + VPN)
     - traefik.http.middlewares.ipwhitelist.ipallowlist.sourceRange=${TRAEFIK_TRUSTED_IPS:-192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1/32}
   # TEMPORARILY DISABLED: Crash loop due to missing database and NTP sync issues
-  # Decision deferred: Evaluate if SSO/2FA needed for personal Pi deployment
-  # authelia:
-  #   image: authelia/authelia:4.38.7
-  #   container_name: minder-authelia
-  #   restart: on-failure
-  #   environment:
-  #   - AUTHELIA_STORAGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-  #   - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
-  #   - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
-  #   - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
-  #   volumes:
-  #   - ../services/authelia/configuration.yml:/config/configuration.yml:ro
-  #   - ../services/authelia/users_database.yml:/config/users_database.yml:ro
-  #   # PILLAR 1: NO exposed ports - Traefik routing only
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   healthcheck:
-  #     test:
-  #     - CMD
-  #     - wget
-  #     - --quiet
-  #     - --tries=1
-  #     - --spider
-  #     - http://localhost:9091/api/health
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 3
-  #   networks:
-  #   - minder-network
-  #   # PILLAR 1: Expose via Traefik with Authelia middleware
-  #   labels:
-  #   - traefik.enable=true
-  #   - traefik.http.routers.authelia.rule=Host(`authelia.minder.local`)
-  #   - traefik.http.routers.authelia.service=authelia
-  #   - traefik.http.routers.authelia.entrypoints=websecure
-  #   - traefik.http.services.authelia.loadbalancer.server.port=9091
+  authelia:
+    image: authelia/authelia:4.38.7
+    container_name: minder-authelia
+    restart: on-failure
+    environment:
+    - AUTHELIA_STORAGE_POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+    - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+    - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
+    volumes:
+    - ../services/authelia/configuration.yml:/config/configuration.yml:ro
+    - ../services/authelia/users_database.yml:/config/users_database.yml:ro
+    # NO exposed ports — reached only via Traefik (Host: authelia.minder.local).
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Healthcheck: the image ships /app/healthcheck.sh (honours the server config) —
+    # use the built-in rather than a hardcoded wget probe.
+    networks:
+    - minder-network
+    labels:
+    - minder.bundle=core
+    - traefik.enable=true
+    - traefik.http.routers.authelia.rule=Host(`authelia.minder.local`)
+    - traefik.http.routers.authelia.service=authelia
+    - traefik.http.routers.authelia.entrypoints=websecure
+    - traefik.http.services.authelia.loadbalancer.server.port=9091
   postgres:
     labels:
     - minder.bundle=core
