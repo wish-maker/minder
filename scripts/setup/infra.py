@@ -114,7 +114,11 @@ def initialize_minio() -> None:
             "set",
             "mydata",
             "http://localhost:9000",
-            env.get("MINIO_ROOT_USER"),
+            # Match compose's `${MINIO_ROOT_USER:-minioadmin}` default: when the var
+            # is unset/empty in .env the container runs as `minioadmin`, so mc must
+            # authenticate as that too — else `mc mb` gets Access Denied and every
+            # bucket silently fails to create (surfaced on the Pi clean-install, #8).
+            env.get("MINIO_ROOT_USER") or "minioadmin",
             env.get("MINIO_ROOT_PASSWORD"),
         ],
         stdout=subprocess.DEVNULL,

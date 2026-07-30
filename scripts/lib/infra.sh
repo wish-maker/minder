@@ -85,7 +85,10 @@ initialize_minio() {
     # on: point it at the local server with the root creds from .env. (The default
     # 'local' alias is unauthenticated → Access Denied, so it can't be reused.)
     local minio_user minio_pass
-    minio_user="$(_env_get MINIO_ROOT_USER)"
+    # Match compose's `${MINIO_ROOT_USER:-minioadmin}`: empty/unset var → the
+    # container runs as minioadmin, so mc must auth as that too, else `mc mb`
+    # gets Access Denied and buckets silently fail (Pi clean-install, #8).
+    minio_user="$(_env_get MINIO_ROOT_USER)"; minio_user="${minio_user:-minioadmin}"
     minio_pass="$(_env_get MINIO_ROOT_PASSWORD)"
     if ! docker exec minder-minio mc alias set mydata \
             "http://localhost:9000" "$minio_user" "$minio_pass" &>/dev/null; then
