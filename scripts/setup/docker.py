@@ -70,6 +70,20 @@ def container_running(service: str) -> bool:
     return container_name(service) in _names()
 
 
+def created_services() -> list[str]:
+    """Service names (CONTAINER_PREFIX stripped) whose container exists but is in
+    the 'created' state — created by compose yet never started. That happens when a
+    `depends_on: condition: service_healthy` dependency doesn't go healthy in time
+    under load, so compose gives up starting the dependent and leaves it 'Created'
+    (#197: graph-rag on a slow neo4j). Read-only (`docker ps -a`), not dry-run
+    gated; returns [] if docker can't be queried."""
+    prefix = config.CONTAINER_PREFIX + "-"
+    out = capture(
+        ["docker", "ps", "-a", "--filter", "status=created", "--format", "{{.Names}}"]
+    )
+    return [n[len(prefix) :] for n in out.splitlines() if n.startswith(prefix)]
+
+
 def capture(argv: list) -> str:
     """Run argv and return its stdout (text), or "" on OSError. Ungated read-only
     capture (bash `$(cmd)`), shared by doctor/health/preflight/status/versions."""

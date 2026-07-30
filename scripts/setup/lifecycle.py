@@ -104,6 +104,27 @@ def start_services() -> None:
     log.success("All service groups dispatched")
 
 
+def _reconcile_created() -> None:
+    """Recover services compose created but never started (state 'created') because a
+    `depends_on: service_healthy` dependency didn't go healthy in time under load
+    (#197: a heavy `install --profile full` left graph-rag 'Created' behind a slow
+    neo4j, then silently reported success). Called once the CORE deps are healthy, so
+    a plain `compose up -d <svc>` now succeeds. Only touches ENABLED services; a
+    disabled-bundle leftover is left for orphan-convergence. Skipped under DRY_RUN
+    (there's no real stack to reconcile)."""
+    if config.DRY_RUN:
+        return
+    created = [s for s in docker.created_services() if bundles.service_active(s)]
+    if not created:
+        return
+    log.warn(
+        f"Recovering {len(created)} service(s) created but not started "
+        f"(dependency wasn't ready in time): {', '.join(created)}"
+    )
+    for svc in created:
+        docker.compose("up", "-d", svc)
+
+
 def wait_for_services() -> None:
     """bash wait_for_services: wait each service group healthy (best-effort; the
     bash `|| true` per svc is mirrored by ignoring wait_healthy's return)."""
@@ -112,6 +133,10 @@ def wait_for_services() -> None:
     # were never started (see _active). Everything enabled → same lists as before.
     for svc in _active(config.CORE_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_SERVICES)
+    # CORE deps (e.g. neo4j) are healthy now → start anything compose left 'Created'
+    # BEFORE we wait on it, so it ends up healthy instead of burning a wait timeout
+    # and being reported down (#197).
+    _reconcile_created()
     for svc in _active(config.API_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_SERVICES)
     for svc in _active(config.MONITORING_SERVICES):
