@@ -1,5 +1,5 @@
-fastapi==0.139.2
-uvicorn==0.51.0
+fastapi==0.141.1
+uvicorn==0.52.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 httpx==0.28.1
@@ -11,4 +11,4 @@ bitsandbytes==0.49.2
 ollama==0.6.2
 openai==2.48.0
 anthropic==0.119.0
-prometheus-client==0.25.0
+prometheus-client==0.26.0

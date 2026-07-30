@@ -1,7 +1,7 @@
 # services/plugin-state-manager/requirements.txt
 # FastAPI framework
-fastapi==0.139.2
-uvicorn==0.51.0
+fastapi==0.141.1
+uvicorn==0.52.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 
@@ -13,10 +13,10 @@ psycopg2-binary==2.9.12
 httpx==0.28.1
 
 # Metrics
-prometheus-client==0.25.0
+prometheus-client==0.26.0
 
 # Redis (caching)
-redis==8.0.1
+redis==8.1.0
 
 # Authentication & Security
 pyjwt==2.13.0
