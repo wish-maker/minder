@@ -38,7 +38,7 @@ docker logs minder-<service> --tail 50 -f
 ```
 
 All services run as Docker containers named `minder-<service>`. Compose is at
-`docker/compose/docker-compose.yml`; the root `./.env` is the single source of truth for
+`docker/docker-compose.yml`; the root `./.env` is the single source of truth for
 configuration.
 
 ---
@@ -64,7 +64,7 @@ docker logs minder-api-gateway --tail 50
 bash setup.sh restart api-gateway
 
 # Or directly
-cd docker/compose && docker compose restart api-gateway
+cd docker/ && docker compose restart api-gateway
 ```
 
 ### Container in a restart loop
@@ -74,7 +74,7 @@ docker logs minder-<service> --tail 100
 
 # Common causes: config error, missing env var, dependency not ready.
 # Recreate after fixing:
-cd docker/compose
+cd docker/
 docker compose up -d --force-recreate <service>
 ```
 
@@ -144,7 +144,7 @@ docker logs minder-traefik --tail 50
 grep TRAEFIK .env
 
 # Restart Traefik
-cd docker/compose && docker compose restart traefik
+cd docker/ && docker compose restart traefik
 ```
 
 Several Traefik routers are wired with an Authelia forward-auth middleware, but **Authelia

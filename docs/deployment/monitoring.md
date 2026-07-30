@@ -4,7 +4,7 @@ Monitoring and observability for the Minder Platform.
 
 > Deployment target is a Raspberry Pi 4 (RPi-4-01, ARM). This is a **development
 > environment**; production hardening is not yet applied. All services run via
-> `docker/compose/docker-compose.yml` (the hand-maintained source of truth) and are
+> `docker/docker-compose.yml` (the hand-maintained source of truth) and are
 > provisioned with `bash setup.sh`.
 
 ---
@@ -67,7 +67,7 @@ bash setup.sh start
 To bring up only the monitoring services:
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml up -d \
+docker compose --file docker/docker-compose.yml up -d \
   prometheus grafana alertmanager jaeger otel-collector influxdb telegraf \
   postgres-exporter redis-exporter rabbitmq-exporter node-exporter cadvisor blackbox-exporter
 ```

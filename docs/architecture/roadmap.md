@@ -86,7 +86,7 @@ workflow, and Docker-image + Python-dependency update workflows. mypy strictness
 (#33 done); coverage-fail-under remains optional/backlog.
 
 ### 6. Config Consolidation
-Per-service config lives under `docker/services/`; `docker/compose/docker-compose.yml` is the
+Per-service config lives under `docker/services/`; `docker/docker-compose.yml` is the
 hand-maintained source of truth. Reconciling remaining mounted config dirs (traefik dynamic,
 rabbitmq definitions) is tracked on the backlog.
 

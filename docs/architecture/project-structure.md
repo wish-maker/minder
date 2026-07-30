@@ -72,9 +72,9 @@ minder/                              # Project root
     # (secrets are auto-filled by setup.sh into ./.env — no separate generate-secrets step)
 ```
 
-> **Compose is the source of truth.** `docker/compose/docker-compose.yml` is hand-maintained.
+> **Compose is the source of truth.** `docker/docker-compose.yml` is hand-maintained.
 > There is no template/regenerate machinery — edit the compose file directly. `setup.sh` invokes
-> Compose as `docker compose --file docker/compose/docker-compose.yml ...`.
+> Compose as `docker compose --file docker/docker-compose.yml ...`.
 
 > **Shared dependencies live in `src/requirements/`** (`requirements.txt`, `requirements-dev.txt`,
 > `requirements-ml.txt`) — not in `src/config/` (that directory was removed). Python tooling
@@ -212,13 +212,13 @@ Every service has:
 ./setup.sh
 
 # 2. Start specific service
-docker compose -f docker/compose/docker-compose.yml up -d api-gateway
+docker compose -f docker/docker-compose.yml up -d api-gateway
 
 # 3. View logs
-docker compose -f docker/compose/docker-compose.yml logs -f api-gateway
+docker compose -f docker/docker-compose.yml logs -f api-gateway
 
 # 4. Restart with rebuild
-docker compose -f docker/compose/docker-compose.yml up -d --build api-gateway
+docker compose -f docker/docker-compose.yml up -d --build api-gateway
 
 # 5. Run tests
 pytest tests/unit/ -v
@@ -235,7 +235,7 @@ pip install new-package
 pip freeze > requirements.txt
 
 # Rebuild container
-docker compose -f docker/compose/docker-compose.yml build api-gateway
+docker compose -f docker/docker-compose.yml build api-gateway
 ```
 
 ### Testing
@@ -373,7 +373,7 @@ docker exec minder-postgres pg_dump -U minder > backup.sql
 Stateless services can be scaled:
 ```bash
 # Scale API Gateway to 3 instances
-docker compose -f docker/compose/docker-compose.yml up -d --scale api-gateway=3
+docker compose -f docker/docker-compose.yml up -d --scale api-gateway=3
 ```
 
 ### Resource Limits
@@ -406,7 +406,7 @@ curl http://localhost:8000/health
 
 ```bash
 # View all logs
-docker compose -f docker/compose/docker-compose.yml logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # View service logs
 docker logs minder-api-gateway --tail 100 -f
@@ -464,7 +464,7 @@ docker logs <service-name>
 lsof -i :8000
 
 # Reset service
-docker compose -f docker/compose/docker-compose.yml restart <service>
+docker compose -f docker/docker-compose.yml restart <service>
 ```
 
 **Database connection errors**:
@@ -473,7 +473,7 @@ docker compose -f docker/compose/docker-compose.yml restart <service>
 docker exec minder-postgres pg_isready -U minder
 
 # Reset database
-docker compose -f docker/compose/docker-compose.yml down -v
+docker compose -f docker/docker-compose.yml down -v
 ./setup.sh
 ```
 

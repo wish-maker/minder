@@ -17,11 +17,11 @@ forward-looking checklist, not a description of current state.
 
 Everything is provisioned by a single script and a single hand-maintained compose file:
 
-- **Compose:** `docker/compose/docker-compose.yml` — the hand-maintained **single source
+- **Compose:** `docker/docker-compose.yml` — the hand-maintained **single source
   of truth**. There is no template and no regeneration step (that machinery was removed).
   Edit this file directly to change the stack.
 - **Config/secrets:** root **`./.env`** is the single source of truth. `setup.sh`
-  auto-heals it and mirrors it to `docker/compose/.env` (auto-generated — do not edit the
+  auto-heals it and mirrors it to `docker/.env` (auto-generated — do not edit the
   mirror). There is no file-secrets overlay and no multi-environment machinery.
 - **Provisioning:** `bash setup.sh` (see command list below).
 
@@ -36,7 +36,7 @@ bundle {status|enable|disable} | ollama-mode | sync-postgres-password | uninstal
 ```
 
 Compose is always invoked as
-`docker compose --file docker/compose/docker-compose.yml ...`.
+`docker compose --file docker/docker-compose.yml ...`.
 
 | Command | Purpose |
 |---|---|
@@ -64,7 +64,7 @@ cd minder
 
 # Configure: root ./.env is the single source of truth.
 # setup.sh auto-fills any CHANGEME secrets you leave and mirrors ./.env to
-# docker/compose/.env — you do not copy it by hand.
+# docker/.env — you do not copy it by hand.
 cp .env.example .env      # if a template is provided; otherwise setup.sh creates it
 $EDITOR .env              # set any values you want to control explicitly
 
@@ -149,7 +149,7 @@ See `monitoring.md` for the full stack and instrumentation details.
 ## Environment Configuration
 
 ```bash
-# ./.env is the ONLY file you edit. setup.sh mirrors it to docker/compose/.env.
+# ./.env is the ONLY file you edit. setup.sh mirrors it to docker/.env.
 # Any value left as CHANGEME is auto-filled with a secure random value on start/install.
 
 ENVIRONMENT=development      # this is a dev deployment
@@ -200,7 +200,7 @@ tooling. They show as "no healthcheck", which is **not** the same as "unhealthy"
 
 ## Reverse Proxy (Traefik v3)
 
-Traefik is already configured in `docker/compose/docker-compose.yml` and discovers services
+Traefik is already configured in `docker/docker-compose.yml` and discovers services
 automatically via Docker labels:
 
 - Automatic service discovery (no manual upstream config)
@@ -218,7 +218,7 @@ any older instructions to configure them.
 
 ## Resource Limits
 
-Set limits directly in `docker/compose/docker-compose.yml`. The API gateway is the only
+Set limits directly in `docker/docker-compose.yml`. The API gateway is the only
 service with an active limit today:
 
 ```yaml
@@ -258,7 +258,7 @@ Persistent state lives in Docker named volumes (`postgres_data`, `neo4j_data`,
 
 ## Upgrades
 
-Image versions are pinned in `docker/compose/docker-compose.yml` (hand-maintained).
+Image versions are pinned in `docker/docker-compose.yml` (hand-maintained).
 `scripts/setup/versions.py` (the native-Python version engine, via `update --check`) derives the list from the `image:` lines and reports drift; CI
 (`docker-image-update.yml`) proposes bumps via PR. Apply with `bash setup.sh update`. Full
 procedure — including PostgreSQL major-version migration — is in
@@ -271,7 +271,7 @@ procedure — including PostgreSQL major-version migration — is in
 Traefik load-balances across replicas of a scaled stateless service:
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml up -d --scale api-gateway=2
+docker compose --file docker/docker-compose.yml up -d --scale api-gateway=2
 ```
 
 > Note: Ollama is **not** scaled with `--scale` — it is profile-gated. Scaling only makes
@@ -284,14 +284,14 @@ docker compose --file docker/compose/docker-compose.yml up -d --scale api-gatewa
 ```bash
 # Status / health
 bash setup.sh status
-docker compose --file docker/compose/docker-compose.yml ps
+docker compose --file docker/docker-compose.yml ps
 
 # Logs
 docker logs minder-<service> --tail 100 -f
 
 # Restart / recreate a service
-docker compose --file docker/compose/docker-compose.yml restart <service>
-docker compose --file docker/compose/docker-compose.yml up -d --force-recreate <service>
+docker compose --file docker/docker-compose.yml restart <service>
+docker compose --file docker/docker-compose.yml up -d --force-recreate <service>
 
 # Resource usage
 docker stats --no-stream
@@ -303,7 +303,7 @@ bash setup.sh doctor
 ### Common issues
 
 - **Service won't start** — check `docker logs <service>`; confirm `./.env` is populated
-  (setup.sh mirrors it to `docker/compose/.env`); check dependency health.
+  (setup.sh mirrors it to `docker/.env`); check dependency health.
 - **High memory / OOM** — the Pi has 8 GB. Reduce Ollama model size or offload Ollama
   (`bash setup.sh ollama-mode`); see `hardware-optimization.md`.
 - **DB connection issues** — `docker exec minder-postgres pg_isready -U "$POSTGRES_USER"`;

@@ -37,7 +37,7 @@ declare -A SECRET_SPEC=(
 # prepare_env — self-healing environment provisioning. Runs on install/start/restart.
 #
 #   root ./.env  = SINGLE SOURCE OF TRUTH (one per machine; gitignored; chmod 600).
-#   docker/compose/.env (COMPOSE_ENV_FILE) = derived COPY that docker compose reads;
+#   docker/.env (COMPOSE_ENV_FILE) = derived COPY that docker compose reads;
 #                        regenerated from root .env every run, carries a DO-NOT-EDIT
 #                        banner. COPY (not symlink) for Windows + Pi portability.
 #
@@ -58,7 +58,7 @@ prepare_env() {
     _fill_env_secrets               # heal MISSING/EMPTY/PLACEHOLDER secrets (backs up on change)
     _ensure_docker_gid              # record the docker group gid as DOCKER_GID (#11, silent)
     chmod 600 "$ENV_FILE" 2>/dev/null || true
-    _sync_compose_env               # mirror root .env → docker/compose/.env (silent)
+    _sync_compose_env               # mirror root .env → docker/.env (silent)
 }
 
 _ensure_docker_gid() {
@@ -186,7 +186,7 @@ _fill_env_secrets() {
     mapfile -t to_fill < <(printf '%s\n' "${to_fill[@]}" | sort)
 
     # #57: refuse to auto-(re)generate secrets while a provisioned stack is running —
-    # doing so would mirror new secrets into docker/compose/.env and let start_services
+    # doing so would mirror new secrets into docker/.env and let start_services
     # recreate the stateful cores, desyncing live services (redis/minio re-read their
     # password on recreate). Only reached when secrets ACTUALLY need filling; the
     # normal full-.env path returned above. Override: MINDER_ALLOW_SECRET_REGEN=1.

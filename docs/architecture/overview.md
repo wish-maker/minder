@@ -188,7 +188,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 - **Authentication**: JWT (bcrypt). No RBAC. Authelia is present but disabled.
 
 ### Infrastructure
-- **Containers**: Docker + Docker Compose (`docker/compose/docker-compose.yml`, hand-maintained)
+- **Containers**: Docker + Docker Compose (`docker/docker-compose.yml`, hand-maintained)
 - **Reverse Proxy**: Traefik v3
 - **Monitoring**: Prometheus + Grafana + InfluxDB + Alertmanager + Jaeger + OpenTelemetry
 - **CI/CD**: GitHub Actions
@@ -216,7 +216,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
   expose host ports (Prometheus 9090, Grafana 3000, Alertmanager 9093, InfluxDB 8086, Jaeger
   16686, OTel collector 14317/14318).
 - **Secrets**: environment variables only. Root `./.env` is the single source of truth; `setup.sh`
-  mirrors it to `docker/compose/.env` (auto-generated, do not edit).
+  mirrors it to `docker/.env` (auto-generated, do not edit).
 
 ## Monitoring & Observability
 
@@ -234,13 +234,13 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 bash setup.sh start
 
 # Start a specific service
-docker compose --file docker/compose/docker-compose.yml up -d api-gateway
+docker compose --file docker/docker-compose.yml up -d api-gateway
 
 # View logs
-docker compose --file docker/compose/docker-compose.yml logs -f <service>
+docker compose --file docker/docker-compose.yml logs -f <service>
 
 # Rebuild and restart
-docker compose --file docker/compose/docker-compose.yml up -d --build <service>
+docker compose --file docker/docker-compose.yml up -d --build <service>
 
 # Run tests
 pytest tests/unit/ -v

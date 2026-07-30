@@ -59,7 +59,7 @@ capable machine is often the most effective "optimization" available.
 ### 3. Container resource limits
 
 Set CPU/memory limits and reservations in
-`docker/compose/docker-compose.yml` (`deploy.resources` / `mem_limit`) to keep a
+`docker/docker-compose.yml` (`deploy.resources` / `mem_limit`) to keep a
 runaway service from starving the LLM. On a memory-constrained Pi, stopping
 services you are not using is more effective than micro-tuning limits.
 

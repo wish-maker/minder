@@ -46,7 +46,7 @@ minder/
     └── manual/          # Manual / exploratory test scripts
 ```
 
-A `docker/compose/docker-compose.test.yml` brings up the dependencies needed for
+A `docker/docker-compose.test.yml` brings up the dependencies needed for
 integration and e2e runs (local only — CI uses GitHub Actions `services:`).
 
 ---
@@ -72,17 +72,17 @@ pytest tests/unit/ -v
 ### 2. Integration Tests (`tests/integration/`)
 
 Test interaction between components with real dependencies (Postgres, Redis, Qdrant,
-etc.) started via `docker/compose/docker-compose.test.yml`.
+etc.) started via `docker/docker-compose.test.yml`.
 
 ```bash
 # Bring up test dependencies
-docker compose -f docker/compose/docker-compose.test.yml up -d
+docker compose -f docker/docker-compose.test.yml up -d
 
 # Run integration tests
 pytest tests/integration/ -v
 
 # Tear down
-docker compose -f docker/compose/docker-compose.test.yml down -v
+docker compose -f docker/docker-compose.test.yml down -v
 ```
 
 ### 3. End-to-End Tests (`tests/e2e/`)

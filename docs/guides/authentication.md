@@ -122,7 +122,7 @@ proven working, treat everything below as **planned/optional**, not active:
 
 If/when Authelia is brought online, its configuration would live under
 `docker/services/authelia/` and it would be enabled by uncommenting its service
-block in `docker/compose/docker-compose.yml`. None of that is in effect today,
+block in `docker/docker-compose.yml`. None of that is in effect today,
 so this guide does not document its per-domain rules as if they were live.
 
 ---

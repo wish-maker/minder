@@ -14,7 +14,7 @@ Minder defines **31 containers** (Authelia excluded/disabled). `setup.sh install
 the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag,
 and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` for
 all 31), and `start` honours the recorded bundle state. The single source of truth is the
-hand-maintained `docker/compose/docker-compose.yml`.
+hand-maintained `docker/docker-compose.yml`.
 
 ---
 
@@ -95,7 +95,7 @@ environment variables. Everything else in the inventory above is expected to run
 
 **Configuration:**
 ```bash
-# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/.env)
 REDIS_HOST=your-redis-cluster.example.com
 REDIS_PORT=6379
 REDIS_PASSWORD=your-secure-password
@@ -120,7 +120,7 @@ REDIS_PASSWORD=your-elasticache-password
 
 **Configuration:**
 ```bash
-# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/.env)
 POSTGRES_HOST=your-postgres-db.example.com
 POSTGRES_PORT=5432
 POSTGRES_USER=minder
@@ -150,7 +150,7 @@ DATABASE_URL=postgresql://user:password@host:5432/dbname
 
 **Configuration:**
 ```bash
-# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/.env)
 QDRANT_HOST=your-cluster.qdrant.io
 QDRANT_PORT=6333
 QDRANT_API_KEY=your-qdrant-cloud-api-key
@@ -173,7 +173,7 @@ All services run in local Docker containers.
 
 ```bash
 bash setup.sh start
-# (setup.sh invokes: docker compose --file docker/compose/docker-compose.yml up -d)
+# (setup.sh invokes: docker compose --file docker/docker-compose.yml up -d)
 ```
 
 **Services (internal-only — reachable by container name on `minder-network`, not published on the host):**
@@ -187,7 +187,7 @@ Some services local, some external.
 
 **Example: Local Redis + Cloud PostgreSQL**
 ```bash
-# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/.env)
 POSTGRES_HOST=aws-rds.amazonaws.com
 POSTGRES_PASSWORD=production-password
 
@@ -196,7 +196,7 @@ REDIS_PORT=6379
 ```
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml up -d redis  # local Redis; PostgreSQL is external
+docker compose --file docker/docker-compose.yml up -d redis  # local Redis; PostgreSQL is external
 ```
 
 ### Scenario 3: Full External (Production)
@@ -204,14 +204,14 @@ docker compose --file docker/compose/docker-compose.yml up -d redis  # local Red
 All services external, no local databases.
 
 ```bash
-# ./.env  (root — single source of truth; setup.sh mirrors it to docker/compose/.env)
+# ./.env  (root — single source of truth; setup.sh mirrors it to docker/.env)
 REDIS_HOST=redis-cloud.example.com
 POSTGRES_HOST=rds.amazonaws.com
 QDRANT_HOST=qdrant-cloud.io
 ```
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml up -d api-gateway plugin-registry  # microservices only
+docker compose --file docker/docker-compose.yml up -d api-gateway plugin-registry  # microservices only
 ```
 
 ### Scenario 4: Per-Machine Configuration
@@ -235,7 +235,7 @@ QDRANT_HOST=https://prod-qdrant.qdrant.io
 
 Then on each machine simply:
 ```bash
-bash setup.sh start   # reads ./.env, mirrors it to docker/compose/.env, starts
+bash setup.sh start   # reads ./.env, mirrors it to docker/.env, starts
 ```
 
 ---
@@ -327,7 +327,7 @@ class Settings:
    ```
 4. **Restart RAG Pipeline:**
    ```bash
-   docker compose --file docker/compose/docker-compose.yml restart rag-pipeline
+   docker compose --file docker/docker-compose.yml restart rag-pipeline
    ```
 
 ---

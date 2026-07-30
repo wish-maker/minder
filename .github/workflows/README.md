@@ -48,7 +48,7 @@ scans, which the runtime data disproved.)
 ### 4. Docker Image Auto-Update — `docker-image-update.yml`
 **Triggers:** weekly cron (Mon 09:00 UTC), manual dispatch.
 **Behavior:** **issue-only** dependency engine. Reads
-`docker/compose/docker-compose.yml`, classifies third-party image updates as
+`docker/docker-compose.yml`, classifies third-party image updates as
 safe/risky (local `minder/*` builds excluded), and opens (or updates) a single
 tracking **issue** — it does not open PRs or modify files.
 

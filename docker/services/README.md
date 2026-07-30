@@ -3,10 +3,10 @@
 This directory holds the **static configuration files** that are bind-mounted into
 the platform's third-party service containers. It is **not** the deployment entry
 point — the compose files live in [`../compose/`](../compose/), and orchestration is
-driven by `setup.sh` / `docker compose --file docker/compose/docker-compose.yml ...`.
+driven by `setup.sh` / `docker compose --file docker/docker-compose.yml ...`.
 
 Each subdirectory is the source of truth for one service's config (mounted read-only
-into the container by `docker/compose/docker-compose.yml`):
+into the container by `docker/docker-compose.yml`):
 
 | Dir | Mounted into | Contents |
 |-----|--------------|----------|

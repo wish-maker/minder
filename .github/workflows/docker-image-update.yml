@@ -293,7 +293,7 @@ jobs:
 
           def check_updates_from_compose() -> Dict:
               """Read docker-compose.yml and check for updates"""
-              with open('docker/compose/docker-compose.yml', 'r', encoding='utf-8') as f:
+              with open('docker/docker-compose.yml', 'r', encoding='utf-8') as f:
                   compose = yaml.safe_load(f)
 
               updates = {}
@@ -584,9 +584,9 @@ jobs:
 
             if (Object.keys(safeUpdates).length > 0 || Object.keys(riskyUpdates).length > 0) {
               body += `1. Review the update(s) above\n`;
-              body += `2. Edit \`docker/compose/docker-compose.yml\` to update the image tag\n`;
-              body += `3. Run \`docker compose -f docker/compose/docker-compose.yml pull\`\n`;
-              body += `4. Run \`docker compose -f docker/compose/docker-compose.yml up -d\`\n`;
+              body += `2. Edit \`docker/docker-compose.yml\` to update the image tag\n`;
+              body += `3. Run \`docker compose -f docker/docker-compose.yml pull\`\n`;
+              body += `4. Run \`docker compose -f docker/docker-compose.yml up -d\`\n`;
               body += `5. Verify all services are healthy: \`docker ps --filter health=healthy\`\n\n`;
               body += `**Your commit message should include:**\n`;
               body += `\`\`\`\n`;

@@ -51,7 +51,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker compose -f docker/compose/docker-compose.yml build api-gateway
+          docker compose -f docker/docker-compose.yml build api-gateway
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master

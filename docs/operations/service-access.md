@@ -162,7 +162,7 @@ one exists.
 ```bash
 docker ps -a --filter name=minder-<service>
 docker logs minder-<service> --tail 50
-cd ~/minder && docker compose --file docker/compose/docker-compose.yml restart <service>
+cd ~/minder && docker compose --file docker/docker-compose.yml restart <service>
 ```
 
 Note: `otel-collector`, `redis-exporter`, and `rabbitmq-exporter` ship **without a

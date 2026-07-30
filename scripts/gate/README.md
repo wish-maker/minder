@@ -60,7 +60,7 @@ preserved*, not *behavior correct*.
   via repeated `selfdiff`; an intermittently-empty gate is the dangerous kind, so
   selfdiff is run many times before trusting it.
 - **No tracked files are rewritten during a run** (`SNAP_FILES` is empty). This used
-  to snapshot/restore `docker/compose/docker-compose.yml` + `.setup/compose.hash`,
+  to snapshot/restore `docker/docker-compose.yml` + `.setup/compose.hash`,
   which `regenerate-compose` rewrote outside `run()`. That verb and its machinery were
   removed (#31) — `docker-compose.yml` is now a hand-maintained source, not regenerated,
   so nothing mutates a tracked file during a capture. The `ENV_PATHS` snapshot/seed for

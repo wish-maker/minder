@@ -9,7 +9,7 @@
 
 Minder's deployment target is a single **Raspberry Pi 4 (RPi-4-01, ARM)**. This is a
 **development environment**; production hardening is not yet applied. Everything runs in
-Docker via `docker/compose/docker-compose.yml` (the hand-maintained source of truth) and
+Docker via `docker/docker-compose.yml` (the hand-maintained source of truth) and
 is provisioned with `bash setup.sh`.
 
 On a single Pi, the two scarce resources are **RAM** and **CPU**. LLM inference (Ollama)
@@ -27,7 +27,7 @@ Docker Compose `deploy.resources` limits are used to keep any one service from s
 the Pi. Today the only service with an **active** limit is the API gateway:
 
 ```yaml
-# docker/compose/docker-compose.yml — api-gateway
+# docker/docker-compose.yml — api-gateway
 services:
   api-gateway:
     deploy:
@@ -71,7 +71,7 @@ decision on a Pi.
 ### How models are configured
 
 ```yaml
-# docker/compose/docker-compose.yml — ollama
+# docker/docker-compose.yml — ollama
 environment:
   - OLLAMA_PULL_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
   - OLLAMA_AUTOMATIC_PULL=${OLLAMA_AUTOMATIC_PULL:-true}
@@ -124,7 +124,7 @@ Neo4j is memory-sensitive. It is pinned to a small heap so it coexists with the 
 the stack on the Pi:
 
 ```yaml
-# docker/compose/docker-compose.yml — neo4j
+# docker/docker-compose.yml — neo4j
 environment:
   NEO4J_dbms_memory_heap_initial__size: 512m
   NEO4J_dbms_memory_heap_max__size: 1G

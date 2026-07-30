@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 COMPOSE = (
-    Path(__file__).resolve().parents[2] / "docker" / "compose" / "docker-compose.yml"
+    Path(__file__).resolve().parents[2] / "docker" / "docker-compose.yml"
 )
 
 # Only these services may bind host ports on all interfaces (the public front door

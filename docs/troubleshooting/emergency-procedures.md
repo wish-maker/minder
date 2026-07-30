@@ -4,11 +4,11 @@
 
 Critical-situation runbooks for the Minder platform (development environment, Raspberry Pi
 4). Services run as Docker containers named `minder-<service>`. Compose is at
-`docker/compose/docker-compose.yml`; the root `./.env` is the single source of truth for
-configuration (`setup.sh` mirrors it to `docker/compose/.env`, which is auto-generated —
+`docker/docker-compose.yml`; the root `./.env` is the single source of truth for
+configuration (`setup.sh` mirrors it to `docker/.env`, which is auto-generated —
 do not edit that copy).
 
-Compose commands below assume you are in `docker/compose/` (`cd docker/compose`). You can
+Compose commands below assume you are in `docker/` (`cd docker/`). You can
 also use the `setup.sh` verbs (`start`, `stop`, `restart`, `backup`, `restore`) from the
 repo root.
 
@@ -25,7 +25,7 @@ repo root.
 bash setup.sh stop
 
 # 2. Verify the state of the database
-docker compose -f docker/compose/docker-compose.yml up -d postgres
+docker compose -f docker/docker-compose.yml up -d postgres
 docker exec minder-postgres psql -U minder -d minder -c "\dt"
 
 # 3. Locate backups produced by setup.sh
@@ -99,7 +99,7 @@ bash setup.sh stop
 docker logs minder-api-gateway | grep -i "unauthorized\|failed\|401\|403"
 
 # 3. Rotate credentials — ALWAYS edit the ROOT ./.env (single source of truth).
-#    Do NOT edit docker/compose/.env: setup.sh overwrites it from ./.env on every
+#    Do NOT edit docker/.env: setup.sh overwrites it from ./.env on every
 #    start/restart.
 
 # JWT secret is STATELESS — editing ./.env + restart is enough:
@@ -113,7 +113,7 @@ NEW_PASS=$(openssl rand -hex 32)
 sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_PASS/" .env
 bash setup.sh sync-postgres-password   # runs ALTER USER so the live DB matches ./.env
 
-# 4. Re-apply to all containers (start re-syncs ./.env -> docker/compose/.env)
+# 4. Re-apply to all containers (start re-syncs ./.env -> docker/.env)
 bash setup.sh start
 
 # 5. Monitor for continued activity; document the incident and update policies
@@ -134,7 +134,7 @@ Pi's limited RAM.
 docker stats --no-stream
 
 # 2. Stop the heaviest non-critical services (AI services / inference)
-cd docker/compose
+cd docker/
 docker compose stop rag-pipeline model-management ollama
 
 # 3. Free resources
@@ -190,9 +190,9 @@ bash setup.sh start
 # 1. Stop
 bash setup.sh stop
 
-# 2. Back up current state (./.env is source of truth; docker/compose/.env is regenerated)
+# 2. Back up current state (./.env is source of truth; docker/.env is regenerated)
 tar czf rollback_backup_$(date +%Y%m%d_%H%M%S).tar.gz \
-  .env docker/compose/docker-compose.yml
+  .env docker/docker-compose.yml
 
 # 3. Check out the previous version
 git checkout <previous-version>
@@ -207,7 +207,7 @@ curl http://localhost:8000/health
 ### Partial Rollback (single service)
 
 ```bash
-cd docker/compose
+cd docker/
 docker compose stop <service>
 docker compose rm -f <service>
 docker compose up -d <service>

@@ -599,7 +599,7 @@ cmd_stop() {
 cmd_start() {
     check_prerequisites
 
-    # Self-heal env + mirror root .env → docker/compose/.env before anything reads it.
+    # Self-heal env + mirror root .env → docker/.env before anything reads it.
     # Silent no-op when .env is already fully populated (keeps behavior gate clean).
     prepare_env
 

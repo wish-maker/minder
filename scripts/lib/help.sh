@@ -100,7 +100,7 @@ ${BOLD}VERSION RESOLUTION${NC}
     VERBOSE=1              Show per-image resolution details
 
 ${BOLD}CONFIGURATION MANAGEMENT${NC}
-    (image versions)         Edit docker/compose/docker-compose.yml directly to change
+    (image versions)         Edit docker/docker-compose.yml directly to change
                              image tags — it is the source of truth for what runs.
     ollama-mode internal|external [url]
                              Switch the Ollama backend in .env: internal = platform-managed

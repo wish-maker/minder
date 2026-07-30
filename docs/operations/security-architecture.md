@@ -28,7 +28,7 @@
   and observability services publish host ports directly (see
   [Service Access Guide](./service-access.md)); storage backends are internal-only.
 - **Secrets:** Root `./.env` is the single source of truth (permissions `600`); setup.sh
-  mirrors it to `docker/compose/.env`.
+  mirrors it to `docker/.env`.
 
 ---
 
@@ -109,7 +109,7 @@ See the [Service Access Guide](./service-access.md) for the authoritative port m
 ## Secrets Management
 
 - **Single source of truth:** root `./.env`. Edit this file only.
-- setup.sh **mirrors** it to `docker/compose/.env` on start/restart. Do not edit the mirror.
+- setup.sh **mirrors** it to `docker/.env` on start/restart. Do not edit the mirror.
 - File permissions are kept at `600`.
 - There is **no** file-secrets overlay and **no** multi-environment layering (removed);
   `.env` is the single mechanism.

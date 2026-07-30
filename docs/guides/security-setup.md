@@ -21,7 +21,7 @@ security posture of the Minder platform.
 - **JWT authentication** at the API Gateway (bcrypt password hashing).
 - **Traefik v3** reverse proxy (TLS termination, routing). *Not Nginx.*
 - **Secrets via a single root `./.env`** file (auto-filled by `setup.sh`,
-  mirrored to `docker/compose/.env`, kept at permission `600`).
+  mirrored to `docker/.env`, kept at permission `600`).
 - **Network isolation**: all storage backends (Postgres, Redis, Qdrant, Neo4j,
   MinIO, RabbitMQ) are internal-only on the `minder-network` Docker network and
   are **not** published to the host.
@@ -73,7 +73,7 @@ This will:
 - Fill every CHANGEME placeholder in `./.env` with a cryptographically secure value
 - Leave any value you set yourself untouched (self-healing on every start/restart)
 - Keep the generated values visible in `./.env` (so you can record them)
-- Set restrictive file permissions (600) on `./.env` and its `docker/compose/.env` copy
+- Set restrictive file permissions (600) on `./.env` and its `docker/.env` copy
 
 ### Option 2: Manual Setup
 
@@ -84,7 +84,7 @@ cp .env.example .env
 # Optionally set your own values; leave CHANGEME for setup.sh to auto-fill
 nano .env
 
-# Auto-fill remaining secrets + mirror ./.env → docker/compose/.env, then start
+# Auto-fill remaining secrets + mirror ./.env → docker/.env, then start
 bash setup.sh start
 ```
 
@@ -125,7 +125,7 @@ your own, any non-placeholder value you write is preserved.
 ## Environment File Structure
 
 **The single source of truth is the root `./.env`.** Edit that file. `setup.sh`
-mirrors it to `docker/compose/.env` (auto-generated — do **not** edit the copy).
+mirrors it to `docker/.env` (auto-generated — do **not** edit the copy).
 
 ```bash
 # Minder Platform - Environment Configuration (root ./.env)
@@ -147,7 +147,7 @@ yourself is preserved.
 ## File Permissions
 
 `setup.sh` sets restrictive permissions (`600`) on both `./.env` and its
-`docker/compose/.env` copy automatically. To verify or set manually:
+`docker/.env` copy automatically. To verify or set manually:
 
 ```bash
 chmod 600 .env
@@ -161,14 +161,14 @@ This ensures owner read+write only; no group or other access.
 
 ## Docker Compose Configuration
 
-Compose reads the mirrored `docker/compose/.env`. Services reference these
+Compose reads the mirrored `docker/.env`. Services reference these
 variables and will fail to start if required secrets are missing. Because the
 root `./.env` is the source of truth, always change values there and re-run
 `setup.sh start` so the mirror is regenerated.
 
 The stack is invoked as:
 ```bash
-docker compose --file docker/compose/docker-compose.yml <command>
+docker compose --file docker/docker-compose.yml <command>
 ```
 
 ---
@@ -209,7 +209,7 @@ All services should show "Up" status.
 ## Secrets Management (Production)
 
 > **Minder's current mechanism is the single root `./.env`** (auto-filled by
-> `setup.sh`, copied to `docker/compose/.env`). There is **one `.env` per machine** —
+> `setup.sh`, copied to `docker/.env`). There is **one `.env` per machine** —
 > no `.env.development`/`.staging`/`.production` layering and no `--env-file` selector.
 > For hardened production you may *optionally* layer one of the external systems below
 > on top; they are forward-looking, not built in.
@@ -256,7 +256,7 @@ stringData:
      `JWT_SECRET=` — `setup.sh` regenerates emptied secret keys on the next start.
    - `setup.sh` backs up `./.env` to `.env.backup-<timestamp>` before any rewrite.
 
-2. **Apply (auto-fills + mirrors `./.env` → `docker/compose/.env`)**
+2. **Apply (auto-fills + mirrors `./.env` → `docker/.env`)**
    ```bash
    ./setup.sh stop
    ./setup.sh start
@@ -289,7 +289,7 @@ If credentials are suspected to be compromised:
 
 3. **Rotate the live database password** (stateful — `./.env` alone won't do it)
    ```bash
-   ./setup.sh start                    # fills ./.env, mirrors to docker/compose/.env
+   ./setup.sh start                    # fills ./.env, mirrors to docker/.env
    ./setup.sh sync-postgres-password   # ALTER USER so the live DB matches ./.env
    ```
 

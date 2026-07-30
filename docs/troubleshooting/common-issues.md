@@ -5,7 +5,7 @@
 
 Common problems and solutions for the Minder platform (development environment, Raspberry
 Pi 4, 31 containers). Services run as Docker containers named `minder-<service>`. Compose is
-at `docker/compose/docker-compose.yml`; the root `./.env` is the single source of truth for
+at `docker/docker-compose.yml`; the root `./.env` is the single source of truth for
 configuration.
 
 For the broader guide, see [troubleshooting.md](troubleshooting.md).
@@ -20,7 +20,7 @@ For the broader guide, see [troubleshooting.md](troubleshooting.md).
 # Check logs
 docker logs minder-<service> --tail 100
 # or
-cd docker/compose && docker compose logs <service>
+cd docker/ && docker compose logs <service>
 ```
 
 Common causes:
@@ -32,7 +32,7 @@ Common causes:
 ### Recreate a service after fixing config
 
 ```bash
-cd docker/compose
+cd docker/
 docker compose up -d --force-recreate <service>
 # or
 bash setup.sh restart <service>
@@ -98,7 +98,7 @@ docker exec -i minder-postgres psql -U minder -d minder < migration.sql
 ### Fresh reset (WARNING: destroys data)
 
 ```bash
-cd docker/compose
+cd docker/
 docker compose down -v
 bash setup.sh start
 ```
@@ -125,11 +125,11 @@ grep REDIS_PASSWORD .env
 docker exec minder-redis redis-cli -a "$REDIS_PASSWORD" ping   # -> PONG
 
 # If needed, restart Redis
-cd docker/compose && docker compose restart redis
+cd docker/ && docker compose restart redis
 docker logs minder-redis --tail 50
 ```
 
-Remember: edit the **root `./.env`**, not `docker/compose/.env` (the latter is regenerated
+Remember: edit the **root `./.env`**, not `docker/.env` (the latter is regenerated
 from the root file by `setup.sh` on every start/restart).
 
 ---
@@ -214,7 +214,7 @@ routed (`exposedByDefault: false`).
 
 ```bash
 docker logs minder-traefik --tail 50
-cd docker/compose && docker compose restart traefik
+cd docker/ && docker compose restart traefik
 ```
 
 Note: Authelia forward-auth is wired on several routers but **Authelia is disabled**, so
@@ -261,7 +261,7 @@ bash setup.sh doctor                    # environment diagnostics
 ### Emergency reset (WARNING: deletes all data)
 
 ```bash
-cd docker/compose
+cd docker/
 docker compose down -v
 docker system prune -a
 bash setup.sh start
