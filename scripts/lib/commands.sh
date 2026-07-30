@@ -607,7 +607,6 @@ cmd_start() {
     validate_gpu_environment
 
     # Phase 4: Validate dynamic configuration
-    validate_access_mode
     validate_ai_compute_mode
     validate_compute_resource_profile
 

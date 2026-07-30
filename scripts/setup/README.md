@@ -75,7 +75,7 @@ scripts.setup`; unknown commands error + print help natively (no delegate).
       without live calls/waits.
 - [x] **`start`** — native (`start.py`); the first orchestration verb — calls the
       ported steps in order: check_prerequisites → prepare_env → validate_gpu →
-      validate_access_mode → validate_ai_compute_mode →
+      validate_ai_compute_mode →
       validate_compute_resource_profile → create_networks → start_services →
       wait_for_services → run_health_checks. Pure sequencing, so it is verified by
       CALL ORDER vs bash cmd_start (`scripts/gate/start_cmd_verify.sh`, which
@@ -224,17 +224,14 @@ Foundation modules (used by the ported verbs; grow as more verbs land):
       ported faithfully but exercised only against real registries. (curl→urllib;
       docker.run gained `quiet=True` to model the pull path's `run … &>/dev/null`.)
 - [x] `preflight` — DONE (`preflight.py`): `check_prerequisites`,
-      `validate_gpu_environment`, `validate_access_mode` +
-      `configure_traefik_access_mode`, `validate_ai_compute_mode`,
+      `validate_gpu_environment`, `validate_ai_compute_mode`,
       `validate_compute_resource_profile`. Verified via
-      `scripts/gate/preflight_verify.sh`: the config validators byte-exact (13
-      cases); check_prerequisites structurally (versions/disk/ports masked;
+      `scripts/gate/preflight_verify.sh`: the config validators byte-exact;
+      check_prerequisites structurally (versions/disk/ports masked;
       openssl/curl advisory dropped — Git-Bash vs native-Windows PATH disagree
       here, agree on the Pi); validate_gpu_environment's no-toolkit CPU-fallback
-      branch (the `docker run --gpus` fails fast — image not found, no pull);
-      validate_access_mode `local` (compares the resulting active traefik-config
-      file set — the real side effect — with the files snapshotted + restored)
-      and `invalid`.
+      branch (the `docker run --gpus` fails fast — image not found, no pull).
+      (The dead Traefik access-mode validator was removed — #25.)
 - [x] `lifecycle` — DONE (`lifecycle.py`): `start_services` (ordered `compose up`
       groups, dry-run-gated; gates the ollama container on the 'internal-ollama'
       profile via OLLAMA_BASE_URL — verified across both ollama branches +
