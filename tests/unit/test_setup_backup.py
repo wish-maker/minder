@@ -1,9 +1,10 @@
-"""Unit tests for backup's incomplete-summary (scripts/setup/backup.py).
+"""Unit tests for backup's incomplete-summary + InfluxDB capture (backup.py).
 
-#177: a RUNNING datastore that isn't captured (export failed, or skipped for a
-missing credential) must no longer read as a clean "Backup complete". The final
-line switches to a loud warn listing what's missing. No Docker: the container
-probes, docker.run, and the un-gated dump/archive helpers are stubbed.
+#177: a RUNNING datastore that isn't captured must no longer read as a clean
+"Backup complete" (loud warn listing what's missing), AND InfluxDB is now
+captured via a token-free raw data-dir snapshot (the v2 `influx backup` CLI is
+absent from influxdb 3-core), so it's no longer silently skipped. No Docker: the
+container probes, docker.run, and the un-gated dump/archive helpers are stubbed.
 """
 
 import pytest
@@ -30,27 +31,41 @@ def stubbed(monkeypatch, tmp_path):
     return warns, succs
 
 
-def test_influx_token_missing_is_loud(monkeypatch, stubbed):
+def test_all_captured_reports_clean_success(stubbed):
+    """Every running store captured (incl. InfluxDB, token-free) → clean success."""
     warns, succs = stubbed
-    monkeypatch.setattr(backup.env, "get", lambda k: "")  # no INFLUXDB_ADMIN_TOKEN
-    rc = backup.run()
-    assert rc == 0  # still non-fatal
-    assert any("Backup complete — NOT captured: InfluxDB" in w for w in warns)
-    assert "Backup complete" not in succs  # not the clean-success form
-
-
-def test_all_captured_reports_clean_success(monkeypatch, stubbed):
-    warns, succs = stubbed
-    monkeypatch.setattr(backup.env, "get", lambda k: "tok")
     rc = backup.run()
     assert rc == 0
     assert "Backup complete" in succs
     assert not any("NOT captured" in w for w in warns)
 
 
+def test_influx_snapshot_is_token_free(monkeypatch, stubbed):
+    """InfluxDB is snapshotted via a raw tar of its data dir — no token lookup,
+    no `influx backup` CLI (#177)."""
+    calls: list[tuple] = []
+    monkeypatch.setattr(backup.docker, "run", lambda *cmd, **k: calls.append(cmd) or 0)
+    backup.run()
+    flat = [" ".join(str(a) for a in c) for c in calls]
+    assert any("/var/lib/influxdb3" in f and "tar" in f for f in flat)
+    assert not any("influx backup" in f or "--token" in f for f in flat)
+
+
+def test_influx_snapshot_failure_is_loud(monkeypatch, stubbed):
+    """A failed InfluxDB snapshot (running store) surfaces in the final line."""
+    warns, succs = stubbed
+
+    def run(*cmd, **k):
+        return 1 if "/var/lib/influxdb3" in cmd else 0
+
+    monkeypatch.setattr(backup.docker, "run", run)
+    rc = backup.run()
+    assert rc == 0
+    assert any("Backup complete — NOT captured: InfluxDB" in w for w in warns)
+
+
 def test_running_store_failure_marked(monkeypatch, stubbed):
     warns, _ = stubbed
-    monkeypatch.setattr(backup.env, "get", lambda k: "tok")  # influx fine
     monkeypatch.setattr(
         backup, "_dump_to_file", lambda *a, **k: False
     )  # postgres fails

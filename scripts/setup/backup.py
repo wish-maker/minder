@@ -1,7 +1,7 @@
 """`backup` verb — ported from scripts/lib/commands.sh cmd_backup (#7, Stage 2).
 
 Full platform backup into `backups/minder-<ts>.tar.gz`: .env + PostgreSQL dump +
-Neo4j dump + InfluxDB backup + Qdrant snapshot + RabbitMQ definitions, then a
+Neo4j dump + InfluxDB snapshot + Qdrant snapshot + RabbitMQ definitions, then a
 gzip archive and a keep-last-7 prune. Faithful to the bash original, including
 WHICH steps go through the dry-run seam and which do not:
 
@@ -24,7 +24,7 @@ import subprocess
 import tarfile
 from pathlib import Path
 
-from . import config, docker, env, log
+from . import config, docker, log
 
 
 def _human_size(nbytes: int) -> str:
@@ -167,41 +167,41 @@ def run() -> int:
     else:
         log.warn("Neo4j not running — skipped")
 
-    # ── InfluxDB (dry-run-gated; exec quiet like bash's `&>/dev/null`) ────
+    # ── InfluxDB (raw data-dir snapshot; #177) ────────────────────────────
+    # influxdb 3-core ships NO backup CLI: the v2 `influx backup` binary isn't in
+    # the image ("influx: not found") and `influxdb3` has no backup subcommand, so
+    # the only supported — and token-free — backup is a file snapshot of the data
+    # dir (/var/lib/influxdb3 → parquet + WAL). Mirrors the Qdrant snapshot below.
+    # (Previously this ran `influx backup --token`, dead code that also silently
+    # skipped the whole store when INFLUXDB_ADMIN_TOKEN was unset — dev default.)
     if docker.container_running("influxdb"):
-        log.spinner_start("Backing up InfluxDB…")
-        influx_token = env.get("INFLUXDB_ADMIN_TOKEN")
-        if influx_token:
-            iname = docker.container_name("influxdb")
-            # bash: `run docker exec … influx backup … &>/dev/null` → run()'s echo is
-            # sent to /dev/null (quiet=True), so only the following `run docker cp`
-            # (un-quiet) prints its [dry-run] line to the console.
-            if (
-                docker.run(
-                    "docker",
-                    "exec",
-                    iname,
-                    "influx",
-                    "backup",
-                    "/tmp/influx-backup",
-                    "--token",
-                    influx_token,
-                    quiet=True,
-                )
-                == 0
-            ):
-                docker.run(
-                    "docker", "cp", f"{iname}:/tmp/influx-backup", f"{dest}/influxdb/"
-                )
-                log.spinner_stop()
-                log.success("InfluxDB backed up")
-            else:
-                log.spinner_stop()
-                log.warn("InfluxDB backup failed")
-                skipped.append("InfluxDB")
+        log.spinner_start("Snapshotting InfluxDB storage…")
+        iname = docker.container_name("influxdb")
+        influx_tar = dest / "influxdb.tar.gz"
+        if (
+            docker.run(
+                "docker",
+                "exec",
+                iname,
+                "tar",
+                "czf",
+                "/tmp/influxdb-backup.tar.gz",
+                "/var/lib/influxdb3",
+            )
+            == 0
+            and docker.run(
+                "docker",
+                "cp",
+                f"{iname}:/tmp/influxdb-backup.tar.gz",
+                f"{dest}/influxdb.tar.gz",
+            )
+            == 0
+        ):
+            log.spinner_stop()
+            log.success(f"InfluxDB  ({_du_sh(influx_tar)})")
         else:
             log.spinner_stop()
-            log.warn("INFLUXDB_ADMIN_TOKEN not set — skipping InfluxDB backup")
+            log.warn("InfluxDB snapshot failed")
             skipped.append("InfluxDB")
     else:
         log.warn("InfluxDB not running — skipped")

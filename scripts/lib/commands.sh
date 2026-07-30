@@ -154,21 +154,18 @@ cmd_backup() {
         log_warn "Neo4j not running — skipped"
     fi
 
+    # influxdb 3-core has NO backup CLI (v2 `influx` binary absent, `influxdb3` has
+    # no backup subcommand) → snapshot the data dir directly, token-free (#177).
     if container_running influxdb; then
-        spinner_start "Backing up InfluxDB…"
-        local influx_token; influx_token="$(_env_get INFLUXDB_ADMIN_TOKEN)"
-        if [[ -n "$influx_token" ]]; then
-            if run docker exec "$(container_name influxdb)" \
-                   influx backup /tmp/influx-backup \
-                   --token "$influx_token" &>/dev/null 2>&1; then
-                run docker cp "$(container_name influxdb):/tmp/influx-backup" "${dest}/influxdb/"
-                spinner_stop; log_success "InfluxDB backed up"
-            else
-                spinner_stop; log_warn "InfluxDB backup failed"
-                skipped="${skipped:+$skipped, }InfluxDB"
-            fi
+        spinner_start "Snapshotting InfluxDB storage…"
+        if run docker exec "$(container_name influxdb)" \
+               tar czf /tmp/influxdb-backup.tar.gz /var/lib/influxdb3 2>/dev/null && \
+           run docker cp "$(container_name influxdb):/tmp/influxdb-backup.tar.gz" \
+               "${dest}/influxdb.tar.gz"; then
+            spinner_stop
+            log_success "InfluxDB  ($(du -sh "${dest}/influxdb.tar.gz" | cut -f1))"
         else
-            spinner_stop; log_warn "INFLUXDB_ADMIN_TOKEN not set — skipping InfluxDB backup"
+            spinner_stop; log_warn "InfluxDB snapshot failed"
             skipped="${skipped:+$skipped, }InfluxDB"
         fi
     else
@@ -337,6 +334,15 @@ cmd_restore() {
         spinner_stop
         (( neo4j_ok )) && log_success "Neo4j restored" \
                        || log_warn "Neo4j restore had errors"
+    fi
+
+    # InfluxDB raw data-dir snapshot restore (#177), symmetric to the backup.
+    if [[ -f "${restore_dir}/influxdb.tar.gz" ]] && container_running influxdb; then
+        spinner_start "Restoring InfluxDB…"
+        local i_cname; i_cname="$(container_name influxdb)"
+        run docker cp "${restore_dir}/influxdb.tar.gz" "${i_cname}:/tmp/influxdb.tar.gz"
+        run docker exec "$i_cname" tar xzf /tmp/influxdb.tar.gz -C /
+        spinner_stop; log_success "InfluxDB restored"
     fi
 
     if [[ -f "${restore_dir}/qdrant.tar.gz" ]] && container_running qdrant; then
