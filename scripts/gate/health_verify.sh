@@ -42,6 +42,7 @@ jnorm() { sed -E -e 's/.*\r//' -e 's/\x1b\[[0-9;]*[A-Za-z]//g' \
                  -e 's/"status":"[^"]*"/"status":"S"/g' \
                  -e 's/"url":"[^"]*"/"url":"U"/g' \
                  -e 's/"ok": [0-9]+/"ok": N/' -e 's/"warn": [0-9]+/"warn": N/' \
+                 -e 's/"error": [0-9]+/"error": N/' \
                  -e '/Script exited unexpectedly/d' -e '/Full log:/d'; }
 
 FAIL=0

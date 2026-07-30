@@ -80,17 +80,23 @@ run_health_checks() {
         [[ -v "SERVICE_PORTS[$svc]" ]] && _check_endpoint "$svc" "${SERVICE_PORTS[$svc]}"
     done
 
-    local ok_count=0 warn_count=0
+    local ok_count=0 warn_count=0 error_count=0
     for r in "${results[@]}"; do
-        [[ "$r" == *":ok:"*   ]] && ok_count=$(( ok_count + 1 ))
-        [[ "$r" == *":warn:"* ]] && warn_count=$(( warn_count + 1 ))
+        [[ "$r" == *":ok:"*    ]] && ok_count=$(( ok_count + 1 ))
+        [[ "$r" == *":warn:"*  ]] && warn_count=$(( warn_count + 1 ))
+        [[ "$r" == *":error:"* ]] && error_count=$(( error_count + 1 ))
     done
+    # A service whose container isn't running (status "error") is a HARD failure, not
+    # a transient "still starting" — it won't heal on its own (#197). Count it so the
+    # summary/exposed signal can't say 🎉 over a down service.
+    local unhealthy=$(( warn_count + error_count ))
 
     if [[ "$json_mode" == true ]]; then
         echo "{"
         echo "  \"timestamp\": \"$(date -u +%FT%TZ)\","
         echo "  \"ok\": ${ok_count},"
         echo "  \"warn\": ${warn_count},"
+        echo "  \"error\": ${error_count},"
         echo "  \"services\": ["
         local first=true
         for r in "${results[@]}"; do
@@ -102,18 +108,25 @@ run_health_checks() {
         echo ""
         echo "  ]"
         echo "}"
-        HEALTH_WARN_COUNT=$warn_count   # expose for cmd_install (return stays 0 → set -e safe)
+        HEALTH_UNHEALTHY_COUNT=$unhealthy   # expose for cmd_install (return stays 0 → set -e safe)
         return
     fi
 
     echo ""
-    if (( warn_count == 0 )); then
+    if (( unhealthy == 0 )); then
         log_success "${ok_count}/${#results[@]} endpoints healthy 🎉"
     else
-        log_warn "${ok_count}/${#results[@]} endpoints reachable — ${warn_count} still starting"
+        # Distinguish "down" (error) from "still starting" (warn).
+        local parts=""
+        (( error_count > 0 )) && parts="${error_count} not running"
+        if (( warn_count > 0 )); then
+            [[ -n "$parts" ]] && parts="${parts}, "
+            parts="${parts}${warn_count} still starting"
+        fi
+        log_warn "${ok_count}/${#results[@]} endpoints healthy — ${parts}"
         log_detail "Re-check: ./${SCRIPT_NAME} status"
     fi
-    HEALTH_WARN_COUNT=$warn_count   # expose for cmd_install (return stays 0 → set -e safe)
+    HEALTH_UNHEALTHY_COUNT=$unhealthy   # expose for cmd_install (return stays 0 → set -e safe)
 }
 
 # ─────────────────────────────────────────────────────────────

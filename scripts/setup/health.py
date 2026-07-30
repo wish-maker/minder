@@ -137,6 +137,12 @@ def run_health_checks(json_mode: bool = False) -> int:
 
     ok_count = sum(1 for _, s, _ in results if s == "ok")
     warn_count = sum(1 for _, s, _ in results if s == "warn")
+    # A service whose container isn't running (status "error") is a HARD failure,
+    # not a transient "still starting" — it won't heal on its own (#197: a heavy
+    # install could leave a depends_on service "Created", yet the summary said 🎉
+    # and the exit signalled clean because errors were never counted). Surface it.
+    error_count = sum(1 for _, s, _ in results if s == "error")
+    unhealthy = warn_count + error_count
 
     if json_mode:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -144,6 +150,7 @@ def run_health_checks(json_mode: bool = False) -> int:
         log._emit(f'  "timestamp": "{ts}",')
         log._emit(f'  "ok": {ok_count},')
         log._emit(f'  "warn": {warn_count},')
+        log._emit(f'  "error": {error_count},')
         log._emit('  "services": [')
         n = len(results)
         for i, (name, status, url) in enumerate(results):
@@ -151,17 +158,22 @@ def run_health_checks(json_mode: bool = False) -> int:
             log._emit(f'    {{"name":"{name}","status":"{status}","url":"{url}"}}{sep}')
         log._emit("  ]")
         log._emit("}")
-        return warn_count
+        return unhealthy
 
     log._emit("")
-    if warn_count == 0:
+    if unhealthy == 0:
         log.success(f"{ok_count}/{len(results)} endpoints healthy 🎉")
     else:
-        log.warn(
-            f"{ok_count}/{len(results)} endpoints reachable — {warn_count} still starting"
-        )
+        # Distinguish "down" (error) from "still starting" (warn) — the former is
+        # actionable now, the latter may just need another moment.
+        parts = []
+        if error_count:
+            parts.append(f"{error_count} not running")
+        if warn_count:
+            parts.append(f"{warn_count} still starting")
+        log.warn(f"{ok_count}/{len(results)} endpoints healthy — {', '.join(parts)}")
         log.detail(f"Re-check: ./{config.SCRIPT_NAME} status")
-    return warn_count
+    return unhealthy
 
 
 def download_ollama_models() -> None:
