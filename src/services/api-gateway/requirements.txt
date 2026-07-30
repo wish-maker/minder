@@ -1,7 +1,7 @@
 # API Gateway Dependencies
 # FastAPI framework and server
-fastapi==0.139.2
-uvicorn==0.51.0
+fastapi==0.141.1
+uvicorn==0.52.0
 pydantic==2.13.4
 pydantic-settings==2.14.2
 
@@ -17,13 +17,13 @@ python-multipart==0.0.32
 asyncpg==0.31.0
 
 # Redis integration
-redis==8.0.1
+redis==8.1.0
 
 # Rate limiting
 slowapi==0.1.10
 
 # Monitoring and logging
-prometheus-client==0.25.0
+prometheus-client==0.26.0
 opentelemetry-api==1.44.0
 opentelemetry-sdk==1.44.0
 opentelemetry-instrumentation-fastapi==0.65b0

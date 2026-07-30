@@ -1,9 +1,9 @@
 # Core Application Requirements
-fastapi==0.139.2
+fastapi==0.141.1
 pydantic==2.13.4
 httpx==0.28.1
 asyncpg==0.31.0
-redis==8.0.1
+redis==8.1.0
 
 # AI/ML Libraries
 ollama==0.6.2
@@ -11,7 +11,7 @@ qdrant-client==1.18.0
 neo4j==6.2.0
 
 # Server
-uvicorn==0.51.0
+uvicorn==0.52.0
 
 # Configuration & Settings
 pydantic-settings==2.14.2
@@ -22,7 +22,7 @@ python-multipart==0.0.32
 python-jose[cryptography]==3.5.0
 
 # Monitoring
-prometheus-client==0.25.0
+prometheus-client==0.26.0
 
 # Database
 psycopg2-binary==2.9.12
@@ -38,7 +38,7 @@ requests==2.34.2
 
 # System & Performance Testing
 psutil==7.2.2
-locust==2.46.1
+locust==2.46.2
 
 # Password Hashing
 passlib[bcrypt]==1.7.4
