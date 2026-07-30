@@ -29,11 +29,13 @@ run_health_checks() {
             return
         fi
 
-        # Use docker exec for health checks (works with internal networks)
-        local internal_url="http://localhost:${port}${health_path}"
         # Add slash between port and path if needed
         [[ "$health_path" != /* ]] && health_path="/${health_path}"
         local display_url="http://${server_ip}:${port}${health_path}"
+        # Probe 127.0.0.1, not server_ip: host ports are bound to loopback (#190 —
+        # nothing bypasses the Traefik/Authelia front door). display_url stays
+        # server_ip for the report.
+        local internal_url="http://127.0.0.1:${port}${health_path}"
 
         # Special case for InfluxDB v3 (requires auth for HTTP endpoints)
         if [[ "$name" == "influxdb" ]]; then
@@ -48,7 +50,7 @@ run_health_checks() {
         fi
 
         # Use direct HTTP request from host (more reliable than docker exec)
-        if curl -sf --max-time 3 "$display_url" &>/dev/null; then
+        if curl -sf --max-time 3 "$internal_url" &>/dev/null; then
             results+=("${name}:ok:${display_url}")
             [[ "$json_mode" == false ]] && echo -e "  ${GREEN}✓${NC} ${name}  ${DIM}${display_url}${NC}"
         else
