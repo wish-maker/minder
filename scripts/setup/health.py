@@ -68,6 +68,11 @@ def run_health_checks(json_mode: bool = False) -> int:
         if not health_path.startswith("/"):
             health_path = "/" + health_path
         display_url = f"http://{server_ip}:{port}{health_path}"
+        # Probe 127.0.0.1, not server_ip: host port maps are bound to 127.0.0.1
+        # (#190 — nothing bypasses the Traefik/Authelia front door), so the loopback
+        # is where they answer. display_url stays server_ip for the report; matches
+        # the influxdb TCP-check precedent just below.
+        check_url = f"http://127.0.0.1:{port}{health_path}"
 
         # InfluxDB v3 needs auth for HTTP endpoints → a plain TCP port check.
         if name == "influxdb":
@@ -86,7 +91,7 @@ def run_health_checks(json_mode: bool = False) -> int:
                     _warn_line(name, display_url)
             return
 
-        if _http_ok(display_url):
+        if _http_ok(check_url):
             results.append((name, "ok", display_url))
             if not json_mode:
                 if log._colors_on():

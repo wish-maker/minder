@@ -399,7 +399,7 @@ services:
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8000:8000"
+    - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -525,7 +525,7 @@ services:
     - /var/run/docker.sock:/var/run/docker.sock:rw
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8001:8001"
+    - "127.0.0.1:8001:8001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -571,7 +571,7 @@ services:
     # Note: DEFAULT_PLUGINS_CONFIG not set - will use empty default
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8003:8003"
+    - "127.0.0.1:8003:8003"
     depends_on:
       postgres:
         condition: service_healthy
@@ -620,7 +620,7 @@ services:
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8004:8004"
+    - "127.0.0.1:8004:8004"
     depends_on:
       qdrant:
         condition: service_healthy
@@ -668,7 +668,7 @@ services:
     - docker_models_cache:/app/model-cache
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8005:8005"
+    - "127.0.0.1:8005:8005"
     depends_on:
       postgres:
         condition: service_healthy
@@ -715,7 +715,7 @@ services:
     - influxdb_data:/var/lib/influxdb3
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
-    - 8086:8086
+    - 127.0.0.1:8086:8086
     healthcheck:
       test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/127.0.0.1/8086' || exit 1"]
       interval: 30s
@@ -784,7 +784,7 @@ services:
     - docker_prometheus_data:/prometheus
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
-    - 9090:9090
+    - 127.0.0.1:9090:9090
     healthcheck:
       test:
       - CMD
@@ -817,7 +817,7 @@ services:
     - docker_alertmanager_data:/alertmanager
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
-    - 9093:9093
+    - 127.0.0.1:9093:9093
     healthcheck:
       test:
       - CMD-SHELL
@@ -849,7 +849,7 @@ services:
     - ../services/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     # PILLAR 4: Expose for LAN access (via Traefik with Authelia in production)
     ports:
-    - 3000:3000
+    - 127.0.0.1:3000:3000
     healthcheck:
       test:
       - CMD-SHELL
@@ -955,7 +955,7 @@ services:
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8002:8002"
+    - "127.0.0.1:8002:8002"
     depends_on:
       postgres:
         condition: service_healthy
@@ -1006,7 +1006,7 @@ services:
     shm_size: '8gb'
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8006:8006"
+    - "127.0.0.1:8006:8006"
     healthcheck:
       test:
       - CMD
@@ -1040,7 +1040,7 @@ services:
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
-    - "8008:8008"
+    - "127.0.0.1:8008:8008"
     depends_on:
       neo4j:
         condition: service_healthy
@@ -1225,12 +1225,12 @@ services:
     - SPAN_STORAGE_TYPE=memory
     - COLLECTOR_ZIPKIN_HOST_PORT=:9411
     ports:
-    - "16686:16686"  # Jaeger UI
-    - "14250:14250"  # OTLP gRPC
-    - "14268:14268"  # HTTP Thrift
-    - "9411:9411"    # Zipkin compact Thrift
-    - "4317:4317"    # OTLP gRPC (legacy)
-    - "4318:4318"    # OTLP HTTP (legacy)
+    - "127.0.0.1:16686:16686"  # Jaeger UI
+    - "127.0.0.1:14250:14250"  # OTLP gRPC
+    - "127.0.0.1:14268:14268"  # HTTP Thrift
+    - "127.0.0.1:9411:9411"    # Zipkin compact Thrift
+    - "127.0.0.1:4317:4317"    # OTLP gRPC (legacy)
+    - "127.0.0.1:4318:4318"    # OTLP HTTP (legacy)
     healthcheck:
       test:
       - CMD
@@ -1266,9 +1266,9 @@ services:
     - ../services/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     - docker_otel-collector-data:/etc/otelcol
     ports:
-    - "14317:4317"   # OTLP gRPC receiver (changed to avoid conflict with Jaeger)
-    - "14318:4318"   # OTLP HTTP receiver (changed to avoid conflict with Jaeger)
-    - "18888:8888"   # Prometheus metrics (changed to avoid conflicts)
+    - "127.0.0.1:14317:4317"   # OTLP gRPC receiver (changed to avoid conflict with Jaeger)
+    - "127.0.0.1:14318:4318"   # OTLP HTTP receiver (changed to avoid conflict with Jaeger)
+    - "127.0.0.1:18888:8888"   # Prometheus metrics (changed to avoid conflicts)
     # NOTE: No healthcheck - image lacks nc for CMD-based check (config validates on startup)
     depends_on:
       jaeger:
