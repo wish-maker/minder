@@ -13,6 +13,7 @@ from scripts.setup import bundles
 EXPECTED = {
     "core": {
         "traefik",
+        "authelia",
         "postgres",
         "redis",
         "rabbitmq",

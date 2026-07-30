@@ -78,7 +78,7 @@ The claim graph has three sources, merged into one `service → claimants` map:
 
 | Bundle | Services | Default |
 |--------|----------|---------|
-| **core** (always-on) | traefik, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry | ON (mandatory) |
+| **core** (always-on) | traefik, authelia, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry | ON (mandatory) |
 | **monitoring** | influxdb, telegraf, prometheus, grafana, alertmanager, jaeger, otel-collector, postgres-exporter, redis-exporter, rabbitmq-exporter, node-exporter, cadvisor, blackbox-exporter | **OFF** |
 | **inference** | ollama, model-management | ON |
 | **rag** | rag-pipeline, qdrant, ollama | ON |
@@ -89,9 +89,8 @@ The claim graph has three sources, merged into one `service → claimants` map:
 > The map above is `bundles.BUNDLES`, now **derived at load time from the
 > `minder.bundle=<comma-list>` Compose labels** on each service (single source of truth,
 > #65 item 3) — no hardcoded map. A unit test pins the derived map to this reviewed
-> spec. **authelia**
-> is NOT in the claim map yet (it's disabled — issue #15); the design intent is for it
-> to join `core` when #15 re-enables it. `rag`/`chat` share `ollama` (and `chat` shares
+> spec. **authelia** joined `core` when #15 wired it (forward-auth on 5 routers).
+> `rag`/`chat` share `ollama` (and `chat` shares
 > `rag-pipeline`) so the refcount can't orphan a service another enabled bundle needs.
 
 Notes:

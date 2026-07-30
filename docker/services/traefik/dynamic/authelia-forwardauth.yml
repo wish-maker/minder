@@ -13,7 +13,7 @@ http:
   middlewares:
     authelia-forwardauth:
       forwardAuth:
-        address: "http://authelia:9091/api/verify?rd=https://auth.minder.local"
+        address: "http://authelia:9091/api/verify?rd=https://authelia.minder.local"
         trustForwardHeader: true
         authResponseHeaders:
           - "Remote-User"

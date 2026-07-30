@@ -67,7 +67,7 @@ MONITORING_NETWORK_NAME = "minder-monitoring"
 # Service groups, in startup order (config.sh SERVICE DEFINITIONS block).
 # ollama is intentionally absent — it is gated by the compose 'internal-ollama'
 # profile, activated by start_services only in internal mode (see lifecycle.py).
-SECURITY_SERVICES = ("traefik",)
+SECURITY_SERVICES = ("traefik", "authelia")
 CORE_SERVICES = (
     "postgres",
     "redis",
@@ -117,7 +117,8 @@ EXTRA_DATABASES = (
 # Per-image version-resolution metadata "stable_prefix|constraint" (config.sh
 # THIRD_PARTY_IMAGE_META). The pinned VERSION lives only in docker-compose.yml;
 # versions.third_party_image_specs() joins each 3rd-party compose image with this.
-# (authelia stays commented out, matching config.sh, until it returns.)
+# (authelia is enabled + core now (#15) but stays pinned in compose — not yet
+# smart-resolved here; add an "authelia/authelia" spec to version-track it.)
 THIRD_PARTY_IMAGE_META = {
     "postgres": "18|none",
     "redis": "8|none",
@@ -146,7 +147,7 @@ THIRD_PARTY_IMAGE_META = {
 
 # Health endpoints "port[/path]" (config.sh SERVICE_PORTS). Only services with an
 # entry are health-checked. Path defaults to /health when the value is bare port.
-# (openwebui/rabbitmq are Traefik-only → intentionally absent; authelia disabled.)
+# (openwebui/rabbitmq/authelia are Traefik-only (no host port) → intentionally absent.)
 SERVICE_PORTS = {
     "api-gateway": "8000/health",
     "plugin-registry": "8001/health",

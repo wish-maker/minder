@@ -28,7 +28,8 @@ declare -A SECRET_SPEC=(
     [NEO4J_AUTH]="16:neo4j/"
     [INFLUXDB_TOKEN]=40
     [AUTHELIA_STORAGE_ENCRYPTION_KEY]=32
-    [AUTHELIA_JWT_SECRET]=32
+    [AUTHELIA_SESSION_SECRET]=32
+    [AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET]=32
     [GRAFANA_PASSWORD]=32
     [WEBUI_SECRET_KEY]=32
 )
@@ -105,7 +106,8 @@ INFLUXDB_BUCKET=metrics
 
 # ── Authelia ─────────────────────────────────────────────────
 AUTHELIA_STORAGE_ENCRYPTION_KEY=$(gen_secret 32)
-AUTHELIA_JWT_SECRET=$(gen_secret 32)
+AUTHELIA_SESSION_SECRET=$(gen_secret 32)
+AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=$(gen_secret 32)
 
 # ── Grafana ──────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin
