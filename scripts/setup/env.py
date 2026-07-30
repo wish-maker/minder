@@ -115,6 +115,29 @@ def sync_telegraf_config() -> None:
     runtime.write_bytes(body)
 
 
+def ensure_bundles_state_file() -> None:
+    """Seed an empty ``bundles.state.json`` (``{}`` → everything enabled, the default)
+    when it is absent, so it can be bind-mounted RW into the registry for the mutating
+    bundle endpoints (#65 item-2). Like sync_telegraf_config it MUST run before
+    ``compose up`` — a missing bind-mount source becomes a docker-created empty
+    DIRECTORY (the bind-mount footgun). Mode 0666 because the registry runs as a
+    non-root appuser and must be able to write it (secret-free by design — only bundle
+    on/off flags). Seed-if-absent: never clobbers host- or API-written enable-state,
+    and ``{}`` is behaviour-identical to an absent file so it stays gate-neutral."""
+    state = config.BUNDLES_STATE
+    try:
+        if not state.exists():
+            state.parent.mkdir(parents=True, exist_ok=True)
+            state.write_text("{}\n", encoding="utf-8")
+        # Ensure 0666 whether we just created it OR it already exists (the host CLI
+        # writes it 0644, and the file is bind-mounted into the non-root registry
+        # which must write it back). write_text truncates in place → the mode sticks.
+        # Runs before every `up`, so it self-heals after a CLI write. Secret-free.
+        state.chmod(0o666)
+    except OSError:
+        pass
+
+
 def _chmod_600(path: Path) -> None:
     try:
         path.chmod(0o600)
@@ -367,3 +390,4 @@ def prepare_env() -> None:
     _chmod_600(ENV_FILE)
     sync_compose_env()
     sync_telegraf_config()
+    ensure_bundles_state_file()
