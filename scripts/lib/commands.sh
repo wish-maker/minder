@@ -753,10 +753,11 @@ cmd_install() {
     progress_next "Running migrations";        cmd_migrate "head"
     progress_next "Health checks";             run_health_checks
 
-    # Don't let the banner imply "all good" when it isn't (HEALTH_WARN_COUNT set by
-    # run_health_checks; return stays 0 so set -e doesn't abort).
-    if (( ${HEALTH_WARN_COUNT:-0} > 0 )); then
-        log_warn "Install finished, but ${HEALTH_WARN_COUNT} endpoint(s) are not yet healthy — the platform may not be fully ready."
+    # Don't let the banner imply "all good" when it isn't (HEALTH_UNHEALTHY_COUNT set
+    # by run_health_checks; return stays 0 so set -e doesn't abort). Counts both
+    # still-starting AND not-running services (#197).
+    if (( ${HEALTH_UNHEALTHY_COUNT:-0} > 0 )); then
+        log_warn "Install finished, but ${HEALTH_UNHEALTHY_COUNT} endpoint(s) are not healthy — the platform may not be fully ready."
         log_detail "Re-check with: ./${SCRIPT_NAME} status"
     fi
 
