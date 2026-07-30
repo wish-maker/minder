@@ -20,7 +20,7 @@ services:
   # ==========================================================================
 
   traefik:
-    image: traefik:v3.7.8
+    image: traefik:v3.7.9
     container_name: minder-traefik
     restart: on-failure
     command:
@@ -139,7 +139,7 @@ services:
   redis:
     labels:
     - minder.bundle=core
-    image: redis:8.8.0-alpine
+    image: redis:8.8.1-alpine
     container_name: minder-redis
     restart: on-failure
     environment:
@@ -161,7 +161,7 @@ services:
     networks:
     - minder-network
   rabbitmq:
-    image: rabbitmq:4.3.2-management
+    image: rabbitmq:4.3.4-management
     container_name: minder-rabbitmq
     hostname: rabbitmq
     restart: on-failure
@@ -264,7 +264,7 @@ services:
   ollama:
     labels:
     - minder.bundle=inference,rag,chat
-    image: ollama/ollama:0.32.1
+    image: ollama/ollama:0.32.5
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
@@ -736,7 +736,7 @@ services:
   telegraf:
     labels:
     - minder.bundle=monitoring
-    image: telegraf:1.39.1
+    image: telegraf:1.39.2
     container_name: minder-telegraf
     restart: on-failure
     volumes:
@@ -1097,7 +1097,7 @@ services:
   redis-exporter:
     labels:
     - minder.bundle=monitoring
-    image: oliver006/redis_exporter:v1.87.0
+    image: oliver006/redis_exporter:v1.88.0
     container_name: minder-redis-exporter
     restart: on-failure
     environment:
@@ -1267,7 +1267,7 @@ services:
   otel-collector:
     labels:
     - minder.bundle=monitoring
-    image: otel/opentelemetry-collector:0.156.0
+    image: otel/opentelemetry-collector:0.157.0
     container_name: minder-otel-collector
     restart: on-failure
     command:
