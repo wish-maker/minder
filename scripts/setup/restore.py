@@ -1,7 +1,8 @@
 """`restore` verb — ported from scripts/lib/commands.sh cmd_restore (#7, Stage 2).
 
-`restore [archive]` — restore .env + PostgreSQL + Qdrant + RabbitMQ definitions
-from a `backups/minder-<ts>.tar.gz` produced by `backup`. With no argument it
+`restore [archive]` — restore .env + PostgreSQL + Neo4j + InfluxDB + Qdrant +
+RabbitMQ definitions from a `backups/minder-<ts>.tar.gz` produced by `backup`.
+With no argument it
 lists the available archives (interactive pick), else it errors non-interactively.
 
 DRY_RUN (#55, fixed): the restore steps MUTATE live data, so they are now gated —
@@ -218,6 +219,29 @@ def run(archive: str = "") -> int:
             log.success("Neo4j restored")
         else:
             log.warn("Neo4j restore had errors")
+
+    # ── InfluxDB (raw data-dir snapshot restore; #177) ────────────────────
+    # Symmetric to the backup snapshot: copy the tar in and extract to / so
+    # /var/lib/influxdb3 is repopulated. Restart influxdb afterwards (the start
+    # step the final message points to) so it re-opens the restored data dir.
+    if (
+        restore_dir
+        and (restore_dir / "influxdb.tar.gz").is_file()
+        and docker.container_running("influxdb")
+    ):
+        log.spinner_start("Restoring InfluxDB…")
+        iname = docker.container_name("influxdb")
+        docker.run(
+            "docker",
+            "cp",
+            str(restore_dir / "influxdb.tar.gz"),
+            f"{iname}:/tmp/influxdb.tar.gz",
+        )
+        docker.run(
+            "docker", "exec", iname, "tar", "xzf", "/tmp/influxdb.tar.gz", "-C", "/"
+        )
+        log.spinner_stop()
+        log.success("InfluxDB restored")
 
     # ── Qdrant (#56: copy in AND extract the same /tmp/qdrant.tar.gz) ──────
     if (
