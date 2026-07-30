@@ -11,8 +11,9 @@ Monitoring and observability for the Minder Platform.
 
 ## Observability Stack
 
-The platform ships a full observability stack. Only the services listed with a
-**host port** are reachable from the Pi's network; everything else is internal-only.
+The platform ships a full observability stack. The services listed with a **host port**
+are bound to `127.0.0.1` (#190) — reachable on the host (`http://localhost:<port>`) but
+not from other machines; everything else is internal-only. External access is via Traefik.
 
 | Component | Container | Image | Host Port | Role |
 |---|---|---|---|---|

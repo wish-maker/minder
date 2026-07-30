@@ -11,25 +11,30 @@
 Minder runs 31 containers behind **Traefik v3** (reverse proxy, TLS, routing via Docker
 labels). This guide describes how services are exposed and how to reach them.
 
-> **Reality check.** This is a development environment.
-> - **Authelia SSO is DISABLED** (its container is commented out in compose). The Traefik
->   forward-auth middleware is wired on a few routers but **not enforced** — there is no
->   working SSO gate right now.
-> - A number of application and observability services **publish host ports directly on the
->   host** (see the map below). They are not all locked behind the proxy.
-> - The API Gateway implements its own JWT auth; the other core services do not gate access.
+> **Reality check.**
+> - **Authelia SSO is ENABLED** (#15) — the Traefik forward-auth middleware enforces it on
+>   5 routers (minio, api-gateway, grafana, openwebui, jaeger): an unauthenticated request
+>   → **302 to the Authelia portal**. Full browser SSO still needs real DNS + TLS on the
+>   deploy (see #15 "C").
+> - Non-Traefik host ports are bound to **`127.0.0.1`** (#190): reachable ON the host
+>   (`http://localhost:<port>`, for ops/health) but **NOT from other machines** — external
+>   access is Traefik-only (`:80`/`:443`, Authelia-gated; the `:8081` dashboard stays
+>   LAN/IP-whitelisted).
+> - The API Gateway also enforces JWT for writes (#47); the other core services are internal.
 
 Access falls into three categories:
-1. **Host-exposed** — reachable directly at `http://localhost:<port>`.
-2. **Traefik-routed** — reachable via `*.minder.local` virtual hosts through ports 80/443.
+1. **Loopback (127.0.0.1)** — reachable on the host at `http://localhost:<port>` (ops/health), not from other machines (#190).
+2. **Traefik-routed** — reachable via `*.minder.local` virtual hosts through ports 80/443 (Authelia-gated).
 3. **Internal-only** — reachable only from inside the Docker network (or via a Traefik route
    where one exists).
 
 ---
 
-## Host-Exposed Services
+## Loopback (127.0.0.1) Services
 
-These publish a host port and can be reached directly at `http://localhost:<port>`.
+These publish a host port bound to `127.0.0.1` (#190) — reachable ON the host at
+`http://localhost:<port>` (ops/health), not from other machines. External users reach
+them through Traefik (Authelia-gated) where a route exists.
 
 ### Core API (FastAPI, all with `/docs`)
 
@@ -81,8 +86,9 @@ Traefik routes selected services on `*.minder.local` virtual hosts (via ports 80
 | `neo4j.minder.local` | Neo4j browser (7474), IP-whitelisted |
 | `api.minder.local` | API Gateway |
 
-The forward-auth middleware references Authelia on some of these routers, but since Authelia
-is disabled the middleware does **not** currently gate access.
+The forward-auth middleware enforces Authelia on these routers (#15/#185): an
+unauthenticated request is 302-redirected to the Authelia portal. Because the service
+host ports are loopback-only (#190), there is no direct-port bypass either.
 
 To use `.minder.local` hostnames locally, add them to your `/etc/hosts` pointing at the
 Traefik host.
