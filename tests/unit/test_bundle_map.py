@@ -14,6 +14,7 @@ EXPECTED = {
     "core": {
         "traefik",
         "authelia",
+        "docker-socket-proxy",
         "postgres",
         "redis",
         "rabbitmq",
