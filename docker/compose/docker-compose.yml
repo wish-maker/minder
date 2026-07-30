@@ -99,6 +99,11 @@ services:
     - minder.bundle=core
     - traefik.enable=true
     - traefik.http.routers.authelia.rule=Host(`authelia.minder.local`)
+    # Priority above api-gateway's `… || PathPrefix(/api)` rule so the portal's own
+    # /api/* (firstfactor, verify, …) always routes to Authelia — otherwise the
+    # broad PathPrefix(/api) hijacks authelia.minder.local/api/firstfactor and
+    # forward-auths the LOGIN endpoint → 401, login impossible (#15).
+    - traefik.http.routers.authelia.priority=100
     - traefik.http.routers.authelia.service=authelia
     - traefik.http.routers.authelia.entrypoints=websecure
     - traefik.http.services.authelia.loadbalancer.server.port=9091
