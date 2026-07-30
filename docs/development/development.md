@@ -72,7 +72,7 @@ cd minder
 cp .env.example .env
 
 # Start everything (setup.sh auto-fills any CHANGEME secret with a secure random
-# value, then mirrors ./.env → docker/compose/.env and brings the stack up)
+# value, then mirrors ./.env → docker/.env and brings the stack up)
 bash setup.sh start
 
 # Check status
@@ -82,7 +82,7 @@ bash setup.sh status
 ### Environment Configuration
 
 The **root `./.env` is the single source of truth**. `setup.sh` mirrors it to
-`docker/compose/.env` (auto-generated — do **not** edit that copy). You do not need to
+`docker/.env` (auto-generated — do **not** edit that copy). You do not need to
 generate secrets by hand: `setup.sh` fills every `CHANGEME` placeholder with a secure
 random value on install/start/restart and leaves any value you set yourself untouched.
 
@@ -117,7 +117,7 @@ bash setup.sh shell <svc>    # shell into a service container
 Under the hood, Compose is invoked as:
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml <command>
+docker compose --file docker/docker-compose.yml <command>
 ```
 
 ### Bringing up individual services (advanced)
@@ -126,8 +126,8 @@ docker compose --file docker/compose/docker-compose.yml <command>
 compose file directly:
 
 ```bash
-docker compose -f docker/compose/docker-compose.yml up -d postgres redis qdrant neo4j
-docker compose -f docker/compose/docker-compose.yml up -d api-gateway rag-pipeline
+docker compose -f docker/docker-compose.yml up -d postgres redis qdrant neo4j
+docker compose -f docker/docker-compose.yml up -d api-gateway rag-pipeline
 ```
 
 ## Development Workflow
@@ -151,11 +151,11 @@ mkdir -p src/services/new-service
 cd src/services/new-service
 touch main.py config.py Dockerfile
 
-# Add a service definition to docker/compose/docker-compose.yml
+# Add a service definition to docker/docker-compose.yml
 # (this file is hand-maintained — edit it directly)
 
 # Build and start
-docker compose -f docker/compose/docker-compose.yml up -d --build new-service
+docker compose -f docker/docker-compose.yml up -d --build new-service
 ```
 
 **Minimal FastAPI service:**
@@ -200,7 +200,7 @@ See [testing.md](testing.md) for the full guide. Quick reference:
 
 ```bash
 pytest tests/unit/ -v          # unit tests
-pytest tests/integration/ -v   # integration tests (needs docker/compose/docker-compose.test.yml deps)
+pytest tests/integration/ -v   # integration tests (needs docker/docker-compose.test.yml deps)
 pytest --cov=src --cov-report=term-missing
 ```
 
@@ -339,8 +339,8 @@ Authentication in api-gateway is **JWT + bcrypt** with Redis-backed rate limitin
 ## Best Practices Summary
 
 1. Use `bash setup.sh` for lifecycle operations
-2. Edit the root `./.env`, never `docker/compose/.env`
-3. Edit `docker/compose/docker-compose.yml` directly (it is the source of truth)
+2. Edit the root `./.env`, never `docker/.env`
+3. Edit `docker/docker-compose.yml` directly (it is the source of truth)
 4. Write tests for new behavior
 5. Run `black` / `isort` / `mypy` before pushing
 6. Use type hints and Pydantic validation

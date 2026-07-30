@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../.." || exit 2   # repo root (script lives in scripts/gate
 # The fill/prepare tests below exercise the fill LOGIC, not the #57 live-stack guard,
 # so allow regeneration globally; the dedicated guard test re-enables it (empty var).
 export MINDER_ALLOW_SECRET_REGEN=1
-CENV="docker/compose/.env"
+CENV="docker/.env"
 BAK="$(mktemp)"; HAD_ENV=0; CBAK="$(mktemp)"; HAD_CENV=0
 [ -f .env ] && { cp .env "$BAK"; HAD_ENV=1; }
 [ -f "$CENV" ] && { cp "$CENV" "$CBAK"; HAD_CENV=1; }

@@ -34,7 +34,7 @@ bash setup.sh migrate
 Compose is always invoked with the explicit file path, e.g.:
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml <command>
+docker compose --file docker/docker-compose.yml <command>
 ```
 
 Migrations run against the databases listed above. Initialization SQL lives under
@@ -78,11 +78,11 @@ mkdir -p "$BACKUP_DIR"
 docker exec minder-postgres pg_dumpall -U minder > "$BACKUP_DIR/full_backup.sql"
 
 # Also snapshot the raw data volume as a fallback.
-# NOTE: the volume is prefixed with the compose PROJECT name (the compose dir is
-# docker/compose/ → project "compose" → volume "compose_postgres_data"). Confirm the
-# exact name with `docker volume ls | grep postgres` before running these commands.
+# NOTE: the volume is prefixed with the compose PROJECT name, pinned to `minder`
+# (#28, top-level `name:` in docker-compose.yml) → volume "minder_postgres_data".
+# Confirm the exact name with `docker volume ls | grep postgres` before running these.
 docker run --rm \
-  -v compose_postgres_data:/data \
+  -v minder_postgres_data:/data \
   -v "$BACKUP_DIR:/backup" \
   alpine tar czf /backup/postgres_data.tar.gz -C /data .
 
@@ -96,7 +96,7 @@ fi
 
 ### Step 2: Upgrade Procedure
 
-`docker/compose/docker-compose.yml` is the hand-maintained single source of truth — edit the
+`docker/docker-compose.yml` is the hand-maintained single source of truth — edit the
 `postgres:` image tag directly in that file (there is no template/regenerate step).
 
 ```bash
@@ -108,13 +108,13 @@ BACKUP_DIR="${1:?Usage: $0 <backup_directory>}"
 
 # 1. Update the postgres image tag in the compose file (edit by hand or with sed)
 #    e.g. postgres:18.4-trixie -> postgres:<new-major>-<variant>
-#    Edit: docker/compose/docker-compose.yml
+#    Edit: docker/docker-compose.yml
 
 # 2. Remove the old data volume (IRREVERSIBLE — you are relying on the dump)
-docker volume rm compose_postgres_data
+docker volume rm minder_postgres_data
 
 # 3. Start the new PostgreSQL
-docker compose --file docker/compose/docker-compose.yml up -d postgres
+docker compose --file docker/docker-compose.yml up -d postgres
 
 # 4. Wait for readiness
 sleep 30
@@ -167,12 +167,12 @@ BACKUP_DIR="${1:?Usage: $0 <backup_directory>}"
 bash setup.sh stop
 
 # Restore the compose file to the previous image tag
-git checkout docker/compose/docker-compose.yml
+git checkout docker/docker-compose.yml
 
 # Remove the failed volume and restore the raw data snapshot
-docker volume rm compose_postgres_data
+docker volume rm minder_postgres_data
 docker run --rm \
-  -v compose_postgres_data:/data \
+  -v minder_postgres_data:/data \
   -v "$BACKUP_DIR:/backup" \
   alpine tar xzf /backup/postgres_data.tar.gz -C /data
 

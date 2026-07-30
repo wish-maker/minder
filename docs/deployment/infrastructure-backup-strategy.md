@@ -33,7 +33,7 @@ bundle {status|enable|disable} | ollama-mode | sync-postgres-password | uninstal
 ```
 
 Compose is always invoked as
-`docker compose --file docker/compose/docker-compose.yml ...`.
+`docker compose --file docker/docker-compose.yml ...`.
 
 ---
 
@@ -72,9 +72,9 @@ MinIO (`minder-minio`) is a real running container. Its buckets:
 ### Configuration
 
 - `./.env` — the **single source of truth** for configuration/secrets. `setup.sh`
-  auto-heals it and mirrors it to `docker/compose/.env` (auto-generated — do **not** back
+  auto-heals it and mirrors it to `docker/.env` (auto-generated — do **not** back
   up or edit the mirror; back up the root file).
-- `docker/compose/docker-compose.yml` — hand-maintained source of truth for the stack.
+- `docker/docker-compose.yml` — hand-maintained source of truth for the stack.
 - `docker/services/traefik/` — reverse-proxy dynamic config.
 
 ---
@@ -139,7 +139,7 @@ docker run --rm \
 ```bash
 tar -czf minder-config-$(date +%Y%m%d).tar.gz \
   .env \
-  docker/compose/docker-compose.yml \
+  docker/docker-compose.yml \
   docker/services/traefik
 ```
 

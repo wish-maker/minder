@@ -42,7 +42,7 @@ SNAP_FILES=()
 # exact prior state INCLUDING absence and restore/delete accordingly. Before each capture
 # a deterministic fully-filled root .env is seeded so prepare_env is a silent no-op
 # (nothing to fill → no fill logs, no .env.backup-<ts>, no randomness).
-ENV_PATHS=( ".env" "docker/compose/.env" )
+ENV_PATHS=( ".env" "docker/.env" )
 
 SNAP_DIR=""
 ENV_SNAP_DIR=""

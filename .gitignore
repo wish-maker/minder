@@ -244,8 +244,8 @@ docker-compose.yml.broken*
 docker-compose.yml.old
 
 # Environment Configuration (contains secrets)
-docker/compose/.env
-docker/compose/.env.local
+docker/.env
+docker/.env.local
 docker/**/.env
 
 # Monitoring Data

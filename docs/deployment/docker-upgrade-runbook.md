@@ -14,7 +14,7 @@ dump/restore rather than an in-place volume swap).
 
 ### How versions are managed (read this first)
 
-- **`docker/compose/docker-compose.yml` is the hand-maintained single source of truth.**
+- **`docker/docker-compose.yml` is the hand-maintained single source of truth.**
   Image versions are pinned directly on the `image:` lines. You edit this file to change a
   version — there is **no template and no regeneration step** (the old
   template/regenerate machinery was removed in #31). Do **not** look for
@@ -30,7 +30,7 @@ dump/restore rather than an in-place volume swap).
   template.
 
 > Bottom line: to change an image version, edit the `image:` tag in
-> `docker/compose/docker-compose.yml`, commit it, then apply with `bash setup.sh update`.
+> `docker/docker-compose.yml`, commit it, then apply with `bash setup.sh update`.
 
 ---
 
@@ -48,7 +48,7 @@ dump/restore rather than an in-place volume swap).
 bash setup.sh update --check   # native-Python version engine (scripts/setup/versions.py)
 
 # Snapshot current image tags for rollback reference
-grep -nE '^\s*image:' docker/compose/docker-compose.yml
+grep -nE '^\s*image:' docker/docker-compose.yml
 ```
 
 ---
@@ -67,11 +67,11 @@ bash setup.sh backup
 
 ### Step 2 — Update the pinned version
 
-Edit the `image:` tag in `docker/compose/docker-compose.yml` (or merge the CI-proposed
+Edit the `image:` tag in `docker/docker-compose.yml` (or merge the CI-proposed
 PR). Example:
 
 ```yaml
-# docker/compose/docker-compose.yml
+# docker/docker-compose.yml
 services:
   grafana:
     image: grafana/grafana:13.1        # bump to the new pinned tag
@@ -84,8 +84,8 @@ services:
 bash setup.sh update
 
 # Or target a single service manually:
-docker compose --file docker/compose/docker-compose.yml pull grafana
-docker compose --file docker/compose/docker-compose.yml up -d grafana
+docker compose --file docker/docker-compose.yml pull grafana
+docker compose --file docker/docker-compose.yml up -d grafana
 ```
 
 ### Step 4 — Verify
@@ -114,7 +114,7 @@ logical dump/restore.
 
 ```bash
 # Stop the app services that write to Postgres (leave DBs/monitoring up)
-docker compose --file docker/compose/docker-compose.yml stop \
+docker compose --file docker/docker-compose.yml stop \
   api-gateway plugin-registry plugin-state-manager \
   marketplace rag-pipeline model-management tts-stt graph-rag openwebui
 
@@ -135,8 +135,8 @@ ls -lh "$BACKUP_DIR"
 # Verify the dump exists before destroying anything
 [ -s "$BACKUP_DIR/postgres_full_dump.sql" ] || { echo "ABORT: empty/missing dump"; exit 1; }
 
-docker compose --file docker/compose/docker-compose.yml stop postgres
-docker compose --file docker/compose/docker-compose.yml rm -f postgres
+docker compose --file docker/docker-compose.yml stop postgres
+docker compose --file docker/docker-compose.yml rm -f postgres
 
 # Remove the old data volume (name is <project>_postgres_data — confirm first)
 docker volume ls | grep postgres_data
@@ -145,10 +145,10 @@ docker volume rm <project>_postgres_data
 
 ### Step 3 — Bump the pinned image and start fresh
 
-Edit `docker/compose/docker-compose.yml` to the new `postgres:` tag, then:
+Edit `docker/docker-compose.yml` to the new `postgres:` tag, then:
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml up -d postgres
+docker compose --file docker/docker-compose.yml up -d postgres
 
 # Wait for readiness
 until docker exec minder-postgres pg_isready -U "$POSTGRES_USER"; do sleep 5; done
@@ -210,7 +210,7 @@ docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"
 
 ```bash
 # Restore the previous pinned tag(s) in the compose file
-git checkout -- docker/compose/docker-compose.yml   # if the bump was committed
+git checkout -- docker/docker-compose.yml   # if the bump was committed
 # ...or hand-edit the image: tag back to the previous version
 
 bash setup.sh update
@@ -219,12 +219,12 @@ bash setup.sh update
 ### Roll back a failed Postgres major upgrade
 
 ```bash
-docker compose --file docker/compose/docker-compose.yml stop postgres
-docker compose --file docker/compose/docker-compose.yml rm -f postgres
+docker compose --file docker/docker-compose.yml stop postgres
+docker compose --file docker/docker-compose.yml rm -f postgres
 docker volume rm <project>_postgres_data
 
 # Revert the postgres: tag in the compose file to the previous major, then:
-docker compose --file docker/compose/docker-compose.yml up -d postgres
+docker compose --file docker/docker-compose.yml up -d postgres
 until docker exec minder-postgres pg_isready -U "$POSTGRES_USER"; do sleep 5; done
 docker exec -i minder-postgres psql -U "$POSTGRES_USER" < "$BACKUP_DIR/postgres_full_dump.sql"
 

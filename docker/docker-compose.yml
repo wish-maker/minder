@@ -14,6 +14,13 @@
 #           minder-network and dynamically exposed via Traefik labels.
 # ============================================================================
 
+# Explicit project name (#28): the compose file moved docker/compose/ → docker/, so
+# the default project name (parent-dir basename) would have flipped compose→docker and
+# renamed every volume (compose_* → docker_*). Pin it to `minder` — location-independent,
+# matches the container_name prefix. Existing deploys: volumes rename compose_* →
+# minder_*; back up + restore (or re-init) once.
+name: minder
+
 services:
   # ==========================================================================
   # PILLAR 1: Zero-Trust Security Layer
@@ -48,10 +55,10 @@ services:
     - 8081:8080  # Traefik Dashboard (LAN access only - use IP whitelist)
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
-    - ../services/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+    - ./services/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
     # #25 Option B: single-file mount — only authelia-forwardauth loads; sibling
     # dynamic files (services/ssl/access-mode) stay unmounted + dormant by design.
-    - ../services/traefik/dynamic/authelia-forwardauth.yml:/etc/traefik/dynamic/authelia-forwardauth.yml:ro
+    - ./services/traefik/dynamic/authelia-forwardauth.yml:/etc/traefik/dynamic/authelia-forwardauth.yml:ro
     - docker_traefik_letsencrypt:/letsencrypt
     - docker_traefik_logs:/var/log/traefik
     healthcheck:
@@ -83,8 +90,8 @@ services:
     - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
     - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
     volumes:
-    - ../services/authelia/configuration.yml:/config/configuration.yml:ro
-    - ../services/authelia/users_database.yml:/config/users_database.yml:ro
+    - ./services/authelia/configuration.yml:/config/configuration.yml:ro
+    - ./services/authelia/users_database.yml:/config/users_database.yml:ro
     # NO exposed ports — reached only via Traefik (Host: authelia.minder.local).
     depends_on:
       postgres:
@@ -120,7 +127,7 @@ services:
       POSTGRES_MULTIPLE_DATABASES: tefas_db,weather_db,news_db,crypto_db
     volumes:
     - postgres_data:/var/lib/postgresql
-    - ../services/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    - ./services/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     # PILLAR 1: NO exposed ports - Internal network only
     healthcheck:
       test:
@@ -169,7 +176,7 @@ services:
     - RABBITMQ_LOG_LEVEL=info
     volumes:
     - rabbitmq_data:/var/lib/rabbitmq
-    - ../services/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    - ./services/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
     # No definitions.json is mounted or loaded. rabbitmq.conf carries no
     # load_definitions directive, and RabbitMQ is provisioned via env
     # (RABBITMQ_DEFAULT_USER/PASS) + app-created topology. The old stale export
@@ -273,7 +280,7 @@ services:
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
     volumes:
     - ollama_data:/root/.ollama
-    - ../services/ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
+    - ./services/ollama/init-models.sh:/docker-entrypoint-initdb.d/init-models.sh:ro
     environment:
     # OLLAMA_PULL_MODELS (not OLLAMA_MODELS): the ollama server reads OLLAMA_MODELS as its
     # model STORAGE DIR, so a model list there made it store models outside the volume (#29).
@@ -376,7 +383,7 @@ services:
     - traefik.http.services.neo4j.loadbalancer.server.port=7474
   api-gateway:
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/api-gateway/Dockerfile
     image: minder/api-gateway:1.0.0
     container_name: minder-api-gateway
@@ -445,7 +452,7 @@ services:
     labels:
     - minder.bundle=core
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/plugin-registry/Dockerfile
     image: minder/plugin-registry:1.0.0
     container_name: minder-plugin-registry
@@ -512,7 +519,7 @@ services:
     env_file:
     - .env
     volumes:
-    - ../../src/plugins:/app/plugins:ro
+    - ../src/plugins:/app/plugins:ro
     - docker_plugins_data:/app/plugins-data
     # Read-only compose file so the registry can derive the bundle map from the
     # minder.bundle= labels for GET /v1/bundles (#65). The bundles.state.json mount is
@@ -523,7 +530,7 @@ services:
     # (:ro there). This is the gitignored RUNTIME copy seeded from the tracked
     # template by setup.sh (sync_telegraf_config) — the plugin rewrites it in-place
     # without dirtying the repo; telegraf watch_config (poll) picks it up.
-    - ../services/telegraf/telegraf.runtime.conf:/app/telegraf-config/telegraf.conf:rw
+    - ./services/telegraf/telegraf.runtime.conf:/app/telegraf-config/telegraf.conf:rw
     # docker.sock for the telegraf plugin's RESTART fallback (used only if a
     # config-reload doesn't take). Restart goes through the docker API over this
     # socket. Security surface — scoped to the telegraf plugin's fallback path.
@@ -551,7 +558,7 @@ services:
     labels:
     - minder.bundle=core
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/plugin-state-manager/Dockerfile
     image: minder/plugin-state-manager:1.0.0
     container_name: minder-plugin-state-manager
@@ -585,7 +592,7 @@ services:
       plugin-registry:
         condition: service_healthy
     volumes:
-    - ../../src/bootstrap/config/default_plugins.yml:/app/src/bootstrap/config/default_plugins.yml:ro
+    - ../src/bootstrap/config/default_plugins.yml:/app/src/bootstrap/config/default_plugins.yml:ro
     healthcheck:
       test:
       - CMD
@@ -601,7 +608,7 @@ services:
     labels:
     - minder.bundle=rag,chat
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/rag-pipeline/Dockerfile
     image: minder/rag-pipeline:1.0.0
     container_name: minder-rag-pipeline
@@ -647,7 +654,7 @@ services:
     labels:
     - minder.bundle=inference
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/model-management/Dockerfile
     image: minder/model-management:1.0.0
     container_name: minder-model-management
@@ -737,7 +744,7 @@ services:
     volumes:
     # Runtime copy (gitignored), seeded from the tracked template by setup.sh; the
     # telegraf plugin owns its managed region here. See sync_telegraf_config.
-    - ../services/telegraf/telegraf.runtime.conf:/etc/telegraf/telegraf.conf:ro
+    - ./services/telegraf/telegraf.runtime.conf:/etc/telegraf/telegraf.conf:ro
     - /proc:/host/proc:ro
     - /sys:/host/sys:ro
     - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -789,8 +796,8 @@ services:
     container_name: minder-prometheus
     restart: on-failure
     volumes:
-    - ../services/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    - ../services/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    - ./services/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - ./services/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
     - docker_prometheus_data:/prometheus
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
@@ -823,7 +830,7 @@ services:
     container_name: minder-alertmanager
     restart: on-failure
     volumes:
-    - ../services/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    - ./services/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     - docker_alertmanager_data:/alertmanager
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
@@ -855,8 +862,8 @@ services:
     - GF_SERVER_ROOT_URL=https://grafana.minder.local
     volumes:
     - docker_grafana_data:/var/lib/grafana
-    - ../services/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
-    - ../services/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    - ./services/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    - ./services/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     # PILLAR 4: Expose for LAN access (via Traefik with Authelia in production)
     ports:
     - 127.0.0.1:3000:3000
@@ -940,7 +947,7 @@ services:
     labels:
     - minder.bundle=core
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/marketplace/Dockerfile
     image: minder/marketplace:1.0.0
     container_name: minder-marketplace
@@ -988,7 +995,7 @@ services:
     labels:
     - minder.bundle=voice
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/tts-stt/Dockerfile
     image: minder/tts-stt:1.0.0
     container_name: minder-tts-stt
@@ -1036,7 +1043,7 @@ services:
     labels:
     - minder.bundle=graph-rag
     build:
-      context: ../../
+      context: ../
       dockerfile: src/services/graph-rag/Dockerfile
     image: minder/graph-rag:1.0.0
     container_name: minder-graph-rag
@@ -1205,7 +1212,7 @@ services:
     container_name: minder-blackbox-exporter
     restart: on-failure
     volumes:
-    - ../services/blackbox-exporter/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    - ./services/blackbox-exporter/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
     command:
     - '--config.file=/etc/blackbox_exporter/config.yml'
     healthcheck:
@@ -1273,7 +1280,7 @@ services:
     command:
     - --config=/etc/otel-collector-config.yaml
     volumes:
-    - ../services/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    - ./services/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     - docker_otel-collector-data:/etc/otelcol
     ports:
     - "127.0.0.1:14317:4317"   # OTLP gRPC receiver (changed to avoid conflict with Jaeger)

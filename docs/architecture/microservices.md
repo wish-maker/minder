@@ -276,7 +276,7 @@ Client → API Gateway → State Manager → fixed manifest handler → State Up
 ### Horizontal Scaling
 Stateless services (API Gateway, Plugin Registry, Marketplace, State Manager) can be scaled:
 ```bash
-docker compose --file docker/compose/docker-compose.yml up -d --scale api-gateway=3
+docker compose --file docker/docker-compose.yml up -d --scale api-gateway=3
 ```
 
 ### Vertical Scaling
@@ -287,7 +287,7 @@ limits in `docker-compose.yml`.
 
 ### Environment Variables
 - Edited in root `./.env` (single source of truth)
-- `setup.sh` mirrors it to `docker/compose/.env` (the file Compose reads) — auto-generated, do not edit
+- `setup.sh` mirrors it to `docker/.env` (the file Compose reads) — auto-generated, do not edit
 - Template in root `./.env.example`
 - Never commit `.env`
 

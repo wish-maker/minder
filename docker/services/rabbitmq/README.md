@@ -132,7 +132,7 @@ Each plugin has its own queue with Dead Letter Queue:
 
 ### Start RabbitMQ
 ```bash
-docker compose -f docker/compose/docker-compose.yml up -d rabbitmq
+docker compose -f docker/docker-compose.yml up -d rabbitmq
 ```
 
 ### Check Status

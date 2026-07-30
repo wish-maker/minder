@@ -35,7 +35,7 @@ bash setup.sh install     # first time
 - ✅ Secret generation (fills CHANGEME values in `./.env`)
 - ✅ Database initialization + Alembic migrations
 - ✅ Docker network configuration
-- ✅ Env mirror: root `./.env` → `docker/compose/.env`
+- ✅ Env mirror: root `./.env` → `docker/.env`
 
 #### Option 2: Manual
 ```bash
@@ -43,10 +43,10 @@ bash setup.sh install     # first time
 cp .env.example .env
 # fill in the CHANGEME secrets yourself, then mirror to the path Compose reads
 # (setup.sh does this copy + auto-fill for you; bypassing it means doing it manually):
-cp .env docker/compose/.env
+cp .env docker/.env
 
 # 2. Start services
-docker compose --file docker/compose/docker-compose.yml up -d
+docker compose --file docker/docker-compose.yml up -d
 
 # 3. Wait for services to come up
 bash setup.sh status
@@ -138,7 +138,7 @@ bash setup.sh uninstall --purge     # Stop AND DELETE all data volumes (irrevers
 
 **Port already in use?**
 ```bash
-# Change ports in docker/compose/docker-compose.yml
+# Change ports in docker/docker-compose.yml
 # Example: ports: - "8080:8000"
 ```
 

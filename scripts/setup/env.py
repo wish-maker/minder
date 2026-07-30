@@ -182,7 +182,7 @@ def fill_env_secrets() -> None:
     to_fill.sort()  # deterministic log/apply order (spec iteration order is arbitrary)
 
     # #57: refuse to auto-(re)generate secrets while a provisioned stack is running —
-    # doing so would mirror new secrets into docker/compose/.env and let start_services
+    # doing so would mirror new secrets into docker/.env and let start_services
     # recreate the stateful cores, desyncing live services (redis/minio re-read their
     # password on recreate). Only reached when secrets ACTUALLY need filling; the
     # normal full-.env path returned above untouched, so healthy start/restart is
