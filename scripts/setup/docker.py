@@ -244,6 +244,31 @@ def wait_postgres_ready(timeout: int = config.TIMEOUT_DB) -> bool:
     return False
 
 
+def compose_services() -> list[str]:
+    """Compose service names addressable by the restart/compose verbs.
+
+    Mirrors compose_all()'s profile set (monitoring + internal-ollama) so every
+    service a restart could target — including the profiled internal-ollama
+    container — is listed. Read-only (`config --services`), so it is NOT dry-run
+    gated; returns [] if docker/compose can't be queried, letting callers fall
+    back to compose's own error instead of a false 'unknown service'."""
+    out = capture(
+        [
+            "docker",
+            "compose",
+            "-f",
+            config.COMPOSE_FILE,
+            "--profile",
+            "monitoring",
+            "--profile",
+            "internal-ollama",
+            "config",
+            "--services",
+        ]
+    )
+    return [ln.strip() for ln in out.splitlines() if ln.strip()]
+
+
 def compose(*args: object) -> int:
     return run("docker", "compose", "-f", config.COMPOSE_FILE, *args)
 
