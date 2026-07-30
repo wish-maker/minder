@@ -31,10 +31,19 @@ def _rebuild() -> None:
             ],
             capture_output=True,
             text=True,
+            # Decode as UTF-8 and never raise on stray bytes: docker/buildkit build
+            # output carries progress control chars that the platform default codec
+            # (cp1252 on Windows) can't decode → text=True alone crashes the whole
+            # `update` on Windows with a UnicodeDecodeError. errors="replace" keeps
+            # it cross-platform (the shim promises Linux/macOS/Windows).
+            encoding="utf-8",
+            errors="replace",
         )
     except OSError:
         return
-    for line in (out.stdout + out.stderr).splitlines():
+    # stdout/stderr can be None if capture failed → guard the concat (was a
+    # TypeError: NoneType + str on the crash path above).
+    for line in ((out.stdout or "") + (out.stderr or "")).splitlines():
         if re.search(r"Step|Successfully|ERROR", line):
             log._emit(line)
 

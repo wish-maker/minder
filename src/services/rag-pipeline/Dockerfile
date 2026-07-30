@@ -2,8 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Set Python environment
-ENV PYTHONPATH=/app:$PYTHONPATH
+# Set Python environment. /app/src is on the path so `shared.*` resolves the moment
+# any module imports it — including route modules (routes.system → shared.health)
+# that load BEFORE main.py's own sys.path.insert runs. Without /app/src here a fresh
+# build crash-loops with "ModuleNotFoundError: No module named 'shared'".
+ENV PYTHONPATH=/app/src:/app:$PYTHONPATH
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
