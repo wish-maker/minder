@@ -106,6 +106,12 @@ cmd_backup() {
 
     section "💾  Platform Backup  →  ${dest}"
 
+    # Datastores that are RUNNING but did NOT make it into the archive (export
+    # failed, or skipped for a missing credential). Surfaced loudly in the final
+    # line so a partial backup can't read as a complete one (#177). Not-running
+    # stores are a deliberate state (already warned per-store) and are excluded.
+    local skipped=""
+
     if [[ -f "$ENV_FILE" ]]; then
         cp "$ENV_FILE" "${dest}/env.backup"
         chmod 600 "${dest}/env.backup"
@@ -122,6 +128,7 @@ cmd_backup() {
             log_success "PostgreSQL  ($(du -sh "${dest}/postgres.sql" | cut -f1))"
         else
             spinner_stop; log_warn "PostgreSQL dump failed"
+            skipped="${skipped:+$skipped, }PostgreSQL"
         fi
     else
         log_warn "PostgreSQL not running — skipped"
@@ -141,6 +148,7 @@ cmd_backup() {
             log_success "Neo4j  ($(du -sh "$neo4j_cypher" | cut -f1))"
         else
             spinner_stop; log_warn "Neo4j export failed"
+            skipped="${skipped:+$skipped, }Neo4j"
         fi
     else
         log_warn "Neo4j not running — skipped"
@@ -157,9 +165,11 @@ cmd_backup() {
                 spinner_stop; log_success "InfluxDB backed up"
             else
                 spinner_stop; log_warn "InfluxDB backup failed"
+                skipped="${skipped:+$skipped, }InfluxDB"
             fi
         else
             spinner_stop; log_warn "INFLUXDB_ADMIN_TOKEN not set — skipping InfluxDB backup"
+            skipped="${skipped:+$skipped, }InfluxDB"
         fi
     else
         log_warn "InfluxDB not running — skipped"
@@ -175,6 +185,7 @@ cmd_backup() {
             log_success "Qdrant  ($(du -sh "${dest}/qdrant.tar.gz" | cut -f1))"
         else
             spinner_stop; log_warn "Qdrant snapshot failed"
+            skipped="${skipped:+$skipped, }Qdrant"
         fi
     else
         log_warn "Qdrant not running — skipped"
@@ -190,6 +201,7 @@ cmd_backup() {
             log_success "RabbitMQ definitions backed up"
         else
             spinner_stop; log_warn "RabbitMQ definitions export failed"
+            skipped="${skipped:+$skipped, }RabbitMQ"
         fi
     else
         log_warn "RabbitMQ not running — skipped"
@@ -215,7 +227,11 @@ cmd_backup() {
         log_detail "Pruned old backups (keeping last 7)"
     fi
 
-    log_success "Backup complete"
+    if [[ -n "$skipped" ]]; then
+        log_warn "Backup complete — NOT captured: ${skipped}"
+    else
+        log_success "Backup complete"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────
