@@ -10,19 +10,9 @@ PY="${PY:-python}"                     # override e.g. PY=python3 on boxes witho
 cd "$(dirname "$0")/../.." || exit 2   # repo root
 BAK="$(mktemp)"; HAD_ENV=0
 [ -f .env ] && { cp .env "$BAK"; HAD_ENV=1; }
-# validate_access_mode renames files under this dir (net-idempotent for `local`);
-# snapshot the access-mode-* set and restore it verbatim afterward.
-TDYN="docker/services/traefik/dynamic"
-TSNAP="$(mktemp -d)"
-[ -d "$TDYN" ] && cp -a "$TDYN"/access-mode-* "$TSNAP"/ 2>/dev/null || true
 restore() {
   if [ "$HAD_ENV" = 1 ]; then cp "$BAK" .env; else rm -f .env; fi
   rm -f "$BAK"
-  if [ -d "$TDYN" ]; then
-    rm -f "$TDYN"/access-mode-* 2>/dev/null || true
-    cp -a "$TSNAP"/access-mode-* "$TDYN"/ 2>/dev/null || true
-  fi
-  rm -rf "$TSNAP"
 }
 trap restore EXIT
 
@@ -113,29 +103,6 @@ else FAIL=1; echo "FAIL  check_prerequisites"; diff <(printf '%s\n' "$bn") <(pri
 cmp "gpu (no-toolkit fallback)" \
   "$(bsh 'validate_gpu_environment; echo "GPU=$GPU_AVAILABLE"' 2>&1)" \
   "$(pyi 'preflight.validate_gpu_environment(); print("GPU="+os.environ.get("GPU_AVAILABLE",""))' 2>&1)"
-
-# ---- validate_access_mode: `local` MOVES traefik files (net-idempotent; the trap
-# restores them) + `invalid` errors before touching anything. Reset .env per run.
-# Also compares the resulting active-config file set (ls) — the real side effect.
-am_state() { ls "$TDYN" 2>/dev/null | grep -E '^access-mode-' | sort | tr '\n' ' '; }
-am_case() {  # $1=name  $2=ACCESS_MODE-line
-  printf '%s' "$2" > .env
-  local bo; bo="$(bsh 'validate_access_mode; echo "AM=$TRAEFIK_ACCESS_MODE rc=$?"' 2>&1)"; local bs; bs="$(am_state)"
-  # reset traefik files to the snapshot before the python run
-  rm -f "$TDYN"/access-mode-* 2>/dev/null; cp -a "$TSNAP"/access-mode-* "$TDYN"/ 2>/dev/null
-  printf '%s' "$2" > .env
-  local po; po="$(pyi 'import os
-rc=preflight.validate_access_mode()
-print("AM="+os.environ.get("TRAEFIK_ACCESS_MODE","")+" rc="+str(rc))' 2>&1)"; local ps; ps="$(am_state)"
-  local bn pn; bn="$(printf '%s' "$bo" | norm)"; pn="$(printf '%s' "$po" | norm)"
-  local ok=1
-  [ "$bn" = "$pn" ] || { ok=0; echo "  stdout DIFFERS:"; diff <(printf '%s\n' "$bn") <(printf '%s\n' "$pn") | sed 's/^/    /'; }
-  [ "$bs" = "$ps" ] || { ok=0; echo "  file-state: bash=[$bs] python=[$ps]"; }
-  if [ "$ok" = 1 ]; then echo "PASS  validate_access_mode $1"; else FAIL=1; echo "FAIL  validate_access_mode $1"; fi
-  rm -f "$TDYN"/access-mode-* 2>/dev/null; cp -a "$TSNAP"/access-mode-* "$TDYN"/ 2>/dev/null
-}
-am_case "local (default)" $'FOO=bar\n'
-am_case "invalid"         $'ACCESS_MODE=bogus\n'
 
 echo "----"; [ "$FAIL" = 0 ] && echo "ALL PASS" || echo "SOME FAILED"
 exit $FAIL

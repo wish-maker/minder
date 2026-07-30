@@ -30,7 +30,6 @@ def rec(n):
 preflight.check_prerequisites = rec('check_prerequisites')
 env.prepare_env = rec('prepare_env')
 preflight.validate_gpu_environment = rec('validate_gpu_environment')
-preflight.validate_access_mode = rec('validate_access_mode')
 preflight.validate_ai_compute_mode = rec('validate_ai_compute_mode')
 preflight.validate_compute_resource_profile = rec('validate_compute_resource_profile')
 infra.create_networks = rec('create_networks')

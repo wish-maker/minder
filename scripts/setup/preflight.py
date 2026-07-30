@@ -3,8 +3,6 @@
 The prerequisite + Phase-4 validation steps the install/start verbs run first:
   check_prerequisites            docker/compose/daemon + openssl/curl + disk + ports
   validate_gpu_environment       NVIDIA Container Toolkit probe → GPU_AVAILABLE
-  validate_access_mode           local/vpn/public → TRAEFIK_ACCESS_MODE + dynamic cfg
-  configure_traefik_access_mode  enable the matching access-mode-<mode>.yml
   validate_ai_compute_mode       internal/external/hybrid → AI_* env
   validate_compute_resource_profile  low/medium/high/enterprise → CPU/MEM limits
 
@@ -189,57 +187,6 @@ def validate_gpu_environment() -> None:
     log.detail(f"GPU Memory: {gpu_memory}")
     os.environ["GPU_AVAILABLE"] = "true"
     log.success("GPU validation passed - hardware acceleration enabled")
-
-
-def configure_traefik_access_mode() -> None:
-    """bash configure_traefik_access_mode: disable every access-mode-*.yml, then
-    enable access-mode-<mode>.yml (by renaming its .disabled twin)."""
-    mode = env.get("ACCESS_MODE") or "local"
-    log.info(f"Configuring Traefik access mode: {mode}")
-
-    dyn = config.SCRIPT_DIR / "docker" / "services" / "traefik" / "dynamic"
-    for cfg in sorted(dyn.glob("access-mode-*.yml")):
-        cfg.rename(cfg.parent / (cfg.name + ".disabled"))
-
-    target = dyn / f"access-mode-{mode}.yml.disabled"
-    if target.is_file():
-        target.rename(target.parent / target.name[: -len(".disabled")])
-        log.success(f"Enabled Traefik config: access-mode-{mode}.yml")
-    else:
-        log.warn(f"Traefik config not found: access-mode-{mode}.yml")
-        log.detail("Using default middleware configuration")
-
-
-def validate_access_mode() -> int:
-    """bash validate_access_mode: local (localhost) / vpn (LAN+VPN) / public
-    (internet) — log the posture, export TRAEFIK_ACCESS_MODE, then wire the
-    matching Traefik dynamic config."""
-    mode = env.get("ACCESS_MODE") or "local"
-    log.info("Validating Access Mode configuration...")
-
-    if mode == "local":
-        log.detail("Access Mode: LOCAL (localhost only)")
-        log.detail("Services accessible only on 127.0.0.1")
-        os.environ["TRAEFIK_ACCESS_MODE"] = "local"
-    elif mode == "vpn":
-        log.detail("Access Mode: VPN (LAN/VPN subnets)")
-        log.detail("Services accessible via VPN with enhanced security")
-        log.detail("Allowed CIDRs: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16")
-        os.environ["TRAEFIK_ACCESS_MODE"] = "vpn"
-    elif mode == "public":
-        log.detail("Access Mode: PUBLIC (internet-facing)")
-        log.detail("Services accessible via internet with DDoS protection")
-        log.detail("WARNING: Ensure SSL certificates and firewall rules are configured")
-        os.environ["TRAEFIK_ACCESS_MODE"] = "public"
-    else:
-        log.error(f"Invalid ACCESS_MODE: {mode}")
-        log.detail("Valid options: local, vpn, public")
-        log.detail(f"Fix: Set ACCESS_MODE in {env.ENV_FILE}")
-        return 1
-
-    configure_traefik_access_mode()
-    log.success(f"Access Mode validation passed: {mode}")
-    return 0
 
 
 def validate_ai_compute_mode() -> int:
