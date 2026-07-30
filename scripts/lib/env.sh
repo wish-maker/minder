@@ -56,8 +56,24 @@ prepare_env() {
     fi
 
     _fill_env_secrets               # heal MISSING/EMPTY/PLACEHOLDER secrets (backs up on change)
+    _ensure_docker_gid              # record the docker group gid as DOCKER_GID (#11, silent)
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     _sync_compose_env               # mirror root .env → docker/compose/.env (silent)
+}
+
+_ensure_docker_gid() {
+    # Record the host 'docker' group gid in .env as DOCKER_GID (#11) so compose's
+    # `group_add: ${DOCKER_GID:-0}` actually grants telegraf/plugin-registry read
+    # access to a root:docker docker.sock when non-root. Silent; no-op when there's
+    # no docker group (dev hosts — the :-0 fallback covers those) or already set.
+    local gid; gid="$(getent group docker 2>/dev/null | cut -d: -f3)"
+    [[ -z "$gid" ]] && return 0
+    [[ "$(_env_get DOCKER_GID)" == "$gid" ]] && return 0
+    if grep -qE "^DOCKER_GID=" "$ENV_FILE" 2>/dev/null; then
+        sed -i "s/^DOCKER_GID=.*/DOCKER_GID=${gid}/" "$ENV_FILE"
+    else
+        printf 'DOCKER_GID=%s\n' "$gid" >> "$ENV_FILE"
+    fi
 }
 
 _write_default_env() {
