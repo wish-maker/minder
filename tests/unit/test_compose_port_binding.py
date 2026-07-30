@@ -9,9 +9,7 @@ shared/bundle_graph (no YAML dep), matching the runtime constraint.
 import re
 from pathlib import Path
 
-COMPOSE = (
-    Path(__file__).resolve().parents[2] / "docker" / "docker-compose.yml"
-)
+COMPOSE = Path(__file__).resolve().parents[2] / "docker" / "docker-compose.yml"
 
 # Only these services may bind host ports on all interfaces (the public front door
 # + the IP-whitelisted dashboard). Everything else must be 127.0.0.1-only.
