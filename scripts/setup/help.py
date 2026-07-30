@@ -82,7 +82,7 @@ _HELP_TEMPLATE = """
     --skip-version-check / SKIP_VERSION_CHECK=1
                                          Use exact pinned versions, skip registries
     --version / -V                       Print version and exit
-    NONINTERACTIVE=1                     Disable interactive prompts (CI; env only)
+    NONINTERACTIVE=true                  Disable interactive prompts (CI; env only)
 
 {bold}EXAMPLES{nc}
     ./{script}                                # Fresh install
