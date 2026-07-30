@@ -130,6 +130,7 @@ THIRD_PARTY_IMAGE_META = {
     "grafana/grafana": "13|none",
     "prom/alertmanager": "v0|none",
     "traefik": "v3|none",
+    "ghcr.io/wollomatic/socket-proxy": "1|none",
     "influxdb": "3|none",
     "telegraf": "1|none",
     "apicurio/apicurio-registry-sql": "2|none",

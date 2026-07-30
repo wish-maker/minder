@@ -115,6 +115,7 @@ declare -A THIRD_PARTY_IMAGE_META=(
     # authelia enabled + core (#15) but pinned in compose — not smart-resolved yet
     # ["authelia/authelia"]="4|none"
     ["traefik"]="v3|none"
+    ["ghcr.io/wollomatic/socket-proxy"]="1|none"
     ["influxdb"]="3|none"
     ["telegraf"]="1|none"
     ["apicurio/apicurio-registry-sql"]="2|none"

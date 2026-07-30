@@ -448,6 +448,41 @@ services:
     - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
     - traefik.http.middlewares.api-gateway-ratelimit.ratelimit.average=${RATE_LIMIT_PER_MINUTE:-60}
     - traefik.http.services.api-gateway.loadbalancer.server.port=8000
+  # Least-privilege Docker Engine API gateway (#65 item-2 security; ADR open-item b).
+  # Replaces the registry's former raw `/var/run/docker.sock:rw` mount: the socket is
+  # mounted here READ-ONLY and only the EXACT paths the registry needs are allowed —
+  # everything else (including POST /containers/create, which with a host bind-mount
+  # would be host takeover) is default-DENY. wollomatic is used over tecnativa because
+  # its per-method regex allowlist can express "restart yes, create no"; tecnativa's
+  # coarser flags can't (its global POST toggle opens create too). The registry
+  # reaches it at tcp://docker-socket-proxy:2375 over minder-network; no host port.
+  docker-socket-proxy:
+    labels:
+    - minder.bundle=core
+    image: ghcr.io/wollomatic/socket-proxy:1.12.3
+    container_name: minder-docker-socket-proxy
+    restart: on-failure
+    # Runs nonroot (distroless) → needs the docker group to read the socket (Pi
+    # socket is root:docker gid 993; Docker Desktop root:root gid 0). Same
+    # DOCKER_GID mechanism as the telegraf container (#11/#192).
+    group_add:
+    - ${DOCKER_GID:-0}
+    command:
+    # Reachable by the registry over the internal network; no host port is published
+    # and the whole surface is the two allowlisted paths, so allowfrom is open.
+    - -listenip=0.0.0.0
+    - -allowfrom=0.0.0.0/0
+    - -loglevel=INFO
+    # LEAST PRIVILEGE — the telegraf plugin needs exactly these two: container
+    # inspect (GET …/json) + restart (POST …/restart). Anything not matched here is
+    # DENIED, including create/exec/start/stop/kill/volumes/images/networks/swarm.
+    # PR2 (bundle enable/disable) will add POST …/(start|stop).
+    - -allowGET=(/v[0-9.]+)?/containers/[^/]+/json
+    - -allowPOST=(/v[0-9.]+)?/containers/[^/]+/restart
+    volumes:
+    - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+    - minder-network
   plugin-registry:
     labels:
     - minder.bundle=core
@@ -457,13 +492,6 @@ services:
     image: minder/plugin-registry:1.0.0
     container_name: minder-plugin-registry
     restart: on-failure
-    # The telegraf plugin's restart fallback talks to docker.sock, but the
-    # container runs as non-root (appuser). Add the socket's group so it has
-    # access. Docker Desktop's socket is root:root → gid 0 (the default);
-    # on the Pi it's root:docker → set DOCKER_GID to the docker group's gid
-    # (getent group docker | cut -d: -f3). Same host-specific gid as #11.
-    group_add:
-    - ${DOCKER_GID:-0}
     environment:
     - POSTGRES_HOST=postgres
     - POSTGRES_PORT=5432
@@ -487,6 +515,11 @@ services:
     # Telegraf plugin (src/plugins/telegraf): manages the telegraf config + reload.
     - TELEGRAF_CONFIG_PATH=/app/telegraf-config/telegraf.conf
     - TELEGRAF_CONTAINER=minder-telegraf
+    # Docker Engine API via the least-privilege docker-socket-proxy (NOT a raw
+    # socket mount): the telegraf plugin's restart fallback + (future) bundle
+    # orchestration reach it over the network. The proxy whitelists only container
+    # inspect + start/stop/restart (#65 item-2 security; ADR open-item b).
+    - DOCKER_HOST=tcp://docker-socket-proxy:2375
     # Network plugin (src/plugins/network): autonomous nmap + SNMP discovery that
     # fans findings into telegraf/postgres/neo4j/rabbitmq. Empty targets by default
     # → scans nothing until an operator opts in (only scan your own infra). Needs
@@ -531,10 +564,6 @@ services:
     # template by setup.sh (sync_telegraf_config) — the plugin rewrites it in-place
     # without dirtying the repo; telegraf watch_config (poll) picks it up.
     - ./services/telegraf/telegraf.runtime.conf:/app/telegraf-config/telegraf.conf:rw
-    # docker.sock for the telegraf plugin's RESTART fallback (used only if a
-    # config-reload doesn't take). Restart goes through the docker API over this
-    # socket. Security surface — scoped to the telegraf plugin's fallback path.
-    - /var/run/docker.sock:/var/run/docker.sock:rw
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "127.0.0.1:8001:8001"
@@ -543,6 +572,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      docker-socket-proxy:
+        condition: service_started
     healthcheck:
       test:
       - CMD

@@ -197,8 +197,17 @@ class TelegrafPlugin:
             return {"method": "restart", "restarted": restarted}
         return {"method": "watch-config", "restarted": False}
 
-    # ── docker engine API over the unix socket (httpx, already in the image) ───
+    # ── docker engine API (httpx, already in the image) ───────────────────────
     def _docker_client(self) -> httpx.AsyncClient:
+        """Talk to the Docker Engine API. Prefer the least-privilege
+        docker-socket-proxy over the network (``DOCKER_HOST=tcp://host:port``) — the
+        registry no longer mounts the raw socket (#65 item-2 security). Fall back to
+        the unix socket if DOCKER_HOST is unset (e.g. a dev run with the socket still
+        mounted)."""
+        docker_host = os.environ.get("DOCKER_HOST", "")
+        if docker_host.startswith("tcp://"):
+            base_url = "http://" + docker_host[len("tcp://") :]
+            return httpx.AsyncClient(base_url=base_url, timeout=_DOCKER_TIMEOUT)
         transport = httpx.AsyncHTTPTransport(uds=_DOCKER_SOCK)
         return httpx.AsyncClient(
             transport=transport, base_url="http://docker", timeout=_DOCKER_TIMEOUT

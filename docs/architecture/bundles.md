@@ -78,7 +78,7 @@ The claim graph has three sources, merged into one `service → claimants` map:
 
 | Bundle | Services | Default |
 |--------|----------|---------|
-| **core** (always-on) | traefik, authelia, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry | ON (mandatory) |
+| **core** (always-on) | traefik, authelia, docker-socket-proxy, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry | ON (mandatory) |
 | **monitoring** | influxdb, telegraf, prometheus, grafana, alertmanager, jaeger, otel-collector, postgres-exporter, redis-exporter, rabbitmq-exporter, node-exporter, cadvisor, blackbox-exporter | **OFF** |
 | **inference** | ollama, model-management | ON |
 | **rag** | rag-pipeline, qdrant, ollama | ON |
@@ -193,12 +193,13 @@ Same operations, two front-ends over one shared brain:
 - **Registry API (Phase 3):** **`GET /v1/bundles` is shipped** (#65 item 2, read-only)
   — it reports the bundle model (enabled state + claims + per-service active/orphaned)
   by importing the same `shared.bundle_graph` brain, over a read-only mount of the
-  compose file (map) + the secret-free `bundles.state.json` (state). The **mutating**
-  endpoints `POST /v1/bundles/{name}/enable|disable`, `POST /v1/bundles/reconcile`,
-  `POST /v1/bundles/profile/{name}` are still pending: their container-orchestration
-  privilege runs through a **docker-socket-proxy** (whitelist start/stop/restart) behind
-  **Authelia** (couples with the Pi deploy #8). This also enables marketplace-triggered
-  auto-enable of a bundle on plugin install.
+  compose file (map) + the secret-free `bundles.state.json` (state). The **docker-socket-proxy**
+  the mutating side needs is **now in place** (#65 item-2 PR1 — least-privilege
+  container inspect + start/stop/restart, replacing the registry's raw `docker.sock:rw`).
+  The **mutating** endpoints `POST /v1/bundles/{name}/enable|disable`,
+  `POST /v1/bundles/reconcile`, `POST /v1/bundles/profile/{name}` are still pending
+  (PR2): they orchestrate containers via the proxy, behind **Authelia**. This also
+  enables marketplace-triggered auto-enable of a bundle on plugin install.
 
 `disable` never deletes data (`stop`, not `down`; volumes persist). There is **no
 per-bundle purge**; the only purge is the existing platform-wide `uninstall
@@ -272,10 +273,19 @@ separated from tracked config.
 
 - **Security debt (internet-exposed Pi):** (a) marketplace plugins may introduce new
   containers with **no review/signing yet** — add a trust layer (signed/reviewed
-  service specs) before opening a public marketplace; (b) the registry already holds
-  `docker.sock:rw` (compose line ~507) — narrow it behind a **docker-socket-proxy**
-  (Phase 3). Authelia gates the API perimeter but does **not** contain a compromised
-  registry process — it is not a substitute for least privilege.
+  service specs) before opening a public marketplace; (b) ~~the registry holds
+  `docker.sock:rw` — narrow it behind a docker-socket-proxy~~ **DONE (#65 item-2, PR1):**
+  the registry no longer mounts the raw socket. A least-privilege **`docker-socket-proxy`**
+  (`ghcr.io/wollomatic/socket-proxy`, core bundle, no host port) mounts the socket
+  read-only and allows only the EXACT paths the registry needs via per-method regex
+  allowlists — PR1: `GET …/containers/{id}/json` + `POST …/containers/{id}/restart`;
+  everything else is default-DENY (critically **no `POST /containers/create`**, which
+  with a host bind-mount would be host takeover). wollomatic was chosen over tecnativa
+  precisely because tecnativa's coarse flags can't express "restart yes, create no" (its
+  global `POST=1` toggle, required for any write, also opens create). The registry
+  reaches it at `tcp://docker-socket-proxy:2375` (`DOCKER_HOST`). Authelia gates the API
+  perimeter but does **not** contain a compromised registry process — this is the
+  least-privilege half.
 - **Conflict/version resolution** (two bundles want a shared service at different
   versions/config) → owned by the marketplace dependency+conflict graph.
 - **External-binding health** in `bundle status` (reachability probe) — Phase 4.
