@@ -1,5 +1,6 @@
 """Observability routes: /health (phase-aware downstream checks) and /metrics."""
 
+import sys
 from datetime import datetime
 
 from core.clients import http_client, redis_client
@@ -9,115 +10,76 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from config import settings
 
+# Shared library on path (idempotent; also done in core/auth.py) so this route uses
+# the shared dependency-check helper instead of hand-rolling the critical/optional →
+# 503/degraded/200 loop that shared.health now owns (#141/#223).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
+
 router = APIRouter()
+
+# Critical dependencies per phase: Phase 1 needs redis + the plugin registry; Phase 2
+# additionally treats the RAG/model services as critical. A non-critical dep being
+# down is "degraded" (still 200), not "unhealthy" (503).
+_PHASE_1 = {"redis", "plugin_registry"}
+_PHASE_2 = {"rag_pipeline", "model_management"}
+
+
+def _http_probe(base_url: str):
+    """Build an async probe that fails unless the service's /health returns 200."""
+
+    async def probe():
+        response = await http_client.get(f"{base_url}/health", timeout=5.0)
+        if response.status_code != 200:
+            raise RuntimeError(f"HTTP {response.status_code}")
+
+    return probe
 
 
 @router.get("/health")
 async def health_check():
-    """Health check endpoint with phase-aware downstream service status"""
-    health_status = {
+    """Health check with phase-aware downstream dependency status."""
+    phase = settings.MINDER_PHASE
+    critical = _PHASE_1 | _PHASE_2 if phase >= 2 else _PHASE_1
+
+    checks = [
+        DependencyCheck(
+            "redis", lambda: redis_client.ping(), critical="redis" in critical
+        ),
+        DependencyCheck(
+            "plugin_registry",
+            _http_probe(settings.PLUGIN_REGISTRY_URL),
+            critical="plugin_registry" in critical,
+        ),
+        DependencyCheck(
+            "rag_pipeline",
+            _http_probe(settings.RAG_PIPELINE_URL),
+            critical="rag_pipeline" in critical,
+        ),
+        DependencyCheck(
+            "model_management",
+            _http_probe(settings.MODEL_MANAGEMENT_URL),
+            critical="model_management" in critical,
+        ),
+    ]
+
+    status, status_code, check_results = await evaluate_dependencies(checks)
+
+    body = {
         "service": "api-gateway",
-        "status": "healthy",
+        "status": status,
         "timestamp": datetime.now().isoformat(),
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
-        "phase": settings.MINDER_PHASE,
-        "checks": {},
+        "phase": phase,
+        "checks": check_results,
     }
+    if status == "degraded":
+        body["message"] = f"Phase {phase} active - Phase 2 services not started"
 
-    # Define critical services for each phase
-    PHASE_1_SERVICES = ["redis", "plugin_registry"]
-    PHASE_2_SERVICES = ["rag_pipeline", "model_management"]
-
-    # All services to check (expanded to include AI services)
-    ALL_SERVICES = {
-        "redis": ("redis", lambda: redis_client.ping()),
-        "plugin_registry": (
-            settings.PLUGIN_REGISTRY_URL,
-            lambda: http_client.get(
-                f"{settings.PLUGIN_REGISTRY_URL}/health", timeout=5.0
-            ),
-        ),
-        "rag_pipeline": (
-            settings.RAG_PIPELINE_URL,
-            lambda: http_client.get(f"{settings.RAG_PIPELINE_URL}/health", timeout=5.0),
-        ),
-        "model_management": (
-            settings.MODEL_MANAGEMENT_URL,
-            lambda: http_client.get(
-                f"{settings.MODEL_MANAGEMENT_URL}/health", timeout=5.0
-            ),
-        ),
-    }
-
-    # Always check all services but mark Phase 2 as optional in Phase 1
-    services_to_check = ALL_SERVICES
-
-    # Determine which services are critical for current phase
-    if settings.MINDER_PHASE == 1:
-        critical_services = PHASE_1_SERVICES
-    elif settings.MINDER_PHASE >= 2:
-        critical_services = PHASE_1_SERVICES + PHASE_2_SERVICES
-    else:
-        critical_services = PHASE_1_SERVICES
-
-    # Check only services relevant to current phase
-    critical_unhealthy = False
-    optional_unhealthy = False
-
-    for service_name, (service_url, check_func) in services_to_check.items():
-        try:
-            if service_name == "redis":
-                # Redis check
-                check_func()
-                health_status["checks"][service_name] = "healthy"
-            else:
-                # HTTP service check
-                response = await check_func()
-                if response.status_code == 200:
-                    health_status["checks"][service_name] = "healthy"
-                else:
-                    health_status["checks"][
-                        service_name
-                    ] = f"unhealthy: HTTP {response.status_code}"
-                    if service_name in critical_services:
-                        critical_unhealthy = True
-                    else:
-                        optional_unhealthy = True
-        except Exception as e:
-            # Provide meaningful error messages
-            error_type = type(e).__name__
-            if error_type == "ReadTimeout":
-                error_msg = "timeout after 5.0s"
-            elif error_type == "ConnectError":
-                error_msg = "connection refused"
-            elif error_type == "ConnectTimeout":
-                error_msg = "connection timeout"
-            else:
-                error_msg = str(e) if str(e) else error_type
-
-            health_status["checks"][service_name] = f"unreachable: {error_msg}"
-            if service_name in critical_services:
-                critical_unhealthy = True
-            else:
-                optional_unhealthy = True
-
-    # Determine overall status based on critical services
-    if critical_unhealthy:
-        health_status["status"] = "unhealthy"
-        status_code = 503
-    elif optional_unhealthy:
-        # Only degraded if optional services are unhealthy
-        health_status["status"] = "degraded"
-        health_status[
-            "message"
-        ] = f"Phase {settings.MINDER_PHASE} active - Phase 2 services not started"
-        status_code = 200  # Degraded is still functional, return 200
-    else:
-        health_status["status"] = "healthy"
-        status_code = 200
-
-    return JSONResponse(status_code=status_code, content=health_status)
+    return JSONResponse(status_code=status_code, content=body)
 
 
 @router.get("/metrics")
