@@ -43,6 +43,10 @@ class RequiredPluginError(Exception):
     """Required plugin error"""
 
 
+class PluginNotFoundError(Exception):
+    """Requested plugin has no state row"""
+
+
 async def get_plugin_state(
     conn: asyncpg.Connection, plugin_name: str
 ) -> Optional[Dict]:
@@ -117,7 +121,10 @@ async def update_plugin_state(
 
 
 async def enable_plugin(
-    conn: asyncpg.Connection, plugin_name: str, reason: Optional[str] = None
+    conn: asyncpg.Connection,
+    plugin_name: str,
+    reason: Optional[str] = None,
+    allow_create: bool = False,
 ) -> Dict:
     """
     Enable a plugin
@@ -126,11 +133,15 @@ async def enable_plugin(
         conn: Database connection
         plugin_name: Plugin name
         reason: Optional reason for enabling
+        allow_create: Materialize a new ENABLED row when the plugin has no
+            state yet. Only the bootstrap path sets this — an API-driven enable
+            of an unknown plugin must 404, not silently create a phantom plugin.
 
     Returns:
         Updated plugin state
 
     Raises:
+        PluginNotFoundError: If the plugin has no state row and allow_create is False
         StateTransitionError: If state transition is invalid
         RequiredPluginError: If plugin is required and cannot be disabled
     """
@@ -150,7 +161,9 @@ async def enable_plugin(
     current = await get_plugin_state(conn, plugin_name)
 
     if not current:
-        # Create new state as enabled
+        if not allow_create:
+            raise PluginNotFoundError(f"Plugin {plugin_name} not found")
+        # Bootstrap path: materialize the default plugin as enabled
         logger.info(f"Creating new enabled state for plugin: {plugin_name}")
         return await create_plugin_state(conn, plugin_name, PluginState.ENABLED)
 
@@ -225,7 +238,7 @@ async def disable_plugin(
     current = await get_plugin_state(conn, plugin_name)
 
     if not current:
-        raise StateTransitionError(f"Plugin {plugin_name} not found")
+        raise PluginNotFoundError(f"Plugin {plugin_name} not found")
 
     # State transition: enabled → disabled
     if current["state"] == "enabled":

@@ -8,6 +8,9 @@ from typing import Optional
 
 from core.database import get_db_pool
 from core.state import (
+    PluginNotFoundError,
+    RequiredPluginError,
+    StateTransitionError,
     disable_plugin,
     enable_plugin,
     get_dependent_plugins,
@@ -28,6 +31,24 @@ from models.plugin_state import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _http_from_domain_error(
+    action: str, plugin_name: str, e: Exception
+) -> HTTPException:
+    """Map a state-layer exception to the right HTTP status.
+
+    Domain errors are client-facing (404 not-found, 409 conflict); anything
+    else is a server fault and must surface as 500, not a masked 400.
+    """
+    if isinstance(e, PluginNotFoundError):
+        return HTTPException(status_code=404, detail=str(e))
+    if isinstance(e, (RequiredPluginError, StateTransitionError)):
+        return HTTPException(status_code=409, detail=str(e))
+    logger.error(f"Failed to {action} plugin {plugin_name}: {e}")
+    return HTTPException(
+        status_code=500, detail=f"Internal error trying to {action} plugin"
+    )
 
 
 @router.get("/state", response_model=PluginStateListResponse)
@@ -92,8 +113,7 @@ async def enable_plugin_endpoint(plugin_name: str, request: EnablePluginRequest)
             state = await enable_plugin(conn, plugin_name, request.reason)
             return PluginStateResponse(**state)
     except Exception as e:
-        logger.error(f"Failed to enable plugin {plugin_name}: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _http_from_domain_error("enable", plugin_name, e)
 
 
 @router.post("/state/{plugin_name}/disable", response_model=PluginStateResponse)
@@ -114,8 +134,7 @@ async def disable_plugin_endpoint(plugin_name: str, request: DisablePluginReques
             )
             return PluginStateResponse(**state)
     except Exception as e:
-        logger.error(f"Failed to disable plugin {plugin_name}: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _http_from_domain_error("disable", plugin_name, e)
 
 
 @router.patch("/state/{plugin_name}", response_model=PluginStateResponse)
@@ -180,5 +199,4 @@ async def resolve_plugin_dependencies(plugin_name: str):
                 "count": len(order),
             }
     except Exception as e:
-        logger.error(f"Failed to resolve dependencies for {plugin_name}: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise _http_from_domain_error("resolve dependencies for", plugin_name, e)
