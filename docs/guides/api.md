@@ -49,7 +49,7 @@ GET /health
 POST /v1/auth/register
 Content-Type: application/json
 
-{ "username": "alice", "password": "..." }
+{ "username": "alice", "email": "alice@example.com", "password": "..." }
 ```
 
 ```http
@@ -63,16 +63,17 @@ Content-Type: application/json
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "expires_in": 1800,
+  "user": { "id": 1, "username": "alice", "email": "alice@example.com", "role": "user" }
 }
 ```
 
 ```http
 POST /v1/auth/refresh
-Content-Type: application/json
-
-{ "refresh_token": "..." }
+Authorization: Bearer <access_token>
 ```
+Refresh takes **no body** — the current token is read from the `Authorization` header.
 
 #### Proxied routes
 
@@ -136,7 +137,7 @@ GET /health
 
 #### List / search plugins
 ```http
-GET /v1/marketplace/plugins?page=1&page_size=10
+GET /v1/marketplace/plugins?limit=10&offset=0
 ```
 
 See `/docs` for the full set of discovery, search, featured, and dependency
@@ -244,7 +245,7 @@ Content-Type: application/json
 POST /stt
 Content-Type: multipart/form-data
 
-audio: <audio_file>
+file: <audio_file>
 language: tr-TR
 ```
 

@@ -44,7 +44,7 @@ gated by holding a valid JWT.
 POST /v1/auth/register
 Content-Type: application/json
 
-{ "username": "alice", "password": "your-password" }
+{ "username": "alice", "email": "alice@example.com", "password": "your-password" }
 ```
 
 ```http
@@ -58,7 +58,9 @@ Content-Type: application/json
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "expires_in": 1800,
+  "user": { "id": 1, "username": "alice", "email": "alice@example.com", "role": "user" }
 }
 ```
 
@@ -73,9 +75,7 @@ Authorization: Bearer <access_token>
 
 ```http
 POST /v1/auth/refresh
-Content-Type: application/json
-
-{ "refresh_token": "..." }
+Authorization: Bearer <access_token>
 ```
 
 ### JWT secret

@@ -110,7 +110,7 @@ curl -s http://localhost:8000/health | jq '.status'
 # Register + login
 curl -X POST http://localhost:8000/v1/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "..."}'
+  -d '{"username": "admin", "email": "admin@example.com", "password": "..."}'
 
 TOKEN=$(curl -s -X POST http://localhost:8000/v1/auth/login \
   -H "Content-Type: application/json" \
@@ -141,6 +141,9 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | POST | `/v1/plugins/{plugin_name}/collect` | Trigger a data-collection run |
 | GET | `/v1/plugins/{plugin_name}/health` | Plugin health status |
 | GET | `/v1/plugins/{plugin_name}/analysis` | The plugin's `analyze()` output, returned verbatim (schema is plugin-defined; the registry does not reshape it). 404 unknown / 403 disabled / 503 not-running |
+| POST | `/v1/plugins/{plugin_name}/actions/{action}` | Invoke a plugin write/execute action (JWT-gated; only names in the plugin's `ACTIONS`) |
+| GET | `/v1/plugins/{plugin_name}/config` | Config schema + effective values, secrets masked (JWT-gated) |
+| PUT | `/v1/plugins/{plugin_name}/config` | Update config: validate → persist → apply live, no restart (JWT-gated) |
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
 ### Webhooks
