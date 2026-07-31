@@ -133,43 +133,27 @@ async def retrieve_with_graph_handler(
                 retrieval_time_ms=(time.time() - start_time) * 1000,
             )
 
-        # DEBUG: Log extracted entities
-        extracted_entity_names = [e["text"] for e in extraction_result["entities"]]
-        logger.info(f"🔍 Extracted entities from query: {extracted_entity_names}")
+        # Search the graph by the spaCy-extracted entity names. The previous code
+        # re-derived capitalized-ASCII tokens via `re.findall(r"\b[A-Z][a-z]+\b")` and
+        # searched those instead — so lowercase / ALL-CAPS / Turkish/non-Latin queries
+        # matched nothing even though NER had already found the entities. Use the NER
+        # output we already computed (entity_count > 0 is guaranteed here).
+        search_terms = list(
+            dict.fromkeys(e["text"] for e in extraction_result["entities"])
+        )
+        logger.info(f"🔍 Searching graph for extracted entities: {search_terms}")
 
-        # Split query into tokens and search for each significant token
-        # This handles cases like "Bill Gates Microsoft" where spaCy extracts multi-word entities
-        import re
-
-        tokens = re.findall(
-            r"\b[A-Z][a-z]+\b", request.query
-        )  # Extract capitalized words
-        tokens = list(set(tokens))  # Remove duplicates
-
-        if len(tokens) == 0:
-            logger.warning("⚠️ No significant tokens found in query")
-            return GraphRetrievalResponse(
-                success=True,
-                query=request.query,
-                related_entities=[],
-                entity_count=0,
-                retrieval_time_ms=(time.time() - start_time) * 1000,
-            )
-
-        logger.info(f"🔍 Split query into tokens: {tokens}")
-
-        # Get related entities via graph traversal for each token
+        # Get related entities via graph traversal for each extracted entity
         related_entities = []
         seen_entities = set()
 
-        for token in tokens[:5]:  # Limit to top 5 tokens
-            logger.info(f"🔍 Searching for related entities to: '{token}'")
+        for term in search_terms[:5]:  # Limit to top 5 entities
             entities = await graph_retriever.find_related_entities(
-                entity_name=token,
+                entity_name=term,
                 max_depth=request.traversal_depth,
                 limit=request.limit,
             )
-            logger.info(f"🔍 Found {len(entities)} related entities for '{token}'")
+            logger.info(f"🔍 Found {len(entities)} related entities for '{term}'")
             for e in entities:
                 if e["text"] not in seen_entities:
                     related_entities.append(e)
