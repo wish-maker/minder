@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL
 
@@ -43,7 +43,10 @@ class RAGPipelineCreate(BaseModel):
     """RAG Pipeline creation request"""
 
     name: str
-    knowledge_base_ids: List[str]
+    # At least one KB: retrieval reads knowledge_base_ids[0], so an empty list
+    # would create a pipeline that 500s (IndexError) on every query — reject at
+    # the edge with 422 instead.
+    knowledge_base_ids: List[str] = Field(..., min_length=1)
     retrieval_config: Dict[str, Any] = {}
     generation_config: Dict[str, Any] = {}
 
