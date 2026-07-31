@@ -10,21 +10,22 @@ import time
 import uuid
 
 from core.clients import redis_client
-from core.metrics import (
-    http_request_duration_seconds,
-    http_requests_in_progress,
-    http_requests_total,
-)
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from config import settings
 
 # Shared library on path (idempotent; also done in core/auth.py) so this module can
-# use the shared CORS helper instead of re-implementing the middleware wiring (#49).
+# use the shared CORS helper + the shared Prometheus collectors instead of
+# re-defining them (they were byte-identical to shared.metrics) (#49/#223).
 if "/app/src" not in sys.path:
     sys.path.insert(0, "/app/src")
 
+from shared.metrics import (  # noqa: E402
+    http_request_duration_seconds,
+    http_requests_in_progress,
+    http_requests_total,
+)
 from shared.utils.cors import add_cors_middleware  # noqa: E402
 
 logger = logging.getLogger("minder.api-gateway")
