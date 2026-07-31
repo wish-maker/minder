@@ -16,7 +16,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 import yaml
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 
 from config import settings
@@ -61,6 +61,7 @@ from routes.plugins import build_plugins_router  # noqa: E402
 from routes.proxy import ProxyRouter  # noqa: E402
 from routes.services import build_services_router  # noqa: E402
 
+from shared.auth.jwt_middleware import get_current_user  # noqa: E402
 from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
@@ -238,11 +239,15 @@ async def health_check():
     )
 
 
-@app.post("/force-webhooks")
-async def force_webhooks():
+@app.post("/v1/force-webhooks", tags=["Webhooks"])
+@app.post("/force-webhooks", include_in_schema=False)  # deprecated unversioned alias
+async def force_webhooks(current_user: dict = Depends(get_current_user)):
     """
     Force webhook registration from /tmp manifest files.
     Workaround for MVP restart-safety issue.
+
+    JWT-gated like every other mutation in this service; the unversioned
+    ``/force-webhooks`` path is kept as a hidden deprecated alias.
     """
     count = 0
     for manifest_file in glob.glob("/tmp/*-manifest.yml"):

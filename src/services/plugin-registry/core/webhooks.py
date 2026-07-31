@@ -149,19 +149,17 @@ async def register_all_webhooks_on_startup():
     import yaml
 
     manifest_files = glob.glob("/tmp/*-manifest.yml")
-    logger.info(f"DEBUG: Found {len(manifest_files)} manifest files in /tmp")
-    logger.info(
-        f"DEBUG: plugins_db has {len(plugins_db)} plugins: {list(plugins_db.keys())}"
-    )
+    logger.debug(f"Found {len(manifest_files)} manifest files in /tmp")
+    logger.debug(f"plugins_db has {len(plugins_db)} plugins: {list(plugins_db.keys())}")
 
     for manifest_file in manifest_files:
         try:
-            logger.info(f"DEBUG: Loading manifest from {manifest_file}")
+            logger.debug(f"Loading manifest from {manifest_file}")
             with open(manifest_file, "r") as f:
                 manifest = yaml.safe_load(f)
             plugin_name = manifest.get("metadata", {}).get("name")
-            logger.info(
-                f"DEBUG: Plugin name: {plugin_name}, in plugins_db: {plugin_name in plugins_db}"
+            logger.debug(
+                f"Plugin name: {plugin_name}, in plugins_db: {plugin_name in plugins_db}"
             )
             if plugin_name and plugin_name in plugins_db:
                 plugin_manifests[plugin_name] = manifest
