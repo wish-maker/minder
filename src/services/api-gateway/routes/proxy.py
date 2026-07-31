@@ -16,6 +16,34 @@ logger = logging.getLogger("minder.api-gateway")
 
 router = APIRouter()
 
+# Downstream response headers that must NOT be copied onto our re-serialized
+# JSONResponse. We rebuild the body from response.json(), so the downstream's
+# content framing is stale/wrong: content-length no longer matches, and httpx has
+# already transparently decoded any content-encoding (so forwarding "gzip" would
+# mislabel a now-plaintext body). The rest are hop-by-hop headers (RFC 7230 §6.1)
+# that must never be forwarded by a proxy.
+_STRIPPED_RESPONSE_HEADERS = frozenset(
+    {
+        "content-length",
+        "content-encoding",
+        "transfer-encoding",
+        "connection",
+        "keep-alive",
+        "proxy-authenticate",
+        "proxy-authorization",
+        "te",
+        "trailer",
+        "upgrade",
+    }
+)
+
+
+def _safe_response_headers(headers) -> dict:
+    """Drop content-framing + hop-by-hop headers before re-emitting a response."""
+    return {
+        k: v for k, v in headers.items() if k.lower() not in _STRIPPED_RESPONSE_HEADERS
+    }
+
 
 async def proxy_request(service_url: str, path: str, request: Request):
     """Proxy request to downstream service"""
@@ -48,7 +76,7 @@ async def proxy_request(service_url: str, path: str, request: Request):
         return JSONResponse(
             status_code=response.status_code,
             content=response.json() if response.content else None,
-            headers=dict(response.headers),
+            headers=_safe_response_headers(response.headers),
         )
 
     except httpx.TimeoutException:
