@@ -140,7 +140,7 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | POST | `/v1/plugins/{plugin_name}/disable` | Disable a plugin |
 | POST | `/v1/plugins/{plugin_name}/collect` | Trigger a data-collection run |
 | GET | `/v1/plugins/{plugin_name}/health` | Plugin health status |
-| GET | `/v1/plugins/{plugin_name}/analysis` | Plugin analysis output |
+| GET | `/v1/plugins/{plugin_name}/analysis` | The plugin's `analyze()` output, returned verbatim (schema is plugin-defined; the registry does not reshape it). 404 unknown / 403 disabled / 503 not-running |
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
 ### Webhooks
