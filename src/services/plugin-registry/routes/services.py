@@ -8,9 +8,10 @@ acyclic and mirrors the modular pattern used elsewhere in the codebase.
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import ServiceRegistration
 
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.pagination import paginate
 
 
@@ -20,8 +21,11 @@ def build_services_router(
     router = APIRouter(tags=["Service Discovery"])
 
     @router.post("/v1/services/register")
-    async def register_service(service: ServiceRegistration):
-        """Register a service for service discovery"""
+    async def register_service(
+        service: ServiceRegistration,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
+        """Register a service for service discovery (JWT or service token)."""
         services_db[service.service_name] = service
         redis_client.hset(
             f"service:{service.service_name}",
@@ -64,8 +68,11 @@ def build_services_router(
         return service
 
     @router.delete("/v1/services/{service_name}")
-    async def unregister_service(service_name: str):
-        """Unregister a service"""
+    async def unregister_service(
+        service_name: str,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
+        """Unregister a service (JWT or service token)."""
         if service_name not in services_db:
             raise HTTPException(status_code=404, detail="Service not found")
         del services_db[service_name]
@@ -73,8 +80,15 @@ def build_services_router(
         return {"message": f"Service {service_name} unregistered"}
 
     @router.get("/v1/services/{service_name}/health")
-    async def check_service_health(service_name: str):
-        """Check health of a registered microservice and record it in Redis."""
+    async def check_service_health(
+        service_name: str,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
+        """Check health of a registered microservice and record it in Redis.
+
+        Auth-gated: it issues an outbound request to the registered host:port, so
+        leaving it open would be an unauthenticated SSRF/health-probe primitive.
+        """
         try:
             health_data = await proxy_router.health_check_proxy(service_name)
             redis_client.hset(
@@ -104,8 +118,18 @@ def build_services_router(
         "/v1/proxy/{service_name}/{path:path}",
         methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     )
-    async def proxy_to_service(service_name: str, path: str, request: Request):
-        """Dynamic proxy: forward a request to a registered microservice."""
+    async def proxy_to_service(
+        service_name: str,
+        path: str,
+        request: Request,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
+        """Dynamic proxy: forward a request to a registered microservice.
+
+        Auth-gated: this forwards to an arbitrary registered host:port and returns
+        the response, so an open version is an SSRF/lateral-movement primitive for
+        any in-network caller.
+        """
         proxy_path = f"/{path}"
         if request.url.query:
             proxy_path = f"{proxy_path}?{request.url.query}"
