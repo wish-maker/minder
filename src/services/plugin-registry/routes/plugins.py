@@ -353,11 +353,18 @@ def build_plugins_router(
 
     # ── central plugin configuration (#34) ─────────────────────────────────────
     @router.get("/v1/plugins/{plugin_name}/config")
-    async def get_plugin_config(plugin_name: str):
+    async def get_plugin_config(
+        plugin_name: str,
+        current_user: dict = Depends(get_current_user),
+    ):
         """Return a plugin's config schema + current effective values (secrets masked).
 
         Effective = declared defaults → env → persisted (API-set) overrides. A UI can
         render `schema` as a form and show `values` as the live config.
+
+        JWT-gated (like the PUT): config can carry secret-typed fields, and masking
+        depends on the schema author flagging them — so it must not be readable by an
+        unauthenticated caller (secrets shouldn't ride the platform's GET-open policy).
         """
         instance = plugin_instances.get(plugin_name)
         if instance is None:
