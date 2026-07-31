@@ -154,11 +154,15 @@ class OllamaManager:
 
         except Exception as e:
             logger.error(f"❌ LLM generation failed: {e}")
+            # Flag the failure so the query path can surface a real 503 instead of
+            # returning this error string as a 200 "answer" (#232). Internal callers
+            # (hyde/rerank/corrective/self_rag) ignore the flag and keep degrading.
             return {
                 "text": f"Error generating response: {str(e)}",
                 "model": model,
                 "context": context,
                 "tokens_used": 0,
+                "error": True,
             }
 
     def _build_rag_prompt(self, question: str, context: str) -> str:

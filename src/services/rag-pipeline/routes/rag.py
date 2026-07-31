@@ -370,14 +370,26 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         conversation_repository=state.conversation_repository,
         gen_timer=state.llm_generation_duration,
     )
-    result = await state.run_query(
-        pipeline=pipeline,
-        pipeline_id=pipeline_id,
-        request=request,
-        llm_model=pipeline.get("llm_model") or DEFAULT_LLM_MODEL,
-        generation_config=pipeline.get("generation_config", {}),
-        components=components,
-    )
+    try:
+        result = await state.run_query(
+            pipeline=pipeline,
+            pipeline_id=pipeline_id,
+            request=request,
+            llm_model=pipeline.get("llm_model") or DEFAULT_LLM_MODEL,
+            generation_config=pipeline.get("generation_config", {}),
+            components=components,
+        )
+    except state.GenerationError:
+        # LLM backend failed to produce an answer — surface a real 503 rather than a
+        # 200 whose "answer" is a leaked exception string (#232), matching the
+        # embedding-failure 503 (#77).
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "LLM backend unavailable — could not generate an answer. Check that "
+                "OLLAMA_BASE_URL is reachable and the model is available."
+            ),
+        )
     # Annotate the retrieval strategy the runner is blind to, plus any silent downgrade.
     method_details = dict(result.get("method_details") or {})
     method_details["retrieval"] = retrieval_strategy

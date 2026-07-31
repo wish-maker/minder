@@ -145,7 +145,7 @@ except Exception as e:  # pragma: no cover
     logger.warning(f"⚠️ Compressor unavailable: {e}")
 
 # Query orchestration lives in the rag/ package (per-method strategy modules + runner).
-from rag.runner import RagComponents, run_query  # noqa: E402,F401
+from rag.runner import GenerationError, RagComponents, run_query  # noqa: E402,F401
 
 # ============================================================================
 # Qdrant Client Management
