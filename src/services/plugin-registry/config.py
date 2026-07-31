@@ -37,6 +37,10 @@ class Settings(BaseSettings):
             raise ValueError("REDIS_PASSWORD must be set via environment variable")
         return v
 
+    # InfluxDB token passed to data plugins' write config. Optional (empty default —
+    # dev influx runs --without-auth, #109) so we never bake in a weak fallback secret.
+    INFLUXDB_TOKEN: str = ""
+
     # Plugin Storage
     PLUGINS_PATH: str = "/app/plugins"
     PLUGINS_DATA_PATH: str = "/app/plugins-data"

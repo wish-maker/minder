@@ -8,7 +8,6 @@ instantiated. Loaded plugins are cached in ``core.state``, persisted via
 """
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -170,27 +169,21 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "host": "minder-postgres",
                     "port": 5432,
                     "user": "minder",
-                    "password": os.environ.get(
-                        "POSTGRES_PASSWORD", "dev_password_change_me"
-                    ),
+                    # From settings (fail-fast if unset) — no weak-default secret baked in.
+                    "password": settings.POSTGRES_PASSWORD,
                     "database": "minder",
                 },
                 "redis": {
                     "host": "minder-redis",
                     "port": 6379,
-                    "password": os.environ.get(
-                        "REDIS_PASSWORD", "dev_password_change_me"
-                    ),
+                    "password": settings.REDIS_PASSWORD,
                     "db": 0,
                 },
                 "influxdb": {
                     "enabled": True,
                     "host": "minder-influxdb",
                     "port": 8086,
-                    "token": os.environ.get(
-                        "INFLUXDB_TOKEN",
-                        "minder-super-secret-token-change-me-in-production",
-                    ),
+                    "token": settings.INFLUXDB_TOKEN,
                     "org": "minder",
                     "bucket": "minder-metrics",
                 },
