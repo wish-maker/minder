@@ -27,6 +27,12 @@ _DEFAULT_USER = "default"
 _MAX_TURNS = 3
 
 
+class GenerationError(Exception):
+    """The LLM failed to produce the final answer. The runner stays HTTP-agnostic;
+    the query route maps this to a 503 instead of returning the error as a 200
+    "answer" (#232) — mirroring how embedding failures already 503 (#77)."""
+
+
 @dataclass
 class RagComponents:
     """Everything the runner needs, injected by the caller (no globals imported)."""
@@ -262,6 +268,10 @@ async def run_query(
             answer_result = await components.ollama_manager.generate_response(
                 prompt=question, context=combined_context, **(generation_config or {})
             )
+            if answer_result.get("error"):
+                raise GenerationError(
+                    answer_result.get("text", "LLM generation failed")
+                )
             answer_text = answer_result["text"]
             model_used = answer_result.get("model", llm_model)
             tokens_used = answer_result.get("tokens_used")
