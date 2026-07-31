@@ -148,7 +148,7 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/v1/plugins/reload-webhook` | Re-register a plugin's webhook routes |
-| POST | `/force-webhooks` | Force re-registration of all webhook routes |
+| POST | `/v1/force-webhooks` | Force re-registration of all webhook routes (JWT-gated; unversioned `/force-webhooks` kept as a deprecated alias) |
 | POST | `/webhook/{path:path}` | Generic inbound webhook / event trigger |
 
 ### Service discovery
