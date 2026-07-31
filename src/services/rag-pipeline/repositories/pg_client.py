@@ -4,6 +4,7 @@ PostgreSQL Client for RAG Pipeline Persistence
 Handles knowledge bases, pipelines, and conversation storage.
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -27,6 +28,10 @@ PG_AVAILABLE = ASYNCPG_AVAILABLE
 
 # PostgreSQL connection pool
 pg_pool: Optional[asyncpg.Pool] = None
+
+# Guards lazy pool creation so two concurrent first-callers don't each build a
+# pool (the second assignment would win and leak the first).
+_pg_pool_lock = asyncio.Lock()
 
 # Database configuration
 import os  # noqa: E402
@@ -52,29 +57,33 @@ async def get_pg_connection():
         sys.path.insert(0, "/app/src")
     from shared.db.pool import create_pg_pool
 
-    # Use globals() to explicitly access and update the module-level variable
+    # Use globals() to explicitly access and update the module-level variable.
+    # Double-checked under a lock so concurrent first-callers create exactly one pool.
     if globals()["pg_pool"] is None:
-        try:
-            # Create connection pool. command_timeout=None preserves the previous
-            # behaviour (no per-command timeout).
-            pool = await create_pg_pool(
-                host=PG_HOST,
-                port=int(PG_PORT),
-                user=PG_USER,
-                password=PG_PASSWORD,
-                database=PG_DATABASE,
-                min_size=2,
-                max_size=10,
-                command_timeout=None,
-            )
-            # Explicitly update the module-level variable using globals()
-            globals()["pg_pool"] = pool
-            logger.info(
-                f"✅ PostgreSQL connection pool created: {PG_HOST}:{PG_PORT}/{PG_DATABASE}"
-            )
-        except Exception as e:
-            logger.error(f"❌ Failed to create PostgreSQL connection pool: {e}")
-            raise
+        async with _pg_pool_lock:
+            if globals()["pg_pool"] is None:
+                try:
+                    # Create connection pool. command_timeout=None preserves the
+                    # previous behaviour (no per-command timeout).
+                    pool = await create_pg_pool(
+                        host=PG_HOST,
+                        port=int(PG_PORT),
+                        user=PG_USER,
+                        password=PG_PASSWORD,
+                        database=PG_DATABASE,
+                        min_size=2,
+                        max_size=10,
+                        command_timeout=None,
+                    )
+                    # Explicitly update the module-level variable using globals()
+                    globals()["pg_pool"] = pool
+                    logger.info(
+                        f"✅ PostgreSQL connection pool created: "
+                        f"{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+                    )
+                except Exception as e:
+                    logger.error(f"❌ Failed to create PostgreSQL connection pool: {e}")
+                    raise
 
     return globals()["pg_pool"]
 

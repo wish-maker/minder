@@ -152,6 +152,18 @@ from rag.runner import RagComponents, run_query  # noqa: E402,F401
 # ============================================================================
 
 
+_qdrant_client: Optional[QdrantClient] = None
+
+
 def get_qdrant_client() -> QdrantClient:
-    """Get Qdrant client"""
-    return QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
+    """Return the shared Qdrant client, created once.
+
+    Cached so we don't open (and abandon) a fresh connection pool on every call —
+    the old per-request construction leaked a client each time. The client is
+    synchronous; migrating the hot paths off the event loop is tracked separately
+    (#211).
+    """
+    global _qdrant_client
+    if _qdrant_client is None:
+        _qdrant_client = QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
+    return _qdrant_client

@@ -178,6 +178,24 @@ _rate_limit_store: Dict[str, list] = {}
 _rate_limit_window_seconds = 60
 
 
+def _prune_rate_limit_key(
+    store: Dict[str, list], key: str, window_start: float
+) -> None:
+    """Drop timestamps older than ``window_start`` for ``key``.
+
+    Removes the key entirely when it empties, so idle user/IP × path combinations
+    don't accumulate a permanent (empty-list) entry — keeping the in-memory store
+    bounded on a long-lived process.
+    """
+    if key not in store:
+        return
+    fresh = [ts for ts in store[key] if ts > window_start]
+    if fresh:
+        store[key] = fresh
+    else:
+        del store[key]
+
+
 def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
     """
     Rate limiting decorator - uses in-memory store
@@ -215,12 +233,9 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
             key = f"{user_id}:{request.url.path}"
             now = datetime.now(timezone.utc).timestamp()
 
-            # Clean old entries
-            if key in _rate_limit_store:
-                window_start = now - (window_minutes * 60)
-                _rate_limit_store[key] = [
-                    ts for ts in _rate_limit_store[key] if ts > window_start
-                ]
+            # Clean old entries (and drop the key entirely if it empties)
+            window_start = now - (window_minutes * 60)
+            _prune_rate_limit_key(_rate_limit_store, key, window_start)
 
             # Check limit
             if len(_rate_limit_store.get(key, [])) >= max_requests:
