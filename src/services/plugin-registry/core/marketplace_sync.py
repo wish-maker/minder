@@ -19,6 +19,12 @@ from core.state import logger
 # get_current_user_or_service. Empty -> no header (marketplace will require a user JWT).
 SERVICE_SYNC_TOKEN = os.environ.get("SERVICE_SYNC_TOKEN", "")
 
+# One resolved marketplace base URL for the whole module — the two call sites used to
+# each `os.environ.get("MARKETPLACE_URL", ...)` with DIFFERENT defaults ("marketplace"
+# vs "minder-marketplace"), so if the env were unset the /ai/sync call would hit a
+# non-resolving host. Single source, correct container name.
+MARKETPLACE_URL = os.environ.get("MARKETPLACE_URL", "http://minder-marketplace:8002")
+
 
 def _service_headers() -> Dict[str, str]:
     return {"X-Service-Token": SERVICE_SYNC_TOKEN} if SERVICE_SYNC_TOKEN else {}
@@ -118,11 +124,9 @@ async def sync_plugin_ai_tools(
             return
 
         # Call marketplace sync API
-        marketplace_url = os.environ.get("MARKETPLACE_URL", "http://marketplace:8002")
-
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
-                f"{marketplace_url}/v1/marketplace/ai/sync",
+                f"{MARKETPLACE_URL}/v1/marketplace/ai/sync",
                 json={
                     "plugin_name": plugin_name,
                     "plugin_id": plugin_id,
@@ -159,15 +163,11 @@ async def get_or_create_marketplace_plugin(
         Plugin UUID or None if failed
     """
     try:
-        marketplace_url = os.environ.get(
-            "MARKETPLACE_URL", "http://minder-marketplace:8002"
-        )
-
         # Try to find existing plugin by name
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Search for existing plugin
             search_response = await client.get(
-                f"{marketplace_url}/v1/marketplace/plugins/search",
+                f"{MARKETPLACE_URL}/v1/marketplace/plugins/search",
                 params={"q": plugin_name},
             )
 
@@ -209,7 +209,7 @@ async def get_or_create_marketplace_plugin(
                 plugin_data["repository_url"] = repository
 
             create_response = await client.post(
-                f"{marketplace_url}/v1/marketplace/plugins",
+                f"{MARKETPLACE_URL}/v1/marketplace/plugins",
                 json=plugin_data,
                 headers=_service_headers(),
             )
