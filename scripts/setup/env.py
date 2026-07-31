@@ -34,6 +34,10 @@ SECRET_SPEC = {
     "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET": "32",
     "GRAFANA_PASSWORD": "32",
     "WEBUI_SECRET_KEY": "32",
+    # Inter-service auth for registry→marketplace AI-tool catalog sync (X-Service-Token).
+    # One .env value passed to both containers, so a generated value matches on both
+    # sides. Was skipped here → stayed empty → sync silently 401'd (#227).
+    "SERVICE_SYNC_TOKEN": "32",
 }
 
 # Values matching this (case-sensitive substring) are treated as unset placeholders.
