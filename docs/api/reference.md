@@ -148,7 +148,7 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/v1/plugins/reload-webhook` | Re-register a plugin's webhook routes |
-| POST | `/force-webhooks` | Force re-registration of all webhook routes |
+| POST | `/v1/force-webhooks` | Force re-registration of all webhook routes (JWT-gated; unversioned `/force-webhooks` kept as a deprecated alias) |
 | POST | `/webhook/{path:path}` | Generic inbound webhook / event trigger |
 
 ### Service discovery
@@ -192,8 +192,8 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/v1/marketplace/plugins` | List catalog plugins (paginated / filterable) |
-| GET | `/v1/marketplace/plugins/search` | Full-text search |
+| GET | `/v1/marketplace/plugins` | List catalog plugins — filterable; paginated via `limit`/`offset` (canonical; `page`/`page_size` accepted but deprecated). Response carries both `total`/`limit`/`offset` and `page`/`page_size`/`total_pages` |
+| GET | `/v1/marketplace/plugins/search` | Full-text search (same `limit`/`offset` pagination) |
 | GET | `/v1/marketplace/plugins/featured` | Featured plugins |
 | GET | `/v1/marketplace/plugins/{plugin_id}` | Plugin details |
 | POST | `/v1/marketplace/plugins` | Create a catalog entry (called by plugin-registry) |

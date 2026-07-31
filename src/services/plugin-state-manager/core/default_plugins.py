@@ -211,7 +211,9 @@ async def enable_plugins_in_dependency_order(conn: asyncpg.Connection, config: D
             try:
                 from core.state import enable_plugin
 
-                await enable_plugin(conn, plugin_name, reason="system_bootstrap")
+                await enable_plugin(
+                    conn, plugin_name, reason="system_bootstrap", allow_create=True
+                )
                 plugins[plugin_name]["enabled"] = True
                 logger.info(f"✅ Enabled default plugin: {plugin_name}")
             except Exception as e:
