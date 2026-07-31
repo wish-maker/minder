@@ -65,10 +65,47 @@ def _row_to_plugin_response(row) -> PluginResponse:
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
 
 
+def _resolve_pagination(
+    limit: Optional[int], offset: Optional[int], page: int, page_size: int
+) -> tuple[int, int]:
+    """Resolve effective ``(limit, offset)``.
+
+    ``limit``/``offset`` (the platform-standard vocabulary, #147/C6) win when
+    supplied; otherwise fall back to the deprecated ``page``/``page_size``.
+    """
+    if limit is not None or offset is not None:
+        return (limit if limit is not None else 10, offset if offset is not None else 0)
+    return page_size, (page - 1) * page_size
+
+
+def _build_list_response(
+    plugins: List[Any], total_count: int, limit: int, offset: int
+) -> PluginListResponse:
+    """Assemble a PluginListResponse populating both pagination vocabularies."""
+    page = (offset // limit) + 1 if limit else 1
+    total_pages = (total_count + limit - 1) // limit if limit else 0
+    return PluginListResponse(
+        plugins=plugins,
+        count=len(plugins),
+        total=total_count,
+        limit=limit,
+        offset=offset,
+        page=page,
+        page_size=limit,
+        total_pages=total_pages,
+    )
+
+
 @router.get("/plugins", response_model=PluginListResponse)
 async def list_plugins(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    limit: Optional[int] = Query(
+        None, ge=1, le=100, description="Page size (canonical)"
+    ),
+    offset: Optional[int] = Query(None, ge=0, description="Items to skip (canonical)"),
+    page: int = Query(1, ge=1, description="Deprecated: use limit/offset"),
+    page_size: int = Query(
+        10, ge=1, le=100, description="Deprecated: use limit/offset"
+    ),
     category: Optional[str] = None,
     pricing_model: Optional[str] = None,
     status: Optional[str] = "approved",
@@ -77,12 +114,15 @@ async def list_plugins(
     List all plugins in marketplace
 
     Args:
-        page: Page number (1-indexed)
-        page_size: Number of items per page
+        limit: Page size (canonical, platform-standard)
+        offset: Items to skip (canonical, platform-standard)
+        page: Deprecated — page number (1-indexed); use limit/offset
+        page_size: Deprecated — items per page; use limit/offset
         category: Filter by category
         pricing_model: Filter by pricing model
         status: Filter by status (default: approved)
     """
+    eff_limit, eff_offset = _resolve_pagination(limit, offset, page, page_size)
     pool = await get_pool()
 
     # Build query conditions
@@ -117,8 +157,7 @@ async def list_plugins(
         total_count = await conn.fetchval(count_query, *params)
 
         # Get plugins
-        offset = (page - 1) * page_size
-        params.extend([page_size, offset])
+        params.extend([eff_limit, eff_offset])
 
         rows = await conn.fetch(
             f"""
@@ -137,28 +176,26 @@ async def list_plugins(
 
         plugins = [_row_to_plugin_response(row) for row in rows]
 
-        total_pages = (total_count + page_size - 1) // page_size
-
-        return PluginListResponse(
-            plugins=plugins,
-            count=len(plugins),
-            page=page,
-            page_size=page_size,
-            total_pages=total_pages,
-        )
+        return _build_list_response(plugins, total_count, eff_limit, eff_offset)
 
 
 @router.get("/plugins/search", response_model=PluginListResponse)
 async def search_plugins(
     q: str = Query(..., min_length=1),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
+    limit: Optional[int] = Query(
+        None, ge=1, le=100, description="Page size (canonical)"
+    ),
+    offset: Optional[int] = Query(None, ge=0, description="Items to skip (canonical)"),
+    page: int = Query(1, ge=1, description="Deprecated: use limit/offset"),
+    page_size: int = Query(
+        10, ge=1, le=100, description="Deprecated: use limit/offset"
+    ),
 ):
     """Search plugins by name or description"""
     pool = await get_pool()
 
     search_pattern = f"%{q}%"
-    offset = (page - 1) * page_size
+    eff_limit, eff_offset = _resolve_pagination(limit, offset, page, page_size)
 
     async with pool.acquire() as conn:
         # Get total count
@@ -189,21 +226,13 @@ async def search_plugins(
             LIMIT $2 OFFSET $3
             """,
             search_pattern,
-            page_size,
-            offset,
+            eff_limit,
+            eff_offset,
         )
 
         plugins = [_row_to_plugin_response(row) for row in rows]
 
-        total_pages = (total_count + page_size - 1) // page_size
-
-        return PluginListResponse(
-            plugins=plugins,
-            count=len(plugins),
-            page=page,
-            page_size=page_size,
-            total_pages=total_pages,
-        )
+        return _build_list_response(plugins, total_count, eff_limit, eff_offset)
 
 
 @router.post("/plugins", response_model=PluginResponse, status_code=201)

@@ -121,10 +121,20 @@ class PluginResponse(BaseModel):
 
 
 class PluginListResponse(BaseModel):
-    """Model for plugin list response"""
+    """Model for plugin list response.
+
+    Carries the platform-standard ``limit``/``offset``/``total`` fields (#147/C6)
+    alongside the original ``page``/``page_size``/``total_pages`` — a superset, so
+    existing page-based clients keep working while new clients use limit/offset.
+    """
 
     plugins: List[PluginResponse]
     count: int
+    # Platform-standard pagination (canonical)
+    total: int = 0
+    limit: int = 0
+    offset: int = 0
+    # Deprecated page-based fields, kept for backward compatibility
     page: int
     page_size: int
     total_pages: int
