@@ -68,7 +68,12 @@ async def load_services_from_redis():
 async def health_check_loop():
     """Background task to monitor plugin health"""
     while True:
-        for plugin_name, plugin_instance in plugin_instances.items():
+        # Snapshot the dict: health_check() below awaits, so a concurrent plugin
+        # uninstall (del plugin_instances[name]) would otherwise raise
+        # "dictionary changed size during iteration" — which, being raised by the
+        # for-statement rather than the per-plugin try/except, would escape the
+        # while-loop and permanently kill health monitoring (the task ref is lost).
+        for plugin_name, plugin_instance in list(plugin_instances.items()):
             try:
                 health = await plugin_instance.health_check()
                 plugin_info = plugins_db.get(plugin_name)
