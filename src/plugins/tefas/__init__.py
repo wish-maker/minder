@@ -27,6 +27,7 @@ configures, and fails soft everywhere; the data lands where TEFAS is reachable.
 import asyncio
 import logging
 import os
+import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
@@ -41,6 +42,11 @@ logger = logging.getLogger("minder.plugin.tefas")
 
 _MEASUREMENT = "tefas_fund_price"
 _DEFAULT_START = "2015-01-01"
+
+# Fund codes come from config (TEFAS_FUNDS, API-settable) and are interpolated into
+# an InfluxDB SQL query + line protocol — restrict to a safe charset so a config
+# value can't break out into injection (or corrupt line protocol with a space/comma).
+_SAFE_CODE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # NAME COLLISION: this plugin package is `plugins.tefas`, but /app/plugins is on
 # sys.path (main.py inserts it), so a bare `import tefas` would resolve to THIS
@@ -217,6 +223,9 @@ class TefasPlugin:
         cfg = self._influx_cfg()
         if not cfg:
             return None
+        if not _SAFE_CODE.match(code):
+            logger.warning(f"⚠️ Skipping influx resume for unsafe fund code: {code!r}")
+            return None
         host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
         db = cfg.get("bucket", "minder-metrics")
         q = f"SELECT max(time) AS t FROM {_MEASUREMENT} WHERE code = '{code}'"
@@ -242,6 +251,9 @@ class TefasPlugin:
     async def _write_history(self, code: str, points: List[Tuple[int, float]]) -> int:
         cfg = self._influx_cfg()
         if not (cfg and points):
+            return 0
+        if not _SAFE_CODE.match(code):
+            logger.warning(f"⚠️ Skipping influx write for unsafe fund code: {code!r}")
             return 0
         host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
         org, bucket = cfg.get("org", "minder"), cfg.get("bucket", "minder-metrics")

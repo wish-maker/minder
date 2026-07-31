@@ -26,6 +26,7 @@ Config (env on plugin-registry; all optional — keyless defaults):
 
 import logging
 import os
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -48,6 +49,11 @@ _ALIASES = {
     "eth": "ETH-USD",
 }
 _MEASUREMENT = "crypto_price"
+
+# Symbols come from config (CRYPTO_SYMBOLS, API-settable) and are interpolated into
+# an InfluxDB SQL query + line protocol — restrict to a safe charset so a config
+# value can't break out into injection (or corrupt line protocol with a space/comma).
+_SAFE_SYMBOL = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class CryptoPlugin:
@@ -226,6 +232,9 @@ class CryptoPlugin:
         cfg = self._influx_cfg()
         if not cfg:
             return None
+        if not _SAFE_SYMBOL.match(symbol):
+            logger.warning(f"⚠️ Skipping influx resume for unsafe symbol: {symbol!r}")
+            return None
         host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
         db = cfg.get("bucket", "minder-metrics")
         q = f"SELECT max(time) AS t FROM {_MEASUREMENT} WHERE symbol = '{symbol}'"
@@ -255,6 +264,9 @@ class CryptoPlugin:
         """Write [(ts, close)] to InfluxDB; return count written (0 if sink off/empty)."""
         cfg = self._influx_cfg()
         if not (cfg and points):
+            return 0
+        if not _SAFE_SYMBOL.match(symbol):
+            logger.warning(f"⚠️ Skipping influx write for unsafe symbol: {symbol!r}")
             return 0
         host, port = cfg.get("host", "minder-influxdb"), cfg.get("port", 8086)
         org, bucket = cfg.get("org", "minder"), cfg.get("bucket", "minder-metrics")
