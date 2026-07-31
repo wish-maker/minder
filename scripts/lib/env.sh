@@ -32,6 +32,9 @@ declare -A SECRET_SPEC=(
     [AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET]=32
     [GRAFANA_PASSWORD]=32
     [WEBUI_SECRET_KEY]=32
+    # registry→marketplace AI-tool sync auth (X-Service-Token); one value → both
+    # containers. Was skipped → stayed empty → sync silently 401'd (#227).
+    [SERVICE_SYNC_TOKEN]=32
 )
 
 # prepare_env — self-healing environment provisioning. Runs on install/start/restart.
