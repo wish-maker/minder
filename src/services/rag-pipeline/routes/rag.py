@@ -1,5 +1,6 @@
 """RAG API routes: knowledge bases, document upload, pipelines, and query."""
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -72,7 +73,10 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
     client = state.get_qdrant_client()
 
     try:
-        client.create_collection(
+        # QdrantClient is synchronous; run its calls off the event loop so a slow
+        # collection op doesn't stall every other concurrent request (#211).
+        await asyncio.to_thread(
+            client.create_collection,
             collection_name=kb_id,
             vectors_config=VectorParams(size=embed_dim, distance=Distance.COSINE),
         )
@@ -144,7 +148,9 @@ async def delete_knowledge_base(kb_id: str):
 
     # Drop the Qdrant collection (best-effort — may already be gone).
     try:
-        state.get_qdrant_client().delete_collection(collection_name=kb_id)
+        await asyncio.to_thread(
+            state.get_qdrant_client().delete_collection, collection_name=kb_id
+        )
         logger.info(f"✅ Deleted Qdrant collection: {kb_id}")
     except Exception as e:
         logger.warning(f"⚠️  Failed to delete Qdrant collection {kb_id}: {e}")
@@ -232,8 +238,10 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
             )
         )
 
-    # Upsert points to Qdrant using PointStruct list
-    client.upsert(
+    # Upsert points to Qdrant using PointStruct list. Off the event loop (#211): a
+    # large upload's upsert is the worst blocker on the sync client.
+    await asyncio.to_thread(
+        client.upsert,
         collection_name=kb_id,
         points=points,
     )
@@ -429,7 +437,8 @@ async def retrieve_relevant_documents(
     all_results = []
     for kb_id in pipeline["knowledge_base_ids"]:
         try:
-            search_result = client.query_points(
+            search_result = await asyncio.to_thread(
+                client.query_points,
                 collection_name=kb_id,
                 query=question_embedding,
                 limit=top_k,
@@ -524,16 +533,23 @@ async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
     merged: list = []
     for kb_id in pipeline["knowledge_base_ids"]:
         try:
-            dense = client.query_points(
-                collection_name=kb_id,
-                query=question_embedding,
-                limit=top_k * 3,  # wider candidate set so BM25 can surface keyword hits
+            dense = (
+                await asyncio.to_thread(
+                    client.query_points,
+                    collection_name=kb_id,
+                    query=question_embedding,
+                    # wider candidate set so BM25 can surface keyword hits
+                    limit=top_k * 3,
+                )
             ).points
         except Exception as e:
             logger.warning(f"⚠️  Hybrid search failed for KB {kb_id}: {e}")
             continue
 
-        _ensure_bm25_index(client, kb_id)
+        # Runs a scroll loop over up to 10k points + BM25 indexing (CPU) — push the
+        # whole thing off the event loop (#211). A concurrent same-KB rebuild is
+        # benign (idempotent: last write wins, both correct).
+        await asyncio.to_thread(_ensure_bm25_index, client, kb_id)
         docmap = {d["_id"]: d for d in _hybrid.documents.get(kb_id, [])}
         for r in dense:  # dense-only hits may not be in the scrolled snapshot
             did = r.payload.get("_id", str(r.id))
@@ -597,8 +613,13 @@ async def retrieve_parent_child(pipeline: Dict, question: str, top_k: int) -> Di
     )  # (kb_id, source, center chunk_index) → dedupe overlapping windows
     for kb_id in pipeline["knowledge_base_ids"]:
         try:
-            hits = client.query_points(
-                collection_name=kb_id, query=question_embedding, limit=top_k
+            hits = (
+                await asyncio.to_thread(
+                    client.query_points,
+                    collection_name=kb_id,
+                    query=question_embedding,
+                    limit=top_k,
+                )
             ).points
         except Exception as e:
             logger.warning(f"⚠️  Parent-child search failed for KB {kb_id}: {e}")
@@ -628,7 +649,8 @@ async def retrieve_parent_child(pipeline: Dict, question: str, top_k: int) -> Di
                 ]
             )
             try:
-                neighbours, _ = client.scroll(
+                neighbours, _ = await asyncio.to_thread(
+                    client.scroll,
                     collection_name=kb_id,
                     scroll_filter=flt,
                     limit=2 * PARENT_WINDOW + 1,

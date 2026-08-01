@@ -1,5 +1,6 @@
 """System & observability routes: /health, /metrics, /initialize, / (root)."""
 
+import asyncio
 import os
 from datetime import datetime, timezone
 
@@ -22,8 +23,10 @@ async def health_check():
     Postgres persistence is optional (in-memory fallback) and not probed here.
     """
 
-    def _qdrant():
-        state.get_qdrant_client().get_collections()
+    async def _qdrant():
+        # Sync client off the event loop (#211) — even the health probe shouldn't
+        # block; evaluate_dependencies awaits async probes.
+        await asyncio.to_thread(state.get_qdrant_client().get_collections)
 
     def _ollama():
         if not (state.OLLAMA_AVAILABLE and state.ollama_manager._initialized):
