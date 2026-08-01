@@ -6,7 +6,7 @@ Provides OpenAI-compatible API for tool calling
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import httpx
@@ -138,7 +138,7 @@ async def execute_function(function_name: str, request: Request):
     return {
         "result": result,
         "status": "success",
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 

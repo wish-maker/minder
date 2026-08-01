@@ -7,7 +7,7 @@ env config in config.py (service-structure standard: thin main + routes/ + core/
 
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -106,7 +106,7 @@ async def health_check():
         content={
             "service": "graph-rag",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
             "environment": settings.ENVIRONMENT,
             "checks": checks,

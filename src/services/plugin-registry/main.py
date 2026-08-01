@@ -13,7 +13,7 @@ import asyncio
 import glob
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 import yaml
 from fastapi import Depends, FastAPI
@@ -229,7 +229,7 @@ async def health_check():
         content={
             "service": "plugin-registry",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
             "environment": settings.ENVIRONMENT,
             "plugins_loaded": len(plugins_db),

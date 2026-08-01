@@ -6,7 +6,7 @@ Real Ollama integration for model lifecycle
 
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from fastapi import FastAPI
@@ -109,7 +109,7 @@ async def health_check():
         content={
             "service": "model-management",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
             "environment": settings.ENVIRONMENT,
             "models_registered": len(models),

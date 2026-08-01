@@ -5,7 +5,7 @@ Plugin state management core logic
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import asyncpg
@@ -84,7 +84,9 @@ async def update_plugin_state(
     metadata: Optional[Dict] = None,
 ) -> Dict:
     """Update plugin state"""
-    now = datetime.now()
+    # enabled_at/disabled_at/updated_at are naive TIMESTAMP columns → store naive-UTC
+    # (was naive-LOCAL). Aware values would be rejected by asyncpg for a `timestamp`.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     if state == PluginState.ENABLED:
         query = """

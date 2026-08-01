@@ -8,7 +8,7 @@ instantiated. Loaded plugins are cached in ``core.state``, persisted via
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -85,7 +85,7 @@ async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "j
             capabilities=manifest.get("capabilities", []),
             data_sources=manifest.get("data_sources", []),
             databases=manifest.get("databases", []),
-            registered_at=datetime.now().isoformat(),
+            registered_at=datetime.now(timezone.utc).isoformat(),
         )
 
         plugins_db[plugin_name] = plugin_info

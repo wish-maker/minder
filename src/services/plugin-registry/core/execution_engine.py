@@ -9,7 +9,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
@@ -313,7 +313,7 @@ class ExecutionEngine:
             payload = {
                 "text": text,
                 "plugin": plugin_name,
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             payload.update(metadata)
 

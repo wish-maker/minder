@@ -1,5 +1,5 @@
 # services/marketplace/core/licensing.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 from services.marketplace.core.database import get_pool
@@ -24,9 +24,14 @@ async def create_license(
         user_id=user_id, plugin_id=plugin_id, tier=tier
     )
 
-    # Set default validity (1 year) if not specified
+    # Set default validity (1 year) if not specified. `valid_until` is a naive
+    # TIMESTAMP column, so store naive-UTC (asyncpg rejects tz-aware values for a
+    # `timestamp` column) — fixes the old naive-LOCAL value while keeping the
+    # expiry comparison below naive↔naive.
     if valid_until is None:
-        valid_until = datetime.now() + timedelta(days=365)
+        valid_until = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+            days=365
+        )
 
     async with pool.acquire() as conn:
         # Check if active license exists
@@ -115,8 +120,12 @@ async def validate_license(license_key: str, plugin_id: str) -> Dict:
         if not row:
             return {"valid": False, "reason": "License not found or inactive"}
 
-        # Check expiration
-        if row["valid_until"] and row["valid_until"] < datetime.now():
+        # Check expiration. row["valid_until"] is naive (naive TIMESTAMP column),
+        # so compare against naive-UTC — a tz-aware now() would raise "can't compare
+        # offset-naive and offset-aware datetimes".
+        if row["valid_until"] and row["valid_until"] < datetime.now(
+            timezone.utc
+        ).replace(tzinfo=None):
             return {
                 "valid": False,
                 "reason": "License expired",
