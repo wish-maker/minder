@@ -9,6 +9,7 @@ from models import STTResponse
 from prometheus_client import Counter
 
 from config import DEFAULT_STT_LANG, SUPPORTED_LANGUAGES
+from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.tts-stt")
 
@@ -51,7 +52,7 @@ async def speech_to_text(
     except Exception as e:
         stt_requests_total.labels(language=language, status="error").inc()
         logger.error(f"❌ STT failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Speech-to-text")
 
 
 @router.get("/stt/languages", tags=["STT"])

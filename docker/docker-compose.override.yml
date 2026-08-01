@@ -1,24 +1,25 @@
 # ============================================================================
 # Docker Compose Override - Development Only
 # ============================================================================
-# This file provides development convenience overrides.
-# It opens direct port access to services for local testing.
+# This file re-exposes core service ports on ALL interfaces (0.0.0.0) for
+# cross-machine dev access. Since #190 the main compose already publishes every
+# core port on 127.0.0.1 (loopback), so `curl localhost:<port>` works WITHOUT
+# this override — you only need it to reach a service from another machine.
 #
-# Usage (development with direct port access):
+# Usage (development with all-interface port access):
 #   docker compose -f docker-compose.yml -f docker-compose.override.yml up
 #
-# Usage (production - no direct port access):
+# Usage (default - loopback-only, main compose):
 #   docker compose up
 # ============================================================================
 
 services:
-  # Open plugin-registry port 8001 for direct testing
-  plugin-registry:
-    ports:
-      - "8001:8001"  # Dev only - for direct API testing without gateway
+  # Uncomment a service to re-expose its port on 0.0.0.0 (all interfaces).
+  # Loopback (127.0.0.1:<port>) is already published by the main compose (#190).
 
-  # Optionally open other services for debugging
-  # Comment out services you don't need direct access to:
+  # plugin-registry:
+  #   ports:
+  #     - "8001:8001"
 
   # api-gateway:
   #   ports:

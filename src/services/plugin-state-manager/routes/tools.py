@@ -15,6 +15,8 @@ from models.tool_execution import (
     ToolExecutionResponse,
 )
 
+from shared.errors import backend_http_error
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -47,7 +49,7 @@ async def list_all_tools(
         )
     except Exception as e:
         logger.error(f"Failed to discover tools: {e}")
-        raise HTTPException(status_code=500, detail=f"Tool discovery failed: {str(e)}")
+        raise backend_http_error(e, "Tool discovery")
 
 
 @router.get("/{tool_name}", response_model=ToolDiscoveryResponse)
@@ -71,9 +73,7 @@ async def get_tool_details(tool_name: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get tool details for {tool_name}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get tool details: {str(e)}"
-        )
+        raise backend_http_error(e, "Tool detail lookup")
 
 
 @router.post("/{tool_name}/execute", response_model=ToolExecutionResponse)
@@ -93,7 +93,7 @@ async def execute_tool_endpoint(tool_name: str, request: ToolExecutionRequest):
         raise
     except Exception as e:
         logger.error(f"Failed to execute tool {tool_name}: {e}")
-        raise HTTPException(status_code=500, detail=f"Tool execution failed: {str(e)}")
+        raise backend_http_error(e, "Tool execution")
 
 
 @router.get("/plugins/{plugin_id}/tools", response_model=ToolDiscoveryResponse)
@@ -103,9 +103,7 @@ async def list_plugin_tools(plugin_id: str):
         return await discover_plugin_tools(plugin_id)
     except Exception as e:
         logger.error(f"Failed to discover tools for plugin {plugin_id}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to discover plugin tools: {str(e)}"
-        )
+        raise backend_http_error(e, "Plugin tool discovery")
 
 
 @router.post("/validate", response_model=LicenseValidationResponse)
@@ -128,6 +126,4 @@ async def validate_tool_license(request: LicenseValidationRequest):
             return LicenseValidationResponse(**result)
     except Exception as e:
         logger.error(f"License validation failed: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"License validation failed: {str(e)}"
-        )
+        raise backend_http_error(e, "License validation")

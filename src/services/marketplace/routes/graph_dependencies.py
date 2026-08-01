@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from services.marketplace.core.neo4j_client import Neo4jClient, get_neo4j_client
 from shared.auth.jwt_middleware import get_current_user
+from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.graph_dependencies")
 
@@ -57,7 +58,7 @@ async def get_plugin_dependencies(
         }
     except Exception as e:
         logger.error(f"Failed to get dependencies for {plugin_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Dependency lookup")
 
 
 @router.post("/dependencies")
@@ -100,7 +101,7 @@ async def add_plugin_dependency(
         raise
     except Exception as e:
         logger.error(f"Failed to add dependency: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Dependency creation")
 
 
 @router.get("/conflicts/{plugin_id}")
@@ -125,7 +126,7 @@ async def get_plugin_conflicts(
         }
     except Exception as e:
         logger.error(f"Failed to get conflicts for {plugin_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Conflict lookup")
 
 
 @router.post("/recommendations")
@@ -157,7 +158,7 @@ async def get_plugin_recommendations(
         }
     except Exception as e:
         logger.error(f"Failed to get recommendations: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Plugin recommendations")
 
 
 @router.get("/health")

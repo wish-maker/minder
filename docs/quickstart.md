@@ -38,6 +38,14 @@ bash setup.sh install     # first time
 - ✅ Env mirror: root `./.env` → `docker/.env`
 
 #### Option 2: Manual
+
+> ⚠️ **The manual path brings up the containers but does NOT bootstrap them.**
+> The automated installer (`install.py`) also initialises MinIO buckets, runs the
+> Alembic migrations, and pulls the Ollama models — none of which `docker compose up`
+> does. Skip the steps below and services start but fail on first use (no schema, no
+> `rag-documents`/`tts-artifacts`/… buckets, no embed model). Prefer Option 1 unless
+> you specifically need the manual flow.
+
 ```bash
 # 1. Configure environment (root ./.env is the single source of truth)
 cp .env.example .env
@@ -50,14 +58,21 @@ docker compose --file docker/docker-compose.yml up -d
 
 # 3. Wait for services to come up
 bash setup.sh status
-```
 
-**Note:** In internal-Ollama mode, models are auto-pulled from `OLLAMA_PULL_MODELS`.
-For a manual start you can pull them yourself (Ollama is internal-only):
-```bash
+# 4. Run the DB migrations (Option 1 does this automatically). Without it the
+#    relational schema is missing and services 500 on their first DB call.
+bash setup.sh migrate
+
+# 5. Pull the Ollama models (internal mode auto-pulls OLLAMA_PULL_MODELS in Option 1):
 docker exec minder-ollama ollama pull llama3.2
 docker exec minder-ollama ollama pull nomic-embed-text
 ```
+
+**MinIO bucket init is automated-only.** There is no standalone `setup.sh` verb for
+it — the buckets are created inside `install`. If you took the manual path, run a
+one-off install to create them (it is idempotent on an already-running stack) or
+create the buckets (`rag-documents`, `tts-artifacts`, `model-checkpoints`,
+`plugin-packages`, `backup-archives`, …) via the MinIO console yourself.
 
 ### Verification
 
@@ -179,4 +194,4 @@ bash setup.sh update
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-01

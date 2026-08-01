@@ -16,6 +16,8 @@ from fastapi import APIRouter, HTTPException
 from models.plugin_state import LicenseTier
 from pydantic import BaseModel
 
+from shared.errors import backend_http_error
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -54,9 +56,7 @@ async def get_plugin_tier(plugin_name: str):
             return {"plugin_name": plugin_name, "required_tier": tier.value}
     except Exception as e:
         logger.error(f"Failed to get license tier for {plugin_name}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get license tier: {str(e)}"
-        )
+        raise backend_http_error(e, "License tier lookup")
 
 
 @router.post("/plugins/{plugin_name}/license/validate")
@@ -76,9 +76,7 @@ async def validate_plugin_license(
             return LicenseValidationResponse(**result)
     except Exception as e:
         logger.error(f"Failed to validate license for {plugin_name}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"License validation failed: {str(e)}"
-        )
+        raise backend_http_error(e, "License validation")
 
 
 @router.patch("/plugins/{plugin_name}/license")
@@ -113,6 +111,4 @@ async def update_plugin_license_endpoint(
         raise
     except Exception as e:
         logger.error(f"Failed to update license for {plugin_name}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to update license: {str(e)}"
-        )
+        raise backend_http_error(e, "License update")
