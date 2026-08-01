@@ -57,11 +57,13 @@ _HELP_TEMPLATE = """
 {bold}CONFIGURATION MANAGEMENT{nc}
     (image versions)         Edit docker/docker-compose.yml directly to change
                              image tags — it is the source of truth for what runs.
-    ollama-mode internal|external [url]
+    ollama-mode internal|external|failover [url]
                              Switch the Ollama backend in .env: internal = platform-managed
                              container; external [url] = reach a URL (same-host daemon or a
-                             remote host; default http://host.docker.internal:11434). Flips
-                             .env only and prints a "run restart to apply" hint — no restart.
+                             remote host; default http://host.docker.internal:11434);
+                             failover [url] = external primary + internal fallback via the
+                             ollama-router (auto-recovering). Flips .env only and prints a
+                             "run restart to apply" hint — no restart.
 
 {bold}BUNDLES{nc}  (capability groups of services — see docs/architecture/bundles.md)
     bundle status            Show each bundle's enable-state + its services and

@@ -102,11 +102,13 @@ ${BOLD}VERSION RESOLUTION${NC}
 ${BOLD}CONFIGURATION MANAGEMENT${NC}
     (image versions)         Edit docker/docker-compose.yml directly to change
                              image tags — it is the source of truth for what runs.
-    ollama-mode internal|external [url]
+    ollama-mode internal|external|failover [url]
                              Switch the Ollama backend in .env: internal = platform-managed
                              container; external [url] = reach a URL (same-host daemon or a
-                             remote host; default http://host.docker.internal:11434). Flips
-                             .env only and prints a "run restart to apply" hint — no restart.
+                             remote host; default http://host.docker.internal:11434);
+                             failover [url] = external primary + internal fallback via the
+                             ollama-router (auto-recovering). Flips .env only and prints a
+                             "run restart to apply" hint — no restart.
 
 ${BOLD}FLAGS${NC}  (pass as a --flag, or set the env var)
     --dry-run / DRY_RUN=1                Preview commands without executing

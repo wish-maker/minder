@@ -1,0 +1,44 @@
+# Ollama failover router (#21). Prefer the external primary; fall back to the
+# platform-managed internal ollama when the primary is unreachable, and return to
+# the primary automatically once it recovers. Consumers point OLLAMA_BASE_URL at
+# this router (http://minder-ollama-router:11434), so failover is transparent and
+# uniform — every consumer, OpenWebUI included, benefits with no per-service code.
+#
+# ${OLLAMA_FAILOVER_PRIMARY} is host:port (e.g. 192.168.68.104:11434), filled by the
+# nginx image's envsubst from the container env. nginx runtime vars ($host, …) are
+# not in the environment, so envsubst leaves them intact.
+
+upstream ollama_pool {
+    server ${OLLAMA_FAILOVER_PRIMARY} max_fails=1 fail_timeout=10s;
+    server minder-ollama:11434 backup;
+}
+
+server {
+    listen 11434;
+
+    # Liveness of the router itself (infra), decoupled from backend health — the
+    # container healthcheck hits this so a flapping backend doesn't mark nginx down.
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location / {
+        proxy_pass http://ollama_pool;
+
+        # Fail over to the backup on a connect error / timeout / 5xx. `non_idempotent`
+        # so POSTs (/api/generate, /api/chat) also fail over — ollama inference is
+        # safe to retry on the fallback since the primary produced no usable response.
+        proxy_next_upstream error timeout http_502 http_503 http_504 non_idempotent;
+        proxy_next_upstream_tries 2;
+
+        # Fail FAST to trigger failover when the primary is down, but allow long
+        # generations once a backend is chosen (a big model can run for minutes).
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+}

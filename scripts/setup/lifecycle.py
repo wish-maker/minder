@@ -27,11 +27,22 @@ def _active(services: "tuple[str, ...]") -> "list[str]":
 def start_services() -> None:
     log.step("Starting all services")
 
-    # Ollama mode: an exported OLLAMA_BASE_URL wins (CLI override), else read .env.
-    # Non-empty → external mode: deactivate the 'internal-ollama' profile so the
-    # platform ollama container never starts. Empty → internal mode: activate it.
+    # Ollama mode: an exported value wins (CLI override), else read .env.
+    #  - OLLAMA_FAILOVER_PRIMARY set → failover: run BOTH the router (external primary)
+    #    and the internal container (backup); consumers point at the router.
+    #  - else OLLAMA_BASE_URL set → external: internal-ollama profile inactive.
+    #  - else                     → internal: activate the internal-ollama profile.
     ollama_url = os.environ.get("OLLAMA_BASE_URL") or env.get("OLLAMA_BASE_URL")
-    if ollama_url:
+    failover_primary = os.environ.get("OLLAMA_FAILOVER_PRIMARY") or env.get(
+        "OLLAMA_FAILOVER_PRIMARY"
+    )
+    failover_mode = bool(failover_primary)
+    if failover_mode:
+        log.info("🔀 Failover Ollama mode (external primary + internal fallback)")
+        log.info(f"   Primary: {failover_primary}  →  backup: internal minder-ollama")
+        log.info("   Consumers reach ollama via the minder-ollama-router")
+        os.environ["COMPOSE_PROFILES"] = "internal-ollama,ollama-router"
+    elif ollama_url:
         log.info("🌐 External Ollama mode (OLLAMA_BASE_URL set)")
         log.info(f"   OLLAMA_BASE_URL: {ollama_url}")
         log.info(
@@ -56,6 +67,13 @@ def start_services() -> None:
     log.info("② Infrastructure (DB, cache, vector store, AI runtime)…")
     docker.compose("up", "-d", *_active(config.CORE_SERVICES))
     time.sleep(8)
+
+    # The failover router has no depends_on pulling it in (consumers only hold its URL
+    # as a string), so bring it up explicitly once the network exists. The internal
+    # backup (minder-ollama) is pulled in by the consumers' depends_on. (#21)
+    if failover_mode:
+        log.info("   ↳ ollama-router (external primary + internal fallback)…")
+        docker.compose("up", "-d", "ollama-router")
 
     log.info("③ Message broker (RabbitMQ)…")
     # RabbitMQ is already in CORE_SERVICES; just wait for it to be healthy.

@@ -145,6 +145,10 @@ OLLAMA_AUTOMATIC_PULL=true
 OLLAMA_MODELS=llama3.2,nomic-embed-text
 OLLAMA_LLM_MODEL=llama3.2
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+# Set by 'ollama-mode failover <url>' (host:port of the external primary). Non-empty
+# means failover mode: the ollama-router prefers this primary and falls back to the
+# internal container. Empty means internal/external mode (see OLLAMA_BASE_URL).
+OLLAMA_FAILOVER_PRIMARY=
 
 # ── Models ─────────────────────────────────────────────────────
 DEFAULT_BASE_MODEL=llama3.2

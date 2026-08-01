@@ -288,7 +288,12 @@ services:
     - OLLAMA_PULL_MODELS=${OLLAMA_MODELS:-llama3.2,nomic-embed-text}
     - OLLAMA_AUTOMATIC_PULL=${OLLAMA_AUTOMATIC_PULL:-true}
     - OLLAMA_HOST=0.0.0.0
-    - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+    # Force empty: WHEN this container runs it is always a LOCAL backend (internal or
+    # failover mode) that must pull its own models. init-models.sh skips the pull when
+    # OLLAMA_BASE_URL is set, and in failover mode the global OLLAMA_BASE_URL points at
+    # the router — inheriting it here would suppress the pull and leave the fallback
+    # backend model-less. The ollama server itself does not use this var. (#21)
+    - OLLAMA_BASE_URL=
     - OLLAMA_ORIGINS=*
     - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
     - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
@@ -321,6 +326,35 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
+    networks:
+    - minder-network
+  ollama-router:
+    # Ollama failover router (#21): external primary -> internal backup, auto-recovering.
+    # Present ONLY in failover mode — start_services activates the 'ollama-router'
+    # profile when OLLAMA_FAILOVER_PRIMARY is set (and explicitly ups this service),
+    # and consumers point OLLAMA_BASE_URL at http://minder-ollama-router:11434 so
+    # failover is transparent (openwebui included, no per-service code). The
+    # 'internal-ollama' profile is co-activated so the backup (minder-ollama) is present.
+    # No minder.bundle label on purpose: it is a mode artifact managed by ollama-mode /
+    # start_services, not a bundle capability (a bundle claim would start it in every
+    # mode, since an explicitly-named profiled service starts regardless of profile).
+    # Default primary=minder-ollama so a stray start is harmless.
+    image: nginx:1.27-alpine
+    container_name: minder-ollama-router
+    profiles: ["ollama-router"]
+    restart: on-failure
+    environment:
+    - OLLAMA_FAILOVER_PRIMARY=${OLLAMA_FAILOVER_PRIMARY:-minder-ollama:11434}
+    volumes:
+    - ./services/ollama-router/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -qO- http://127.0.0.1:11434/healthz || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
     - minder-network
   qdrant:

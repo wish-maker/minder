@@ -48,49 +48,69 @@ cmd_migrate() {
 # Surgically rewrites ONLY the OLLAMA_BASE_URL line in root .env (the single source of
 # truth; outside SECRET_SPEC so smart-fill never touches it). Prints a restart hint —
 # does NOT restart. start_services/download_ollama_models read this back from .env.
+# Replace the `key=` line (or append it if absent) — same as the Python _set_key.
+_ollama_set_key() {
+    local key="$1" val="$2" repl
+    repl="${val//&/\\&}"                           # escape sed replacement metachar
+    if grep -qE "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${repl}|" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$val" >> "$ENV_FILE"
+    fi
+}
+
 cmd_ollama_mode() {
     local mode="${1:-}" url="${2:-}"
     local default_url="http://host.docker.internal:11434"
-    local new_url
+    local router_url="http://minder-ollama-router:11434"
+    local base_url primary target hostport
 
     case "$mode" in
-        internal) new_url="" ;;
-        external)
-            new_url="${url:-$default_url}"
-            if ! [[ "$new_url" =~ ^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/.*)?$ ]]; then
-                log_error "Invalid Ollama URL: '${new_url}'"
+        internal) base_url=""; primary="" ;;
+        external|failover)
+            target="${url:-$default_url}"
+            if ! [[ "$target" =~ ^https?://[A-Za-z0-9._-]+(:[0-9]+)?(/.*)?$ ]]; then
+                log_error "Invalid Ollama URL: '${target}'"
                 log_detail "Expected a full URL, e.g. ${default_url} or http://192.168.1.50:11434"
                 log_detail ".env was NOT changed."
                 exit 1
             fi
+            if [[ "$mode" == "external" ]]; then
+                base_url="$target"; primary=""
+            else                                   # failover: consumers -> router; router -> primary + internal backup
+                hostport="${target#*://}"; hostport="${hostport%%/*}"
+                base_url="$router_url"; primary="$hostport"
+            fi
             ;;
         *)
-            log_error "Usage: ./${SCRIPT_NAME} ollama-mode internal|external [url]"
+            log_error "Usage: ./${SCRIPT_NAME} ollama-mode internal|external|failover [url]"
             log_detail "  internal        platform-managed ollama container (OLLAMA_BASE_URL empty)"
             log_detail "  external [url]  reach ollama at a URL (default ${default_url})"
+            log_detail "  failover [url]  external primary + internal fallback via ollama-router"
             exit 1
             ;;
     esac
 
     [[ -f "$ENV_FILE" ]] || { log_error "No .env at ${ENV_FILE} — run ./${SCRIPT_NAME} install first."; exit 1; }
 
-    local before after repl
+    local before after
     before="$(_env_get OLLAMA_BASE_URL)"
-    repl="${new_url//&/\\&}"                       # escape sed replacement metachar
-    if grep -qE "^OLLAMA_BASE_URL=" "$ENV_FILE"; then
-        sed -i "s|^OLLAMA_BASE_URL=.*|OLLAMA_BASE_URL=${repl}|" "$ENV_FILE"
-    else
-        printf 'OLLAMA_BASE_URL=%s\n' "$new_url" >> "$ENV_FILE"
-    fi
+    _ollama_set_key OLLAMA_BASE_URL "$base_url"
+    _ollama_set_key OLLAMA_FAILOVER_PRIMARY "$primary"
     after="$(_env_get OLLAMA_BASE_URL)"
 
     local label
-    [[ -z "$new_url" ]] && label="internal (platform-managed container)" || label="external (${new_url})"
-    if [[ "$before" == "$after" ]]; then
+    case "$mode" in
+        internal) label="internal (platform-managed container)" ;;
+        external) label="external (${base_url})" ;;
+        failover) label="failover (primary ${primary} → internal backup, via ollama-router)" ;;
+    esac
+    if [[ "$before" == "$after" && "$mode" != "failover" ]]; then
         log_info "Ollama mode already ${label} — .env unchanged."
     else
         log_success "Ollama mode → ${label}"
         log_detail "OLLAMA_BASE_URL: '${before}' → '${after}'"
+        [[ -n "$primary" ]] && log_detail "OLLAMA_FAILOVER_PRIMARY: '${primary}'"
     fi
     log_warn "Run  ./${SCRIPT_NAME} restart  to apply (recreates services + re-mirrors .env)."
 }
