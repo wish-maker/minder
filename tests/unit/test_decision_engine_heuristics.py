@@ -8,6 +8,7 @@ stats aggregation are deterministic and were untested. Module imports only stdli
 """
 
 import importlib.util
+import json
 from pathlib import Path
 
 _MOD = (
@@ -110,9 +111,34 @@ def test_stats_empty():
     assert Engine().get_decision_stats() == {"total_decisions": 0}
 
 
-# NOTE: the non-empty get_decision_stats path is intentionally NOT asserted here.
-# It keys strategy/complexity distributions by the raw Enum objects (from
-# decision.__dict__), not their .value, so the result is not JSON-serializable.
-# The method is currently uncalled (no endpoint/consumer), so it's a latent defect
-# rather than an active bug — recorded in the standardization tracking issue rather
-# than locked in as "correct" behavior here.
+def _record(strategy, complexity, confidence):
+    """A decision_history entry shaped exactly as decide_pipeline stores it —
+    analysis/decision via __dict__, so strategy/complexity are raw Enum members."""
+    analysis = _analysis(complexity, confidence)
+    decision = Engine()._heuristic_decision(analysis)
+    decision.retrieval_strategy = strategy
+    return {
+        "query": analysis.original_query,
+        "analysis": analysis.__dict__,
+        "decision": decision.__dict__,
+    }
+
+
+def test_stats_distributions_use_enum_values_and_are_json_serializable():
+    eng = Engine()
+    eng.decision_history = [
+        _record(Strategy.BASIC, Complexity.SIMPLE, 0.9),
+        _record(Strategy.BASIC, Complexity.SIMPLE, 0.7),
+        _record(Strategy.HIERARCHICAL, Complexity.COMPLEX, 0.5),
+    ]
+
+    stats = eng.get_decision_stats()
+
+    # #223/#7: keys are the .value strings, not raw Enum objects.
+    assert stats["strategy_distribution"] == {"basic": 2, "hierarchical": 1}
+    assert stats["complexity_distribution"] == {"simple": 2, "complex": 1}
+    assert stats["total_decisions"] == 3
+    assert abs(stats["avg_confidence"] - (0.9 + 0.7 + 0.5) / 3) < 1e-9
+
+    # The whole point: it must round-trip through JSON (Enum keys would raise).
+    assert json.loads(json.dumps(stats))["strategy_distribution"]["basic"] == 2
