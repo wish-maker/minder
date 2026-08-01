@@ -265,8 +265,13 @@ async def run_query(
                 )
 
         if not answer_text:  # standard path (default or any fallback above)
+            # Thread the resolved generation model through — the standard path was the
+            # only one that dropped it, so every query silently used the default model
+            # regardless of the KB/pipeline/per-query llm_model. generation_config wins
+            # if it explicitly sets "model" (merged into one dict → no kwarg collision).
+            gen_kwargs = {"model": llm_model, **(generation_config or {})}
             answer_result = await components.ollama_manager.generate_response(
-                prompt=question, context=combined_context, **(generation_config or {})
+                prompt=question, context=combined_context, **gen_kwargs
             )
             if answer_result.get("error"):
                 raise GenerationError(
