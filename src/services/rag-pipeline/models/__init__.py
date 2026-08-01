@@ -69,6 +69,11 @@ class QueryRequest(BaseModel):
     conversation_id: Optional[
         str
     ] = None  # For conversational RAG - enables conversation history
+    # Per-query generation-model override. None → use the KB's configured llm_model
+    # (then the platform default). Lets a caller pick a specific model per question
+    # (e.g. a coding/reasoning model on an external fleet) without reconfiguring the
+    # KB. Does NOT affect embeddings — those must match the model used at ingest.
+    llm_model: Optional[str] = None
     # standard | hyde | self_rag | auto (decision engine) | corrective (CRAG)
     method: str = "standard"
     # Orthogonal, capability-adaptive post-retrieval enhancers (apply to any method):

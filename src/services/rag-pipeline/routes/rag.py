@@ -27,6 +27,7 @@ from qdrant_client.models import (
     Range,
     VectorParams,
 )
+from rag.model_selection import resolve_llm_model
 from rag.text_utils import chunk_text, extract_text_from_file
 
 from config import DEFAULT_LLM_MODEL, EMBEDDING_DIMENSIONS
@@ -383,7 +384,9 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             pipeline=pipeline,
             pipeline_id=pipeline_id,
             request=request,
-            llm_model=pipeline.get("llm_model") or DEFAULT_LLM_MODEL,
+            llm_model=resolve_llm_model(
+                request.llm_model, pipeline, state.knowledge_bases, DEFAULT_LLM_MODEL
+            ),
             generation_config=pipeline.get("generation_config", {}),
             components=components,
         )
