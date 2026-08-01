@@ -90,6 +90,10 @@ environment:
   - **set** (e.g. to a beefier host) → the container is inactive and inference is
     offloaded. Use `bash setup.sh ollama-mode` to switch. Offloading is the recommended
     way to run large models without stressing the Pi.
+  - **failover** (`ollama-mode failover <url>`) → offload to the external host as the
+    primary, but keep the internal container as an automatic fallback for when that host
+    is unavailable. The resilient way to offload; see
+    `getting-started/ai-setup.md` → *Failover mode*.
 
 ### Model-size tradeoffs on a Pi 4 (8 GB)
 

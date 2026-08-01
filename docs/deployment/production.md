@@ -49,7 +49,7 @@ Compose is always invoked as
 | `backup` / `restore` | Backup and restore (see `infrastructure-backup-strategy.md`) |
 | `doctor` | Diagnostics / health checks |
 | `update` | Pull + recreate pinned images (see `docker-upgrade-runbook.md`) |
-| `ollama-mode` | Switch between local-container and external/native Ollama |
+| `ollama-mode` | Switch Ollama backend: `internal` / `external [url]` / `failover [url]` (external primary + internal fallback) |
 | `sync-postgres-password` | Reconcile `./.env` Postgres password with the volume |
 | `uninstall` | Tear down |
 

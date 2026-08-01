@@ -11,9 +11,10 @@ Ollama instead.
 > exposed on the host. Reach it from another container, from inside the Ollama
 > container (`docker exec`), or via services that proxy to it.
 
-## Ollama modes: internal vs external
+## Ollama modes: internal, external, failover
 
-Ollama has two modes, selected by the `OLLAMA_BASE_URL` value in root `./.env`:
+Ollama has three modes, recorded in root `./.env` and selected with the
+`ollama-mode` verb:
 
 - **Internal (default):** `OLLAMA_BASE_URL` is **empty**. The platform-managed
   `minder-ollama` container runs (it is gated behind the `internal-ollama` compose
@@ -21,6 +22,11 @@ Ollama has two modes, selected by the `OLLAMA_BASE_URL` value in root `./.env`:
 - **External / native host:** `OLLAMA_BASE_URL` is **set** to a URL. The internal
   container stays inactive, and services talk to your external Ollama instead
   (same host, native install, or a remote GPU box).
+- **Failover:** an external **primary** with **automatic fallback to the internal
+  container** when the primary is unreachable — and automatic return to the primary
+  once it recovers. Best of both: the speed/model-fleet of a strong external box
+  while you're using it, and the platform keeps serving (from its own Ollama) when
+  that box is off. See [Failover mode](#failover-mode-external-primary--internal-fallback).
 
 Switch modes with the `ollama-mode` verb:
 
@@ -33,11 +39,15 @@ bash setup.sh ollama-mode external
 
 # External Ollama at a specific URL
 bash setup.sh ollama-mode external http://192.168.1.50:11434
+
+# Failover: external primary + automatic fallback to the internal container
+bash setup.sh ollama-mode failover http://192.168.1.50:11434
 ```
 
-This edits only `OLLAMA_BASE_URL` in `./.env`; it does **not** restart — run
-`bash setup.sh restart` to apply. In external mode the local Ollama container is
-not started (it's gated behind the compose profile), saving RAM/CPU.
+This edits `./.env` (`OLLAMA_BASE_URL`, plus `OLLAMA_FAILOVER_PRIMARY` for failover);
+it does **not** restart — run `bash setup.sh restart` to apply. In external mode the
+local Ollama container is not started (it's gated behind the compose profile), saving
+RAM/CPU; failover mode keeps it running as the warm standby.
 
 ### The URL must be reachable *from inside the containers*
 
@@ -65,6 +75,42 @@ docker exec minder-rag-pipeline curl -s -o /dev/null -w '%{http_code}\n' \
 
 Ollama must also be listening on all interfaces for containers to reach it — start the
 native server with `OLLAMA_HOST=0.0.0.0` (not the default `127.0.0.1`).
+
+## Failover mode (external primary + internal fallback)
+
+Failover mode gives you a fast external Ollama **without** the single point of failure
+of plain external mode: if the external host goes away, the platform automatically
+serves from its own internal container, and returns to the external host once it's back.
+
+```bash
+bash setup.sh ollama-mode failover http://192.168.1.50:11434
+bash setup.sh restart
+```
+
+**How it works.** A small `minder-ollama-router` (nginx) sits in front of Ollama with
+the external host as the **primary** and the internal `minder-ollama` container as the
+**backup**. All services point at the router (`OLLAMA_BASE_URL=http://minder-ollama-router:11434`),
+so failover is transparent — OpenWebUI included, no per-service change. When the primary
+stops answering, requests (including generations) fail over to the internal container;
+after a short interval the router re-probes the primary and returns to it automatically.
+The internal container stays running as a warm standby (idle Ollama loads no model into
+RAM, so it costs almost nothing until it actually serves a fallback request).
+
+**See which backend is active:**
+
+```bash
+bash setup.sh status        # → "Ollama Backend" section: primary REACHABLE (external) / UNREACHABLE (fallback)
+
+# Or per-response — the router reports the backend that served it:
+docker exec minder-rag-pipeline curl -sI http://minder-ollama-router:11434/api/tags | grep -i x-ollama-upstream
+```
+
+> **Model availability on fallback.** Fallback is seamless only for models the internal
+> container actually has — by default `llama3.2` + `nomic-embed-text` (see
+> [Automatic model downloads](#automatic-model-downloads)). A knowledge base or query
+> pinned to a model that lives **only** on the external primary (e.g. a large model the
+> Pi can't run) will fail while the primary is unreachable. Keep your default/embedding
+> models available on both sides.
 
 ## Automatic model downloads
 
