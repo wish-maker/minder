@@ -58,7 +58,9 @@ def main(argv: list[str]) -> int:
     if cmd in _VERSION_VERBS or "--version" in argv or "-V" in argv:
         log._emit(f"{config.SCRIPT_NAME} {config.SCRIPT_VERSION}")
         return 0
-    if cmd in _HELP_VERBS:
+    # Help wins if -h/--help appears ANYWHERE, not just as the first positional, so
+    # `setup.sh status --help` shows help instead of silently running `status`.
+    if cmd in _HELP_VERBS or _HELP_VERBS & set(argv):
         help_module.print_help()
         return 0
     if cmd == "ollama-mode":

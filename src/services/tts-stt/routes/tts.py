@@ -10,6 +10,7 @@ from models import TTSRequest
 from prometheus_client import Counter
 
 from config import DEFAULT_TTS_LANG, SUPPORTED_LANGUAGES
+from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.tts-stt")
 
@@ -41,14 +42,16 @@ async def text_to_speech(request: TTSRequest):
 
     # Language is validated by TTSRequest (422 with the valid set) before we get here.
     try:
-        tts_requests_total.labels(language=request.language, status="success").inc()
-
         # Synthesis + file I/O are blocking; run off the event loop so concurrent
         # requests aren't stalled. media_type/ext depend on the engine (Piper=WAV,
         # gTTS=MP3), chosen inside synthesize().
         audio_bytes, media_type, ext = await asyncio.to_thread(
             synthesize, request.text, request.language, request.slow
         )
+
+        # Count success only after synthesis actually succeeds — otherwise a failure
+        # increments both success (here) and error (except) and double-counts.
+        tts_requests_total.labels(language=request.language, status="success").inc()
 
         # Estimate duration
         duration = len(request.text) / 15  # Rough estimate
@@ -66,7 +69,7 @@ async def text_to_speech(request: TTSRequest):
     except Exception as e:
         tts_requests_total.labels(language=request.language, status="error").inc()
         logger.error(f"❌ TTS failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Text-to-speech")
 
 
 @router.get("/tts/languages", tags=["TTS"])

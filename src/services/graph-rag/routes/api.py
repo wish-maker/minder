@@ -21,6 +21,8 @@ from models.schemas import (
     KnowledgeGraphResponse,
 )
 
+from shared.errors import backend_http_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,7 @@ async def extract_entities_handler(
 
     except Exception as e:
         logger.error(f"❌ Entity extraction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Entity extraction")
 
 
 async def construct_knowledge_graph_handler(
@@ -92,7 +94,7 @@ async def construct_knowledge_graph_handler(
 
     except Exception as e:
         logger.error(f"❌ Knowledge graph construction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Knowledge graph construction")
 
 
 async def delete_document_graph_handler(
@@ -107,7 +109,7 @@ async def delete_document_graph_handler(
         return {"success": True, "document_id": document_id, **counts}
     except Exception as e:
         logger.error(f"❌ Failed to delete document graph {document_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Knowledge graph deletion")
 
 
 async def retrieve_with_graph_handler(
@@ -173,7 +175,7 @@ async def retrieve_with_graph_handler(
 
     except Exception as e:
         logger.error(f"❌ Graph retrieval failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Graph retrieval")
 
 
 async def get_entity_context_handler(
@@ -207,7 +209,7 @@ async def get_entity_context_handler(
         raise
     except Exception as e:
         logger.error(f"❌ Entity context retrieval failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Entity context retrieval")
 
 
 def build_graph_router(
