@@ -14,7 +14,6 @@ OPT-IN, so plain `status` is byte-identical and the gate stays green):
 """
 
 import datetime
-import socket
 import subprocess
 import sys
 import time
@@ -22,17 +21,32 @@ import time
 from . import config, docker, env, health, log
 
 _PREFIX = config.CONTAINER_PREFIX + "-"
+_ROUTER = _PREFIX + "ollama-router"
 
 
 def _primary_reachable(hostport: str) -> bool:
-    """True if a TCP connection to the failover primary (host:port) succeeds within a
-    short timeout — a reachable Ollama primary accepts on its port. Mirrors the bash
-    `/dev/tcp` probe so the two status views stay byte-identical (parity gate)."""
-    host, _, port = hostport.partition(":")
+    """True if the failover PRIMARY is reachable **from inside the router container** —
+    probed there (busybox wget) rather than host-side so it reflects the router's
+    actual network path (host and container can differ). Returns False if the router
+    isn't running. Mirrors the bash `docker exec … wget` probe for the parity gate."""
     try:
-        with socket.create_connection((host, int(port or "11434")), timeout=3):
-            return True
-    except (OSError, ValueError):
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                _ROUTER,
+                "wget",
+                "-q",
+                "-T",
+                "3",
+                "-O",
+                "/dev/null",
+                f"http://{hostport}/api/tags",
+            ],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    except OSError:
         return False
 
 

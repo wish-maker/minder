@@ -586,15 +586,15 @@ cmd_status() {
 
     echo ""
     echo -e "${BOLD}Ollama Backend${NC}"
-    # In failover mode probe the primary so a primary outage shows as "on the internal
-    # fallback" instead of unexplained slowness (#21). TCP probe = the Python status's
-    # socket check, kept byte-identical for the parity gate.
-    local _oprim _obase _ohost _oport
+    # In failover mode probe the primary FROM INSIDE the router container (its real
+    # network path, which can differ from the host's) so a primary outage shows as "on
+    # the internal fallback" instead of unexplained slowness (#21). Same docker-exec
+    # wget probe as the Python status, kept byte-identical for the parity gate.
+    local _oprim _obase
     _oprim="$(_env_get OLLAMA_FAILOVER_PRIMARY)"
     _obase="$(_env_get OLLAMA_BASE_URL)"
     if [[ -n "$_oprim" ]]; then
-        _ohost="${_oprim%%:*}"; _oport="${_oprim##*:}"
-        if timeout 3 bash -c "exec 3<>/dev/tcp/${_ohost}/${_oport}" 2>/dev/null; then
+        if docker exec "${CONTAINER_PREFIX}-ollama-router" wget -q -T 3 -O /dev/null "http://${_oprim}/api/tags" 2>/dev/null; then
             echo "  failover — primary ${_oprim} REACHABLE → serving from the external primary"
         else
             echo "  failover — primary ${_oprim} UNREACHABLE → serving from the internal fallback"

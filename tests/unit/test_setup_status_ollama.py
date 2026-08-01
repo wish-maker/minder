@@ -45,7 +45,17 @@ def test_internal_mode(monkeypatch):
     assert "internal — platform-managed container" in out
 
 
-def test_primary_reachable_false_on_dead_endpoint():
-    # Connection refused / DNS failure → False, fast (no exception leaks).
+def test_primary_reachable_false_when_router_absent(monkeypatch):
+    # Probes via `docker exec <router> wget …`. When the router container is absent
+    # (or docker missing) the probe must return False gracefully — never raise.
+    class _Res:
+        returncode = 1
+
+    monkeypatch.setattr(status.subprocess, "run", lambda *a, **k: _Res())
     assert status._primary_reachable("127.0.0.1:1") is False
-    assert status._primary_reachable("no-such-host.invalid:11434") is False
+
+    def _boom(*a, **k):
+        raise OSError("docker not found")
+
+    monkeypatch.setattr(status.subprocess, "run", _boom)
+    assert status._primary_reachable("10.0.0.9:11434") is False
