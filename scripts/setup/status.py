@@ -14,13 +14,51 @@ OPT-IN, so plain `status` is byte-identical and the gate stays green):
 """
 
 import datetime
+import socket
 import subprocess
 import sys
 import time
 
-from . import config, docker, health, log
+from . import config, docker, env, health, log
 
 _PREFIX = config.CONTAINER_PREFIX + "-"
+
+
+def _primary_reachable(hostport: str) -> bool:
+    """True if a TCP connection to the failover primary (host:port) succeeds within a
+    short timeout — a reachable Ollama primary accepts on its port. Mirrors the bash
+    `/dev/tcp` probe so the two status views stay byte-identical (parity gate)."""
+    host, _, port = hostport.partition(":")
+    try:
+        with socket.create_connection((host, int(port or "11434")), timeout=3):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
+def _print_ollama_backend() -> None:
+    """Show the active Ollama backend. In failover mode probe the primary so the user
+    can see whether they are on the fast external primary or the internal fallback —
+    otherwise a primary outage is only visible as unexplained slowness. (#21)"""
+    primary = env.get("OLLAMA_FAILOVER_PRIMARY")
+    base = env.get("OLLAMA_BASE_URL")
+    log._emit(log.bold("Ollama Backend"))
+    if primary:
+        if _primary_reachable(primary):
+            log._emit(
+                f"  failover — primary {primary} REACHABLE "
+                "→ serving from the external primary"
+            )
+        else:
+            log._emit(
+                f"  failover — primary {primary} UNREACHABLE "
+                "→ serving from the internal fallback"
+            )
+    elif base:
+        log._emit(f"  external — {base}")
+    else:
+        log._emit("  internal — platform-managed container")
+    log._emit("")
 
 
 def _count(filter_args: list) -> int:
@@ -91,6 +129,8 @@ def _print_status() -> None:
     for ln in stats_table:
         log._emit(ln)
     log._emit("")
+
+    _print_ollama_backend()
 
     health.run_health_checks()
 

@@ -585,6 +585,27 @@ cmd_status() {
         | grep -E "NAME|${CONTAINER_PREFIX}-" | head -20
 
     echo ""
+    echo -e "${BOLD}Ollama Backend${NC}"
+    # In failover mode probe the primary so a primary outage shows as "on the internal
+    # fallback" instead of unexplained slowness (#21). TCP probe = the Python status's
+    # socket check, kept byte-identical for the parity gate.
+    local _oprim _obase _ohost _oport
+    _oprim="$(_env_get OLLAMA_FAILOVER_PRIMARY)"
+    _obase="$(_env_get OLLAMA_BASE_URL)"
+    if [[ -n "$_oprim" ]]; then
+        _ohost="${_oprim%%:*}"; _oport="${_oprim##*:}"
+        if timeout 3 bash -c "exec 3<>/dev/tcp/${_ohost}/${_oport}" 2>/dev/null; then
+            echo "  failover — primary ${_oprim} REACHABLE → serving from the external primary"
+        else
+            echo "  failover — primary ${_oprim} UNREACHABLE → serving from the internal fallback"
+        fi
+    elif [[ -n "$_obase" ]]; then
+        echo "  external — ${_obase}"
+    else
+        echo "  internal — platform-managed container"
+    fi
+
+    echo ""
     run_health_checks
 }
 

@@ -26,6 +26,11 @@ server {
     location / {
         proxy_pass http://ollama_pool;
 
+        # Which backend actually served this response — the primary's host:port, or the
+        # internal backup on failover (both, comma-separated, if it failed over). Lets
+        # any caller/ops see the active backend with a plain `curl -i`. (#21)
+        add_header X-Ollama-Upstream $upstream_addr always;
+
         # Fail over to the backup on a connect error / timeout / 5xx. `non_idempotent`
         # so POSTs (/api/generate, /api/chat) also fail over — ollama inference is
         # safe to retry on the fallback since the primary produced no usable response.
