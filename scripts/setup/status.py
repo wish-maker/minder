@@ -18,9 +18,61 @@ import subprocess
 import sys
 import time
 
-from . import config, docker, health, log
+from . import config, docker, env, health, log
 
 _PREFIX = config.CONTAINER_PREFIX + "-"
+_ROUTER = _PREFIX + "ollama-router"
+
+
+def _primary_reachable(hostport: str) -> bool:
+    """True if the failover PRIMARY is reachable **from inside the router container** —
+    probed there (busybox wget) rather than host-side so it reflects the router's
+    actual network path (host and container can differ). Returns False if the router
+    isn't running. Mirrors the bash `docker exec … wget` probe for the parity gate."""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                _ROUTER,
+                "wget",
+                "-q",
+                "-T",
+                "3",
+                "-O",
+                "/dev/null",
+                f"http://{hostport}/api/tags",
+            ],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    except OSError:
+        return False
+
+
+def _print_ollama_backend() -> None:
+    """Show the active Ollama backend. In failover mode probe the primary so the user
+    can see whether they are on the fast external primary or the internal fallback —
+    otherwise a primary outage is only visible as unexplained slowness. (#21)"""
+    primary = env.get("OLLAMA_FAILOVER_PRIMARY")
+    base = env.get("OLLAMA_BASE_URL")
+    log._emit(log.bold("Ollama Backend"))
+    if primary:
+        if _primary_reachable(primary):
+            log._emit(
+                f"  failover — primary {primary} REACHABLE "
+                "→ serving from the external primary"
+            )
+        else:
+            log._emit(
+                f"  failover — primary {primary} UNREACHABLE "
+                "→ serving from the internal fallback"
+            )
+    elif base:
+        log._emit(f"  external — {base}")
+    else:
+        log._emit("  internal — platform-managed container")
+    log._emit("")
 
 
 def _count(filter_args: list) -> int:
@@ -91,6 +143,8 @@ def _print_status() -> None:
     for ln in stats_table:
         log._emit(ln)
     log._emit("")
+
+    _print_ollama_backend()
 
     health.run_health_checks()
 
