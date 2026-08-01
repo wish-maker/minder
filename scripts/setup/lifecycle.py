@@ -68,11 +68,15 @@ def start_services() -> None:
     docker.compose("up", "-d", *_active(config.CORE_SERVICES))
     time.sleep(8)
 
-    # The failover router has no depends_on pulling it in (consumers only hold its URL
-    # as a string), so bring it up explicitly once the network exists. The internal
-    # backup (minder-ollama) is pulled in by the consumers' depends_on. (#21)
+    # Failover: bring up the internal backup THEN the router. nginx resolves its
+    # upstream hostnames at startup, so if minder-ollama isn't running yet the router
+    # dies with "host not found in upstream" and only recovers via restart:on-failure.
+    # Neither has a depends_on pulling it in here (consumers only hold the router URL
+    # as a string; they depend_on 'ollama' but start later, in group ④), so both are
+    # brought up explicitly, in order. (#21)
     if failover_mode:
-        log.info("   ↳ ollama-router (external primary + internal fallback)…")
+        log.info("   ↳ internal ollama (failover backup) + ollama-router…")
+        docker.compose("up", "-d", "ollama")
         docker.compose("up", "-d", "ollama-router")
 
     log.info("③ Message broker (RabbitMQ)…")
