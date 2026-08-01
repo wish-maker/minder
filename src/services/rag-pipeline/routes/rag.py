@@ -2,7 +2,7 @@
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from core import state
@@ -54,7 +54,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
     embed_dim = EMBEDDING_DIMENSIONS.get(request.embedding_model, 768)
 
     # Stamp once so the stored and returned created_at match (#140).
-    created_at = datetime.now().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
     state.knowledge_bases[kb_id] = {
         "id": kb_id,
         "name": request.name,
@@ -284,7 +284,7 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
         "knowledge_base_ids": request.knowledge_base_ids,
         "retrieval_config": request.retrieval_config,
         "generation_config": request.generation_config,
-        "created_at": datetime.now().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
     # Save to PostgreSQL if available

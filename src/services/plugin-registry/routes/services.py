@@ -6,7 +6,7 @@ acyclic and mirrors the modular pattern used elsewhere in the codebase.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import ServiceRegistration
@@ -34,7 +34,7 @@ def build_services_router(
                 "host": service.host,
                 "port": service.port,
                 "health_check_url": service.health_check_url,
-                "registered_at": datetime.now().isoformat(),
+                "registered_at": datetime.now(timezone.utc).isoformat(),
                 "metadata": json.dumps(service.metadata),
             },
         )
@@ -95,21 +95,21 @@ def build_services_router(
                 f"service:{service_name}",
                 mapping={
                     "health_status": "healthy",
-                    "last_health_check": datetime.now().isoformat(),
+                    "last_health_check": datetime.now(timezone.utc).isoformat(),
                 },
             )
             return {
                 "service": service_name,
                 "status": "healthy",
                 "health_data": health_data,
-                "checked_at": datetime.now().isoformat(),
+                "checked_at": datetime.now(timezone.utc).isoformat(),
             }
         except HTTPException:
             redis_client.hset(
                 f"service:{service_name}",
                 mapping={
                     "health_status": "unhealthy",
-                    "last_health_check": datetime.now().isoformat(),
+                    "last_health_check": datetime.now(timezone.utc).isoformat(),
                 },
             )
             raise
@@ -157,7 +157,7 @@ def build_services_router(
         return {
             "services": proxyable,
             "count": len(proxyable),
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     return router

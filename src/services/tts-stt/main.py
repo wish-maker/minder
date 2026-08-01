@@ -6,7 +6,7 @@ Simple text-to-speech and speech-to-text functionality
 import os
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.stt_engine import STT_AVAILABLE
 from core.tts_engine import TTS_AVAILABLE
@@ -88,7 +88,7 @@ async def health_check():
         content={
             "service": "tts-stt",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
             "environment": os.getenv("ENVIRONMENT", "development"),
             "tts_available": TTS_AVAILABLE,

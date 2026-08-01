@@ -132,7 +132,7 @@ def build_plugins_router(
             author=meta.get("author", ""),
             status="registered",
             enabled=True,
-            registered_at=datetime.now().isoformat(),
+            registered_at=datetime.now(timezone.utc).isoformat(),
         )
 
         return {

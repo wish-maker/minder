@@ -1,7 +1,7 @@
 # services/marketplace/main.py
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add src to path for shared module imports (MUST be before other imports)
 sys.path.insert(0, "/app/src")
@@ -91,7 +91,7 @@ async def health_check():
         content={
             "service": "marketplace",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
             "environment": settings.ENVIRONMENT,
             "checks": checks,

@@ -1,7 +1,7 @@
 """Observability routes: /health (phase-aware downstream checks) and /metrics."""
 
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.clients import http_client, redis_client
 from fastapi import APIRouter, Response
@@ -70,7 +70,7 @@ async def health_check():
     body = {
         "service": "api-gateway",
         "status": status,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
         "phase": phase,

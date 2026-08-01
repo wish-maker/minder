@@ -6,7 +6,7 @@ Central plugin management, state control, and AI tools execution
 
 import sys
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.database import close_db_pool, get_db_pool, initialize_database
 from fastapi import FastAPI
@@ -97,7 +97,7 @@ async def health_check():
         content={
             "service": "plugin-state-manager",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": settings.VERSION,
             "environment": settings.ENVIRONMENT,
             "database": "connected"

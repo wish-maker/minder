@@ -1,7 +1,7 @@
 """System & observability routes: /health, /metrics, /initialize, / (root)."""
 
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core import state
 from fastapi import APIRouter, HTTPException
@@ -40,7 +40,7 @@ async def health_check():
         content={
             "service": "rag-pipeline",
             "status": status,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": APP_VERSION,
             "environment": os.getenv("ENVIRONMENT", "development"),
             "knowledge_bases": len(state.knowledge_bases),

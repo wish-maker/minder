@@ -9,7 +9,7 @@ This is a repository layer component for data access.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,8 @@ class ConversationRepository:
         if not answer:
             raise ValueError("answer cannot be empty")
 
-        timestamp = datetime.now()  # datetime object, not string
+        # naive TIMESTAMP column → naive-UTC datetime object (was naive-LOCAL).
+        timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
         metadata_json = json.dumps(metadata or {})
 
         try:

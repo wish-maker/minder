@@ -9,7 +9,7 @@ via ``core.database``.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.database import update_plugin_in_database
 from core.state import logger, plugin_instances, plugins_db, redis_client, services_db
@@ -82,7 +82,7 @@ async def health_check_loop():
                     plugin_info.health_status = (
                         "healthy" if health.get("healthy") else "unhealthy"
                     )
-                    last_check_dt = datetime.now()
+                    last_check_dt = datetime.now(timezone.utc)
                     plugin_info.last_health_check = last_check_dt.isoformat()
 
                     # Update in Redis for service discovery
