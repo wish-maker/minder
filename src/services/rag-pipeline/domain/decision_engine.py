@@ -14,6 +14,12 @@ from typing import Any, Dict, List
 logger = logging.getLogger(__name__)
 
 
+def _enum_value(v: Any) -> str:
+    """Normalize an Enum member to its .value (leave plain strings untouched) so
+    values used as dict keys / JSON fields stay serializable."""
+    return v.value if isinstance(v, Enum) else str(v)
+
+
 class QueryComplexity(Enum):
     """Query complexity levels"""
 
@@ -336,8 +342,12 @@ Rules:
         complexity_counts: Dict[str, int] = {}
 
         for record in self.decision_history:
-            strategy = record["decision"]["retrieval_strategy"]
-            complexity = record["analysis"]["complexity"]
+            # analysis/decision are stored via __dict__, so these are the raw
+            # RetrievalStrategy/QueryComplexity Enum members — key the distributions
+            # by their .value so the result stays JSON-serializable (Enum keys raise
+            # in json.dumps). Tolerate plain strings too (defensive).
+            strategy = _enum_value(record["decision"]["retrieval_strategy"])
+            complexity = _enum_value(record["analysis"]["complexity"])
 
             strategy_counts[strategy] = strategy_counts.get(strategy, 0) + 1
             complexity_counts[complexity] = complexity_counts.get(complexity, 0) + 1
