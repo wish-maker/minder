@@ -163,6 +163,22 @@ async def _ollama_chat(body: Dict) -> Dict:
 MAX_TOOL_ITERATIONS = 5
 
 
+def _normalize_tool_args(args: object) -> Dict:
+    """Unwrap the argument envelope some models emit.
+
+    Ollama tool_calls should carry flat arguments (``{"coin": "bitcoin"}``), but some
+    capable models — notably command-r — wrap them as
+    ``{"tool_name": "...", "parameters": {"coin": "bitcoin"}}``. Passing that envelope
+    to the plugin action (which expects the flat args) makes the call fail. Unwrap a
+    ``parameters`` dict when present so these models' tool calls actually execute. A
+    flat, correct args dict is returned unchanged (none of the plugin tools take a
+    ``parameters`` argument themselves).
+    """
+    if isinstance(args, dict) and isinstance(args.get("parameters"), dict):
+        return args["parameters"]
+    return args if isinstance(args, dict) else {}
+
+
 async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
     """Offer plugin tools to the model and run any tool_calls it makes (opt-in path).
 
@@ -200,7 +216,7 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
         for call in tool_calls:
             fn = call.get("function", {})
             name = fn.get("name")
-            args = fn.get("arguments") or {}
+            args = _normalize_tool_args(fn.get("arguments") or {})
             meta = meta_by_name.get(name)
             if not meta:
                 content = f"error: unknown tool '{name}'"
