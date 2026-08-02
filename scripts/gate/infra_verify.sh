@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Verify the ported infra helpers (scripts/setup/infra.py) vs scripts/lib/infra.sh
 # under DRY_RUN=1, against the LIVE stack.
-#  - create_networks: dry-run-gated `docker network create` + read-only probe.
+#  - create_networks / remove_networks: dry-run-gated `docker network create`/`rm`
+#    + read-only probe.
 #  - initialize_database / initialize_minio: the compose ups are gated; the CREATE
 #    DATABASE / mc bucket ops are un-gated but IDEMPOTENT, so on a stack where all
 #    aux DBs + buckets already exist they are a safe no-op ("Already exists" for
@@ -39,6 +40,7 @@ cmp() { local n="$1" b p; b="$(printf '%s' "$2" | norm)"; p="$(printf '%s' "$3" 
   else FAIL=1; echo "FAIL  $n"; diff <(printf '%s\n' "$b") <(printf '%s\n' "$p") | sed 's/^/    /'; fi; }
 
 cmp "create_networks"     "$(bsh 'create_networks' 2>&1)"     "$(pyi 'infra.create_networks()' 2>&1)"
+cmp "remove_networks"     "$(bsh 'remove_networks' 2>&1)"     "$(pyi 'infra.remove_networks()' 2>&1)"
 cmp "initialize_database" "$(bsh 'initialize_database' 2>&1)" "$(pyi 'infra.initialize_database()' 2>&1)"
 cmp "initialize_minio"    "$(bsh 'initialize_minio' 2>&1)"    "$(pyi 'infra.initialize_minio()' 2>&1)"
 

@@ -2,19 +2,26 @@
 
 `uninstall`            → compose down (data volumes PRESERVED).
 `uninstall --purge`    → destructive: `compose down -v --remove-orphans` (deletes
-                         volumes too), behind a DESTRUCTIVE banner + (interactive
-                         only) a typed-DELETE confirmation.
+                         volumes too) plus infra.remove_networks(), behind a
+                         DESTRUCTIVE banner + (interactive only) a typed-DELETE
+                         confirmation.
 
 The compose calls go through docker.compose_all() → all profiles active, so `down`
 also removes profile-gated containers (the internal-ollama container; #58). It is
 dry-run-gated, so both branches are non-destructive under DRY_RUN — which is how they
 are verified (scripts/gate/uninstall_verify.sh, incl. --purge under CI where the
 DELETE prompt is skipped). The interactive DELETE prompt is exercised by hand.
+
+`infra.remove_networks()` is needed because both compose networks are declared
+`external: true` — `compose down -v` never removes networks it doesn't own, so
+without this call the two networks `infra.create_networks()` makes during install
+silently survive every uninstall --purge (confirmed live, 2026-08-02, across two
+separate uninstall/reinstall cycles on hantal).
 """
 
 import sys
 
-from . import config, docker, log
+from . import config, docker, infra, log
 
 SCRIPT_NAME = config.SCRIPT_NAME
 
@@ -54,6 +61,7 @@ def run(purge_arg: str = "") -> int:
 
         log.warn("Removing all services, networks, and volumes…")
         docker.compose_all("down", "-v", "--remove-orphans")
+        infra.remove_networks()
         log.success("Full uninstall complete")
     else:
         log.info("Stopping services (data volumes are preserved)")
