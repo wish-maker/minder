@@ -22,6 +22,22 @@ create_networks() {
     fi
 }
 
+# Counterpart to create_networks, for cmd_uninstall --purge. Both networks are
+# declared `external: true` in docker-compose.yml, so `compose down -v` never
+# removes them on its own — without this, they silently survive every purge.
+remove_networks() {
+    log_step "Removing Docker networks"
+
+    for net in "$NETWORK_NAME" "$MONITORING_NETWORK_NAME"; do
+        if docker network ls --format '{{.Name}}' | grep -q "^${net}$"; then
+            run docker network rm "$net"
+            log_success "Network '${net}' removed"
+        else
+            log_info "Network '${net}' already absent"
+        fi
+    done
+}
+
 # ─────────────────────────────────────────────────────────────
 # DATABASE INITIALISATION
 # ─────────────────────────────────────────────────────────────

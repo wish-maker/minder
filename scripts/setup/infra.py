@@ -8,6 +8,12 @@ non-destructive under DRY_RUN and cleanly verifiable — like `stop`.
 run un-gated `docker exec` mutations, but they are idempotent — CREATE/mc mb only
 act when the DB/bucket is absent — so they are verified live against a stack where
 all already exist (a safe no-op) with the per-item result masked.
+
+`remove_networks` is the `create_networks` counterpart for `uninstall --purge`:
+both compose networks are declared `external: true` (see docker-compose.yml), so
+`compose down -v` never touches them — confirmed live (2026-08-02): two separate
+uninstall --purge runs both left them behind every time. Only called from the
+--purge path, matching the destructive tier that already deletes data volumes.
 """
 
 import subprocess
@@ -38,6 +44,16 @@ def create_networks() -> None:
             "--attachable",
         )
         log.success(f"Network '{config.MONITORING_NETWORK_NAME}' created")
+
+
+def remove_networks() -> None:
+    log.step("Removing Docker networks")
+    for name in (config.NETWORK_NAME, config.MONITORING_NETWORK_NAME):
+        if docker.network_exists(name):
+            docker.run("docker", "network", "rm", name)
+            log.success(f"Network '{name}' removed")
+        else:
+            log.info(f"Network '{name}' already absent")
 
 
 def initialize_database() -> None:

@@ -689,6 +689,7 @@ cmd_uninstall() {
 
         log_warn "Removing all services, networks, and volumes…"
         compose_all down -v --remove-orphans
+        remove_networks
         log_success "Full uninstall complete"
     else
         log_info "Stopping services (data volumes are preserved)"
