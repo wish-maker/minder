@@ -60,6 +60,20 @@ initialize_database() {
         fi
     done
 
+    # Cluster-wide default session timezone (#252): DEFAULT NOW() on a
+    # TIMESTAMP (no tz) column casts the tz-aware "now" using the session's
+    # `timezone` GUC — left at its OS default this stores local wall-clock
+    # (e.g. TR time on the Pi), disagreeing with the naive-UTC values Python
+    # writes (#239). ALTER SYSTEM + reload is idempotent and takes effect
+    # immediately, so it's safe to run on every install/re-run, including
+    # against clusters whose data directory predates this fix.
+    if docker exec "$(container_name postgres)" psql -U minder \
+           -c "ALTER SYSTEM SET timezone TO 'UTC'; SELECT pg_reload_conf();" &>/dev/null 2>&1; then
+        log_detail "Database timezone set to UTC"
+    else
+        log_detail "Could not set database timezone to UTC"
+    fi
+
     log_success "Database initialisation complete"
 }
 
