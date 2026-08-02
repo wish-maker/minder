@@ -342,16 +342,18 @@ minder/plugin-registry:1.0.0
 
 ### Docker Volumes
 
-Data is stored in named volumes:
+Data is stored in named volumes (docker-compose.yml's `volumes:` keys — Compose
+auto-prefixes each with the project name, `minder`, e.g. `postgres_data` becomes
+the actual on-disk volume `minder_postgres_data`):
 ```
-docker_postgres_data      # Database data
-docker_redis_data         # Redis persistence
-docker_qdrant_data        # Vector storage
-docker_neo4j_data         # Graph database
-docker_ollama_data        # LLM models
-docker_influxdb_data      # Metrics data
-docker_prometheus_data    # Metrics storage
-docker_grafana_data       # Dashboard data
+postgres_data             # Database data
+redis_data                # Redis persistence
+qdrant_data               # Vector storage
+neo4j_data                # Graph database
+ollama_data               # LLM models
+influxdb_data             # Metrics data
+prometheus_data           # Metrics storage
+grafana_data              # Dashboard data
 ```
 
 ### Backups

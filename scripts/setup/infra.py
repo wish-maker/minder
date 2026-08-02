@@ -16,6 +16,12 @@ both compose networks are declared `external: true` (see docker-compose.yml), so
 `compose down -v` never touches them — confirmed live (2026-08-02): two separate
 uninstall --purge runs both left them behind every time. Only called from the
 --purge path, matching the destructive tier that already deletes data volumes.
+
+`migrate_volume_names` (#262) is dry-run-gated the same way as `create_networks`
+(existence probes read-only, the `docker volume create`/`docker run` mutations go
+through docker.run()) and is called from `start`/`install` right before compose
+ever touches volumes, so a rename in docker-compose.yml never silently orphans
+data already on disk under an old volume name.
 """
 
 import subprocess
@@ -56,6 +62,66 @@ def remove_networks() -> None:
             log.success(f"Network '{name}' removed")
         else:
             log.info(f"Network '{name}' already absent")
+
+
+# One-time volume-name cleanup (#262): these 9 keys carried a redundant "docker_"
+# prefix — Compose auto-prefixes every volume with the project name (`minder`)
+# already, so the actual on-disk volumes were double-prefixed (e.g.
+# "minder_docker_traefik_letsencrypt"). Old key -> new key, matching the plain
+# convention every other volume already uses.
+_VOLUME_RENAMES = {
+    "docker_traefik_letsencrypt": "traefik_letsencrypt",
+    "docker_traefik_logs": "traefik_logs",
+    "docker_otel-collector-data": "otel_collector_data",
+    "docker_plugins_data": "plugins_data",
+    "docker_models_data": "models_data",
+    "docker_models_cache": "models_cache",
+    "docker_prometheus_data": "prometheus_data",
+    "docker_grafana_data": "grafana_data",
+    "docker_alertmanager_data": "alertmanager_data",
+}
+
+
+def migrate_volume_names() -> None:
+    """#262: copy data from each old (project-prefixed) volume to its renamed
+    counterpart before `compose up` ever gets a chance to create an empty volume
+    under the new name — without this, a host that already has data under an old
+    name (the Pi) would silently lose access to it the moment docker-compose.yml's
+    volume keys changed. Idempotent (checks existence both sides) and safe to run
+    on every start/restart: a no-op on a fresh install (no old volume) and a no-op
+    once already migrated (new volume already exists). Never deletes the old
+    volume — that's a manual step once the new one is confirmed good.
+    """
+    log.step("Checking for volume-name migrations")
+    migrated_any = False
+    for old_key, new_key in _VOLUME_RENAMES.items():
+        old_name = f"{config.CONTAINER_PREFIX}_{old_key}"
+        new_name = f"{config.CONTAINER_PREFIX}_{new_key}"
+        if not docker.volume_exists(old_name) or docker.volume_exists(new_name):
+            continue  # nothing to migrate, or already migrated
+        log.info(f"Migrating volume '{old_name}' → '{new_name}'…")
+        docker.run("docker", "volume", "create", new_name)
+        docker.run(
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{old_name}:/from",
+            "-v",
+            f"{new_name}:/to",
+            "alpine",
+            "sh",
+            "-c",
+            "cp -a /from/. /to/",
+        )
+        log.success(f"Migrated: {old_key} → {new_key}")
+        migrated_any = True
+    if migrated_any:
+        log.detail(
+            "Old volume(s) left in place — remove manually once the new ones look right."
+        )
+    else:
+        log.info("No volume migrations needed")
 
 
 def initialize_database() -> None:

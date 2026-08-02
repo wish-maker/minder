@@ -2,10 +2,10 @@
 
 Pure orchestration: it calls, in order, the ported pieces that now all exist —
 preflight (prereqs, GPU, access/AI/compute validation), env self-heal, network
-creation, service startup, the health wait, and the health report. Each step is
-individually verified by its own gate script; this module is verified as a whole
-under the gate's docker shim (which makes the waits/health instant + deterministic)
-by scripts/gate/start_cmd_verify.sh.
+creation, volume-name migration (#262), service startup, the health wait, and the
+health report. Each step is individually verified by its own gate script; this
+module is verified as a whole under the gate's docker shim (which makes the
+waits/health instant + deterministic) by scripts/gate/start_cmd_verify.sh.
 """
 
 from . import env, health, infra, lifecycle, preflight
@@ -25,6 +25,7 @@ def run() -> int:
     ):
         return 1
     infra.create_networks()
+    infra.migrate_volume_names()
     lifecycle.start_services()
     lifecycle.wait_for_services()
     health.run_health_checks()

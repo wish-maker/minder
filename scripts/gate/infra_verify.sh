@@ -3,6 +3,8 @@
 # under DRY_RUN=1, against the LIVE stack.
 #  - create_networks / remove_networks: dry-run-gated `docker network create`/`rm`
 #    + read-only probe.
+#  - migrate_volume_names (#262): dry-run-gated `docker volume create`/`run` +
+#    read-only probe, same shape as create_networks.
 #  - initialize_database / initialize_minio: the compose ups are gated; the CREATE
 #    DATABASE / mc bucket ops are un-gated but IDEMPOTENT, so on a stack where all
 #    aux DBs + buckets already exist they are a safe no-op ("Already exists" for
@@ -41,6 +43,7 @@ cmp() { local n="$1" b p; b="$(printf '%s' "$2" | norm)"; p="$(printf '%s' "$3" 
 
 cmp "create_networks"     "$(bsh 'create_networks' 2>&1)"     "$(pyi 'infra.create_networks()' 2>&1)"
 cmp "remove_networks"     "$(bsh 'remove_networks' 2>&1)"     "$(pyi 'infra.remove_networks()' 2>&1)"
+cmp "migrate_volume_names" "$(bsh 'migrate_volume_names' 2>&1)" "$(pyi 'infra.migrate_volume_names()' 2>&1)"
 cmp "initialize_database" "$(bsh 'initialize_database' 2>&1)" "$(pyi 'infra.initialize_database()' 2>&1)"
 cmp "initialize_minio"    "$(bsh 'initialize_minio' 2>&1)"    "$(pyi 'infra.initialize_minio()' 2>&1)"
 

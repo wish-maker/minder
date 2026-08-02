@@ -176,6 +176,19 @@ def network_exists(name: str) -> bool:
     return name in out.stdout.splitlines()
 
 
+def volume_exists(name: str) -> bool:
+    # Same idiom as network_exists, for docker volume ls.
+    try:
+        out = subprocess.run(
+            ["docker", "volume", "ls", "--format", "{{.Name}}"],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return False
+    return name in out.stdout.splitlines()
+
+
 # ── Wait / poll helpers (docker.sh) ───────────────────────────────────────
 # Live polls (not dry-run-gated, read-only). They use the spinner; the spinner
 # output is normalized away by the gate, so what's verified is the final

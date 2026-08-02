@@ -47,6 +47,7 @@ def run(profile: str = "standard") -> int:
     bundles.seed_profile(profile)
     log.progress_next("Creating Docker network")
     infra.create_networks()
+    infra.migrate_volume_names()  # #262: no-op on a fresh install, real on a host with old-named volumes
     log.progress_next("Resolving & pulling images")
     versions.pull_all_images()
     log.progress_next("Initialising databases")

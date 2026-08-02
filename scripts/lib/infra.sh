@@ -38,6 +38,65 @@ remove_networks() {
     done
 }
 
+# One-time volume-name cleanup (#262): these 9 keys carried a redundant "docker_"
+# prefix — Compose auto-prefixes every volume with the project name (CONTAINER_PREFIX)
+# already, so the actual on-disk volumes were double-prefixed (e.g.
+# "minder_docker_traefik_letsencrypt"). Old key:new key, matching the plain
+# convention every other volume already uses. A plain indexed array (not an
+# associative one) on purpose — associative-array key order isn't guaranteed in
+# bash, and this order must match the Python port's dict order exactly for the
+# behavior-parity gate (scripts/gate/infra_verify.sh).
+readonly -a VOLUME_RENAMES=(
+    "docker_traefik_letsencrypt:traefik_letsencrypt"
+    "docker_traefik_logs:traefik_logs"
+    "docker_otel-collector-data:otel_collector_data"
+    "docker_plugins_data:plugins_data"
+    "docker_models_data:models_data"
+    "docker_models_cache:models_cache"
+    "docker_prometheus_data:prometheus_data"
+    "docker_grafana_data:grafana_data"
+    "docker_alertmanager_data:alertmanager_data"
+)
+
+# Copies data from each old (project-prefixed) volume to its renamed counterpart
+# before `compose up` ever gets a chance to create an empty volume under the new
+# name — without this, a host that already has data under an old name (the Pi)
+# would silently lose access to it the moment docker-compose.yml's volume keys
+# changed. Idempotent (checks existence both sides) and safe to run on every
+# start/restart. Never deletes the old volume — manual cleanup once confirmed good.
+migrate_volume_names() {
+    log_step "Checking for volume-name migrations"
+
+    local migrated_any=false
+    local pair old_key new_key old_name new_name
+    for pair in "${VOLUME_RENAMES[@]}"; do
+        old_key="${pair%%:*}"
+        new_key="${pair##*:}"
+        old_name="${CONTAINER_PREFIX}_${old_key}"
+        new_name="${CONTAINER_PREFIX}_${new_key}"
+
+        if ! docker volume ls --format '{{.Name}}' | grep -q "^${old_name}$"; then
+            continue  # nothing to migrate
+        fi
+        if docker volume ls --format '{{.Name}}' | grep -q "^${new_name}$"; then
+            continue  # already migrated
+        fi
+
+        log_info "Migrating volume '${old_name}' → '${new_name}'…"
+        run docker volume create "$new_name"
+        run docker run --rm -v "${old_name}:/from" -v "${new_name}:/to" \
+            alpine sh -c "cp -a /from/. /to/"
+        log_success "Migrated: ${old_key} → ${new_key}"
+        migrated_any=true
+    done
+
+    if [[ "$migrated_any" == true ]]; then
+        log_detail "Old volume(s) left in place — remove manually once the new ones look right."
+    else
+        log_info "No volume migrations needed"
+    fi
+}
+
 # ─────────────────────────────────────────────────────────────
 # DATABASE INITIALISATION
 # ─────────────────────────────────────────────────────────────
