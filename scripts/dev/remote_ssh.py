@@ -51,7 +51,9 @@ def main() -> int:
 
     alias, argv = argv[0], argv[1:]
     if alias not in remote_lib.HOSTS:
-        sys.exit(f"unknown host alias {alias!r} — choices: {', '.join(remote_lib.HOSTS)}")
+        sys.exit(
+            f"unknown host alias {alias!r} — choices: {', '.join(remote_lib.HOSTS)}"
+        )
     cfg = remote_lib.HOSTS[alias]
 
     if argv and argv[0] == "--job":
@@ -60,10 +62,14 @@ def main() -> int:
         job_name = argv[1]
         job = remote_lib.JOBS.get(job_name)
         if job is None:
-            sys.exit(f"unknown job {job_name!r} — choices: {', '.join(remote_lib.JOBS)}")
+            sys.exit(
+                f"unknown job {job_name!r} — choices: {', '.join(remote_lib.JOBS)}"
+            )
         cmds = job.get(cfg["shell"])
         if cmds is None:
-            sys.exit(f"job {job_name!r} has no {cfg['shell']} variant for host {alias!r}")
+            sys.exit(
+                f"job {job_name!r} has no {cfg['shell']} variant for host {alias!r}"
+            )
         return remote_lib.run(alias, cmds)
 
     no_cd = raw = False

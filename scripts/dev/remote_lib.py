@@ -127,7 +127,9 @@ def connect(alias: str):
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     if cfg["auth"] == "key":
         key_path = _require(env, f"{prefix}_KEY")
-        key = paramiko.Ed25519Key.from_private_key_file(str(Path(key_path).expanduser()))
+        key = paramiko.Ed25519Key.from_private_key_file(
+            str(Path(key_path).expanduser())
+        )
         client.connect(host, username=user, pkey=key, sock=sock, timeout=30)
     else:
         password = _require(env, f"{prefix}_PASSWORD")
