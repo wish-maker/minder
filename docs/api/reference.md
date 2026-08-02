@@ -1,7 +1,7 @@
 # Minder Platform — API Reference
 
 **Version:** 1.0.0
-**Last Updated:** 2026-07-26
+**Last Updated:** 2026-08-02
 **Base URL (via API Gateway):** `http://localhost:8000`
 
 ---
@@ -168,11 +168,14 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | GET | `/v1/proxy` | List services that can be proxied |
 | ANY | `/v1/proxy/{service_name}/{path:path}` | Dynamic proxy to a registered service |
 
-### Bundles (read-only)
+### Bundles
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/v1/bundles` | The bundle model: each capability bundle, whether it's enabled, its claimed services, and per-service active/orphaned status. Derived from the Compose `minder.bundle=` labels + the secret-free enable-state via the shared brain (`shared.bundle_graph`). Read-only — enable/disable/reconcile need the docker-socket-proxy (Phase 3, #8). `503` if the compose file isn't mounted |
+| GET | `/v1/bundles` | The bundle model: each capability bundle, whether it's enabled, its claimed services, and per-service active/orphaned status. Derived from the Compose `minder.bundle=` labels + the secret-free enable-state via the shared brain (`shared.bundle_graph`). `503` if the compose file isn't mounted |
+| POST | `/v1/bundles/{name}/enable` | Enable a bundle (JWT-gated). Persists intent to `bundles.state.json` (same file the host CLI writes) and starts already-materialised claimed containers via the least-privilege docker-socket-proxy — it cannot *create* new containers, so a never-materialised service comes back as `pending_create` until the next host `setup.sh start`/`restart` converge |
+| POST | `/v1/bundles/{name}/disable` | Disable a bundle (JWT-gated); stops its claimed containers via the docker-socket-proxy, same persistence model as enable |
+| POST | `/v1/bundles/reconcile` | Re-apply the persisted enable-state to running containers (JWT-gated) — start/stop drift correction without changing intent |
 
 ### Ops
 
@@ -247,6 +250,7 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Service health |
+| GET | `/metrics` | Prometheus metrics |
 
 ---
 
@@ -289,6 +293,7 @@ Plugin state control, AI-tool discovery/execution, and per-plugin licensing.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Service health |
+| GET | `/metrics` | Prometheus metrics |
 
 ---
 
@@ -307,18 +312,19 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/initialize` | Initialize the Ollama client / warm the pipeline |
+| GET | `/capabilities` | What's actually live on this host (rerank backend, hybrid/parent-context availability, etc.) — see [rag-methods.md](../rag-methods.md) |
 | POST | `/knowledge-bases` | Create a knowledge base (`name` required, `description` optional; pick embedding + LLM model) |
 | GET | `/knowledge-bases` | List knowledge bases |
 | GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
 | DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
 | POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector) |
-
-> The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
 | DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
+
+> The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
 
 ```bash
 # Create a knowledge base, then upload a document into it
@@ -384,6 +390,7 @@ Entity extraction and knowledge-graph construction/retrieval, backed by **Neo4j*
 | POST | `/entity-context` | Retrieve context / neighbors around an entity |
 | DELETE | `/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |
 | GET | `/health` | Service health |
+| GET | `/metrics` | Prometheus metrics |
 
 ---
 
@@ -447,6 +454,19 @@ the full observability port map.
 ---
 
 ## Changelog
+
+### 2026-08-02
+- Re-verified every route table against each service's live `/openapi.json` on a real
+  deployment (hantal), per #256. Found and fixed real drift:
+  - **Bundles section was stale**: documented `POST /v1/bundles/{name}/enable|disable`
+    and `POST /v1/bundles/reconcile` as not-yet-implemented ("need the docker-socket-proxy,
+    Phase 3"), but they've been live since #65 item 2 PR2 (`87e1845`). Added them.
+  - Marketplace, Plugin State Manager, and Graph-RAG Ops sections were missing their
+    `GET /metrics` row despite the endpoint being live (and despite the Monitoring
+    section below claiming every service exposes one).
+  - RAG Pipeline's route table was missing `GET /capabilities`, mentioned only in prose.
+  - Fixed a Markdown bug: a blockquote note sat mid-table in the RAG Pipeline section,
+    splitting one table into two at render time. Moved it after the table.
 
 ### 2026-07-10
 - Corrected the service inventory to the 8 real core services (added graph-rag :8008; removed

@@ -95,6 +95,14 @@ only when `OLLAMA_BASE_URL` is empty (local mode); when set, an external/native 
 the container stays inactive. Models auto-pulled via `OLLAMA_PULL_MODELS` into the
 `/root/.ollama/models` volume.
 
+#### Ollama Router (`nginx:1.27-alpine`, mode-gated)
+**Purpose**: Failover-mode-only reverse proxy (`minder-ollama-router`, internal port 11434,
+profile `ollama-router`) sitting in front of an external **primary** Ollama with the internal
+`minder-ollama` container as automatic backup. All services point `OLLAMA_BASE_URL` at it, so
+failover is transparent — no per-service code. Only present when `ollama-mode failover` is set
+(via `OLLAMA_FAILOVER_PRIMARY`); absent in plain internal/external mode. See
+[Ollama modes](../getting-started/ai-setup.md#ollama-modes-internal-external-failover).
+
 ### Core APIs
 
 All core APIs expose a `/health` endpoint. Route prefixes vary per service (e.g.
