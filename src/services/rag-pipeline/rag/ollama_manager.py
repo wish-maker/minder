@@ -10,7 +10,12 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL, OLLAMA_HOST
+from config import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_LLM_MODEL,
+    OLLAMA_FAILOVER_PRIMARY,
+    OLLAMA_HOST,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,37 +33,43 @@ except ImportError:
 async def _describe_failover_404(model: str, base_error: str) -> str:
     """#249: a model-not-found 404 is ambiguous in failover mode — it could mean the
     model genuinely doesn't exist anywhere, or that it only lives on the external
-    primary and the router quietly fell back to the internal Ollama while the
-    primary was unreachable. Check the router's X-Ollama-Upstream header (present on
-    every response it proxies, including this failed one) and say which case this
-    is instead of surfacing a bare, misleading 404. Best-effort: any hiccup checking
-    it just returns the original message unchanged.
+    primary while the router has quietly fallen back to the internal Ollama. Probe
+    the primary directly (mirrors scripts/setup/status.py's `_primary_reachable`,
+    just from inside the container instead of via `docker exec`) and say which case
+    this is instead of surfacing a bare, misleading 404. Best-effort: any hiccup
+    probing it just returns the original message unchanged.
 
-    Detection: nginx's $upstream_addr is comma-separated with one entry per upstream
-    server it actually tried (nginx.conf.template) — a single entry means the
-    primary answered directly; 2+ entries means an earlier one failed and the LAST
-    entry (the internal backup, since it's the only other pool member) served it.
-    Confirmed live (2026-08-02): with an unreachable primary, the header reads
-    "10.255.255.1:11434, 172.18.0.11:11434" — nginx resolves the backup's hostname
-    to its container IP, so matching the literal "minder-ollama:11434" string never
-    fires. Counting comma-separated entries instead of string-matching a hostname
-    is what actually detects the fallback.
+    Earlier approach tried inferring this from the router's X-Ollama-Upstream
+    response header instead of probing the primary directly, and was wrong: nginx's
+    upstream circuit breaker (`max_fails=1 fail_timeout=10s`) skips a recently-failed
+    primary entirely on subsequent requests, so the header only shows BOTH attempts
+    (primary then backup, comma-separated) for the first request after each
+    fail_timeout window — every request after that shows just the backup's address
+    with no comma, indistinguishable from "the primary answered directly".
+    Confirmed live (2026-08-02): identical requests a few seconds apart flipped
+    between a 2-entry and a 1-entry header with no change in which backend was
+    actually serving. A direct reachability probe has no such timing dependency.
     """
+    if not OLLAMA_FAILOVER_PRIMARY:
+        return base_error  # not configured for failover on this container
+    primary_url = OLLAMA_FAILOVER_PRIMARY
+    if not primary_url.startswith("http"):
+        primary_url = f"http://{primary_url}"
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
-            resp = await client.get(f"{OLLAMA_HOST}/api/tags")
-        upstream = resp.headers.get("x-ollama-upstream", "")
+            resp = await client.get(f"{primary_url}/api/tags")
+        primary_reachable = resp.status_code < 500
     except Exception:
-        return base_error
-    attempts = [a.strip() for a in upstream.split(",") if a.strip()]
-    if len(attempts) < 2:
-        return base_error  # served by the primary on the first try (or not behind the router at all)
-    served_by = attempts[-1]
+        primary_reachable = False
+    if primary_reachable:
+        return (
+            base_error  # primary answered — the model genuinely doesn't exist anywhere
+        )
     return (
-        f"{base_error} — served by the internal fallback ({served_by}) because the "
-        f"external primary is currently unreachable. Model '{model}' may only exist "
-        "on the primary; it should work again once the primary recovers (see "
-        "`bash setup.sh status` for the active backend)."
+        f"{base_error} — the external primary ({OLLAMA_FAILOVER_PRIMARY}) is "
+        "currently unreachable, so this was served by the internal fallback. "
+        f"Model '{model}' may only exist on the primary; it should work again once "
+        "the primary recovers (see `bash setup.sh status` for the active backend)."
     )
 
 
@@ -196,11 +207,13 @@ class OllamaManager:
             logger.error(f"❌ LLM generation failed: {e}")
             error_text = str(e)
             # #249: a 404 through the failover router is ambiguous — clarify it when
-            # it actually is the "only on the unreachable primary" case.
+            # it actually is the "only on the unreachable primary" case. (Cheap
+            # early-exit here; _describe_failover_404 also self-guards on
+            # OLLAMA_FAILOVER_PRIMARY being set.)
             if (
                 isinstance(e, ResponseError)
                 and e.status_code == 404
-                and "ollama-router" in OLLAMA_HOST
+                and OLLAMA_FAILOVER_PRIMARY
             ):
                 error_text = await _describe_failover_404(model, error_text)
             # Flag the failure so the query path can surface a real 503 instead of
