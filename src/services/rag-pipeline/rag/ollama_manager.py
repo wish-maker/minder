@@ -24,12 +24,6 @@ except ImportError:
     ResponseError = Exception  # type: ignore[misc,assignment]  # unreachable without the package
     logging.warning("ollama package not installed. Install with: pip install ollama")
 
-# The failover router's hardcoded backup upstream (docker/services/ollama-router/
-# nginx.conf.template) — seeing this in the router's X-Ollama-Upstream response
-# header means the external primary was unreachable and the internal fallback
-# actually served the request.
-_ROUTER_BACKUP_UPSTREAM = "minder-ollama:11434"
-
 
 async def _describe_failover_404(model: str, base_error: str) -> str:
     """#249: a model-not-found 404 is ambiguous in failover mode — it could mean the
@@ -39,6 +33,16 @@ async def _describe_failover_404(model: str, base_error: str) -> str:
     every response it proxies, including this failed one) and say which case this
     is instead of surfacing a bare, misleading 404. Best-effort: any hiccup checking
     it just returns the original message unchanged.
+
+    Detection: nginx's $upstream_addr is comma-separated with one entry per upstream
+    server it actually tried (nginx.conf.template) — a single entry means the
+    primary answered directly; 2+ entries means an earlier one failed and the LAST
+    entry (the internal backup, since it's the only other pool member) served it.
+    Confirmed live (2026-08-02): with an unreachable primary, the header reads
+    "10.255.255.1:11434, 172.18.0.11:11434" — nginx resolves the backup's hostname
+    to its container IP, so matching the literal "minder-ollama:11434" string never
+    fires. Counting comma-separated entries instead of string-matching a hostname
+    is what actually detects the fallback.
     """
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -46,10 +50,12 @@ async def _describe_failover_404(model: str, base_error: str) -> str:
         upstream = resp.headers.get("x-ollama-upstream", "")
     except Exception:
         return base_error
-    if _ROUTER_BACKUP_UPSTREAM not in upstream:
-        return base_error  # served by the primary (or not actually in failover) — the bare 404 is accurate
+    attempts = [a.strip() for a in upstream.split(",") if a.strip()]
+    if len(attempts) < 2:
+        return base_error  # served by the primary on the first try (or not behind the router at all)
+    served_by = attempts[-1]
     return (
-        f"{base_error} — served by the internal fallback ({upstream}) because the "
+        f"{base_error} — served by the internal fallback ({served_by}) because the "
         f"external primary is currently unreachable. Model '{model}' may only exist "
         "on the primary; it should work again once the primary recovers (see "
         "`bash setup.sh status` for the active backend)."

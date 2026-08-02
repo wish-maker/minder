@@ -69,17 +69,25 @@ class _FakeAsyncClientCtx:
 
 
 @pytest.mark.asyncio
-async def test_backup_upstream_gets_the_clarifying_message():
-    ctx = _FakeAsyncClientCtx(response=_mock_response("minder-ollama:11434"))
+async def test_failed_over_upstream_gets_the_clarifying_message():
+    # Real header observed live (2026-08-02) with an unreachable primary: nginx's
+    # $upstream_addr lists the failed primary THEN the backup that actually served
+    # it, both resolved to host:port (the backup's hostname resolves to its
+    # container IP — matching a literal "minder-ollama:11434" string never fires).
+    ctx = _FakeAsyncClientCtx(
+        response=_mock_response("10.255.255.1:11434, 172.18.0.11:11434")
+    )
     with patch("rag_pipeline_ollama_manager.httpx.AsyncClient", return_value=ctx):
         result = await _describe_failover_404("command-r", "model not found")
     assert "internal fallback" in result
+    assert "172.18.0.11:11434" in result
     assert "command-r" in result
     assert result.startswith("model not found")
 
 
 @pytest.mark.asyncio
-async def test_primary_upstream_leaves_message_unchanged():
+async def test_primary_served_on_first_try_leaves_message_unchanged():
+    # A single entry means nginx never needed to retry — the primary answered.
     ctx = _FakeAsyncClientCtx(response=_mock_response("192.168.1.50:11434"))
     with patch("rag_pipeline_ollama_manager.httpx.AsyncClient", return_value=ctx):
         result = await _describe_failover_404("command-r", "model not found")
