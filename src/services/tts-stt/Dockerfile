@@ -6,12 +6,16 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install system dependencies
+# flac: SpeechRecognition's recognize_google() shells out to the `flac` CLI to
+# transcode non-WAV/AIFF audio before uploading - without it every /stt call
+# fails at runtime with "FLAC conversion utility not available" (#246).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libsndfile1 \
     ffmpeg \
     espeak-ng \
+    flac \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

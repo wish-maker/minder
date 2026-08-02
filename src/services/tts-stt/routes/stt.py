@@ -4,7 +4,7 @@ import asyncio
 import logging
 
 from core.stt_engine import STT_AVAILABLE, transcribe
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from models import STTResponse
 from prometheus_client import Counter
 
@@ -22,7 +22,7 @@ router = APIRouter()
 
 @router.post("/stt", response_model=STTResponse, tags=["STT"])
 async def speech_to_text(
-    file: UploadFile = File(...), language: str = DEFAULT_STT_LANG
+    file: UploadFile = File(...), language: str = Form(DEFAULT_STT_LANG)
 ):
     """Convert speech to text"""
     if not STT_AVAILABLE:
