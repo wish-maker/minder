@@ -23,6 +23,30 @@ python scripts/dev/pi_ssh.py --no-cd 'uname -a'
 root `.gitignore` `.env` rule covers it). Never commit it. `.env.example` is the
 committed template documenting the required keys.
 
+## `hantal_ssh.py` — drive the Windows dev box
+
+A second dev machine ("hantal") runs its own full local Docker stack (see its
+own `.claude/CLAUDE.md` there) and is reached over Tailscale. Same idea as
+`pi_ssh.py`, but SSH-key auth instead of password, and commands run through
+`powershell` by default since Windows' SSH default shell is `cmd.exe`.
+
+```bash
+# one-time: same gitignored .env as pi_ssh.py, extended with HANTAL_* keys
+cp scripts/dev/.env.example scripts/dev/.env   # then fill in HANTAL_HOST/USER/KEY/DIR
+
+python scripts/dev/hantal_ssh.py 'git log -1 --oneline'
+python scripts/dev/hantal_ssh.py 'docker ps --format "{{.Names}}"'
+python scripts/dev/hantal_ssh.py --raw --no-cd 'whoami'   # skip cd + powershell wrapping
+```
+
+If the dev host running this script has no direct tailnet route (a sandboxed
+container with no `/dev/net/tun`, so `tailscaled` runs in
+`--tun=userspace-networking` mode), set `HANTAL_SOCKS5=host:port` in `.env` to
+route through tailscaled's own SOCKS5 proxy (needs `socat` installed:
+`apt-get install -y socat`). Leave it blank when running from a real tailnet
+peer. See `docs/development/tailscale-bridge.md` for how to stand up that
+proxy from scratch on a fresh sandbox.
+
 ## `dev.py` — collapse the repetitive PR-loop commands
 
 Wraps the command sequences the PR flow runs over and over into one call each, so a
