@@ -70,10 +70,15 @@ class GraphRetriever:
                     # Use string formatting for depth value
                     # Case-insensitive CONTAINS for partial matching (e.g., "apple"
                     # matches "Apple Computer") - see the case-sensitivity note above.
+                    # Traverse RELATES_TO only (not the untyped `-[*..]-` this used to
+                    # be): that matched ANY relationship including MENTIONS, so a path
+                    # could pass through a Document node - nodes(path) then included
+                    # it, and a Document has no .text/.label, producing a null entry
+                    # in every multi-hop result set.
                     query = f"""
                     MATCH (e:Entity)
                     WHERE toLower(e.text) CONTAINS toLower($entity_name)
-                    MATCH path = (e)-[*1..{max_depth}]-(related:Entity)
+                    MATCH path = (e)-[:RELATES_TO*1..{max_depth}]-(related:Entity)
                     WHERE related.text <> e.text
                     WITH nodes(path) as entities
                     UNWIND entities as entity
