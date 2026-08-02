@@ -44,6 +44,37 @@ HOSTS = {
 }
 
 
+# Reusable, no-argument command sequences for `remote_ssh.py <alias> --job
+# <name>` — keyed by shell (not alias), so the same job works on any host of
+# that shell type. Every host drives its own checkout through scripts/setup/
+# (see repo README) rather than raw `docker compose`, which needs the -f
+# docker/docker-compose.yml + profile flags scripts/setup/docker.py already
+# pins — a bare `docker compose ...` here would silently target the wrong
+# project. `setup.sh` itself needs bash, so hosts without it (Windows) call
+# `python -m scripts.setup` directly instead — same underlying Python module.
+JOBS = {
+    "update": {
+        "raw": ["git pull", "bash setup.sh update"],
+        "powershell": ["git pull", "python -m scripts.setup update"],
+    },
+    "restart": {
+        "raw": ["bash setup.sh restart"],
+        "powershell": ["python -m scripts.setup restart"],
+    },
+    "status": {
+        "raw": ["bash setup.sh status"],
+        "powershell": ["python -m scripts.setup status"],
+    },
+    "prune-images": {
+        # Dangling images only (same command scripts/setup/stop.py's --clean
+        # runs) — NOT `setup.sh stop --clean`, which tears the whole stack down
+        # first; this is meant as a standalone maintenance job.
+        "raw": ["docker image prune -f"],
+        "powershell": ["docker image prune -f"],
+    },
+}
+
+
 def load_env() -> dict:
     if not ENV_PATH.exists():
         sys.exit(

@@ -27,6 +27,35 @@ hand-joining a shell string each time.
 `pi_ssh.py` and `hantal_ssh.py` (below) are thin, alias-bound wrappers over the
 same `remote_lib.run()` — kept for muscle memory / existing docs.
 
+### `--job <name>` — fixed no-argument sequences
+
+For the operations you actually run over and over (pull + rebuild, restart,
+check status, clear old images), `remote_lib.JOBS` holds one command sequence
+per shell type — the same job name works on any host, resolved to that host's
+shell:
+
+```bash
+python scripts/dev/remote_ssh.py --list-jobs         # update, restart, status, prune-images
+python scripts/dev/remote_ssh.py hantal --job status
+python scripts/dev/remote_ssh.py pi --job update      # git pull && bash setup.sh update
+python scripts/dev/remote_ssh.py hantal --job update  # git pull ; python -m scripts.setup update
+```
+
+Jobs shell out to `scripts/setup/` (`setup.sh` on bash hosts, `python -m
+scripts.setup` where bash may not exist, e.g. Windows) rather than raw `docker
+compose`, since the compose file lives at `docker/docker-compose.yml` and needs
+the `-f`/profile flags `scripts/setup/docker.py` already pins. `prune-images`
+is the exception — it's a standalone `docker image prune -f` (dangling images
+only), deliberately **not** `setup.sh stop --clean`, which tears the whole
+stack down first.
+
+`update`/`restart`/`prune-images` mutate a live stack — only `status` (read-only)
+has been exercised against both real hosts; run the others once by hand before
+scripting them into anything unattended.
+
+Add a job by adding an entry to `JOBS` in `remote_lib.py`, keyed by shell
+(`"raw"` or `"powershell"`) — no CLI changes needed.
+
 ## `pi_ssh.py` — drive the RPi-4 validation box
 
 Minder is validated on real ARM hardware (a Raspberry Pi 4).
