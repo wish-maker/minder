@@ -8,18 +8,52 @@ the query runner / RAG method modules, which receive it as an opaque
 import logging
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL, OLLAMA_HOST
 
 logger = logging.getLogger(__name__)
 
 # Ollama client for real embeddings and LLM
 try:
-    from ollama import AsyncClient
+    from ollama import AsyncClient, ResponseError
 
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
+    ResponseError = Exception  # type: ignore[misc,assignment]  # unreachable without the package
     logging.warning("ollama package not installed. Install with: pip install ollama")
+
+# The failover router's hardcoded backup upstream (docker/services/ollama-router/
+# nginx.conf.template) — seeing this in the router's X-Ollama-Upstream response
+# header means the external primary was unreachable and the internal fallback
+# actually served the request.
+_ROUTER_BACKUP_UPSTREAM = "minder-ollama:11434"
+
+
+async def _describe_failover_404(model: str, base_error: str) -> str:
+    """#249: a model-not-found 404 is ambiguous in failover mode — it could mean the
+    model genuinely doesn't exist anywhere, or that it only lives on the external
+    primary and the router quietly fell back to the internal Ollama while the
+    primary was unreachable. Check the router's X-Ollama-Upstream header (present on
+    every response it proxies, including this failed one) and say which case this
+    is instead of surfacing a bare, misleading 404. Best-effort: any hiccup checking
+    it just returns the original message unchanged.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{OLLAMA_HOST}/api/tags")
+        upstream = resp.headers.get("x-ollama-upstream", "")
+    except Exception:
+        return base_error
+    if _ROUTER_BACKUP_UPSTREAM not in upstream:
+        return base_error  # served by the primary (or not actually in failover) — the bare 404 is accurate
+    return (
+        f"{base_error} — served by the internal fallback ({upstream}) because the "
+        f"external primary is currently unreachable. Model '{model}' may only exist "
+        "on the primary; it should work again once the primary recovers (see "
+        "`bash setup.sh status` for the active backend)."
+    )
 
 
 class OllamaManager:
@@ -154,11 +188,20 @@ class OllamaManager:
 
         except Exception as e:
             logger.error(f"❌ LLM generation failed: {e}")
+            error_text = str(e)
+            # #249: a 404 through the failover router is ambiguous — clarify it when
+            # it actually is the "only on the unreachable primary" case.
+            if (
+                isinstance(e, ResponseError)
+                and e.status_code == 404
+                and "ollama-router" in OLLAMA_HOST
+            ):
+                error_text = await _describe_failover_404(model, error_text)
             # Flag the failure so the query path can surface a real 503 instead of
             # returning this error string as a 200 "answer" (#232). Internal callers
             # (hyde/rerank/corrective/self_rag) ignore the flag and keep degrading.
             return {
-                "text": f"Error generating response: {str(e)}",
+                "text": f"Error generating response: {error_text}",
                 "model": model,
                 "context": context,
                 "tokens_used": 0,
