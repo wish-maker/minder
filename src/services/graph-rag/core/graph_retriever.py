@@ -48,8 +48,14 @@ class GraphRetriever:
         try:
             async with self.driver.session() as session:
                 if relationship_type:
+                    # toLower() on both sides: entity text case in the graph reflects
+                    # however it was originally extracted, which won't always match a
+                    # query's casing (e.g. a lowercase query against a capitalized
+                    # stored entity) - exact case-sensitive matching silently found
+                    # nothing for anything but an exact case match (#248).
                     query = """
-                    MATCH (e:Entity {text: $entity_name})-[r:RELATES_TO {predicate: $rel_type}]->(related:Entity)
+                    MATCH (e:Entity)-[r:RELATES_TO {predicate: $rel_type}]->(related:Entity)
+                    WHERE toLower(e.text) = toLower($entity_name)
                     RETURN related.text as entity, related.label as label,
                            r.predicate as predicate, r.type as type
                     LIMIT $limit
@@ -62,10 +68,11 @@ class GraphRetriever:
                 else:
                     # Neo4j 5.x doesn't support parameterized path lengths
                     # Use string formatting for depth value
-                    # Use CONTAINS for partial matching (e.g., "Apple" matches "Apple Computer")
+                    # Case-insensitive CONTAINS for partial matching (e.g., "apple"
+                    # matches "Apple Computer") - see the case-sensitivity note above.
                     query = f"""
                     MATCH (e:Entity)
-                    WHERE e.text CONTAINS $entity_name
+                    WHERE toLower(e.text) CONTAINS toLower($entity_name)
                     MATCH path = (e)-[*1..{max_depth}]-(related:Entity)
                     WHERE related.text <> e.text
                     WITH nodes(path) as entities
@@ -110,10 +117,14 @@ class GraphRetriever:
         """
         try:
             async with self.driver.session() as session:
-                # Get entity details
+                # Get entity details (case-insensitive - see find_related_entities;
+                # LIMIT 1 since text alone isn't unique across different labels,
+                # e.g. a PERSON and a NOUN_PHRASE node can share the same text)
                 entity_query = """
-                MATCH (e:Entity {text: $entity_name})
+                MATCH (e:Entity)
+                WHERE toLower(e.text) = toLower($entity_name)
                 RETURN e.text as text, e.label as label, e.description as description
+                LIMIT 1
                 """
                 entity_result = await session.run(entity_query, entity_name=entity_name)
                 entity_record = await entity_result.single()
@@ -123,7 +134,8 @@ class GraphRetriever:
 
                 # Get related entities
                 related_query = """
-                MATCH (e:Entity {text: $entity_name})-[r:RELATES_TO]->(related:Entity)
+                MATCH (e:Entity)-[r:RELATES_TO]->(related:Entity)
+                WHERE toLower(e.text) = toLower($entity_name)
                 RETURN related.text as text, related.label as label, r.predicate as predicate
                 LIMIT $context_window
                 """
@@ -145,8 +157,9 @@ class GraphRetriever:
 
                 # Get documents that mention this entity
                 docs_query = """
-                MATCH (e:Entity {text: $entity_name})<-[:MENTIONS]-(d:Document)
-                RETURN d.id as doc_id, d.title as title
+                MATCH (e:Entity)<-[:MENTIONS]-(d:Document)
+                WHERE toLower(e.text) = toLower($entity_name)
+                RETURN DISTINCT d.id as doc_id, d.title as title
                 LIMIT 5
                 """
                 docs_result = await session.run(docs_query, entity_name=entity_name)
@@ -185,7 +198,8 @@ class GraphRetriever:
             async with self.driver.session() as session:
                 search_query = """
                 MATCH (e:Entity)
-                WHERE e.text CONTAINS $query OR e.label CONTAINS $query
+                WHERE toLower(e.text) CONTAINS toLower($query)
+                   OR toLower(e.label) CONTAINS toLower($query)
                 RETURN e.text as text, e.label as label, e.description as description
                 LIMIT $limit
                 """
