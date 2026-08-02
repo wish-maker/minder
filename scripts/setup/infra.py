@@ -96,6 +96,10 @@ def initialize_database() -> None:
     # writes (#239). ALTER SYSTEM + reload is idempotent and takes effect
     # immediately, so it's safe to run on every install/re-run, including
     # against clusters whose data directory predates this fix.
+    # Two separate -c flags, NOT one semicolon-joined string: psql's simple
+    # query protocol implicitly wraps a multi-statement -c string in one
+    # transaction block, and ALTER SYSTEM cannot run inside a transaction
+    # block (confirmed live — a single joined -c errors with exactly that).
     tz_result = subprocess.run(
         [
             "docker",
@@ -105,7 +109,9 @@ def initialize_database() -> None:
             "-U",
             "minder",
             "-c",
-            "ALTER SYSTEM SET timezone TO 'UTC'; SELECT pg_reload_conf();",
+            "ALTER SYSTEM SET timezone TO 'UTC';",
+            "-c",
+            "SELECT pg_reload_conf();",
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

@@ -67,8 +67,13 @@ initialize_database() {
     # writes (#239). ALTER SYSTEM + reload is idempotent and takes effect
     # immediately, so it's safe to run on every install/re-run, including
     # against clusters whose data directory predates this fix.
+    # Two separate -c flags, NOT one semicolon-joined string: psql's simple
+    # query protocol implicitly wraps a multi-statement -c string in one
+    # transaction block, and ALTER SYSTEM cannot run inside a transaction
+    # block (confirmed live — a single joined -c errors with exactly that).
     if docker exec "$(container_name postgres)" psql -U minder \
-           -c "ALTER SYSTEM SET timezone TO 'UTC'; SELECT pg_reload_conf();" &>/dev/null 2>&1; then
+           -c "ALTER SYSTEM SET timezone TO 'UTC';" \
+           -c "SELECT pg_reload_conf();" &>/dev/null 2>&1; then
         log_detail "Database timezone set to UTC"
     else
         log_detail "Could not set database timezone to UTC"
