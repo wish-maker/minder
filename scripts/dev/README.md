@@ -35,10 +35,11 @@ per shell type — the same job name works on any host, resolved to that host's
 shell:
 
 ```bash
-python scripts/dev/remote_ssh.py --list-jobs         # update, restart, status, prune-images
+python scripts/dev/remote_ssh.py --list-jobs         # update, restart, status, prune-images, test
 python scripts/dev/remote_ssh.py hantal --job status
 python scripts/dev/remote_ssh.py pi --job update      # git pull && bash setup.sh update
 python scripts/dev/remote_ssh.py hantal --job update  # git pull ; python -m scripts.setup update
+python scripts/dev/remote_ssh.py pi --job test        # tests/unit only, CI's dummy creds
 ```
 
 Jobs shell out to `scripts/setup/` (`setup.sh` on bash hosts, `python -m
@@ -51,7 +52,10 @@ stack down first.
 
 `update`/`restart`/`prune-images` mutate a live stack — only `status` (read-only)
 has been exercised against both real hosts; run the others once by hand before
-scripting them into anything unattended.
+scripting them into anything unattended. `test` runs only `tests/unit/` (mocked
+DB/Redis, same dummy creds CI's unit-tests job uses) — deliberately not
+`tests/integration`/`tests/e2e`, which in CI get their own disposable Postgres/
+Redis containers that a live box doesn't have.
 
 Add a job by adding an entry to `JOBS` in `remote_lib.py`, keyed by shell
 (`"raw"` or `"powershell"`) — no CLI changes needed.

@@ -9,6 +9,7 @@ Usage:
     python scripts/dev/remote_ssh.py <alias> '<cmd1>' '<cmd2>' '<cmd3>'
     python scripts/dev/remote_ssh.py <alias> --no-cd '<cmd run from user home>'
     python scripts/dev/remote_ssh.py <alias> --raw '<cmd>'   # skip shell wrapping (e.g. powershell)
+    python scripts/dev/remote_ssh.py <alias> --no-pty '<cmd>'  # force no PTY (some CLIs TUI-hang on one)
     python scripts/dev/remote_ssh.py <alias> --job <name>    # e.g. update, restart, status, prune-images
 
 Multiple positional commands run as one remote invocation, chained with the
@@ -72,16 +73,18 @@ def main() -> int:
             )
         return remote_lib.run(alias, cmds)
 
-    no_cd = raw = False
-    while argv and argv[0] in ("--no-cd", "--raw"):
+    no_cd = raw = no_pty = False
+    while argv and argv[0] in ("--no-cd", "--raw", "--no-pty"):
         if argv[0] == "--no-cd":
             no_cd = True
-        else:
+        elif argv[0] == "--raw":
             raw = True
+        else:
+            no_pty = True
         argv = argv[1:]
 
     cmds = argv if argv else ["echo no-cmd"]
-    return remote_lib.run(alias, cmds, no_cd=no_cd, raw=raw)
+    return remote_lib.run(alias, cmds, no_cd=no_cd, raw=raw, no_pty=no_pty)
 
 
 if __name__ == "__main__":

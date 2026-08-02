@@ -72,6 +72,31 @@ JOBS = {
         "raw": ["docker image prune -f"],
         "powershell": ["docker image prune -f"],
     },
+    # tests/unit only, with the same dummy creds CI's unit-tests job sets (see
+    # .github/workflows/ci.yml) — unit tests mock their DB/Redis access rather
+    # than hitting the host's real running stack, so this is safe to run
+    # against a live box. Deliberately excludes tests/integration + tests/e2e:
+    # CI spins those up their own disposable Postgres/Redis containers, which
+    # a live box doesn't have — running them here would either fail outright
+    # or, worse, hit the box's real data-bearing services.
+    "test": {
+        "raw": [
+            "POSTGRES_HOST=localhost POSTGRES_PORT=5432 POSTGRES_USER=postgres "
+            "POSTGRES_PASSWORD=test_password POSTGRES_DB=minder_test "
+            "REDIS_HOST=localhost REDIS_PORT=6379 REDIS_PASSWORD=test_password "
+            "JWT_SECRET=test_jwt_secret_for_ci NEO4J_AUTH=neo4j/test_password "
+            "python3 -m pytest tests/unit/ -v --tb=short"
+        ],
+        "powershell": [
+            "$env:POSTGRES_HOST='localhost'; $env:POSTGRES_PORT='5432'; "
+            "$env:POSTGRES_USER='postgres'; $env:POSTGRES_PASSWORD='test_password'; "
+            "$env:POSTGRES_DB='minder_test'; $env:REDIS_HOST='localhost'; "
+            "$env:REDIS_PORT='6379'; $env:REDIS_PASSWORD='test_password'; "
+            "$env:JWT_SECRET='test_jwt_secret_for_ci'; "
+            "$env:NEO4J_AUTH='neo4j/test_password'; "
+            "python -m pytest tests/unit/ -v --tb=short"
+        ],
+    },
 }
 
 
@@ -155,15 +180,21 @@ def build_command(cfg: dict, env: dict, cmds: list, no_cd: bool, raw: bool) -> s
     return cmd
 
 
-def run(alias: str, cmds: list, no_cd: bool = False, raw: bool = False) -> int:
+def run(
+    alias: str, cmds: list, no_cd: bool = False, raw: bool = False, no_pty: bool = False
+) -> int:
     """Connect to `alias`, run `cmds` (chained per HOSTS[alias]), stream output,
-    and return the remote exit status."""
+    and return the remote exit status. `no_pty` overrides HOSTS[alias]'s default
+    to force no PTY for this call — needed for CLIs whose interactive-terminal
+    UI (e.g. openclaw's @clack/prompts-style rendering) hangs waiting for an
+    ANSI cursor-position response that a bare PTY with no real terminal emulator
+    driving it never sends (confirmed 2026-08-02: `openclaw agents add` hung
+    indefinitely over a PTY channel, completed in ~30s with none)."""
     client, cfg, env = connect(alias)
     cmd = build_command(cfg, env, cmds, no_cd, raw)
+    get_pty = False if no_pty else cfg.get("get_pty", False)
     try:
-        _, stdout, stderr = client.exec_command(
-            cmd, timeout=1800, get_pty=cfg.get("get_pty", False)
-        )
+        _, stdout, stderr = client.exec_command(cmd, timeout=1800, get_pty=get_pty)
         for line in iter(stdout.readline, ""):
             sys.stdout.write(line)
             sys.stdout.flush()
