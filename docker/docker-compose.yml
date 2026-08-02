@@ -59,8 +59,8 @@ services:
     # #25 Option B: single-file mount — only authelia-forwardauth loads; sibling
     # dynamic files (services/ssl/access-mode) stay unmounted + dormant by design.
     - ./services/traefik/dynamic/authelia-forwardauth.yml:/etc/traefik/dynamic/authelia-forwardauth.yml:ro
-    - docker_traefik_letsencrypt:/letsencrypt
-    - docker_traefik_logs:/var/log/traefik
+    - traefik_letsencrypt:/letsencrypt
+    - traefik_logs:/var/log/traefik
     healthcheck:
       test:
       - CMD-SHELL
@@ -588,7 +588,7 @@ services:
     - .env
     volumes:
     - ../src/plugins:/app/plugins:ro
-    - docker_plugins_data:/app/plugins-data
+    - plugins_data:/app/plugins-data
     # Read-only compose file so the registry can derive the bundle map from the
     # minder.bundle= labels for GET /v1/bundles (#65).
     - ./docker-compose.yml:/app/bundles/docker-compose.yml:ro
@@ -748,8 +748,8 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     volumes:
-    - docker_models_data:/app/models
-    - docker_models_cache:/app/model-cache
+    - models_data:/app/models
+    - models_cache:/app/model-cache
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "127.0.0.1:8005:8005"
@@ -870,7 +870,7 @@ services:
     volumes:
     - ./services/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     - ./services/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-    - docker_prometheus_data:/prometheus
+    - prometheus_data:/prometheus
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
     - 127.0.0.1:9090:9090
@@ -903,7 +903,7 @@ services:
     restart: on-failure
     volumes:
     - ./services/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    - docker_alertmanager_data:/alertmanager
+    - alertmanager_data:/alertmanager
     # PILLAR 4: Expose for Grafana (internal) and optional LAN access
     ports:
     - 127.0.0.1:9093:9093
@@ -933,7 +933,7 @@ services:
     - GF_INSTALL_PLUGINS=redis-datasource
     - GF_SERVER_ROOT_URL=https://grafana.minder.local
     volumes:
-    - docker_grafana_data:/var/lib/grafana
+    - grafana_data:/var/lib/grafana
     - ./services/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
     - ./services/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     # PILLAR 4: Expose for LAN access (via Traefik with Authelia in production)
@@ -1353,7 +1353,7 @@ services:
     - --config=/etc/otel-collector-config.yaml
     volumes:
     - ./services/otel-collector/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
-    - docker_otel-collector-data:/etc/otelcol
+    - otel_collector_data:/etc/otelcol
     ports:
     - "127.0.0.1:14317:4317"   # OTLP gRPC receiver (changed to avoid conflict with Jaeger)
     - "127.0.0.1:14318:4318"   # OTLP HTTP receiver (changed to avoid conflict with Jaeger)
@@ -1366,9 +1366,9 @@ services:
     - minder-network
 
 volumes:
-  docker_traefik_letsencrypt:
+  traefik_letsencrypt:
     driver: local
-  docker_traefik_logs:
+  traefik_logs:
     driver: local
   postgres_data:
     driver: local
@@ -1388,23 +1388,23 @@ volumes:
     driver: local
   influxdb_data:
     driver: local
-  docker_otel-collector-data:
+  otel_collector_data:
     driver: local
-  docker_plugins_data:
+  plugins_data:
     driver: local
-  docker_models_data:
+  models_data:
     driver: local
-  docker_models_cache:
+  models_cache:
     driver: local
   tts_stt_data:
     driver: local
   influxdb_config:
     driver: local
-  docker_prometheus_data:
+  prometheus_data:
     driver: local
-  docker_grafana_data:
+  grafana_data:
     driver: local
-  docker_alertmanager_data:
+  alertmanager_data:
     driver: local
 networks:
   minder-network:

@@ -10,7 +10,7 @@ set -u
 PY="${PY:-python}"
 cd "$(dirname "$0")/../.." || exit 2
 
-STUBS='check_prerequisites(){ :;}; prepare_env(){ :;}; create_networks(){ :;}; pull_all_images(){ :;}; initialize_database(){ :;}; initialize_minio(){ :;}; start_services(){ :;}; wait_for_services(){ :;}; download_ollama_models(){ :;}; cmd_migrate(){ :;}; run_health_checks(){ :;}'
+STUBS='check_prerequisites(){ :;}; prepare_env(){ :;}; create_networks(){ :;}; migrate_volume_names(){ :;}; pull_all_images(){ :;}; initialize_database(){ :;}; initialize_minio(){ :;}; start_services(){ :;}; wait_for_services(){ :;}; download_ollama_models(){ :;}; cmd_migrate(){ :;}; run_health_checks(){ :;}'
 bsh() { SCRIPT_DIR="$PWD" TERM=xterm bash -c '
   SCRIPT_DIR="$PWD"; IFS=$'"'"'\n\t'"'"'
   SCRIPT_VERSION="1.0.0"; SCRIPT_NAME="setup.sh"
@@ -26,6 +26,7 @@ preflight.check_prerequisites = _noop
 env.prepare_env = _noop
 bundles.seed_profile = _noop
 infra.create_networks = _noop
+infra.migrate_volume_names = _noop
 versions.pull_all_images = _noop
 infra.initialize_database = _noop
 infra.initialize_minio = _noop

@@ -652,6 +652,7 @@ cmd_start() {
     validate_compute_resource_profile
 
     create_networks
+    migrate_volume_names
     start_services
     wait_for_services
     run_health_checks
@@ -785,7 +786,7 @@ cmd_install() {
 
     progress_next "Checking prerequisites";    check_prerequisites
     progress_next "Setting up environment";    prepare_env
-    progress_next "Creating Docker network";   create_networks
+    progress_next "Creating Docker network";   create_networks; migrate_volume_names
     progress_next "Resolving & pulling images";pull_all_images
     progress_next "Initialising databases";    initialize_database
     progress_next "Initialising object storage"; initialize_minio
