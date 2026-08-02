@@ -152,6 +152,11 @@ All eight core APIs are FastAPI services with real implementations.
 - Local LLM runtime. Profile-gated (`internal-ollama`): runs only when `OLLAMA_BASE_URL` is empty
   (local mode). When set, an external/native host is used and the container stays inactive.
   Models are auto-pulled via `OLLAMA_PULL_MODELS` into the `/root/.ollama/models` volume.
+- **Third mode: failover.** A mode-gated `minder-ollama-router` (nginx, profile `ollama-router`)
+  fronts an external primary with automatic fallback to the internal container, transparent to
+  every consumer (`OLLAMA_BASE_URL` points at the router). See
+  [Ollama modes](../getting-started/ai-setup.md#ollama-modes-internal-external-failover) for the
+  full internal/external/failover breakdown.
 
 #### OpenWebUI (internal 8080, reached via Traefik)
 - Web-based chat UI (the platform's only user-facing web app). Depends on postgres, rag-pipeline,

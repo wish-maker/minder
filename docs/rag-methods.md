@@ -29,7 +29,16 @@ candidate — see Bucket 2).
 > How methods/enhancers are requested (all on `POST /pipeline/{id}/query`):
 > `{"question": "...", "top_k": 5, "method": "standard|hyde|self_rag|auto|corrective",
 > "conversation_id": "...", "rerank": false, "compress": false, "hybrid": false,
-> "parent_context": false}`.
+> "parent_context": false, "llm_model": "..."}`.
+
+### Generation model resolution (#241)
+
+`llm_model` picks the LLM used to generate the answer (not the embedding model —
+embeddings are never overridable per query, since they must match whatever model was
+used at ingest time). Resolved most-specific first: an explicit **per-query**
+`llm_model` → the **pipeline's** own configured `llm_model` → the first referenced
+**knowledge base's** configured `llm_model` → the platform default. Omit the field to
+use whatever the pipeline/KB already has configured.
 
 ### Method validation & honest degradation (#138)
 
