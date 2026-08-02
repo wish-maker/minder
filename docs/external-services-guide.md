@@ -73,7 +73,7 @@ in some cases via a Traefik route).
 | Traefik | `minder-traefik` | `traefik:v3.7.8` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
 | Authelia | `minder-authelia` | — | — | **ENABLED** — live service in compose (no `profiles:` gate, runs by default); depends on postgres + redis being healthy. Traefik's `authelia-forwardauth` middleware is enforced on 5 routers (minio, api-gateway, grafana, openwebui, jaeger) — unauthenticated requests get a 302 redirect to the portal. Full browser SSO still needs real DNS + TLS on the deploy. Counted in the 32 containers |
 
-> **Healthchecks:** 28 of 31 containers have healthchecks. `otel-collector`, `redis-exporter`,
+> **Healthchecks:** 29 of 32 containers have healthchecks. `otel-collector`, `redis-exporter`,
 > and `rabbitmq-exporter` intentionally have none (image tooling limits) and appear as
 > "no-healthcheck", not "unhealthy".
 

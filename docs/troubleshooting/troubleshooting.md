@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-10
 **Platform Version:** 1.0.0
-**Scale:** 31 containers (development environment on Raspberry Pi 4)
+**Scale:** 32 containers (development environment on Raspberry Pi 4)
 
 ---
 
@@ -82,7 +82,7 @@ docker compose up -d --force-recreate <service>
 
 ## Healthchecks: What "no-healthcheck" Means
 
-28 of the 31 containers have Docker healthchecks. **Three do not, by design** — their base
+29 of the 32 containers have Docker healthchecks. **Three do not, by design** — their base
 images lack the tooling (e.g. `nc`) to run one:
 
 - `minder-otel-collector`

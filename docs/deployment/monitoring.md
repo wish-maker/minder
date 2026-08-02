@@ -43,7 +43,7 @@ not from other machines; everything else is internal-only. External access is vi
 
 ## Healthcheck Status (Important)
 
-28 of 31 containers define a Docker healthcheck. **Three do not, by design** — the base
+29 of 32 containers define a Docker healthcheck. **Three do not, by design** — the base
 images lack the tooling (e.g. `nc`) a healthcheck would need:
 
 - `minder-otel-collector`

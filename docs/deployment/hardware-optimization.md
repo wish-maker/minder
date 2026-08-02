@@ -173,7 +173,7 @@ See `monitoring.md` for the full stack and how to wire alerts through Alertmanag
 
 ## Practical Guidance for the Pi 4
 
-1. **Watch total RAM first.** 8 GB is shared across ~31 containers plus Ollama. The API
+1. **Watch total RAM first.** 8 GB is shared across ~32 containers plus Ollama. The API
    gateway is capped at 2 G; Ollama and Neo4j are the next biggest consumers.
 2. **Offload big models.** Point `OLLAMA_BASE_URL` at an external host for anything larger
    than a small quantized model.

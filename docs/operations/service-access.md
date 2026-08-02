@@ -8,7 +8,7 @@
 
 ## Overview
 
-Minder runs 31 containers behind **Traefik v3** (reverse proxy, TLS, routing via Docker
+Minder runs 32 containers behind **Traefik v3** (reverse proxy, TLS, routing via Docker
 labels). This guide describes how services are exposed and how to reach them.
 
 > **Reality check.**
