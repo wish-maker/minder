@@ -60,13 +60,21 @@ async def construct_knowledge_graph_handler(
             text=request.text, extract_relationships=request.extract_relationships
         )
 
-        # Create document node
-        await graph_constructor.create_document_node(
+        # Create document node. The return value MUST be checked: on failure
+        # (e.g. a Neo4j write error) this previously returned False silently and
+        # construction carried on, reporting success with entity nodes created
+        # but no Document node and no MENTIONS edges to them at all (#248).
+        document_created = await graph_constructor.create_document_node(
             document_id=request.document_id,
             title=request.title,
             source=request.source,
             metadata=request.metadata,
         )
+        if not document_created:
+            raise RuntimeError(
+                f"Failed to create document node for '{request.document_id}' "
+                "(see graph-rag logs for the underlying Neo4j error)"
+            )
 
         # Create entity nodes
         entity_ids = await graph_constructor.create_entity_nodes(

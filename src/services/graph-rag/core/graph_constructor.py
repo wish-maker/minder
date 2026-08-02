@@ -4,6 +4,7 @@ Knowledge Graph Construction Module for Graph RAG
 Manages Neo4j knowledge graph construction and operations.
 """
 
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -56,12 +57,17 @@ class KnowledgeGraphConstructor:
                 RETURN d
                 """
 
+                # Neo4j property values must be primitive types or arrays thereof -
+                # a raw dict (even {}) always raised Neo.ClientError.Statement.TypeError
+                # ("Encountered: Map{}"), silently caught below, so the Document node
+                # was NEVER created and every downstream MENTIONS/traversal query
+                # matched nothing. JSON-encode it instead.
                 result = await session.run(
                     query,
                     document_id=document_id,
                     title=title,
                     source=source,
-                    metadata=metadata,
+                    metadata=json.dumps(metadata) if metadata else None,
                 )
 
                 return await result.single() is not None
