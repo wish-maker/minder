@@ -96,8 +96,10 @@ curl http://localhost:9093/-/healthy
 - Default credentials: `admin` / `admin` (change on first login)
 
 Grafana is also routed through Traefik with an `authelia-forwardauth` middleware.
-Authelia is currently **disabled** (commented out in compose), so that forward-auth is
-**not enforced** today. Direct access on port 3000 works as normal.
+Authelia is **enabled** (a live service in compose, no profile gate) and that
+forward-auth **is enforced** on the Grafana route — unauthenticated requests get a 302
+redirect to the Authelia portal. Full browser SSO still needs real DNS + TLS on the
+deploy. Direct access on port 3000 bypasses Traefik and works as normal.
 
 The Prometheus datasource points at `http://minder-prometheus:9090` (internal Docker DNS
 name). Dashboards live in `docker/services/grafana/dashboards/`.

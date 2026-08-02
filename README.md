@@ -97,7 +97,7 @@ bash setup.sh start           # auto-fills remaining secrets, sets perms, starts
 
 - Database passwords (PostgreSQL, Redis, RabbitMQ)
 - JWT secrets for API authentication
-- Encryption keys for Authelia SSO (generated, but Authelia is currently disabled)
+- Encryption keys for Authelia SSO (Authelia is enabled by default and enforcing forward-auth)
 - Service credentials (Neo4j, InfluxDB, MinIO, Grafana)
 
 **📝 Key configuration options:**
@@ -192,13 +192,15 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 
 **Inference & Edge:**
 - Ollama (local LLM runtime, internal-only), OpenWebUI (chat UI, via Traefik)
-- Traefik v3 (reverse proxy / TLS). Authelia SSO is present but **currently disabled**.
+- Traefik v3 (reverse proxy / TLS). Authelia SSO is **enabled**, enforcing forward-auth on
+  5 routers (minio, api-gateway, grafana, openwebui, jaeger); full browser SSO still needs
+  real DNS + TLS on the deploy.
 
 **Observability:**
 - Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry Collector, InfluxDB, Telegraf
 - Exporters: postgres, redis, rabbitmq, node, cAdvisor, blackbox
 
-**Total:** 31 containers (8 core APIs + 8 data stores + 2 inference/UI + 7 observability + 6 exporters + Traefik; Authelia excluded/disabled). `bash setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start all 31). Deploys on a Raspberry Pi 4 (ARM).
+**Total:** 32 containers (8 core APIs + 8 data stores + 2 inference/UI + 7 observability + 6 exporters + Traefik + Authelia, enabled/included). `bash setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start all 32). Deploys on a Raspberry Pi 4 (ARM).
 
 ---
 
@@ -248,7 +250,8 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 - **Rate Limiting**: Redis-backed, per-window limits at the API gateway
 - **Network Isolation**: Storage backends are internal-only on `minder-network`
 - **IP Whitelisting**: Traefik middleware on the dashboard / RabbitMQ / Neo4j routes
-- **Authelia SSO / 2FA**: wired into Traefik but **currently disabled** (see issue #15)
+- **Authelia SSO / 2FA**: wired into Traefik and **enabled**, enforcing forward-auth on 5
+  routers; full browser SSO still needs real DNS + TLS on the deploy (see issue #15)
 - _Not yet implemented_: role-based access control (RBAC), app-level audit logging
 
 ### 📊 **Observability Stack**
@@ -279,11 +282,11 @@ Prometheus/Grafana/Jaeger stack. Key tuning levers:
 **Deploy-Ready Services (Proven on the dev host; ARM Pi validation tracked in #8):**
 - ✅ Clean install recovery: `docker compose down -v → bash setup.sh start` → all services healthy
 - ✅ All 8 core APIs: JWT auth, persistence, end-to-end functionality proven
-- ✅ 28/31 containers healthy (3 no-healthcheck: redis-exporter, rabbitmq-exporter, otel-collector)
+- ✅ 29/32 containers healthy (3 no-healthcheck: redis-exporter, rabbitmq-exporter, otel-collector)
 - ✅ 11/11 endpoints reachable (api-gateway + monitoring + AI services)
 
 **Deferred (NOT production-ready yet):**
-- ⏸️ Authelia SSO/2FA — Disabled pending configuration
+- ⏸️ Authelia SSO/2FA — Enabled and enforcing forward-auth; full browser SSO pending real DNS + TLS
 - ⏸️ Role-based auth — Auth-only (JWT) implemented
 - ⏸️ Uniform rate limiting — Service-specific, not standardized
 

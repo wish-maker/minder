@@ -31,9 +31,12 @@ security posture of the Minder platform.
 ### What is NOT in place (do not assume)
 
 - **No RBAC** — access is gated by holding a valid JWT only.
-- **No active SSO / 2FA** — Authelia is defined but disabled (see
-  [authentication.md](./authentication.md)).
 - **No application-level audit logging** beyond ordinary service/access logs.
+
+### Also in place
+
+- **SSO / 2FA (Authelia)** — enabled, enforcing on five Traefik routers (minio,
+  api-gateway, grafana, openwebui, jaeger). See [authentication.md](./authentication.md).
 
 ---
 
@@ -387,8 +390,9 @@ docker logs minder-api-gateway --tail 100
 
 ### Recommended before production (not yet applied)
 
-- Enable and enforce SSO/2FA (the deferred Authelia layer) or another auth
-  proxy for the management UIs.
+- Complete Authelia's browser-SSO rollout (real DNS + TLS for
+  `authelia.minder.local`) so full SSO works end-to-end, not just the
+  forward-auth 302.
 - Front all services with HTTPS/TLS certificates (Let's Encrypt via Traefik).
 - Add alerting on failed authentication attempts and anomalous access.
 - Establish a credential-rotation cadence and review access logs periodically.

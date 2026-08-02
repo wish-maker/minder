@@ -10,10 +10,10 @@ It also explains how to point selected data services (Redis, PostgreSQL, Qdrant)
 cloud providers instead of the local Docker containers, using environment variables and
 without modifying code.
 
-Minder defines **31 containers** (Authelia excluded/disabled). `setup.sh install` seeds
+Minder defines **32 containers** (Authelia included/enabled). `setup.sh install` seeds
 the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag,
 and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` for
-all 31), and `start` honours the recorded bundle state. The single source of truth is the
+all 32), and `start` honours the recorded bundle state. The single source of truth is the
 hand-maintained `docker/docker-compose.yml`.
 
 ---
@@ -71,7 +71,7 @@ in some cases via a Traefik route).
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
 | Traefik | `minder-traefik` | `traefik:v3.7.8` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
-| Authelia | `minder-authelia` | — | — | **DISABLED** — commented out in compose (crash loop / decision deferred). Traefik forward-auth is wired on a few routers but not enforced. Not counted in the 31 containers |
+| Authelia | `minder-authelia` | — | — | **ENABLED** — live service in compose (no `profiles:` gate, runs by default); depends on postgres + redis being healthy. Traefik's `authelia-forwardauth` middleware is enforced on 5 routers (minio, api-gateway, grafana, openwebui, jaeger) — unauthenticated requests get a 302 redirect to the portal. Full browser SSO still needs real DNS + TLS on the deploy. Counted in the 32 containers |
 
 > **Healthchecks:** 28 of 31 containers have healthchecks. `otel-collector`, `redis-exporter`,
 > and `rabbitmq-exporter` intentionally have none (image tooling limits) and appear as
@@ -422,4 +422,4 @@ For issues or questions:
 
 ---
 
-*Last Updated: 2026-07-10 · 31 containers · Development environment*
+*Last Updated: 2026-07-10 · 32 containers · Development environment*

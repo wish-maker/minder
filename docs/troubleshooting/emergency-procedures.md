@@ -88,8 +88,9 @@ rollbacks.
 **Symptoms:** unauthorized access, compromised credentials, suspicious activity.
 
 > Note: this is a development environment; only JWT auth is implemented in api-gateway
-> (no RBAC), and Authelia SSO is currently disabled. Treat exposed credentials seriously
-> regardless.
+> (no RBAC). Authelia SSO is enabled and its forward-auth is enforced on the minio,
+> api-gateway, grafana, openwebui, and jaeger routes (full browser SSO still needs real
+> DNS + TLS on the deploy). Treat exposed credentials seriously regardless.
 
 ```bash
 # 1. Stop all services immediately
@@ -120,7 +121,7 @@ bash setup.sh start
 ```
 
 **Prevention:** rotate secrets regularly; keep the host firewalled; review access logs;
-finish the Authelia SSO decision for production.
+finish wiring real DNS + TLS so Authelia SSO works end-to-end in production.
 
 ---
 

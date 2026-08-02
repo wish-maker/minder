@@ -87,8 +87,8 @@ bash setup.sh stop
 
 ## Service Map
 
-31 containers run on the Pi (Authelia is defined but currently **disabled** and not
-counted). Only Traefik and the app/monitoring services below expose host ports; all
+32 containers run on the Pi (Authelia SSO/2FA is **enabled** by default and included in the
+count). Only Traefik and the app/monitoring services below expose host ports; all
 storage backends are **internal-only** and reached over the Docker network or via Traefik.
 
 ### Core API services (8 — all FastAPI)
@@ -139,10 +139,11 @@ See `monitoring.md` for the full stack and instrumentation details.
 - **Traefik** (`traefik:v3.7.8`) — the reverse proxy, TLS termination, and router. Routing
   is via Docker labels (`exposedByDefault: false`). Host ports 80/443 and 8081 (dashboard,
   IP-whitelisted). **Minder does not use Nginx.**
-- **Authelia** — **disabled** (commented out in compose) due to a crash loop; the
-  keep-vs-drop decision is deferred. Traefik has an `authelia-forwardauth` middleware wired
-  on five routers (minio, api-gateway, grafana, openwebui, jaeger), but because the container
-  is down, that auth is **not enforced** today.
+- **Authelia** — **enabled** (a live, active service in compose with no profile gate;
+  depends on postgres and redis being healthy). Traefik has an `authelia-forwardauth`
+  middleware wired and **enforced** on five routers (minio, api-gateway, grafana,
+  openwebui, jaeger) — unauthenticated requests get a 302 redirect to the Authelia
+  portal. Full browser SSO still needs real DNS + TLS on this deploy.
 
 ---
 
@@ -192,7 +193,7 @@ curl http://localhost:3000/api/health  # grafana
 docker exec minder-ollama ollama list
 ```
 
-28 of 31 containers define a Docker healthcheck. Three do **not**, by design
+29 of 32 containers define a Docker healthcheck. Three do **not**, by design
 (`otel-collector`, `redis-exporter`, `rabbitmq-exporter`) — their base images lack the
 tooling. They show as "no healthcheck", which is **not** the same as "unhealthy".
 
@@ -308,7 +309,9 @@ bash setup.sh doctor
   (`bash setup.sh ollama-mode`); see `hardware-optimization.md`.
 - **DB connection issues** — `docker exec minder-postgres pg_isready -U "$POSTGRES_USER"`;
   if passwords diverged, run `bash setup.sh sync-postgres-password`.
-- **Auth not enforced** — expected: Authelia is currently disabled.
+- **Auth not enforced on a route** — check that the route is one of the five
+  Authelia-protected routers (minio, api-gateway, grafana, openwebui, jaeger); Authelia
+  itself is enabled and enforcing by default.
 
 ---
 
@@ -317,7 +320,8 @@ bash setup.sh doctor
 The items below are **not** done yet. They are the gap between this development deployment
 and a hardened one:
 
-- [ ] Decide on and (re-)enable Authelia SSO/MFA, or remove it (decision deferred).
+- [ ] Complete DNS + real TLS for the deploy so Authelia SSO/MFA (already enabled and
+      enforcing forward-auth on 5 routers) works as full browser SSO.
 - [ ] Replace self-signed certs with real TLS (Let's Encrypt via Traefik or provided
       certs).
 - [ ] Configure real DNS for the public hostnames.

@@ -6,8 +6,8 @@ Authentication on the Minder platform is handled by the **API Gateway**
 (`minder-api-gateway`, port 8000) using **JWT** tokens with **bcrypt** password
 hashing. This is the mechanism that is actually in effect today.
 
-A single sign-on / 2FA layer (Authelia) is defined in the stack but is
-**currently disabled** — see [Authelia (deferred)](#authelia-deferred) below.
+A single sign-on / 2FA layer (Authelia) is also **enabled** in front of five
+Traefik routers — see [Authelia (SSO / 2FA)](#authelia-sso--2fa) below.
 There is **no role-based access control (RBAC)** implemented; access is
 gated by holding a valid JWT.
 
@@ -98,32 +98,28 @@ consistent across services that validate tokens.
 Traefik has an `authelia-forwardauth` middleware wired onto five routers
 (minio, api-gateway, grafana, openwebui, jaeger). The other three routers
 (traefik-dashboard, rabbitmq, neo4j) use an IP-whitelist middleware instead.
-Because the Authelia container is disabled, that forward-auth check is **not
-enforced** — those five routes are not currently protected by SSO.
+The Authelia container is **enabled and running**, so that forward-auth check
+**is enforced** — an unauthenticated request to those five routes gets a 302
+redirect to the Authelia portal.
 
 ---
 
-## Authelia (deferred)
+## Authelia (SSO / 2FA)
 
-Authelia is intended to provide centralised SSO and 2FA in front of the stack,
-but it is **commented out in the compose file and does not run**. The stated
-reason in the compose file:
+Authelia provides centralised SSO and 2FA in front of the stack and is
+**enabled and running** (`docker/docker-compose.yml`, service `authelia`).
+Its configuration lives under `docker/services/authelia/`
+(`configuration.yml`, `users_database.yml`).
 
-> "TEMPORARILY DISABLED: Crash loop due to missing database and NTP sync issues.
-> Decision deferred."
+The Traefik `authelia-forwardauth` middleware enforces it on five routers
+(minio, api-gateway, grafana, openwebui, jaeger): an unauthenticated request
+is 302-redirected to the Authelia portal. Full browser SSO still needs real
+DNS + TLS on the deploy.
 
-Whether to keep or drop Authelia is an open decision. Until it is re-enabled and
-proven working, treat everything below as **planned/optional**, not active:
-
-- Single Sign-On across services
-- Two-Factor Authentication (TOTP / WebAuthn)
-- Brute-force protection and session regulation
-- Access-control rules per domain
-
-If/when Authelia is brought online, its configuration would live under
-`docker/services/authelia/` and it would be enabled by uncommenting its service
-block in `docker/docker-compose.yml`. None of that is in effect today,
-so this guide does not document its per-domain rules as if they were live.
+- Single Sign-On across services — **active**
+- Two-Factor Authentication (TOTP / WebAuthn) — available per Authelia's config
+- Brute-force protection and session regulation — Authelia defaults
+- Access-control rules per domain — see `configuration.yml`'s `access_control` section
 
 ---
 
@@ -157,7 +153,7 @@ docker logs minder-traefik --tail 100
 ## Additional Resources
 
 - [Traefik Documentation](https://doc.traefik.io/traefik/)
-- [Authelia Documentation](https://www.authelia.com/) (for the deferred SSO layer)
+- [Authelia Documentation](https://www.authelia.com/) (the SSO/2FA layer in front of the stack)
 - [JWT Best Practices (RFC 8725)](https://datatracker.ietf.org/doc/html/rfc8725)
 
 ---

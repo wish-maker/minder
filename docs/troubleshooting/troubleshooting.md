@@ -147,10 +147,11 @@ grep TRAEFIK .env
 cd docker/ && docker compose restart traefik
 ```
 
-Several Traefik routers are wired with an Authelia forward-auth middleware, but **Authelia
-is currently disabled** (commented out in compose). With Authelia down, that forward-auth
-is **not enforced** — its keep/drop is an open decision. If you were expecting an auth
-redirect and don't see one, this is why.
+Five Traefik routers (minio, api-gateway, grafana, openwebui, jaeger) are wired with an
+Authelia forward-auth middleware, and **Authelia is enabled and enforcing** it. Unauthenticated
+requests to those routes get a 302 redirect to the Authelia portal. If you were expecting an
+auth redirect and don't see one on those routes, check that Authelia itself is healthy
+(`docker logs minder-authelia`). Full browser SSO still requires real DNS + TLS on the deploy.
 
 ---
 

@@ -19,7 +19,7 @@ and where it is headed.
 
 ## What Exists Today
 
-The platform runs as 31 Docker containers provisioned by `bash setup.sh`. See
+The platform runs as 32 Docker containers provisioned by `bash setup.sh`. See
 `docs/architecture/overview.md` and `docs/architecture/microservices.md` for the current,
 authoritative service breakdown.
 
@@ -41,13 +41,16 @@ RabbitMQ 4.3, Apicurio schema registry.
 **Observability:** Prometheus, Grafana, InfluxDB, Telegraf, Alertmanager, Jaeger, OpenTelemetry
 collector, plus six exporters.
 
+**Reverse proxy & auth:** Traefik v3, plus Authelia SSO/2FA — **enabled** by default,
+enforcing forward-auth on 5 Traefik routers (minio, api-gateway, grafana, openwebui,
+jaeger). Full browser SSO still needs real DNS + TLS on the deploy.
+
 **Not present / not implemented (do not expect these):**
 - Model fine-tuning service — **removed** (do not re-add)
 - Standalone `ai-service` — **removed**
 - Custom frontend app (Next.js/React) — there is none; the UI is OpenWebUI
 - RBAC — only JWT auth exists
 - Default domain plugins (crypto/weather/network/news/tefas) — SHIPPED as first-party module plugins in `src/plugins/`, on the central plugin-config API (#34 done)
-- Authelia SSO/2FA — defined but **disabled** (commented out in compose)
 
 ---
 
@@ -66,9 +69,10 @@ hybrid (dense+BM25) + parent-child (small-to-big) retrieval strategies are all n
 the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)); `GET /capabilities`
 reports what's active. Only RAPTOR remains unwired.
 
-### 3. Authelia Decision
-Authelia is currently disabled. Whether to finish wiring it (DB auto-init + NTP) or drop it is an
-open decision on the tracker.
+### 3. Authelia
+Authelia is enabled and enforcing forward-auth on 5 Traefik routers (minio, api-gateway,
+grafana, openwebui, jaeger). The remaining work is completing real DNS + TLS on the deploy
+so full browser SSO works end-to-end.
 
 ### 4. Setup / Tooling — Python port (DONE)
 `setup.sh` was split into `scripts/lib/` bash modules (Stage 1), then **fully ported to

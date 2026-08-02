@@ -18,10 +18,10 @@
   `exposedByDefault: false`). There is **no Nginx** in this stack.
 - **Authentication:** The **API Gateway** implements real JWT (HS256) authentication with
   bcrypt-hashed credentials, plus Redis-backed rate limiting (60s window, fail-open).
-- **SSO / Authelia:** **DISABLED.** The Authelia service is commented out in compose. Traefik
-  has a `authelia-forwardauth` middleware referenced on a few routers, but because the
-  container is down the middleware does **not** enforce anything. Keep-vs-drop is an open
-  decision.
+- **SSO / Authelia:** **ENABLED.** The Authelia service is live in compose. Traefik's
+  `authelia-forwardauth` middleware is referenced on five routers (minio, api-gateway,
+  grafana, openwebui, jaeger) and **does** enforce SSO — unauthenticated requests get a
+  302 redirect to the Authelia portal.
 - **RBAC:** **Not implemented.** Only JWT authentication exists on the gateway; there is no
   role-based access control.
 - **Network:** Services communicate over Docker networks by container name. Some application
@@ -78,13 +78,12 @@ curl -X POST http://localhost:8000/v1/auth/login \
 curl -H "Authorization: Bearer <token>" http://localhost:8000/health
 ```
 
-### Authelia SSO (disabled)
+### Authelia SSO (enabled)
 
-Authelia is **defined but disabled** (commented out in compose). It was intended to provide
-SSO/2FA in front of web services via a Traefik `forwardAuth` middleware. Because the
-container does not run, any router referencing that middleware currently passes traffic
-through **without** authentication. Whether to keep and wire Authelia or drop it is an open
-platform decision.
+Authelia is **enabled and running**, providing SSO/2FA in front of web services via a
+Traefik `forwardAuth` middleware wired onto five routers (minio, api-gateway, grafana,
+openwebui, jaeger). Requests to those routers are 302-redirected to the Authelia portal
+when unauthenticated.
 
 ### RBAC (not implemented)
 
@@ -131,7 +130,8 @@ Never commit `.env` files containing real secrets.
 
 This is a development deployment. Before treating it as production-ready:
 
-1. Decide and (if kept) actually enable Authelia SSO so routed services are gated.
+1. Complete Authelia's rollout (real DNS + TLS for `authelia.minder.local`) so browser SSO
+   works end-to-end, not just the forward-auth 302.
 2. Lock down host-published ports; front everything through the proxy.
 3. Replace self-signed `.local` certificates with a real CA / Let's Encrypt.
 4. Implement authorization (RBAC) beyond the gateway's JWT check if multi-tenant/role
@@ -145,8 +145,8 @@ This is a development deployment. Before treating it as production-ready:
 
 - [Service Access Guide](./service-access.md)
 - [Traefik Documentation](https://doc.traefik.io/traefik/)
-- [Authelia Documentation](https://www.authelia.com/docs/) (for the deferred SSO rollout)
+- [Authelia Documentation](https://www.authelia.com/docs/) (for the SSO rollout)
 
 ---
 
-*Last Updated: 2026-07-10 · Development environment · Reverse proxy: Traefik v3 · SSO: disabled · RBAC: not implemented*
+*Last Updated: 2026-07-10 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled (Authelia) · RBAC: not implemented*

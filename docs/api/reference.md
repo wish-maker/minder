@@ -12,10 +12,12 @@ The Minder Platform exposes RESTful APIs from **8 core FastAPI microservices**. 
 them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Docker labels).
 
 > **Development environment.** This is a development deployment on a Raspberry Pi 4.
-> Production hardening is not yet fully applied. Authelia SSO is **defined but currently
-> disabled** (its container is commented out in compose), so the Traefik forward-auth
-> middleware is wired on five routers but **not enforced**. The API Gateway itself
-> implements real JWT + bcrypt authentication and Redis-backed rate limiting.
+> Production hardening is not yet fully applied. Authelia SSO is **enabled by default**
+> and the Traefik forward-auth middleware is wired and **enforced** on five routers
+> (minio, api-gateway, grafana, openwebui, jaeger) — unauthenticated requests get a 302
+> redirect to the Authelia portal. Full browser SSO still needs real DNS + TLS on the
+> deploy. The API Gateway itself implements real JWT + bcrypt authentication and
+> Redis-backed rate limiting.
 
 ### Core API services
 
@@ -455,5 +457,6 @@ the full observability port map.
 - Fixed the API Gateway auth paths (`/v1/auth/*`, not `/auth/*`) and removed the fictional
   `POST /8004/ingest` example (the real flow is `/knowledge-bases` → `/knowledge-bases/{id}/upload`).
 - Documented interactive OpenAPI docs at `http://localhost:<port>/docs` for every service.
-- Clarified that Authelia SSO is currently disabled and the API Gateway's own JWT auth is the
-  real authentication mechanism; forward-auth is wired on five Traefik routers but not enforced.
+- Clarified that Authelia SSO is enabled and enforcing forward-auth on five Traefik routers,
+  and that the API Gateway's own JWT auth remains the real authentication mechanism for the
+  API itself.

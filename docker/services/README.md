@@ -20,7 +20,7 @@ into the container by `docker/docker-compose.yml`):
 | `otel-collector/`  | otel-collector  | collector pipeline config |
 | `rabbitmq/`        | rabbitmq        | `rabbitmq.conf` |
 | `ollama/`          | ollama          | `init-models.sh` |
-| `authelia/`        | authelia        | config + users DB (**service currently disabled**) |
+| `authelia/`        | authelia        | config + users DB (**service enabled**, enforcing forward-auth on 5 routers) |
 
 > **Editing config here changes runtime behavior on the next `restart`/`up`.** For
 > the service map, ports, and operational commands see the root

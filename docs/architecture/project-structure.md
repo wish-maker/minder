@@ -39,7 +39,7 @@ minder/                              # Project root
 │       ├── telegraf/                # Metrics agent config
 │       ├── traefik/                 # Reverse proxy config
 │       ├── neo4j/ · ollama/ · influxdb/ · otel-collector/ · rabbitmq/
-│       ├── authelia/                # Authelia config (service disabled)
+│       ├── authelia/                # Authelia config (service enabled)
 │       └── scripts/                 # Docker helper scripts
 │
 ├── src/                             # Application source
@@ -124,11 +124,11 @@ services/api-gateway/
 
 ## Infrastructure Components
 
-31 containers total (Authelia is defined but disabled and not counted).
+32 containers total (Authelia is defined, enabled, and counted).
 
 **Edge / Security**:
 - Traefik (v3) - Reverse proxy, TLS termination, routing
-- Authelia - SSO/2FA — **DISABLED** (commented out in compose)
+- Authelia - SSO/2FA — **ENABLED**, enforcing forward-auth on 5 routers (minio, api-gateway, grafana, openwebui, jaeger)
 
 **Data Stores** (internal-only, not host-exposed):
 - PostgreSQL 18.4 - Primary database
@@ -196,7 +196,7 @@ Every service has:
 
 - **Authentication**: JWT-based auth (bcrypt password hashing)
 - **Authorization**: JWT validation only — **RBAC is not implemented**
-- **SSO / 2FA**: Authelia is present but **disabled** (commented out in compose)
+- **SSO / 2FA**: Authelia is **enabled** and enforcing forward-auth on 5 routers (minio, api-gateway, grafana, openwebui, jaeger); full browser SSO still needs real DNS + TLS on the deploy
 - **Rate limiting**: Redis-based rate limiter (fail-open)
 - **Input validation**: Pydantic validators
 - **Secrets management**: environment variables only (root `./.env`)

@@ -319,8 +319,10 @@ This is a development environment; production hardening is not yet applied. Stil
 - **Use parameterized queries** — never string-format SQL.
 
 Authentication in api-gateway is **JWT + bcrypt** with Redis-backed rate limiting. There is
-**no RBAC** implemented (JWT auth only). The Authelia SSO component is currently disabled
-(commented out in compose); auth via Traefik forward-auth is therefore not enforced.
+**no RBAC** implemented (JWT auth only). The Authelia SSO component is **enabled** (a live
+service in compose, not commented out), and Traefik forward-auth is enforced on the minio,
+api-gateway, grafana, openwebui, and jaeger routers. Full browser SSO still needs real DNS
++ TLS on the deploy.
 
 ## Resources
 

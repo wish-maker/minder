@@ -4,7 +4,7 @@
 
 **Platform Version:** 1.0.0
 **Last Updated:** 2026-07-10
-**Containers:** 31 defined (Authelia excluded — disabled). `setup.sh install` seeds the
+**Containers:** 32 defined (Authelia included — enabled). `setup.sh install` seeds the
 **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and
 voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start
 all 31). `start` then honours the recorded bundle state (`bundles.state.json`). Started
@@ -16,8 +16,10 @@ redis-exporter, rabbitmq-exporter). See [Service Bundles](bundles.md).
 **Deploy Status:** Clean install proven from zero (`docker compose down -v` → `bash setup.sh start`)
 
 **Deferred / Disabled:**
-- ⏸️ Authelia SSO/2FA — DISABLED (commented out in `docker-compose.yml`); crash loop from missing DB + NTP. Keep-vs-drop is an open decision.
 - ⏸️ Role-based access control — NOT implemented. Only JWT authentication exists today.
+
+**Enabled:**
+- ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 5 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger).
 
 > Three services (`otel-collector`, `redis-exporter`, `rabbitmq-exporter`) ship without a healthcheck because their images lack the tooling to run one. They report "no-healthcheck", not "unhealthy".
 
@@ -44,8 +46,8 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 ┌─────────────────────────────────────────────────────────────────┐
 │                        SECURITY / EDGE                          │
 │  ┌──────────────┐              ┌──────────────────────────────┐ │
-│  │   Traefik    │ (80/443)     │  Authelia (9091) — DISABLED  │ │
-│  │ Reverse Proxy│ v3.7.8       │  (commented out in compose)  │ │
+│  │   Traefik    │ (80/443)     │  Authelia (9091) — ENABLED   │ │
+│  │ Reverse Proxy│ v3.7.8       │  (forward-auth, 5 routers)   │ │
 │  └──────────────┘              └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                  │
@@ -90,8 +92,8 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │  InfluxDB :8086 · Telegraf · OTel Collector · 6 exporters      │
 └─────────────────────────────────────────────────────────────────┘
 
-Total: 31 containers across core APIs, inference, storage, and observability
-(Authelia is defined but disabled and is not counted in the 31.)
+Total: 32 containers across core APIs, inference, storage, and observability
+(includes Authelia, which is enabled).
 ```
 
 ## Service Descriptions
@@ -103,11 +105,11 @@ Total: 31 containers across core APIs, inference, storage, and observability
 - The only host-facing entry point besides directly-exposed monitoring services
 - Version: `traefik:v3.7.8`
 
-#### Authelia (9091) — ⏸️ DISABLED
-- Would provide SSO and 2FA, but is **commented out** in `docker-compose.yml`
-- Disabled due to a crash loop (missing database + NTP sync). A `forwardauth` middleware is still
-  wired on five Traefik routers (minio, api-gateway, grafana, openwebui, jaeger), but because the
-  container is down, that auth is **not enforced**. Keep-vs-drop remains an open decision.
+#### Authelia (9091) — ✅ ENABLED
+- Provides SSO and 2FA, running as `minder-authelia` in `docker-compose.yml`
+- A `forwardauth` middleware is wired on five Traefik routers (minio, api-gateway, grafana,
+  openwebui, jaeger), and that auth **is enforced** — unauthenticated requests get a 302
+  redirect to the Authelia portal. Full browser SSO still needs real DNS + TLS on the deploy.
 
 ### Core APIs
 
@@ -185,7 +187,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 - **Databases**: PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.06 (community)
 - **Object store**: MinIO · **Message bus**: RabbitMQ 4.3 · **Schema registry**: Apicurio (SQL)
 - **LLM**: Ollama with local models
-- **Authentication**: JWT (bcrypt). No RBAC. Authelia is present but disabled.
+- **Authentication**: JWT (bcrypt) at the gateway, plus Authelia SSO/2FA on 5 Traefik routers. No RBAC.
 
 ### Infrastructure
 - **Containers**: Docker + Docker Compose (`docker/docker-compose.yml`, hand-maintained)
@@ -200,8 +202,9 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 
 ### Authentication Flow
 1. Requests enter through Traefik (TLS termination, routing).
-2. Traefik has an Authelia `forwardauth` middleware wired on some routers, but Authelia is
-   currently disabled, so that step is a no-op.
+2. Traefik has an Authelia `forwardauth` middleware wired on five routers (minio, api-gateway,
+   grafana, openwebui, jaeger); Authelia is enabled, so unauthenticated requests are
+   302-redirected to the Authelia portal.
 3. Core APIs validate JWT tokens (issued by the API Gateway, bcrypt-hashed credentials).
 
 ### Authorization

@@ -4,7 +4,7 @@ Detailed microservices architecture for the Minder Platform.
 
 ## Current Service Status
 
-**Total Containers:** 31 (Authelia is defined but disabled, and not counted)
+**Total Containers:** 32 (Authelia is enabled and counted)
 **With Health Checks:** 28
 **No-Healthcheck (by design):** 3 (otel-collector, redis-exporter, rabbitmq-exporter — their images lack the tooling for a healthcheck)
 **Unhealthy:** 0
@@ -47,12 +47,11 @@ backed by internal data stores and a monitoring stack. All services are Python 3
 
 **Host Ports**: 80, 443, 8081 (dashboard, IP whitelist)
 
-#### Authelia (SSO & 2FA) — DISABLED
-**Status**: Commented out in `docker-compose.yml`. Would provide SSO/2FA, but is currently
-disabled due to a crash loop (missing database + NTP sync). A Traefik `forwardauth` middleware
-references it on five routers (minio, api-gateway, grafana, openwebui, jaeger), but with the
-container down, that auth is **not enforced**.
-Keep-vs-drop is an open decision.
+#### Authelia (SSO & 2FA) — ENABLED
+**Status**: Running (`minder-authelia`) in `docker-compose.yml`, providing SSO/2FA. A Traefik
+`forwardauth` middleware references it on five routers (minio, api-gateway, grafana, openwebui,
+jaeger), and that auth **is enforced** — unauthenticated requests get a 302 redirect to the
+Authelia portal. Full browser SSO still needs real DNS + TLS on the deploy.
 
 ### Data Stores (internal-only — not host-exposed)
 
@@ -195,8 +194,8 @@ frontend framework.
 Metrics storage and querying. Scrapes core services and the exporters below.
 
 #### Grafana (`grafana/grafana:13.1`, host 3000)
-Dashboards. Traefik route has an Authelia `forwardauth` middleware, but since Authelia is
-disabled that auth is not currently enforced.
+Dashboards. Traefik route has an Authelia `forwardauth` middleware, and since Authelia is
+enabled that auth is enforced.
 
 #### InfluxDB (`influxdb:3.10.3-core`, host 8086)
 Time-series storage (fed by Telegraf).
@@ -251,7 +250,7 @@ traefik
   └── monitoring (prometheus, grafana, influxdb, jaeger, alertmanager, exporters)
 ```
 
-(Authelia would sit in front of some routers but is disabled.)
+(Authelia sits in front of five routers: minio, api-gateway, grafana, openwebui, jaeger.)
 
 ## Data Flow
 
@@ -259,7 +258,7 @@ traefik
 ```
 Client → Traefik → API Gateway → Service → Database/Cache
 ```
-(Authelia forwardauth is wired on some routers but disabled.)
+(Authelia forwardauth is wired and enforced on five routers.)
 
 ### RAG Query Flow
 ```
@@ -308,7 +307,7 @@ Services use `restart: on-failure`.
 
 ### Authentication
 - JWT for API authentication (bcrypt password hashing)
-- Authelia SSO is present but disabled
+- Authelia SSO is enabled, enforcing on five Traefik routers
 - **RBAC is not implemented**
 
 ## Monitoring
@@ -326,5 +325,5 @@ Services use `restart: on-failure`.
 ## Future Improvements
 
 Forward work is tracked as GitHub issues in `wish-maker/minder` (see `roadmap.md`). Themes under
-consideration include the ARM/Pi deployment, completing the Traefik dynamic/access config, and
-Authelia keep-vs-drop. (Offline TTS via Piper and the stricter mypy CI gate are already done.)
+consideration include the ARM/Pi deployment and completing Authelia's browser-SSO rollout (real
+DNS + TLS). (Offline TTS via Piper and the stricter mypy CI gate are already done.)
