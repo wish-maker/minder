@@ -8,15 +8,17 @@ import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from core.stt_engine import STT_AVAILABLE
-from core.tts_engine import TTS_AVAILABLE
-from fastapi import FastAPI
-from fastapi.responses import JSONResponse
-from routes.stt import router as stt_router
-from routes.tts import router as tts_router
-
-# Shared library (needs src/ on the path)
+# Shared library (needs src/ on the path) — must happen before routes.stt /
+# routes.tts below, since those import from `shared.*` at their own top level.
 sys.path.insert(0, "/app/src")
+
+from core.stt_engine import STT_AVAILABLE  # noqa: E402
+from core.tts_engine import TTS_AVAILABLE  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from routes.stt import router as stt_router  # noqa: E402
+from routes.tts import router as tts_router  # noqa: E402
+
 from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
