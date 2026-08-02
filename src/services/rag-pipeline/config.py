@@ -12,6 +12,10 @@ APP_VERSION = "1.0.0"
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
 QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+# Set only in failover mode (ollama-mode failover <url>) — host:port of the external
+# primary the ollama-router prefers. Empty otherwise. See rag/ollama_manager.py's
+# _describe_failover_404 (#249).
+OLLAMA_FAILOVER_PRIMARY = os.getenv("OLLAMA_FAILOVER_PRIMARY", "")
 MODEL_MANAGEMENT_URL = os.getenv(
     "MODEL_MANAGEMENT_URL", "http://minder-model-management:8005"
 )

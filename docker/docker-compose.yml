@@ -689,6 +689,9 @@ services:
     # main.py reads OLLAMA_HOST (not OLLAMA_BASE_URL) — alias it so the OLLAMA_BASE_URL
     # knob actually reaches this inference-heavy service in remote/native mode.
     - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
+    # Empty outside failover mode. Lets ollama_manager tell "model not found
+    # anywhere" apart from "only on the (currently unreachable) primary" (#249).
+    - OLLAMA_FAILOVER_PRIMARY=${OLLAMA_FAILOVER_PRIMARY:-}
     - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2}
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005

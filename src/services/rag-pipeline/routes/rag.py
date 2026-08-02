@@ -390,17 +390,19 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             generation_config=pipeline.get("generation_config", {}),
             components=components,
         )
-    except state.GenerationError:
+    except state.GenerationError as e:
         # LLM backend failed to produce an answer — surface a real 503 rather than a
         # 200 whose "answer" is a leaked exception string (#232), matching the
-        # embedding-failure 503 (#77).
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "LLM backend unavailable — could not generate an answer. Check that "
-                "OLLAMA_BASE_URL is reachable and the model is available."
-            ),
+        # embedding-failure 503 (#77). The exception's own message (from
+        # generate_response's error path) is safe to expose — no secrets, just what
+        # ollama/the failover router reported — and is more useful than a fixed
+        # generic string (e.g. it says whether failover served this off the
+        # internal fallback while the primary is down, #249).
+        detail = str(e) or (
+            "LLM backend unavailable — could not generate an answer. Check that "
+            "OLLAMA_BASE_URL is reachable and the model is available."
         )
+        raise HTTPException(status_code=503, detail=detail)
     # Annotate the retrieval strategy the runner is blind to, plus any silent downgrade.
     method_details = dict(result.get("method_details") or {})
     method_details["retrieval"] = retrieval_strategy

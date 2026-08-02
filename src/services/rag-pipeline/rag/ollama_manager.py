@@ -8,18 +8,69 @@ the query runner / RAG method modules, which receive it as an opaque
 import logging
 from typing import Any, Dict, List, Optional
 
-from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL, OLLAMA_HOST
+import httpx
+
+from config import (
+    DEFAULT_EMBEDDING_MODEL,
+    DEFAULT_LLM_MODEL,
+    OLLAMA_FAILOVER_PRIMARY,
+    OLLAMA_HOST,
+)
 
 logger = logging.getLogger(__name__)
 
 # Ollama client for real embeddings and LLM
 try:
-    from ollama import AsyncClient
+    from ollama import AsyncClient, ResponseError
 
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
+    ResponseError = Exception  # type: ignore[misc,assignment]  # unreachable without the package
     logging.warning("ollama package not installed. Install with: pip install ollama")
+
+
+async def _describe_failover_404(model: str, base_error: str) -> str:
+    """#249: a model-not-found 404 is ambiguous in failover mode — it could mean the
+    model genuinely doesn't exist anywhere, or that it only lives on the external
+    primary while the router has quietly fallen back to the internal Ollama. Probe
+    the primary directly (mirrors scripts/setup/status.py's `_primary_reachable`,
+    just from inside the container instead of via `docker exec`) and say which case
+    this is instead of surfacing a bare, misleading 404. Best-effort: any hiccup
+    probing it just returns the original message unchanged.
+
+    Earlier approach tried inferring this from the router's X-Ollama-Upstream
+    response header instead of probing the primary directly, and was wrong: nginx's
+    upstream circuit breaker (`max_fails=1 fail_timeout=10s`) skips a recently-failed
+    primary entirely on subsequent requests, so the header only shows BOTH attempts
+    (primary then backup, comma-separated) for the first request after each
+    fail_timeout window — every request after that shows just the backup's address
+    with no comma, indistinguishable from "the primary answered directly".
+    Confirmed live (2026-08-02): identical requests a few seconds apart flipped
+    between a 2-entry and a 1-entry header with no change in which backend was
+    actually serving. A direct reachability probe has no such timing dependency.
+    """
+    if not OLLAMA_FAILOVER_PRIMARY:
+        return base_error  # not configured for failover on this container
+    primary_url = OLLAMA_FAILOVER_PRIMARY
+    if not primary_url.startswith("http"):
+        primary_url = f"http://{primary_url}"
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.get(f"{primary_url}/api/tags")
+        primary_reachable = resp.status_code < 500
+    except Exception:
+        primary_reachable = False
+    if primary_reachable:
+        return (
+            base_error  # primary answered — the model genuinely doesn't exist anywhere
+        )
+    return (
+        f"{base_error} — the external primary ({OLLAMA_FAILOVER_PRIMARY}) is "
+        "currently unreachable, so this was served by the internal fallback. "
+        f"Model '{model}' may only exist on the primary; it should work again once "
+        "the primary recovers (see `bash setup.sh status` for the active backend)."
+    )
 
 
 class OllamaManager:
@@ -154,11 +205,22 @@ class OllamaManager:
 
         except Exception as e:
             logger.error(f"❌ LLM generation failed: {e}")
+            error_text = str(e)
+            # #249: a 404 through the failover router is ambiguous — clarify it when
+            # it actually is the "only on the unreachable primary" case. (Cheap
+            # early-exit here; _describe_failover_404 also self-guards on
+            # OLLAMA_FAILOVER_PRIMARY being set.)
+            if (
+                isinstance(e, ResponseError)
+                and e.status_code == 404
+                and OLLAMA_FAILOVER_PRIMARY
+            ):
+                error_text = await _describe_failover_404(model, error_text)
             # Flag the failure so the query path can surface a real 503 instead of
             # returning this error string as a 200 "answer" (#232). Internal callers
             # (hyde/rerank/corrective/self_rag) ignore the flag and keep degrading.
             return {
-                "text": f"Error generating response: {str(e)}",
+                "text": f"Error generating response: {error_text}",
                 "model": model,
                 "context": context,
                 "tokens_used": 0,
