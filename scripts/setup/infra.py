@@ -4,10 +4,12 @@ Only `create_networks` is ported so far: it is dry-run-gated (the `docker networ
 create` goes through docker.run(), the existence probe is read-only), so it is
 non-destructive under DRY_RUN and cleanly verifiable — like `stop`.
 
-`initialize_database` (aux DB creation) and `initialize_minio` (bucket creation)
-run un-gated `docker exec` mutations, but they are idempotent — CREATE/mc mb only
-act when the DB/bucket is absent — so they are verified live against a stack where
-all already exist (a safe no-op) with the per-item result masked.
+`initialize_database` (aux DB creation + UTC session timezone, #252) and
+`initialize_minio` (bucket creation) run un-gated `docker exec` mutations, but
+they are idempotent — CREATE/mc mb only act when the DB/bucket is absent, and
+`ALTER SYSTEM SET timezone` + reload is a safe no-op to repeat — so they are
+verified live against a stack where all already exist (a safe no-op) with the
+per-item result masked.
 
 `remove_networks` is the `create_networks` counterpart for `uninstall --purge`:
 both compose networks are declared `external: true` (see docker-compose.yml), so
@@ -86,6 +88,40 @@ def initialize_database() -> None:
         log.detail(
             f"Created: {db}" if result.returncode == 0 else f"Already exists: {db}"
         )
+
+    # Cluster-wide default session timezone (#252): DEFAULT NOW() on a
+    # TIMESTAMP (no tz) column casts the tz-aware "now" using the session's
+    # `timezone` GUC — left at its OS default this stores local wall-clock
+    # (e.g. TR time on the Pi), disagreeing with the naive-UTC values Python
+    # writes (#239). ALTER SYSTEM + reload is idempotent and takes effect
+    # immediately, so it's safe to run on every install/re-run, including
+    # against clusters whose data directory predates this fix.
+    # Two separate -c flags, NOT one semicolon-joined string: psql's simple
+    # query protocol implicitly wraps a multi-statement -c string in one
+    # transaction block, and ALTER SYSTEM cannot run inside a transaction
+    # block (confirmed live — a single joined -c errors with exactly that).
+    tz_result = subprocess.run(
+        [
+            "docker",
+            "exec",
+            postgres,
+            "psql",
+            "-U",
+            "minder",
+            "-c",
+            "ALTER SYSTEM SET timezone TO 'UTC';",
+            "-c",
+            "SELECT pg_reload_conf();",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    log.detail(
+        "Database timezone set to UTC"
+        if tz_result.returncode == 0
+        else "Could not set database timezone to UTC"
+    )
+
     log.success("Database initialisation complete")
 
 
