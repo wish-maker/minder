@@ -4,10 +4,32 @@ Helpers used while developing/validating Minder that are **not** part of the set
 CLI (`scripts/setup/`), the parity gate (`scripts/gate/`), or the bash reference
 lib (`scripts/lib/`). Nothing here is imported by the platform at runtime.
 
+## `remote_ssh.py` + `remote_lib.py` — drive any configured dev host
+
+`remote_lib.py` is the shared core (env loading, SOCKS5 proxying, command
+chaining/execution) behind every host runner below — it holds a `HOSTS` dict
+keyed by alias (currently `pi`, `hantal`). `remote_ssh.py` is a generic CLI
+over it, so a new host is a `HOSTS` entry + its `<PREFIX>_*` keys in `.env`,
+not a new script:
+
+```bash
+python scripts/dev/remote_ssh.py --list                       # configured aliases
+python scripts/dev/remote_ssh.py pi 'git log --oneline -1'
+python scripts/dev/remote_ssh.py hantal 'git log -1' 'docker ps --format "{{.Names}}"'  # chained
+python scripts/dev/remote_ssh.py hantal --raw --no-cd 'whoami'
+```
+
+Multiple positional commands run as one remote invocation, chained with the
+host's operator (`&&` for bash hosts, `;` for the Windows/powershell host) —
+useful for a recurring multi-step job (pull, rebuild, healthcheck) without
+hand-joining a shell string each time.
+
+`pi_ssh.py` and `hantal_ssh.py` (below) are thin, alias-bound wrappers over the
+same `remote_lib.run()` — kept for muscle memory / existing docs.
+
 ## `pi_ssh.py` — drive the RPi-4 validation box
 
-Minder is validated on real ARM hardware (a Raspberry Pi 4). This is a small
-paramiko SSH runner so that workflow doesn't have to be re-typed each session.
+Minder is validated on real ARM hardware (a Raspberry Pi 4).
 
 ```bash
 # one-time: create the gitignored secrets file
@@ -22,6 +44,9 @@ python scripts/dev/pi_ssh.py --no-cd 'uname -a'
 `scripts/dev/.env` holds the address + credentials and is **gitignored** (the repo
 root `.gitignore` `.env` rule covers it). Never commit it. `.env.example` is the
 committed template documenting the required keys.
+
+Same as `hantal_ssh.py` below, if this dev host has no direct tailnet route, set
+`PI_SOCKS5=host:port` in `.env` to route through tailscaled's SOCKS5 proxy.
 
 ## `hantal_ssh.py` — drive the Windows dev box
 
