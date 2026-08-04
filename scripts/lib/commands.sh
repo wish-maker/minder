@@ -142,8 +142,11 @@ cmd_backup() {
 
     if container_running postgres; then
         spinner_start "Dumping PostgreSQL…"
+        # --clean --if-exists (#281): without these, restoring onto an
+        # already-initialized Postgres (the realistic case) makes every CREATE
+        # statement in the dump error as "already exists" instead of overwriting.
         if docker exec "$(container_name postgres)" \
-               pg_dumpall -U minder 2>/dev/null > "${dest}/postgres.sql"; then
+               pg_dumpall -U minder --clean --if-exists 2>/dev/null > "${dest}/postgres.sql"; then
             spinner_stop
             log_success "PostgreSQL  ($(du -sh "${dest}/postgres.sql" | cut -f1))"
         else
@@ -300,9 +303,24 @@ cmd_restore() {
 
     local tmp_dir; tmp_dir="$(mktemp -d)"
     spinner_start "Extracting archive…"
-    tar xzf "$archive" -C "$tmp_dir"
+    tar xzf "$archive" -C "$tmp_dir" 2>/dev/null
     spinner_stop
     local restore_dir; restore_dir="$(find "$tmp_dir" -mindepth 1 -maxdepth 1 -type d | head -1)"
+
+    # #283: a corrupt/truncated archive extracts to nothing — every restore step
+    # below is gated on `-f "${restore_dir}/…"`, so without this check the run
+    # would silently restore NOTHING and still fall through to "Restore complete".
+    if [[ -z "$restore_dir" ]]; then
+        rm -rf "$tmp_dir"
+        log_error "'$(basename "$archive")' did not extract to a valid backup directory — the archive may be corrupt or truncated. Nothing was restored."
+        exit 1
+    fi
+
+    # Datastores whose archived data EXISTS but wasn't actually restored (its
+    # container isn't running, or the restore itself failed) — surfaced loudly in
+    # the final line so a partial restore can't read as a complete one (#282,
+    # mirroring cmd_backup's own `skipped` tracking for the same failure mode).
+    local skipped=""
 
     # #55: the steps below MUTATE live data, so they are DRY_RUN-gated — docker
     # steps via run() (echo-only under dry-run); the .env copy and the psql/rabbitmq
@@ -329,15 +347,21 @@ cmd_restore() {
         spinner_start "Restoring PostgreSQL…"
         local pg_cname; pg_cname="$(container_name postgres)"
         local pg_ok=1
+        # -v ON_ERROR_STOP=1 (#281): without it, psql keeps going past SQL errors
+        # and still exits 0 — a real restore error would otherwise report success.
         if _is_dry_run; then
-            run docker exec -i "$pg_cname" psql -U minder -f -
+            run docker exec -i "$pg_cname" psql -U minder -v ON_ERROR_STOP=1 -f -
         elif ! docker exec -i "$pg_cname" \
-                 psql -U minder -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
+                 psql -U minder -v ON_ERROR_STOP=1 -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
             pg_ok=0
         fi
         spinner_stop
-        (( pg_ok )) && log_success "PostgreSQL restored" \
-                    || log_warn "PostgreSQL restore had errors (partial restore possible)"
+        if (( pg_ok )); then
+            log_success "PostgreSQL restored"
+        else
+            log_warn "PostgreSQL restore had errors (partial restore possible)"
+            skipped="${skipped:+$skipped, }PostgreSQL"
+        fi
     fi
 
     if [[ -f "${restore_dir}/neo4j.cypher" ]] && container_running neo4j; then
@@ -352,17 +376,31 @@ cmd_restore() {
             neo4j_ok=0
         fi
         spinner_stop
-        (( neo4j_ok )) && log_success "Neo4j restored" \
-                       || log_warn "Neo4j restore had errors"
+        if (( neo4j_ok )); then
+            log_success "Neo4j restored"
+        else
+            log_warn "Neo4j restore had errors"
+            skipped="${skipped:+$skipped, }Neo4j"
+        fi
+    elif [[ -f "${restore_dir}/neo4j.cypher" ]]; then
+        log_warn "Neo4j not running — restore skipped"
+        skipped="${skipped:+$skipped, }Neo4j"
     fi
 
     # InfluxDB raw data-dir snapshot restore (#177), symmetric to the backup.
     if [[ -f "${restore_dir}/influxdb.tar.gz" ]] && container_running influxdb; then
         spinner_start "Restoring InfluxDB…"
         local i_cname; i_cname="$(container_name influxdb)"
-        run docker cp "${restore_dir}/influxdb.tar.gz" "${i_cname}:/tmp/influxdb.tar.gz"
-        run docker exec "$i_cname" tar xzf /tmp/influxdb.tar.gz -C /
-        spinner_stop; log_success "InfluxDB restored"
+        if run docker cp "${restore_dir}/influxdb.tar.gz" "${i_cname}:/tmp/influxdb.tar.gz" && \
+           run docker exec "$i_cname" tar xzf /tmp/influxdb.tar.gz -C /; then
+            spinner_stop; log_success "InfluxDB restored"
+        else
+            spinner_stop; log_warn "InfluxDB restore had errors"
+            skipped="${skipped:+$skipped, }InfluxDB"
+        fi
+    elif [[ -f "${restore_dir}/influxdb.tar.gz" ]]; then
+        log_warn "InfluxDB not running — restore skipped"
+        skipped="${skipped:+$skipped, }InfluxDB"
     fi
 
     if [[ -f "${restore_dir}/qdrant.tar.gz" ]] && container_running qdrant; then
@@ -371,9 +409,16 @@ cmd_restore() {
         # #56: copy in AND extract the SAME /tmp/qdrant.tar.gz. Was: extract
         # /tmp/qdrant-backup.tar.gz — a stale/absent name that never matched the
         # just-copied file, so the restore silently did nothing.
-        run docker cp "${restore_dir}/qdrant.tar.gz" "${q_cname}:/tmp/qdrant.tar.gz"
-        run docker exec "$q_cname" tar xzf /tmp/qdrant.tar.gz -C /
-        spinner_stop; log_success "Qdrant restored"
+        if run docker cp "${restore_dir}/qdrant.tar.gz" "${q_cname}:/tmp/qdrant.tar.gz" && \
+           run docker exec "$q_cname" tar xzf /tmp/qdrant.tar.gz -C /; then
+            spinner_stop; log_success "Qdrant restored"
+        else
+            spinner_stop; log_warn "Qdrant restore had errors"
+            skipped="${skipped:+$skipped, }Qdrant"
+        fi
+    elif [[ -f "${restore_dir}/qdrant.tar.gz" ]]; then
+        log_warn "Qdrant not running — restore skipped"
+        skipped="${skipped:+$skipped, }Qdrant"
     fi
 
     if [[ -f "${restore_dir}/rabbitmq-definitions.json" ]] && container_running rabbitmq; then
@@ -388,12 +433,23 @@ cmd_restore() {
             rmq_ok=0
         fi
         spinner_stop
-        (( rmq_ok )) && log_success "RabbitMQ definitions restored" \
-                     || log_warn "RabbitMQ definitions restore had errors"
+        if (( rmq_ok )); then
+            log_success "RabbitMQ definitions restored"
+        else
+            log_warn "RabbitMQ definitions restore had errors"
+            skipped="${skipped:+$skipped, }RabbitMQ"
+        fi
+    elif [[ -f "${restore_dir}/rabbitmq-definitions.json" ]]; then
+        log_warn "RabbitMQ not running — restore skipped"
+        skipped="${skipped:+$skipped, }RabbitMQ"
     fi
 
     rm -rf "$tmp_dir"
-    log_success "Restore complete — restart services: ./${SCRIPT_NAME} start"
+    if [[ -n "$skipped" ]]; then
+        log_warn "Restore complete — NOT restored: ${skipped}. Restart services: ./${SCRIPT_NAME} start"
+    else
+        log_success "Restore complete — restart services: ./${SCRIPT_NAME} start"
+    fi
 }
 
 # ─────────────────────────────────────────────────────────────
