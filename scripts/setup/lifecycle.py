@@ -165,3 +165,15 @@ def wait_for_services() -> None:
         docker.wait_healthy(svc, config.TIMEOUT_MONITORING)
     for svc in _active(config.AI_SERVICES):
         docker.wait_healthy(svc, config.TIMEOUT_AI)
+    # #292: the call above only catches API-tier staleness caused by a slow
+    # CORE-tier dependency (the original #197 shape, e.g. graph-rag<-neo4j) —
+    # it runs BEFORE the API_SERVICES wait loop, so a service left 'Created'
+    # by a still-unhealthy API-tier SIBLING (e.g. marketplace/plugin-state-
+    # manager <- plugin-registry, all in the same API_SERVICES compose-up
+    # call) hits the same race and is never retried. One more pass here, after
+    # every tier has had its full wait timeout, maximizes the chance the real
+    # blocking dependency is finally ready — and catches leftovers from ANY
+    # tier, not just CORE-caused ones (confirmed live, 2026-08-04: a slow
+    # plugin-registry healthcheck left marketplace + plugin-state-manager
+    # 'Created' forever — install still reported success).
+    _reconcile_created()
