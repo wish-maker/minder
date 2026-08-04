@@ -53,25 +53,11 @@ async def get_postgres_connection():
         # command_timeout=None preserves the previous behaviour (no per-command
         # timeout). hasattr fallbacks preserved for the same defaults as before.
         postgres_pool = await create_pg_pool(
-            host=(
-                settings.POSTGRES_HOST
-                if hasattr(settings, "POSTGRES_HOST")
-                else "minder-postgres"
-            ),
-            port=settings.POSTGRES_PORT if hasattr(settings, "POSTGRES_PORT") else 5432,
-            user=(
-                settings.POSTGRES_USER
-                if hasattr(settings, "POSTGRES_USER")
-                else "minder"
-            ),
-            password=(
-                settings.POSTGRES_PASSWORD
-                if hasattr(settings, "POSTGRES_PASSWORD")
-                else "dev_password_change_me"
-            ),
-            database=(
-                settings.POSTGRES_DB if hasattr(settings, "POSTGRES_DB") else "minder"
-            ),
+            host=settings.DB_HOST,
+            port=settings.DB_PORT,
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            database=settings.DB_NAME,
             min_size=2,
             max_size=10,
             command_timeout=None,

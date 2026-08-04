@@ -48,11 +48,11 @@ async def get_pg_pool() -> asyncpg.Pool:
         # command_timeout=None preserves the previous behaviour (no per-command
         # timeout); the shared helper defaults to 60 which callers opt into.
         _pg_pool = await create_pg_pool(
-            host=settings.POSTGRES_HOST,
-            port=int(settings.POSTGRES_PORT),
-            user=settings.POSTGRES_USER,
-            password=settings.POSTGRES_PASSWORD,
-            database=settings.POSTGRES_DB,
+            host=settings.DB_HOST,
+            port=int(settings.DB_PORT),
+            user=settings.DB_USER,
+            password=settings.DB_PASSWORD,
+            database=settings.DB_NAME,
             min_size=1,
             max_size=10,
             command_timeout=None,

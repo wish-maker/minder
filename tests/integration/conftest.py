@@ -13,6 +13,13 @@ os.environ.setdefault("POSTGRES_PORT", "5433")  # local default; CI sets via env
 os.environ.setdefault("POSTGRES_USER", "postgres")
 os.environ.setdefault("POSTGRES_PASSWORD", "testpass")  # local default; CI sets via env
 os.environ.setdefault("POSTGRES_DB", "minder_test")
+# DB_* mirrors POSTGRES_* (#265): api-gateway's Settings (MinderBaseSettings) reads
+# DB_HOST/PORT/USER/PASSWORD/NAME instead of the legacy POSTGRES_* names.
+os.environ.setdefault("DB_HOST", os.environ["POSTGRES_HOST"])
+os.environ.setdefault("DB_PORT", os.environ["POSTGRES_PORT"])
+os.environ.setdefault("DB_USER", os.environ["POSTGRES_USER"])
+os.environ.setdefault("DB_PASSWORD", os.environ["POSTGRES_PASSWORD"])
+os.environ.setdefault("DB_NAME", os.environ["POSTGRES_DB"])
 os.environ["JWT_SECRET"] = "test_jwt_secret_for_e2e_tests"
 os.environ["JWT_ALGORITHM"] = "HS256"
 os.environ["JWT_EXPIRATION_MINUTES"] = "60"
@@ -33,8 +40,8 @@ sys.path.insert(
 from config import settings  # noqa: E402
 
 # Override directly to ensure test values (respect env for CI compatibility)
-settings.POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-settings.POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5433"))
-settings.POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-settings.POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "testpass")
-settings.POSTGRES_DB = os.getenv("POSTGRES_DB", "minder_test")
+settings.DB_HOST = os.getenv("DB_HOST", "localhost")
+settings.DB_PORT = int(os.getenv("DB_PORT", "5433"))
+settings.DB_USER = os.getenv("DB_USER", "postgres")
+settings.DB_PASSWORD = os.getenv("DB_PASSWORD", "testpass")
+settings.DB_NAME = os.getenv("DB_NAME", "minder_test")

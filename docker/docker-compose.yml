@@ -438,11 +438,11 @@ services:
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
-    - POSTGRES_HOST=postgres
-    - POSTGRES_PORT=5432
-    - POSTGRES_USER=minder
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    - POSTGRES_DB=minder
+    - DB_HOST=postgres
+    - DB_PORT=5432
+    - DB_USER=minder
+    - DB_PASSWORD=${POSTGRES_PASSWORD}
+    - DB_NAME=minder
     - JWT_SECRET=${JWT_SECRET}
     - JWT_ALGORITHM=HS256
     - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
@@ -535,11 +535,11 @@ services:
     container_name: minder-plugin-registry
     restart: on-failure
     environment:
-    - POSTGRES_HOST=postgres
-    - POSTGRES_PORT=5432
-    - POSTGRES_USER=minder
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    - POSTGRES_DB=minder
+    - DB_HOST=postgres
+    - DB_PORT=5432
+    - DB_USER=minder
+    - DB_PASSWORD=${POSTGRES_PASSWORD}
+    - DB_NAME=minder
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - SERVICE_REGISTRY_BACKEND=redis
     - REDIS_HOST=redis
@@ -1034,11 +1034,11 @@ services:
     env_file:
     - .env
     environment:
-    - MARKETPLACE_DATABASE_HOST=postgres
-    - MARKETPLACE_DATABASE_PORT=5432
-    - MARKETPLACE_DATABASE_USER=minder
-    - MARKETPLACE_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
-    - MARKETPLACE_DATABASE_NAME=minder_marketplace
+    - DB_HOST=postgres
+    - DB_PORT=5432
+    - DB_USER=minder
+    - DB_PASSWORD=${POSTGRES_PASSWORD}
+    - DB_NAME=minder_marketplace
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}

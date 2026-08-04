@@ -82,7 +82,7 @@ async def load_plugin_from_module(plugin_dir: Path):
                     "port": 5432,
                     "user": "minder",
                     # From settings (fail-fast if unset) — no weak-default secret baked in.
-                    "password": settings.POSTGRES_PASSWORD,
+                    "password": settings.DB_PASSWORD,
                     "database": "minder",
                 },
                 "redis": {
