@@ -7,7 +7,7 @@ redis==8.1.0
 
 # AI/ML Libraries
 ollama==0.6.2
-qdrant-client==1.18.0
+qdrant-client==1.19.0
 neo4j==6.2.0
 
 # Server
