@@ -17,8 +17,18 @@ non-destructive early exits.
 Qdrant (#56, fixed): copy in AND extract the same `/tmp/qdrant.tar.gz`. The bash
 original copied `qdrant.tar.gz` into the container but extracted a stale/absent
 `/tmp/qdrant-backup.tar.gz`, so the Qdrant restore silently did nothing.
+
+#281/#282/#283 (fixed): PostgreSQL restore now uses `-v ON_ERROR_STOP=1` so a
+restore onto an already-initialized DB actually surfaces as a failure instead of
+reporting success while silently not overwriting data; a corrupt/truncated
+archive (extracts to no subdirectory) now errors out instead of falling through
+to "Restore complete" having restored nothing; and every per-store step now
+tracks into a `skipped` list (container not running, or the restore itself
+failed) that is surfaced in the final summary line — mirroring backup.py's own
+`skipped` list for the same "silent partial success" failure mode (#177).
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -26,33 +36,78 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from . import backup, config, docker, log
+from . import backup, config, docker, infra, log
+
+# #289: the postgres image's own entrypoint always (re)creates this bootstrap
+# role fresh from POSTGRES_USER/POSTGRES_PASSWORD, and it's the ONLY role in
+# this deployment (no separate "postgres" superuser) — the very role the
+# restore connects AS. `DROP ROLE IF EXISTS minder;`/`CREATE ROLE minder;`/
+# `ALTER ROLE minder WITH ...;` in the dump can never succeed (Postgres refuses
+# to let a role drop itself) and there is nothing to restore about it anyway,
+# so these statements are filtered out before the dump reaches psql.
+_OWN_ROLE_STMT_RE = re.compile(
+    rb"^(DROP ROLE IF EXISTS minder;|CREATE ROLE minder;|ALTER ROLE minder\b)"
+)
+
+
+def _strip_own_role_statements(sql_bytes: bytes) -> bytes:
+    return b"".join(
+        ln
+        for ln in sql_bytes.splitlines(keepends=True)
+        if not _OWN_ROLE_STMT_RE.match(ln)
+    )
 
 
 def _restore_postgres(sql_file: Path) -> bool:
-    """bash `docker exec -i <pg> psql -U minder -f - < file &>/dev/null 2>&1`:
-    feed the dump on stdin, discard all output; True on exit 0. Bare (un-gated)."""
+    """bash `docker exec -i <pg> psql -U minder -d postgres -v ON_ERROR_STOP=1
+    -f -` fed the (role-statement-filtered) dump on stdin, discard all output;
+    True on exit 0. Bare (un-gated).
+
+    -d postgres (found live, 2026-08-04, while verifying #281 on hantal): psql
+    with no -d connects to a database NAMED AFTER THE USER — here "minder", the
+    very database the dump's `--clean` DROPs and recreates. `DROP DATABASE
+    minder` while connected TO minder always fails ("cannot drop the currently
+    open database"), regardless of ON_ERROR_STOP — a pre-existing bug, just
+    invisible before #281 added ON_ERROR_STOP (psql printed the error and kept
+    going). `postgres` is pg_dumpall's own maintenance DB, deliberately excluded
+    from the dump's DROP list, so connecting there lets the restore drop/recreate
+    every real database including "minder" itself.
+
+    -v ON_ERROR_STOP=1 (#281): without it, psql keeps going past SQL errors and
+    still exits 0 — so restoring an old backup (dumped without --clean
+    --if-exists, #281's other half) onto an already-initialized Postgres would
+    error on every CREATE DATABASE/CREATE TABLE as "already exists", yet still
+    report "PostgreSQL restored". With ON_ERROR_STOP, a real error now actually
+    surfaces as a non-zero exit → the caller's existing warn branch fires
+    instead of a false success. #289: this ALSO means the dump's own-role
+    statements (see above) must be filtered out first — they always error
+    ("current user cannot be dropped") and would otherwise hard-abort the
+    restore before any real data is touched."""
     try:
-        with open(sql_file, "rb") as fh:
-            return (
-                subprocess.run(
-                    [
-                        "docker",
-                        "exec",
-                        "-i",
-                        docker.container_name("postgres"),
-                        "psql",
-                        "-U",
-                        "minder",
-                        "-f",
-                        "-",
-                    ],
-                    stdin=fh,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode
-                == 0
-            )
+        sql_bytes = _strip_own_role_statements(sql_file.read_bytes())
+        return (
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-i",
+                    docker.container_name("postgres"),
+                    "psql",
+                    "-U",
+                    "minder",
+                    "-d",
+                    "postgres",
+                    "-v",
+                    "ON_ERROR_STOP=1",
+                    "-f",
+                    "-",
+                ],
+                input=sql_bytes,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
     except OSError:
         return False
 
@@ -146,6 +201,25 @@ def run(archive: str = "") -> int:
     subdirs = sorted(p for p in tmp_dir.iterdir() if p.is_dir())
     restore_dir = subdirs[0] if subdirs else None
 
+    # #283: a corrupt/truncated archive extracts to nothing (or extractall raised
+    # and was swallowed above, matching bash) — every restore step below is gated
+    # on `restore_dir and ...`, so without this check the run would silently
+    # restore NOTHING and still fall through to "Restore complete" at the bottom.
+    if restore_dir is None:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        log.error(
+            f"'{Path(archive).name}' did not extract to a valid backup directory "
+            "— the archive may be corrupt or truncated. Nothing was restored."
+        )
+        return 1
+
+    # Datastores whose archived data EXISTS but wasn't actually restored (its
+    # container isn't running, or the restore itself failed) — surfaced loudly in
+    # the final line so a partial restore can't read as a complete one (#282,
+    # mirroring backup.py's own `skipped` list for the same "silent partial
+    # success" failure mode, #177).
+    skipped: list[str] = []
+
     # ── .env (native copy; DRY_RUN echoes the cp/chmod like bash's `run`) ──
     if restore_dir and (restore_dir / "env.backup").is_file():
         if config.DRY_RUN:
@@ -160,7 +234,13 @@ def run(archive: str = "") -> int:
         log.success(".env restored")
 
     # ── ensure postgres is up (compose up gated; wait skipped under DRY_RUN) ─
+    # #288: `restore`'s own precondition is "services must be stopped", and
+    # `stop` deliberately removes the app network — so without recreating it
+    # here first (mirroring start.py), `compose up -d postgres` fails with
+    # "network minder-network declared as external, but could not be found"
+    # and every store below then reports "not running — restore skipped".
     if not docker.container_running("postgres"):
+        infra.create_networks()
         docker.compose("up", "-d", "postgres")
         if not config.DRY_RUN:
             docker.wait_postgres_ready()
@@ -171,7 +251,19 @@ def run(archive: str = "") -> int:
         pgname = docker.container_name("postgres")
         if config.DRY_RUN:
             docker.run(
-                "docker", "exec", "-i", pgname, "psql", "-U", "minder", "-f", "-"
+                "docker",
+                "exec",
+                "-i",
+                pgname,
+                "psql",
+                "-U",
+                "minder",
+                "-d",
+                "postgres",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-f",
+                "-",
             )
             ok = True
         else:
@@ -181,6 +273,7 @@ def run(archive: str = "") -> int:
             log.success("PostgreSQL restored")
         else:
             log.warn("PostgreSQL restore had errors (partial restore possible)")
+            skipped.append("PostgreSQL")
 
     # ── Neo4j (APOC cypher restore; #124 — restore was previously missing) ─
     # Load the exported cypher via cypher-shell -f. Password resolved inside the
@@ -219,6 +312,10 @@ def run(archive: str = "") -> int:
             log.success("Neo4j restored")
         else:
             log.warn("Neo4j restore had errors")
+            skipped.append("Neo4j")
+    elif restore_dir and (restore_dir / "neo4j.cypher").is_file():
+        log.warn("Neo4j not running — restore skipped")
+        skipped.append("Neo4j")
 
     # ── InfluxDB (raw data-dir snapshot restore; #177) ────────────────────
     # Symmetric to the backup snapshot: copy the tar in and extract to / so
@@ -231,17 +328,35 @@ def run(archive: str = "") -> int:
     ):
         log.spinner_start("Restoring InfluxDB…")
         iname = docker.container_name("influxdb")
-        docker.run(
-            "docker",
-            "cp",
-            str(restore_dir / "influxdb.tar.gz"),
-            f"{iname}:/tmp/influxdb.tar.gz",
-        )
-        docker.run(
-            "docker", "exec", iname, "tar", "xzf", "/tmp/influxdb.tar.gz", "-C", "/"
+        ok = (
+            docker.run(
+                "docker",
+                "cp",
+                str(restore_dir / "influxdb.tar.gz"),
+                f"{iname}:/tmp/influxdb.tar.gz",
+            )
+            == 0
+            and docker.run(
+                "docker",
+                "exec",
+                iname,
+                "tar",
+                "xzf",
+                "/tmp/influxdb.tar.gz",
+                "-C",
+                "/",
+            )
+            == 0
         )
         log.spinner_stop()
-        log.success("InfluxDB restored")
+        if ok:
+            log.success("InfluxDB restored")
+        else:
+            log.warn("InfluxDB restore had errors")
+            skipped.append("InfluxDB")
+    elif restore_dir and (restore_dir / "influxdb.tar.gz").is_file():
+        log.warn("InfluxDB not running — restore skipped")
+        skipped.append("InfluxDB")
 
     # ── Qdrant (#56: copy in AND extract the same /tmp/qdrant.tar.gz) ──────
     if (
@@ -251,17 +366,28 @@ def run(archive: str = "") -> int:
     ):
         log.spinner_start("Restoring Qdrant…")
         qname = docker.container_name("qdrant")
-        docker.run(
-            "docker",
-            "cp",
-            str(restore_dir / "qdrant.tar.gz"),
-            f"{qname}:/tmp/qdrant.tar.gz",
-        )
-        docker.run(
-            "docker", "exec", qname, "tar", "xzf", "/tmp/qdrant.tar.gz", "-C", "/"
+        ok = (
+            docker.run(
+                "docker",
+                "cp",
+                str(restore_dir / "qdrant.tar.gz"),
+                f"{qname}:/tmp/qdrant.tar.gz",
+            )
+            == 0
+            and docker.run(
+                "docker", "exec", qname, "tar", "xzf", "/tmp/qdrant.tar.gz", "-C", "/"
+            )
+            == 0
         )
         log.spinner_stop()
-        log.success("Qdrant restored")
+        if ok:
+            log.success("Qdrant restored")
+        else:
+            log.warn("Qdrant restore had errors")
+            skipped.append("Qdrant")
+    elif restore_dir and (restore_dir / "qdrant.tar.gz").is_file():
+        log.warn("Qdrant not running — restore skipped")
+        skipped.append("Qdrant")
 
     # ── RabbitMQ definitions ──────────────────────────────────────────────
     if (
@@ -307,7 +433,19 @@ def run(archive: str = "") -> int:
             log.success("RabbitMQ definitions restored")
         else:
             log.warn("RabbitMQ definitions restore had errors")
+            skipped.append("RabbitMQ")
+    elif restore_dir and (restore_dir / "rabbitmq-definitions.json").is_file():
+        log.warn("RabbitMQ not running — restore skipped")
+        skipped.append("RabbitMQ")
 
     shutil.rmtree(tmp_dir, ignore_errors=True)
-    log.success(f"Restore complete — restart services: ./{config.SCRIPT_NAME} start")
+    if skipped:
+        log.warn(
+            f"Restore complete — NOT restored: {', '.join(skipped)}. "
+            f"Restart services: ./{config.SCRIPT_NAME} start"
+        )
+    else:
+        log.success(
+            f"Restore complete — restart services: ./{config.SCRIPT_NAME} start"
+        )
     return 0

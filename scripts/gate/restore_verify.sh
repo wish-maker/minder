@@ -82,6 +82,7 @@ bsh() { SCRIPT_DIR="$PWD" CI=true NONINTERACTIVE=true DRY_RUN=1 bash -c '
   source scripts/lib/log.sh      >/dev/null 2>&1
   source scripts/lib/docker.sh   >/dev/null 2>&1
   source scripts/lib/env.sh      >/dev/null 2>&1
+  source scripts/lib/infra.sh    >/dev/null 2>&1
   source scripts/lib/commands.sh >/dev/null 2>&1
   spinner_start(){ :;}; spinner_stop(){ :;}
   cmd_restore "'"$ARCHIVE"'"'; }

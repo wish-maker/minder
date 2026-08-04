@@ -114,6 +114,15 @@ def run() -> int:
                 "pg_dumpall",
                 "-U",
                 "minder",
+                # --clean --if-exists (#281): without these, the dump has CREATE
+                # DATABASE/CREATE ROLE/CREATE TABLE but no matching DROPs, so
+                # restoring onto an already-initialized Postgres (the realistic
+                # case — the platform's own containers create the DBs on first
+                # boot) makes every CREATE statement error as "already exists".
+                # With --clean --if-exists the dump drops each object first, so
+                # it actually overwrites live data instead of erroring on it.
+                "--clean",
+                "--if-exists",
             ],
             dump,
         )
