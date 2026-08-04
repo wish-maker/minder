@@ -1,14 +1,13 @@
 """System & observability routes: /health, /metrics, /initialize, / (root)."""
 
 import asyncio
-import os
 from datetime import datetime, timezone
 
 from core import state
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 
-from config import APP_VERSION
+from config import settings
 from shared.health import DependencyCheck, evaluate_dependencies
 
 router = APIRouter()
@@ -44,8 +43,8 @@ async def health_check():
             "service": "rag-pipeline",
             "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "version": APP_VERSION,
-            "environment": os.getenv("ENVIRONMENT", "development"),
+            "version": settings.APP_VERSION,
+            "environment": settings.ENVIRONMENT,
             "knowledge_bases": len(state.knowledge_bases),
             "rag_pipelines": len(state.rag_pipelines),
             "ollama_available": state.OLLAMA_AVAILABLE,
@@ -126,7 +125,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder RAG Pipeline",
-        "version": APP_VERSION,
+        "version": settings.APP_VERSION,
         "status": "operational",
         "ollama_available": state.OLLAMA_AVAILABLE,
     }

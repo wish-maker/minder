@@ -33,14 +33,10 @@ pg_pool: Optional[asyncpg.Pool] = None
 # pool (the second assignment would win and leak the first).
 _pg_pool_lock = asyncio.Lock()
 
-# Database configuration
-import os  # noqa: E402
-
-PG_HOST = os.getenv("POSTGRES_HOST", "postgres")
-PG_PORT = os.getenv("POSTGRES_PORT", "5432")
-PG_USER = os.getenv("POSTGRES_USER", "minder")
-PG_PASSWORD = os.getenv("POSTGRES_PASSWORD", "minder")
-PG_DATABASE = os.getenv("POSTGRES_DATABASE", "minder")
+# Database configuration (#267 — was ad-hoc os.getenv with a weak hardcoded
+# password fallback and a POSTGRES_DATABASE env var docker-compose.yml never
+# actually set; config.py's Settings is the real, fail-fast source now).
+from config import settings  # noqa: E402
 
 
 async def get_pg_connection():
@@ -66,11 +62,11 @@ async def get_pg_connection():
                     # Create connection pool. command_timeout=None preserves the
                     # previous behaviour (no per-command timeout).
                     pool = await create_pg_pool(
-                        host=PG_HOST,
-                        port=int(PG_PORT),
-                        user=PG_USER,
-                        password=PG_PASSWORD,
-                        database=PG_DATABASE,
+                        host=settings.DB_HOST,
+                        port=settings.DB_PORT,
+                        user=settings.DB_USER,
+                        password=settings.DB_PASSWORD,
+                        database=settings.DB_NAME,
                         min_size=2,
                         max_size=10,
                         command_timeout=None,
@@ -79,7 +75,7 @@ async def get_pg_connection():
                     globals()["pg_pool"] = pool
                     logger.info(
                         f"✅ PostgreSQL connection pool created: "
-                        f"{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+                        f"{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
                     )
                 except Exception as e:
                     logger.error(f"❌ Failed to create PostgreSQL connection pool: {e}")

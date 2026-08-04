@@ -17,7 +17,7 @@ from prometheus_client import Counter, Histogram
 from qdrant_client import QdrantClient
 from rag.ollama_manager import OLLAMA_AVAILABLE, OllamaManager  # noqa: F401
 
-from config import OLLAMA_HOST, QDRANT_HOST, QDRANT_PORT
+from config import settings
 
 logger = logging.getLogger("minder.rag-pipeline")
 
@@ -111,7 +111,7 @@ try:
     from domain.decision_engine import AgentDecisionEngine
 
     _ollama_host = (
-        OLLAMA_HOST.replace("http://", "").replace("https://", "").rstrip("/")
+        settings.OLLAMA_HOST.replace("http://", "").replace("https://", "").rstrip("/")
         or "minder-ollama:11434"
     )
     decision_engine = AgentDecisionEngine(ollama_host=_ollama_host)
@@ -165,5 +165,7 @@ def get_qdrant_client() -> QdrantClient:
     """
     global _qdrant_client
     if _qdrant_client is None:
-        _qdrant_client = QdrantClient(url=f"http://{QDRANT_HOST}:{QDRANT_PORT}")
+        _qdrant_client = QdrantClient(
+            url=f"http://{settings.QDRANT_HOST}:{settings.QDRANT_PORT}"
+        )
     return _qdrant_client

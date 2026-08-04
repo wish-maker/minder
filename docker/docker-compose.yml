@@ -702,11 +702,16 @@ services:
     - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2}
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
-    - POSTGRES_HOST=postgres
-    - POSTGRES_PORT=5432
-    - POSTGRES_USER=minder
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    - POSTGRES_DB=minder
+    - DB_HOST=postgres
+    - DB_PORT=5432
+    - DB_USER=minder
+    - DB_PASSWORD=${POSTGRES_PASSWORD}
+    - DB_NAME=minder
+    # rag-pipeline holds no Redis/JWT state of its own — these exist only to
+    # satisfy MinderBaseSettings' required-secret validation (#267 platform-wide
+    # convergence); neither is ever read by this service's code.
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+    - JWT_SECRET=${JWT_SECRET}
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
@@ -1089,6 +1094,12 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
+    # tts-stt holds no DB/Redis/JWT state of its own — these exist only to
+    # satisfy MinderBaseSettings' required-secret validation (#267 platform-wide
+    # convergence); none is ever read by this service's code.
+    - DB_PASSWORD=${POSTGRES_PASSWORD}
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+    - JWT_SECRET=${JWT_SECRET}
     # deploy:
     #   resources:
     #     limits:

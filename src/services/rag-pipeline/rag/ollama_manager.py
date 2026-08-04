@@ -10,12 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from config import (
-    DEFAULT_EMBEDDING_MODEL,
-    DEFAULT_LLM_MODEL,
-    OLLAMA_FAILOVER_PRIMARY,
-    OLLAMA_HOST,
-)
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +45,9 @@ async def _describe_failover_404(model: str, base_error: str) -> str:
     between a 2-entry and a 1-entry header with no change in which backend was
     actually serving. A direct reachability probe has no such timing dependency.
     """
-    if not OLLAMA_FAILOVER_PRIMARY:
+    if not settings.OLLAMA_FAILOVER_PRIMARY:
         return base_error  # not configured for failover on this container
-    primary_url = OLLAMA_FAILOVER_PRIMARY
+    primary_url = settings.OLLAMA_FAILOVER_PRIMARY
     if not primary_url.startswith("http"):
         primary_url = f"http://{primary_url}"
     try:
@@ -66,7 +61,7 @@ async def _describe_failover_404(model: str, base_error: str) -> str:
             base_error  # primary answered — the model genuinely doesn't exist anywhere
         )
     return (
-        f"{base_error} — the external primary ({OLLAMA_FAILOVER_PRIMARY}) is "
+        f"{base_error} — the external primary ({settings.OLLAMA_FAILOVER_PRIMARY}) is "
         "currently unreachable, so this was served by the internal fallback. "
         f"Model '{model}' may only exist on the primary; it should work again once "
         "the primary recovers (see `bash setup.sh status` for the active backend)."
@@ -87,13 +82,13 @@ class OllamaManager:
             raise RuntimeError("Ollama package not installed")
 
         try:
-            self.client = AsyncClient(host=OLLAMA_HOST)
-            self.embed_client = AsyncClient(host=OLLAMA_HOST)
+            self.client = AsyncClient(host=settings.OLLAMA_HOST)
+            self.embed_client = AsyncClient(host=settings.OLLAMA_HOST)
 
             # Test connection
             await self._test_connection()
             self._initialized = True
-            logger.info(f"✅ Ollama client initialized: {OLLAMA_HOST}")
+            logger.info(f"✅ Ollama client initialized: {settings.OLLAMA_HOST}")
 
         except Exception as e:
             logger.error(f"❌ Failed to initialize Ollama client: {e}")
@@ -137,7 +132,7 @@ class OllamaManager:
             logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
 
     async def generate_embeddings(
-        self, texts: List[str], model: str = DEFAULT_EMBEDDING_MODEL
+        self, texts: List[str], model: str = settings.OLLAMA_EMBEDDING_MODEL
     ) -> List[List[float]]:
         """Generate embeddings using Ollama"""
         if not self._initialized:
@@ -170,7 +165,7 @@ class OllamaManager:
     async def generate_response(
         self,
         prompt: str,
-        model: str = DEFAULT_LLM_MODEL,
+        model: str = settings.OLLAMA_LLM_MODEL,
         context: str = "",
         temperature: float = 0.7,
     ) -> Dict[str, Any]:
@@ -213,7 +208,7 @@ class OllamaManager:
             if (
                 isinstance(e, ResponseError)
                 and e.status_code == 404
-                and OLLAMA_FAILOVER_PRIMARY
+                and settings.OLLAMA_FAILOVER_PRIMARY
             ):
                 error_text = await _describe_failover_404(model, error_text)
             # Flag the failure so the query path can surface a real 503 instead of

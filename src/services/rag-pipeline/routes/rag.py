@@ -30,7 +30,7 @@ from qdrant_client.models import (
 from rag.model_selection import resolve_llm_model
 from rag.text_utils import chunk_text, extract_text_from_file
 
-from config import DEFAULT_LLM_MODEL, EMBEDDING_DIMENSIONS
+from config import EMBEDDING_DIMENSIONS, settings
 
 logger = logging.getLogger("minder.rag-pipeline")
 
@@ -385,7 +385,10 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             pipeline_id=pipeline_id,
             request=request,
             llm_model=resolve_llm_model(
-                request.llm_model, pipeline, state.knowledge_bases, DEFAULT_LLM_MODEL
+                request.llm_model,
+                pipeline,
+                state.knowledge_bases,
+                settings.OLLAMA_LLM_MODEL,
             ),
             generation_config=pipeline.get("generation_config", {}),
             components=components,

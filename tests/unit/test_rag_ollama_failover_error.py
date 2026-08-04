@@ -80,9 +80,9 @@ def _mock_response(status_code: int):
 @pytest.mark.asyncio
 async def test_no_failover_primary_configured_leaves_message_unchanged():
     # Not in failover mode at all (the default) — never even probes.
-    with patch("rag_pipeline_ollama_manager.OLLAMA_FAILOVER_PRIMARY", ""), patch(
-        "rag_pipeline_ollama_manager.httpx.AsyncClient"
-    ) as client_cls:
+    with patch(
+        "rag_pipeline_ollama_manager.settings.OLLAMA_FAILOVER_PRIMARY", ""
+    ), patch("rag_pipeline_ollama_manager.httpx.AsyncClient") as client_cls:
         result = await _describe_failover_404("command-r", "model not found")
     assert result == "model not found"
     client_cls.assert_not_called()
@@ -92,7 +92,8 @@ async def test_no_failover_primary_configured_leaves_message_unchanged():
 async def test_primary_reachable_leaves_message_unchanged():
     ctx = _FakeAsyncClientCtx(response=_mock_response(200))
     with patch(
-        "rag_pipeline_ollama_manager.OLLAMA_FAILOVER_PRIMARY", "192.168.1.50:11434"
+        "rag_pipeline_ollama_manager.settings.OLLAMA_FAILOVER_PRIMARY",
+        "192.168.1.50:11434",
     ), patch("rag_pipeline_ollama_manager.httpx.AsyncClient", return_value=ctx):
         result = await _describe_failover_404("command-r", "model not found")
     # Primary answered directly — the model genuinely doesn't exist anywhere.
@@ -103,7 +104,8 @@ async def test_primary_reachable_leaves_message_unchanged():
 async def test_primary_unreachable_gets_clarifying_message():
     ctx = _FakeAsyncClientCtx(raise_on_get=ConnectionError("no route to host"))
     with patch(
-        "rag_pipeline_ollama_manager.OLLAMA_FAILOVER_PRIMARY", "10.255.255.1:11434"
+        "rag_pipeline_ollama_manager.settings.OLLAMA_FAILOVER_PRIMARY",
+        "10.255.255.1:11434",
     ), patch("rag_pipeline_ollama_manager.httpx.AsyncClient", return_value=ctx):
         result = await _describe_failover_404("command-r", "model not found")
     assert result.startswith("model not found")
@@ -116,7 +118,8 @@ async def test_primary_unreachable_gets_clarifying_message():
 async def test_primary_5xx_counts_as_unreachable():
     ctx = _FakeAsyncClientCtx(response=_mock_response(503))
     with patch(
-        "rag_pipeline_ollama_manager.OLLAMA_FAILOVER_PRIMARY", "10.255.255.1:11434"
+        "rag_pipeline_ollama_manager.settings.OLLAMA_FAILOVER_PRIMARY",
+        "10.255.255.1:11434",
     ), patch("rag_pipeline_ollama_manager.httpx.AsyncClient", return_value=ctx):
         result = await _describe_failover_404("command-r", "model not found")
     assert "internal fallback" in result

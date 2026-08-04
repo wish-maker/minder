@@ -12,7 +12,7 @@ another service's equally named top-level ``config`` isn't poisoned (the #142 go
 import importlib.util
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -31,8 +31,9 @@ _MODELS = (
 def rp_models():
     saved = sys.modules.get("config")
     fake = ModuleType("config")
-    fake.DEFAULT_EMBEDDING_MODEL = "embed-model"
-    fake.DEFAULT_LLM_MODEL = "llm-model"
+    fake.settings = SimpleNamespace(
+        OLLAMA_EMBEDDING_MODEL="embed-model", OLLAMA_LLM_MODEL="llm-model"
+    )
     sys.modules["config"] = fake
     try:
         spec = importlib.util.spec_from_file_location("rp_models", _MODELS)

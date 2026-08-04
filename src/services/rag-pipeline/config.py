@@ -1,30 +1,46 @@
-"""Configuration constants for the RAG Pipeline service.
+"""Settings for the RAG Pipeline service.
 
 Centralizes the environment-driven settings that were previously defined inline
 in main.py so the service module, the Ollama manager, and the Pydantic models
 share a single source of truth.
 """
 
-import os
+import sys
 
-APP_VERSION = "1.0.0"
+# MinderBaseSettings + shared packages live under /app/src (#267).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
 
-QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
-QDRANT_PORT = os.getenv("QDRANT_PORT", "6333")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-# Set only in failover mode (ollama-mode failover <url>) — host:port of the external
-# primary the ollama-router prefers. Empty otherwise. See rag/ollama_manager.py's
-# _describe_failover_404 (#249).
-OLLAMA_FAILOVER_PRIMARY = os.getenv("OLLAMA_FAILOVER_PRIMARY", "")
-MODEL_MANAGEMENT_URL = os.getenv(
-    "MODEL_MANAGEMENT_URL", "http://minder-model-management:8005"
-)
+from shared.config import MinderBaseSettings  # noqa: E402
 
-# Default models (can be overridden per knowledge base)
-DEFAULT_EMBEDDING_MODEL = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
-DEFAULT_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2")
 
-# Embedding dimensions (depends on model)
+class Settings(MinderBaseSettings):
+    """RAG Pipeline Settings"""
+
+    APP_VERSION: str = "1.0.0"
+
+    # Database
+    DB_NAME: str = "minder"
+
+    # Qdrant
+    QDRANT_HOST: str = "qdrant"
+    QDRANT_PORT: int = 6333
+
+    # Set only in failover mode (ollama-mode failover <url>) — host:port of the
+    # external primary the ollama-router prefers. Empty otherwise. See
+    # rag/ollama_manager.py's _describe_failover_404 (#249).
+    OLLAMA_FAILOVER_PRIMARY: str = ""
+
+    MODEL_MANAGEMENT_URL: str = "http://minder-model-management:8005"
+
+    # Default models (can be overridden per knowledge base)
+    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
+    OLLAMA_LLM_MODEL: str = "llama3.2"
+
+
+settings = Settings()
+
+# Embedding dimensions (depends on model) — static data, not env-driven.
 EMBEDDING_DIMENSIONS = {
     "nomic-embed-text": 768,
     "mxbai-embed-large": 1024,

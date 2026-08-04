@@ -2,14 +2,14 @@
 
 from pydantic import BaseModel, field_validator
 
-from config import DEFAULT_TTS_LANG, SUPPORTED_LANGUAGES
+from config import SUPPORTED_LANGUAGES, settings
 
 
 class TTSRequest(BaseModel):
     """Text-to-Speech request"""
 
     text: str
-    language: str = DEFAULT_TTS_LANG
+    language: str = settings.DEFAULT_TTS_LANG
     slow: bool = False
 
     @field_validator("language")

@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from models import TTSRequest
 from prometheus_client import Counter
 
-from config import DEFAULT_TTS_LANG, SUPPORTED_LANGUAGES
+from config import SUPPORTED_LANGUAGES, settings
 from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.tts-stt")
@@ -77,6 +77,6 @@ async def get_tts_languages():
     """Get supported languages"""
     return {
         "languages": SUPPORTED_LANGUAGES,
-        "default": DEFAULT_TTS_LANG,
+        "default": settings.DEFAULT_TTS_LANG,
         "available": TTS_AVAILABLE,
     }
