@@ -17,11 +17,17 @@ DELETE prompt is skipped). The interactive DELETE prompt is exercised by hand.
 without this call the two networks `infra.create_networks()` makes during install
 silently survive every uninstall --purge (confirmed live, 2026-08-02, across two
 separate uninstall/reinstall cycles on hantal).
+
+`bundles.reset_state()` (#276) deletes bundles.state.json under --purge only —
+without it, a purge + fresh install on an already-used host silently inherits
+whatever bundle selection was active before the purge (seed_profile's own
+never-clobber-a-user's-choices guard blocks it from writing the standard
+profile's defaults if the state file still exists, empty or not).
 """
 
 import sys
 
-from . import config, docker, infra, log
+from . import bundles, config, docker, infra, log
 
 SCRIPT_NAME = config.SCRIPT_NAME
 
@@ -62,6 +68,10 @@ def run(purge_arg: str = "") -> int:
         log.warn("Removing all services, networks, and volumes…")
         docker.compose_all("down", "-v", "--remove-orphans")
         infra.remove_networks()
+        if bundles.reset_state():
+            log.success(
+                "Bundle selection reset — next install/start uses profile defaults"
+            )
         log.success("Full uninstall complete")
     else:
         log.info("Stopping services (data volumes are preserved)")

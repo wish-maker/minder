@@ -169,6 +169,24 @@ def seed_profile(name: str) -> bool:
     return True
 
 
+def reset_state() -> bool:
+    """#276: `uninstall --purge` counterpart to seed_profile's "never clobber a
+    user's choices on re-install" guard — a purge already deletes every data
+    volume/network, so leaving bundles.state.json behind defeats its own "start
+    completely fresh" premise: seed_profile's file-existence check would then skip
+    writing the standard profile's defaults on the next install, silently
+    inheriting whichever bundles were enabled before the purge (confirmed live,
+    2026-08-04 — a purge + fresh install on a host previously set to `--profile
+    full` came back with all 7 bundles enabled instead of the documented
+    standard-profile subset). Plain `uninstall` (the data-preserving mode)
+    deliberately does NOT call this — only --purge should reset bundle choices.
+    Returns False (no-op) if the file doesn't exist or under DRY_RUN."""
+    if config.DRY_RUN or not STATE_FILE.exists():
+        return False
+    STATE_FILE.unlink()
+    return True
+
+
 def enable(name: str) -> int:
     claims = BUNDLES[name]["claims"]
     already = is_enabled(name)

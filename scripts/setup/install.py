@@ -39,12 +39,19 @@ def run(profile: str = "standard") -> int:
 
     log.progress_next("Checking prerequisites")
     preflight.check_prerequisites()
+    # Seed the bundle enable-state for a fresh install BEFORE env.prepare_env()
+    # (silent + skip-if-exists + DRY_RUN no-op → keeps install_cmd_verify
+    # byte-identical). `bundle status` shows the result; `bundle enable <name>`
+    # adds more later. #276: this MUST run before prepare_env() — prepare_env's
+    # own ensure_bundles_state_file() seeds an empty {} stub (for the bind-mount
+    # footgun) whenever the file is absent, and seed_profile's own
+    # never-clobber-a-user's-choices guard is "does the file already exist" —
+    # so with prepare_env running first, seed_profile always saw an
+    # already-created (if empty) file and silently no-op'd, on every install,
+    # not just re-installs (confirmed live, 2026-08-04).
+    bundles.seed_profile(profile)
     log.progress_next("Setting up environment")
     env.prepare_env()
-    # Seed the bundle enable-state for a fresh install (silent + skip-if-exists +
-    # DRY_RUN no-op → keeps install_cmd_verify byte-identical). `bundle status`
-    # shows the result; `bundle enable <name>` adds more later.
-    bundles.seed_profile(profile)
     log.progress_next("Creating Docker network")
     infra.create_networks()
     infra.migrate_volume_names()  # #262: no-op on a fresh install, real on a host with old-named volumes
