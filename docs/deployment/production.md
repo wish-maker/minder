@@ -122,7 +122,7 @@ storage backends are **internal-only** and reached over the Docker network or vi
 |---|---|---|
 | PostgreSQL | `minder-postgres` | `postgres:18.4-trixie` |
 | Redis | `minder-redis` | `redis:8.8.0-alpine` |
-| Qdrant (vectors) | `minder-qdrant` | `qdrant/qdrant:v1.18.3` |
+| Qdrant (vectors) | `minder-qdrant` | `qdrant/qdrant:v1.19` |
 | Neo4j (graph) | `minder-neo4j` | `neo4j:2026.06.0-community` |
 | MinIO (objects) | `minder-minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` |
 | RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.2-management` |

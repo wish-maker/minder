@@ -367,7 +367,7 @@ services:
   qdrant:
     labels:
     - minder.bundle=rag
-    image: qdrant/qdrant:v1.18.3
+    image: qdrant/qdrant:v1.19
     container_name: minder-qdrant
     restart: on-failure
     volumes:
@@ -930,7 +930,7 @@ services:
     - --storage.path=/alertmanager
     - --web.external-url=http://localhost:9093
   grafana:
-    image: grafana/grafana:13.1.1
+    image: grafana/grafana:13.1.2
     container_name: minder-grafana
     restart: on-failure
     environment:

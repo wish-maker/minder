@@ -67,7 +67,7 @@ Authelia portal. Full browser SSO still needs real DNS + TLS on the deploy.
 #### Redis (`redis:8.8.0-alpine`)
 **Purpose**: Caching, sessions, rate limiting, service-discovery records (internal port 6379)
 
-#### Qdrant (`qdrant/qdrant:v1.18.3`)
+#### Qdrant (`qdrant/qdrant:v1.19`)
 **Purpose**: Vector database for RAG embeddings and semantic search (internal port 6333)
 
 #### Neo4j (`neo4j:2026.06.0-community`)
