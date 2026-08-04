@@ -76,6 +76,66 @@ async def get_functions_definitions():
     return await get_tool_definitions()
 
 
+@router.get("/tools/openapi.json")
+async def tools_openapi_spec():
+    """OpenAPI 3.x spec for Minder's read-only plugin tools (#251).
+
+    Consumable directly as an OpenWebUI "Tool Server" (Settings -> Admin -> Tool
+    Servers, type "openapi") so the chat UI's own native tool-calling can invoke
+    Minder's plugin tools, not just the gateway's own /v1/ai/chat/completions loop.
+
+    Deliberately narrower than plugin-registry's full API: only GET-method (i.e.
+    unauthenticated read-only, #254) tools from get_tool_definitions() are included.
+    Anything in this spec becomes freely callable by any model connected through it
+    with no further per-request auth, so mutating/admin endpoints must never appear
+    here -- this mirrors exactly what get_tool_definitions()/_chat_with_tools() would
+    let the model call today, just described in OpenAPI instead of OpenAI-tool JSON
+    Schema, and it stays in sync automatically as plugins are added/removed/toggled.
+    """
+    tools = (await get_tool_definitions()).get("tools", [])
+    paths: Dict[str, Dict] = {}
+    for tool in tools:
+        fn = tool.get("function")
+        meta = tool.get("metadata", {})
+        if not fn or (meta.get("method") or "POST").upper() != "GET":
+            continue
+        endpoint = meta.get("endpoint")
+        if not endpoint:
+            continue
+        params_schema = fn.get("parameters") or {}
+        properties = params_schema.get("properties") or {}
+        required = set(params_schema.get("required") or [])
+        parameters = [
+            {
+                "name": pname,
+                "in": "query",
+                "required": pname in required,
+                "schema": {"type": pschema.get("type", "string")},
+                "description": pschema.get("description", ""),
+            }
+            for pname, pschema in properties.items()
+        ]
+        paths[endpoint] = {
+            "get": {
+                "operationId": fn["name"],
+                "summary": (fn.get("description") or fn["name"])[:120],
+                "description": fn.get("description", ""),
+                "parameters": parameters,
+                "responses": {"200": {"description": "Successful response"}},
+            }
+        }
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "Minder Plugin Tools",
+            "description": "Read-only data tools from Minder's active plugins.",
+            "version": "1.0.0",
+        },
+        "servers": [{"url": settings.PLUGIN_REGISTRY_URL}],
+        "paths": paths,
+    }
+
+
 async def _call_plugin_tool(
     metadata: Dict,
     *,
