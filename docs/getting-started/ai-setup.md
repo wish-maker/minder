@@ -76,6 +76,44 @@ docker exec minder-rag-pipeline curl -s -o /dev/null -w '%{http_code}\n' \
 Ollama must also be listening on all interfaces for containers to reach it — start the
 native server with `OLLAMA_HOST=0.0.0.0` (not the default `127.0.0.1`).
 
+## Single-host setup (Ollama already running natively)
+
+**This applies if:** you already run Ollama on the same machine you're installing
+Minder on — for other things, outside Minder — and want Minder to use that same
+instance instead of running a second, separate one.
+
+**The one required step:** point Minder at your existing Ollama with **external
+mode**, set *before* (or right after) `install`:
+
+```bash
+# Either before installing, in ./.env:
+OLLAMA_BASE_URL=http://host.docker.internal:11434   # see the address gotchas above for your OS
+
+# Or right after installing:
+bash setup.sh ollama-mode external http://host.docker.internal:11434
+bash setup.sh restart
+```
+
+**Why not just leave it on internal mode too?** Internal mode starts a *second*,
+platform-managed Ollama container alongside your native one — two separate Ollama
+processes competing for the same GPU/RAM for no benefit, since external mode already
+gives every Minder service (RAG pipeline, model management, gateway, OpenWebUI) the
+exact same access to your native instance. External mode keeps the internal
+container inactive (gated behind the `internal-ollama` compose profile), so this is
+"free" — no extra config beyond the one URL above.
+
+**Getting the URL right:** see [The URL must be reachable from inside the
+containers](#the-url-must-be-reachable-from-inside-the-containers) above —
+`host.docker.internal` (Docker Desktop on Windows/Mac), the host's LAN IP (Linux, or
+if `host.docker.internal` isn't set up), never `localhost`.
+
+**Do you need failover mode instead of plain external?** Only if you want Minder to
+keep working when you manually stop your native Ollama for some other reason (e.g.
+freeing the GPU for something else) — failover falls back to an internal container
+that's otherwise sitting idle. For a single always-on host where your native Ollama
+just runs continuously, plain external mode is simpler and this is unnecessary
+complexity.
+
 ## Failover mode (external primary + internal fallback)
 
 Failover mode gives you a fast external Ollama **without** the single point of failure
