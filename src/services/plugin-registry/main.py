@@ -10,12 +10,10 @@ endpoints, and router inclusion.
 """
 
 import asyncio
-import glob
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-import yaml
 from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 
@@ -243,28 +241,17 @@ async def health_check():
 @app.post("/force-webhooks", include_in_schema=False)  # deprecated unversioned alias
 async def force_webhooks(current_user: dict = Depends(get_current_user)):
     """
-    Force webhook registration from /tmp manifest files.
-    Workaround for MVP restart-safety issue.
+    Force webhook re-registration from persisted manifests (PostgreSQL, #269).
+
+    Manual trigger for the same restore-on-startup path register_all_webhooks_on_startup
+    runs at boot -- was previously a "/tmp/*-manifest.yml" restart-safety workaround.
 
     JWT-gated like every other mutation in this service; the unversioned
     ``/force-webhooks`` path is kept as a hidden deprecated alias.
     """
-    count = 0
-    for manifest_file in glob.glob("/tmp/*-manifest.yml"):
-        try:
-            with open(manifest_file, "r") as f:
-                manifest = yaml.safe_load(f)
-            plugin_name = manifest.get("metadata", {}).get("name")
-            if plugin_name and plugin_name in plugins_db:
-                plugin_manifests[plugin_name] = manifest
-                await register_plugin_webhook(plugin_name, manifest)
-                logger.info(f"Loaded manifest from {manifest_file} for {plugin_name}")
-                count += 1
-        except Exception as e:
-            logger.warning(f"Failed to load manifest from {manifest_file}: {e}")
-
+    await register_all_webhooks_on_startup()
     return {
-        "message": f"Registered {count} webhook(s)",
+        "message": f"Registered {len(webhook_routes)} webhook(s)",
         "webhooks": list(webhook_routes.keys()),
     }
 

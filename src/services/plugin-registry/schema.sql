@@ -24,3 +24,12 @@ CREATE TABLE IF NOT EXISTS plugin_configs (
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Webhook plugin manifests (#269): persisted so registered webhook routes survive
+-- a registry restart. Previously in-memory-only, backed by a "/tmp/*-manifest.yml"
+-- restart-safety workaround -- restored from here on startup instead.
+CREATE TABLE IF NOT EXISTS plugin_manifests (
+    plugin_name VARCHAR(255) PRIMARY KEY,
+    manifest JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
