@@ -225,3 +225,46 @@ async def save_plugin_config(plugin_name: str, config: dict) -> None:
             json.dumps(config),
         )
     logger.info(f"Saved config for plugin {plugin_name}: {list(config.keys())}")
+
+
+async def save_plugin_manifest(plugin_name: str, manifest: dict) -> None:
+    """Upsert a plugin's webhook manifest (JSONB) so its webhook route survives
+    a registry restart (#269)."""
+    try:
+        pool = await get_postgres_connection()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO plugin_manifests (plugin_name, manifest, updated_at)
+                VALUES ($1, $2::jsonb, NOW())
+                ON CONFLICT (plugin_name) DO UPDATE SET
+                    manifest = EXCLUDED.manifest, updated_at = NOW()
+                """,
+                plugin_name,
+                json.dumps(manifest),
+            )
+        logger.debug(f"Saved manifest for plugin {plugin_name}")
+    except Exception as e:
+        logger.error(f"Failed to save manifest for {plugin_name}: {e}")
+
+
+async def load_all_plugin_manifests() -> dict:
+    """Load every persisted plugin manifest (plugin_name -> manifest dict), to
+    restore webhook routes on startup (#269). {} on error — startup continues
+    with no webhooks restored rather than failing."""
+    try:
+        pool = await get_postgres_connection()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT plugin_name, manifest FROM plugin_manifests"
+            )
+        manifests = {}
+        for row in rows:
+            manifest = row["manifest"]
+            manifests[row["plugin_name"]] = (
+                manifest if isinstance(manifest, dict) else json.loads(manifest)
+            )
+        return manifests
+    except Exception as e:
+        logger.error(f"Failed to load plugin manifests: {e}")
+        return {}

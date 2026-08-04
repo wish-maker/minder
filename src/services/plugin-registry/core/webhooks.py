@@ -8,6 +8,7 @@ paths from the manifest — there is NO dynamic code execution.
 
 from typing import Dict
 
+from core.database import load_all_plugin_manifests, save_plugin_manifest
 from core.state import logger, plugin_manifests, plugins_db, webhook_routes
 from fastapi import HTTPException, Request
 
@@ -38,6 +39,12 @@ async def register_plugin_webhook(plugin_name: str, manifest: Dict):
     full_webhook_path = f"/webhook{webhook_path}"
     webhook_routes[full_webhook_path] = plugin_name
     plugin_manifests[plugin_name] = manifest
+
+    # Persist (#269): every caller of this function reaches here, so this is the
+    # single hook point that covers plugin install, manifest re-registration, and
+    # startup restore alike -- the route survives a registry restart instead of
+    # relying on in-memory state.
+    await save_plugin_manifest(plugin_name, manifest)
 
     logger.info(f"Registered webhook route: {full_webhook_path} -> {plugin_name}")
 
@@ -129,43 +136,24 @@ async def register_all_webhooks_on_startup():
     """
     Register all webhook routes on startup.
 
-    Called during startup to restore webhook routes from database.
-    Ensures restart-safety.
-
-    MVP: Loads from in-memory plugin_manifests populated by install endpoint.
-    TODO: Load from PostgreSQL and restore all manifests.
+    Restores every persisted manifest from PostgreSQL (#269 — previously
+    in-memory-only, backed by a "/tmp/*-manifest.yml" restart-safety
+    workaround) and re-registers its webhook route. Only plugins still present
+    in plugins_db are restored — a manifest whose plugin was since removed is
+    left un-registered rather than resurrecting a stale route.
     """
-    # Clear existing routes
     webhook_routes.clear()
 
-    # MVP: For now, just register webhooks from already-loaded manifests
-    # In production, would load all manifests from PostgreSQL here
-    for plugin_name, manifest in list(plugin_manifests.items()):
-        await register_plugin_webhook(plugin_name, manifest)
+    persisted = await load_all_plugin_manifests()
+    logger.debug(f"Loaded {len(persisted)} persisted manifest(s) from PostgreSQL")
 
-    # TEMP: Load manifests from /tmp for testing (MVP restart-safety workaround)
-    import glob
-
-    import yaml
-
-    manifest_files = glob.glob("/tmp/*-manifest.yml")
-    logger.debug(f"Found {len(manifest_files)} manifest files in /tmp")
-    logger.debug(f"plugins_db has {len(plugins_db)} plugins: {list(plugins_db.keys())}")
-
-    for manifest_file in manifest_files:
-        try:
-            logger.debug(f"Loading manifest from {manifest_file}")
-            with open(manifest_file, "r") as f:
-                manifest = yaml.safe_load(f)
-            plugin_name = manifest.get("metadata", {}).get("name")
+    for plugin_name, manifest in persisted.items():
+        if plugin_name not in plugins_db:
             logger.debug(
-                f"Plugin name: {plugin_name}, in plugins_db: {plugin_name in plugins_db}"
+                f"Skipping manifest for {plugin_name}: no longer in plugins_db"
             )
-            if plugin_name and plugin_name in plugins_db:
-                plugin_manifests[plugin_name] = manifest
-                await register_plugin_webhook(plugin_name, manifest)
-                logger.info(f"Loaded manifest from {manifest_file} for {plugin_name}")
-        except Exception as e:
-            logger.warning(f"Failed to load manifest from {manifest_file}: {e}")
+            continue
+        plugin_manifests[plugin_name] = manifest
+        await register_plugin_webhook(plugin_name, manifest)
 
     logger.info(f"Restored {len(webhook_routes)} webhook routes on startup")
