@@ -222,8 +222,15 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
                 content = f"error: unknown tool '{name}'"
             else:
                 try:
+                    # GET tools (#254 read-only actions) take args as query params, not
+                    # a JSON body — _call_plugin_tool branches on metadata["method"],
+                    # but the caller must still route args to the right kwarg.
+                    is_get = (meta.get("method") or "POST").upper() == "GET"
                     result = await _call_plugin_tool(
-                        meta, json_body=args, auth_header=auth_header
+                        meta,
+                        json_body=None if is_get else args,
+                        params=args if is_get else None,
+                        auth_header=auth_header,
                     )
                     content = json.dumps(result)[:4000]
                 except httpx.HTTPStatusError as he:

@@ -42,6 +42,9 @@ class WeatherPlugin:
     """Poll a keyless weather API for configured locations; sink the series to InfluxDB."""
 
     ACTIONS = frozenset({"refresh", "get_weather"})
+    # Read-only subset of ACTIONS, reachable unauthenticated via GET (#254) —
+    # "refresh" stays POST + JWT-gated since it writes to InfluxDB.
+    READ_ONLY_ACTIONS = frozenset({"get_weather"})
 
     # Central config (#34): manageable over the API — GET/PUT /v1/plugins/weather/config.
     # We can't know a user's city, so the collected locations are a first-class,
@@ -80,6 +83,7 @@ class WeatherPlugin:
                 "required": ["location"],
             },
             "action": "get_weather",
+            "method": "GET",
         },
     ]
 
