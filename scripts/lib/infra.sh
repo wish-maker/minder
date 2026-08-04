@@ -101,7 +101,14 @@ migrate_volume_names() {
 # DATABASE INITIALISATION
 # ─────────────────────────────────────────────────────────────
 
-readonly -a EXTRA_DATABASES=(minder_marketplace tefas_db weather_db news_db crypto_db)
+# #294: minder_authelia/minder_schemaregistry were missing here — both are
+# hardcoded, non-configurable database names (services/authelia/
+# configuration.yml's `database: minder_authelia`; docker-compose.yml's
+# schema-registry QUARKUS_DATASOURCE_JDBC_URL/REGISTRY_DATASOURCE_URL), so on
+# a fresh install both containers fatally crashed on every single startup
+# ("database ... does not exist") and were restarted by Docker's on-failure
+# policy forever (confirmed live on the Pi: 835 and 363 restarts respectively).
+readonly -a EXTRA_DATABASES=(minder_marketplace minder_authelia minder_schemaregistry tefas_db weather_db news_db crypto_db)
 
 initialize_database() {
     log_step "Initialising databases"
