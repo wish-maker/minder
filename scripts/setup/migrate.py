@@ -44,7 +44,14 @@ def run(target: str = "head") -> int:
 
     if not docker.container_running("postgres"):
         log.error("PostgreSQL is not running. Start services first.")
-        return 1
+        # #290: raise, don't return — bash's `exit 1` here (commands.sh's
+        # cmd_migrate) is a genuine process-terminating hard stop under
+        # `set -euo pipefail`, aborting the whole `cmd_install` when this guard
+        # fires mid-install. A plain `return 1` is invisible to install.py's
+        # `migrate.run("head")` call (its return value is discarded), so a
+        # migration phase that hits this guard was silently swallowed and the
+        # installer still ran health checks and printed the success banner.
+        raise SystemExit(1)
 
     for svc in _MIGRATION_SERVICES:
         if not docker.container_running(svc):
