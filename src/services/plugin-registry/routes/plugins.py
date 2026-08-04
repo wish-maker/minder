@@ -286,6 +286,56 @@ def build_plugins_router(
             "note": "Collection runs in background. Check /health endpoint for results.",
         }
 
+    @router.get("/v1/plugins/{plugin_name}/actions/{action}")
+    @enforce_rate_limit(max_requests=30, window_minutes=1)
+    async def invoke_plugin_read_action(
+        plugin_name: str,
+        action: str,
+        request: Request,
+    ):
+        """Invoke a WHITELISTED read-only action on a running plugin, unauthenticated.
+
+        Only methods in the plugin's READ_ONLY_ACTIONS (a declared subset of ACTIONS)
+        are reachable here — mutating actions (e.g. "refresh") stay POST-only and
+        JWT-gated via invoke_plugin_action below. Query params are passed as keyword
+        args (GET has no body). #254: read-only data tools like get_crypto_price were
+        gated behind the same JWT requirement as mutating actions purely because all
+        actions shared one POST route; this gives them an unauthenticated path that
+        matches their actual semantics.
+        """
+        plugin = plugins_db.get(plugin_name)
+        instance = plugin_instances.get(plugin_name)
+        if not plugin or instance is None:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin '{plugin_name}' is not running"
+            )
+        read_only: "frozenset[str]" = getattr(
+            instance, "READ_ONLY_ACTIONS", frozenset()
+        )
+        method = getattr(instance, action, None)
+        if action not in read_only or not callable(method):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Plugin '{plugin_name}' exposes no read-only action '{action}'",
+            )
+        kwargs = dict(request.query_params)
+        try:
+            inspect.signature(method).bind(**kwargs)
+        except TypeError as e:
+            raise HTTPException(status_code=400, detail=f"bad arguments: {e}")
+        try:
+            result = method(**kwargs)
+            if inspect.isawaitable(result):
+                result = await result
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Read action {plugin_name}.{action} failed: {e}")
+            raise HTTPException(status_code=500, detail=f"Action failed: {e}")
+        return {"plugin": plugin_name, "action": action, "result": result}
+
     @router.post("/v1/plugins/{plugin_name}/actions/{action}")
     @enforce_rate_limit(max_requests=20, window_minutes=1)
     async def invoke_plugin_action(

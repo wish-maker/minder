@@ -60,6 +60,9 @@ class CryptoPlugin:
     """Backfill + daily-incremental crypto close prices (Yahoo, keyless) into InfluxDB."""
 
     ACTIONS = frozenset({"refresh", "get_price"})
+    # Read-only subset of ACTIONS, reachable unauthenticated via GET (#254) —
+    # "refresh" stays POST + JWT-gated since it writes to InfluxDB.
+    READ_ONLY_ACTIONS = frozenset({"get_price"})
 
     # Central config (#34) — GET/PUT /v1/plugins/crypto/config, applied live (no restart).
     _DEFAULT_SYMBOLS = "BTC-USD,ETH-USD"
@@ -102,6 +105,7 @@ class CryptoPlugin:
                 "required": ["coin"],
             },
             "action": "get_price",
+            "method": "GET",
         },
     ]
 

@@ -71,6 +71,9 @@ class TefasPlugin:
     """Backfill + daily-incremental TEFAS fund prices into InfluxDB (tefas-crawler)."""
 
     ACTIONS = frozenset({"refresh", "get_fund_price"})
+    # Read-only subset of ACTIONS, reachable unauthenticated via GET (#254) —
+    # "refresh" stays POST + JWT-gated since it writes to InfluxDB.
+    READ_ONLY_ACTIONS = frozenset({"get_fund_price"})
 
     CONFIG_SCHEMA = [
         {
@@ -111,6 +114,7 @@ class TefasPlugin:
                 "required": ["code"],
             },
             "action": "get_fund_price",
+            "method": "GET",
         },
     ]
 

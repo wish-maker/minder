@@ -61,6 +61,9 @@ class NewsPlugin:
     """Fetch headlines from keyless RSS/Atom feeds; serve them + a volume metric."""
 
     ACTIONS = frozenset({"refresh", "get_news"})
+    # Read-only subset of ACTIONS, reachable unauthenticated via GET (#254) —
+    # "refresh" stays POST + JWT-gated since it writes to InfluxDB.
+    READ_ONLY_ACTIONS = frozenset({"get_news"})
 
     # Central config (#34) — GET/PUT /v1/plugins/news/config, applied live (no restart).
     CONFIG_SCHEMA = [
@@ -106,6 +109,7 @@ class NewsPlugin:
                 "required": [],
             },
             "action": "get_news",
+            "method": "GET",
         },
     ]
 
