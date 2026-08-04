@@ -11,7 +11,7 @@ qdrant-client==1.18.0
 neo4j==6.2.0
 
 # Server
-uvicorn==0.52.0
+uvicorn==0.52.1
 
 # Configuration & Settings
 pydantic-settings==2.14.2
@@ -38,7 +38,7 @@ requests==2.34.2
 
 # System & Performance Testing
 psutil==7.2.2
-locust==2.46.2
+locust==2.46.3
 
 # Password Hashing
 passlib[bcrypt]==1.7.4
