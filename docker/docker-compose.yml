@@ -91,6 +91,12 @@ services:
     - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
     - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
     volumes:
+    # authelia_config eliminates the anonymous volume the base image's /config
+    # VOLUME declaration would otherwise create for whatever isn't covered by the
+    # two file binds below — Authelia's real persistent state lives in Postgres
+    # (AUTHELIA_STORAGE_POSTGRES_PASSWORD above), so this holds nothing meaningful
+    # and simply starts empty (#274).
+    - authelia_config:/config
     - ./services/authelia/configuration.yml:/config/configuration.yml:ro
     - ./services/authelia/users_database.yml:/config/users_database.yml:ro
     # NO exposed ports — reached only via Traefik (Host: authelia.minder.local).
@@ -392,6 +398,7 @@ services:
       NEO4J_apoc_export_file_enabled: 'true'
     volumes:
     - neo4j_data:/data
+    - neo4j_logs:/logs
     # (init-cypher mount removed: the neo4j image doesn't run /docker-entrypoint-initdb.d
     #  scripts—that's a postgres/mysql convention—and the script was an echo-only stub.
     #  Real neo4j seeding, if ever needed, requires a proper mechanism: cypher-shell in a
@@ -1313,6 +1320,11 @@ services:
     - COLLECTOR_OTLP_ENABLED=true
     - SPAN_STORAGE_TYPE=memory
     - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+    # SPAN_STORAGE_TYPE=memory means nothing meaningful is ever written here —
+    # named only to eliminate the anonymous volume the base image's /tmp VOLUME
+    # declaration would otherwise create (#274).
+    volumes:
+    - jaeger_tmp:/tmp
     ports:
     - "127.0.0.1:16686:16686"  # Jaeger UI
     - "127.0.0.1:14250:14250"  # OTLP gRPC
@@ -1384,6 +1396,8 @@ volumes:
     driver: local
   neo4j_data:
     driver: local
+  neo4j_logs:
+    driver: local
   qdrant_data:
     driver: local
   influxdb_data:
@@ -1406,10 +1420,14 @@ volumes:
     driver: local
   alertmanager_data:
     driver: local
+  jaeger_tmp:
+    driver: local
+  authelia_config:
+    driver: local
 networks:
   minder-network:
     external: true
-    name: docker_minder-network
+    name: minder-network
   minder-monitoring:
     external: true
     name: minder-monitoring
