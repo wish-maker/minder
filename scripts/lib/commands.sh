@@ -599,6 +599,13 @@ cmd_status() {
         else
             echo "  failover — primary ${_oprim} UNREACHABLE → serving from the internal fallback"
         fi
+        # #279: the internal fallback is the whole safety net when the primary is
+        # down — check it's actually alive (not just "container exists", a live
+        # `ollama list` call) regardless of which one is currently serving, so a
+        # dead backup doesn't stay invisible while the primary happens to be up.
+        if ! docker exec "${CONTAINER_PREFIX}-ollama" ollama list &>/dev/null; then
+            echo -e "  ${YELLOW}⚠${NC} internal fallback container is not responding — no safety net if the primary goes down"
+        fi
     elif [[ -n "$_obase" ]]; then
         echo "  external — ${_obase}"
     else
