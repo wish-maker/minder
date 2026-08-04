@@ -178,8 +178,30 @@ class ExecutionEngine:
             # Validate secret if present
             secret_ref = webhook_config.get("secretRef")
             if secret_ref:
-                # TODO: Validate against secrets store
-                logger.debug(f"Would validate secret: {secret_ref}")
+                # Fail closed (#47/#270): no secrets store exists yet to validate
+                # against -- previously logged and silently proceeded, a no-op
+                # that gave the caller no actual verification. webhooks.py's
+                # handle_webhook_request() already rejects secretRef-declaring
+                # requests before reaching here (#47); this raise is
+                # defense-in-depth in case this method is ever called from a
+                # path that doesn't go through that gate.
+                #
+                # secret_ref is a REFERENCE/pointer (e.g. "vault://plugin-secret"),
+                # never the secret's actual value, so logging it is safe -- but
+                # CodeQL's py/clear-text-logging-sensitive-data can't tell "secret
+                # reference" from "secret value" from the variable name alone.
+                # webhooks.py's identical #47 pattern (line ~98) already carries
+                # this same open, accepted alert on main.
+                logger.warning(
+                    "Action for %s declares secretRef '%s' but secret "
+                    "verification is not implemented; rejecting (fail-closed).",
+                    plugin_name,
+                    secret_ref,
+                )
+                raise ValueError(
+                    f"secretRef '{secret_ref}' declared but secret verification "
+                    "is not implemented; rejecting (fail-closed)."
+                )
 
             # Execute action
             action = spec.get("action", {})
