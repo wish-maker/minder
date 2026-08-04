@@ -338,7 +338,13 @@ cmd_restore() {
         log_success ".env restored"
     fi
 
+    # #288: restore's own precondition is "services must be stopped", and cmd_stop
+    # deliberately removes the app network — so without recreating it here first
+    # (mirroring cmd_start), `compose up -d postgres` fails with "network
+    # minder-network declared as external, but could not be found" and every
+    # store below then reports "not running — restore skipped".
     if ! container_running postgres; then
+        create_networks
         compose up -d postgres
         _is_dry_run || wait_postgres_ready
     fi

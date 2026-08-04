@@ -1,7 +1,8 @@
-"""Unit tests for restore's corrupt-archive guard + skipped-store tracking
-(restore.py, #281/#282/#283). No Docker: container probes, docker.run/compose,
-and the un-gated psql/rabbitmqctl helpers are stubbed. Archives are real
-tar.gz files built in tmp_path so tarfile extraction runs for real.
+"""Unit tests for restore's corrupt-archive guard, skipped-store tracking, and
+network-recreation-before-postgres (restore.py, #281/#282/#283/#288). No
+Docker: container probes, docker.run/compose, and the un-gated psql/rabbitmqctl
+helpers are stubbed. Archives are real tar.gz files built in tmp_path so
+tarfile extraction runs for real.
 """
 
 import tarfile
@@ -126,3 +127,29 @@ def test_failed_store_restore_is_tracked_as_skipped(monkeypatch, stubbed, tmp_pa
     assert rc == 0
     assert any("PostgreSQL restore had errors" in w for w in warns)
     assert any("Restore complete — NOT restored: PostgreSQL" in w for w in warns)
+
+
+def test_postgres_not_running_recreates_network_first(monkeypatch, stubbed, tmp_path):
+    """#288: found live on hantal — restore's own precondition is "services must
+    be stopped", and `stop` deliberately removes the app network, so bringing
+    postgres back up here must recreate the network first (mirroring
+    start.py) or `compose up -d postgres` fails with "network ... declared as
+    external, but could not be found"."""
+    archive = _make_archive(tmp_path, files={"postgres.sql": "-- dump\n"})
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+
+    def container_running(service):
+        return service != "postgres"
+
+    monkeypatch.setattr(restore.docker, "container_running", container_running)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        restore.infra, "create_networks", lambda: calls.append("create_networks")
+    )
+    monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: calls.append(a) or 0)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    assert calls[0] == "create_networks"
+    assert ("up", "-d", "postgres") in calls[1:]

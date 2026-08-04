@@ -35,7 +35,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 
-from . import backup, config, docker, log
+from . import backup, config, docker, infra, log
 
 
 def _restore_postgres(sql_file: Path) -> bool:
@@ -211,7 +211,13 @@ def run(archive: str = "") -> int:
         log.success(".env restored")
 
     # ── ensure postgres is up (compose up gated; wait skipped under DRY_RUN) ─
+    # #288: `restore`'s own precondition is "services must be stopped", and
+    # `stop` deliberately removes the app network — so without recreating it
+    # here first (mirroring start.py), `compose up -d postgres` fails with
+    # "network minder-network declared as external, but could not be found"
+    # and every store below then reports "not running — restore skipped".
     if not docker.container_running("postgres"):
+        infra.create_networks()
         docker.compose("up", "-d", "postgres")
         if not config.DRY_RUN:
             docker.wait_postgres_ready()
