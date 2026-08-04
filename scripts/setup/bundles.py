@@ -212,6 +212,16 @@ def enable(name: str) -> int:
 
 
 def disable(name: str, stop_orphans: bool = False) -> int:
+    # #284: the CLI dispatcher (run()) already blocks this, but every core-labeled
+    # service in docker-compose.yml carries ONLY the core label — none shared with
+    # another bundle — so a caller reaching disable() directly (bypassing run(),
+    # e.g. a future registry API endpoint that reuses this same shared brain) would
+    # have _orphans_after("core") return the entire platform kernel (postgres,
+    # redis, qdrant, neo4j, rabbitmq, minio, schema-registry, traefik, authelia) and
+    # stop all of it with stop_orphans=True. Guard here too, not just in run().
+    if name == CORE_BUNDLE:
+        log.error("The 'core' bundle is the always-on kernel and cannot be disabled.")
+        return 1
     _set_enabled(name, False)
     log.success(f"Bundle '{name}' → disabled")
     orphans = _orphans_after(name)

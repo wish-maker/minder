@@ -216,6 +216,13 @@ def test_core_bundle_cannot_be_disabled(statefile):
     assert bundles.run("disable", "core") == 1
 
 
+def test_disable_itself_guards_core(statefile):
+    """#284: disable() must refuse core even when called directly, bypassing the
+    CLI dispatcher's own guard (e.g. a future API endpoint reusing this brain)."""
+    assert bundles.disable("core") == 1
+    assert bundles.is_enabled("core") is True
+
+
 # ── install profiles (seed_profile) ────────────────────────────────────────
 def test_seed_profile_standard_enables_ai_disables_ops(statefile):
     assert bundles.seed_profile("standard") is True
