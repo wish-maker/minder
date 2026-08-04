@@ -1,17 +1,15 @@
 """
 Core Plugin Loader Module
 
-Discovers and loads plugins from ``settings.PLUGINS_PATH``: manifest-based plugins
-(JSON/YAML) are registered from metadata, module-based plugins are imported and
-instantiated. Loaded plugins are cached in ``core.state``, persisted via
-``core.database``, and their AI tools synced via ``core.marketplace_sync``.
+Discovers and loads plugins from ``settings.PLUGINS_PATH``: every plugin is
+module-based (a directory with an ``__init__.py``), imported and instantiated.
+Loaded plugins are cached in ``core.state``, persisted via ``core.database``,
+and their AI tools synced via ``core.marketplace_sync``.
 """
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
 from core import plugin_config as cfgmod
 from core.database import load_plugin_config, update_plugin_in_database
 from core.marketplace_sync import sync_plugin_ai_tools
@@ -33,95 +31,9 @@ async def load_plugins_from_disk():
         if not plugin_dir.is_dir():
             continue
 
-        # Look for plugin manifest (JSON or YAML) FIRST, then main module
-        manifest_json = plugin_dir / "manifest.json"
-        manifest_yml = plugin_dir / "manifest.yml"
-        manifest_yaml = plugin_dir / "manifest.yaml"
         main_module = plugin_dir / "__init__.py"
-
-        # Prefer manifest files over __init__.py
-        if manifest_json.exists():
-            await load_plugin_from_manifest(manifest_json, "json")
-        elif manifest_yml.exists():
-            await load_plugin_from_manifest(manifest_yml, "yaml")
-        elif manifest_yaml.exists():
-            await load_plugin_from_manifest(manifest_yaml, "yaml")
-        elif main_module.exists():
+        if main_module.exists():
             await load_plugin_from_module(plugin_dir)
-
-
-async def load_plugin_from_manifest(manifest_path: Path, manifest_type: str = "json"):
-    """Load plugin from manifest file (JSON or YAML)"""
-    try:
-        with open(manifest_path, "r") as f:
-            if manifest_type == "json":
-                manifest = json.load(f)
-            else:  # yaml or yml
-                manifest = yaml.safe_load(f)
-
-        plugin_name = manifest.get("name")
-        if not plugin_name:
-            logger.error(f"Manifest missing 'name' field: {manifest_path}")
-            return
-
-        # Extract dependencies if present (handle both list and dict formats)
-        dependencies_data = manifest.get("dependencies", {})
-        if isinstance(dependencies_data, dict):
-            dependencies_list = dependencies_data.get("python", [])
-        else:
-            dependencies_list = (
-                dependencies_data if isinstance(dependencies_data, list) else []
-            )
-
-        # TODO: Load plugin module and call register()
-        # For now, just store metadata
-        plugin_info = PluginInfo(
-            name=plugin_name,
-            version=manifest.get("version", "1.0.0"),
-            description=manifest.get("description", ""),
-            author=manifest.get("author", ""),
-            status="registered",
-            dependencies=dependencies_list,
-            capabilities=manifest.get("capabilities", []),
-            data_sources=manifest.get("data_sources", []),
-            databases=manifest.get("databases", []),
-            registered_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        plugins_db[plugin_name] = plugin_info
-        logger.info(f"Loaded plugin: {plugin_name} (version {plugin_info.version})")
-
-        # Persist to database
-        await update_plugin_in_database(
-            plugin_name,
-            version=plugin_info.version,
-            description=plugin_info.description,
-            author=plugin_info.author,
-            dependencies=(
-                json.dumps(plugin_info.dependencies)
-                if plugin_info.dependencies
-                else None
-            ),
-            capabilities=(
-                json.dumps(plugin_info.capabilities)
-                if plugin_info.capabilities
-                else None
-            ),
-            data_sources=(
-                json.dumps(plugin_info.data_sources)
-                if plugin_info.data_sources
-                else None
-            ),
-            databases=(
-                json.dumps(plugin_info.databases) if plugin_info.databases else None
-            ),
-        )
-
-        # Auto-sync AI tools with marketplace
-        await sync_plugin_ai_tools(plugin_name, manifest_path.parent)
-
-    except Exception as e:
-        logger.error(f"Failed to load plugin from {manifest_path}: {e}")
 
 
 async def load_plugin_from_module(plugin_dir: Path):
