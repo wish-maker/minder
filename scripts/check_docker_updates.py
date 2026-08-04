@@ -268,6 +268,13 @@ def latest_semver_tag(tags: List[str]) -> Optional[str]:
 
 
 def get_registry(image_ref: str) -> str:
+    # CodeQL flags anchored startswith() host checks as py/incomplete-url-
+    # substring-sanitization (the query can't distinguish this from an
+    # unanchored "in" check that a URL like evil.com/ghcr.io/x would bypass).
+    # image_ref here is never attacker input -- it's an `image:` value read
+    # straight from this repo's own hand-maintained docker/docker-compose.yml,
+    # the same trust boundary as the identical pattern in scripts/setup/
+    # versions.py's registry_type()/strip_known_registry().
     if image_ref.startswith("ghcr.io/"):
         return "GHCR"
     elif image_ref.startswith("gcr.io/"):
