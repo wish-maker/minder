@@ -133,7 +133,7 @@ def main() -> int:
     # Report contains emoji; force UTF-8 stdout so it prints on any console (Windows
     # cp125x included), matching the UTF-8 CI environment.
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     except (AttributeError, ValueError):
         pass
     report = build_report()

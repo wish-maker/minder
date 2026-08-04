@@ -66,6 +66,8 @@ jobs:
           ( cd src/shared && mypy . --config-file "${CFG}" )
           echo "── mypy scripts/setup/ ──"
           mypy scripts/setup/ --config-file "${CFG}"
+          echo "── mypy scripts/check_pip_updates.py + check_docker_updates.py ──"
+          mypy scripts/check_pip_updates.py scripts/check_docker_updates.py --config-file "${CFG}"
 
   shell-lint:
     name: Shell Lint (setup.sh shim + setup.bash.sh + scripts/lib)
