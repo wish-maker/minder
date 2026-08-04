@@ -67,7 +67,7 @@ cmp "run true (exit)"  "$(bsh "run true;  echo \$?")"  "$(pyi "print(docker.run(
 cmp "run false (exit)" "$(bsh "run false; echo \$?")"  "$(pyi "print(docker.run('false'))")"
 
 # --- network_exists (LIVE) — bash idiom is inlined; compare to the ported helper ---
-for n in "docker_minder-network" "definitely-not-a-real-network"; do
+for n in "minder-network" "definitely-not-a-real-network"; do
   cmp "network_exists $n" \
     "$(bsh "docker network ls --format '{{.Name}}' | grep -q \"^${n}\$\" && echo true || echo false")" \
     "$(pyi "print('true' if docker.network_exists('$n') else 'false')")"
