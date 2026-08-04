@@ -181,3 +181,129 @@ async def test_chat_with_tools_routes_post_tool_args_as_json_body(ai_mod, monkey
     assert len(calls) == 1
     assert calls[0]["json_body"] == {}
     assert calls[0]["params"] is None
+
+
+def test_parse_content_tool_call_matches_offered_tool(ai_mod):
+    meta_by_name = {"get_crypto_price": {"plugin": "crypto"}}
+    content = '{"name": "get_crypto_price", "arguments": {"coin": "bitcoin"}}'
+    got = ai_mod._parse_content_tool_call(content, meta_by_name)
+    assert got == {
+        "function": {"name": "get_crypto_price", "arguments": {"coin": "bitcoin"}}
+    }
+
+
+def test_parse_content_tool_call_ignores_unknown_tool_name(ai_mod):
+    meta_by_name = {"get_crypto_price": {"plugin": "crypto"}}
+    content = '{"name": "delete_everything", "arguments": {}}'
+    assert ai_mod._parse_content_tool_call(content, meta_by_name) is None
+
+
+def test_parse_content_tool_call_ignores_non_json_prose(ai_mod):
+    meta_by_name = {"get_crypto_price": {"plugin": "crypto"}}
+    assert (
+        ai_mod._parse_content_tool_call("Bitcoin is worth $64,000.", meta_by_name)
+        is None
+    )
+
+
+def test_parse_content_tool_call_ignores_json_array(ai_mod):
+    # Valid JSON, but not an object with "name" -- must not match.
+    meta_by_name = {"get_crypto_price": {"plugin": "crypto"}}
+    assert ai_mod._parse_content_tool_call("[1, 2, 3]", meta_by_name) is None
+
+
+def test_parse_content_tool_call_ignores_non_string_content(ai_mod):
+    meta_by_name = {"get_crypto_price": {"plugin": "crypto"}}
+    assert ai_mod._parse_content_tool_call(None, meta_by_name) is None
+    assert ai_mod._parse_content_tool_call(123, meta_by_name) is None
+
+
+@pytest.mark.asyncio
+async def test_chat_with_tools_executes_content_embedded_tool_call(ai_mod, monkeypatch):
+    """#250: qwen2.5-coder-style models emit the tool call as JSON content instead
+    of native tool_calls. The loop should still recognize + execute it."""
+    tool = {
+        "type": "function",
+        "function": {"name": "get_crypto_price", "parameters": {}},
+        "metadata": {
+            "plugin": "crypto",
+            "endpoint": "/v1/plugins/crypto/actions/get_price",
+            "method": "GET",
+        },
+    }
+
+    async def fake_get_tool_definitions():
+        return {"tools": [tool]}
+
+    calls = []
+
+    async def fake_call_plugin_tool(
+        metadata, *, json_body=None, params=None, auth_header=None
+    ):
+        calls.append({"json_body": json_body, "params": params})
+        return {"coin": "bitcoin", "price": 42}
+
+    responses = [
+        {
+            "message": {
+                "content": (
+                    '{"name": "get_crypto_price", "arguments": {"coin": "bitcoin"}}'
+                )
+            }
+        },
+        {"message": {"content": "The price is $42."}},
+    ]
+
+    async def fake_ollama_chat(body):
+        return responses.pop(0)
+
+    monkeypatch.setattr(ai_mod, "get_tool_definitions", fake_get_tool_definitions)
+    monkeypatch.setattr(ai_mod, "_call_plugin_tool", fake_call_plugin_tool)
+    monkeypatch.setattr(ai_mod, "_ollama_chat", fake_ollama_chat)
+
+    result = await ai_mod._chat_with_tools(
+        {"messages": [{"role": "user", "content": "price of bitcoin?"}]}, None
+    )
+
+    assert result == {"message": {"content": "The price is $42."}}
+    assert len(calls) == 1
+    assert calls[0]["params"] == {"coin": "bitcoin"}
+
+
+@pytest.mark.asyncio
+async def test_chat_with_tools_content_not_matching_any_tool_passes_through(
+    ai_mod, monkeypatch
+):
+    """Ordinary prose in content (no matching tool name) returns the response
+    unchanged -- no false-positive tool execution."""
+    tool = {
+        "type": "function",
+        "function": {"name": "get_crypto_price", "parameters": {}},
+        "metadata": {"plugin": "crypto", "endpoint": "/x", "method": "GET"},
+    }
+
+    async def fake_get_tool_definitions():
+        return {"tools": [tool]}
+
+    call_count = 0
+
+    async def fake_call_plugin_tool(*a, **k):
+        nonlocal call_count
+        call_count += 1
+        return {}
+
+    async def fake_ollama_chat(body):
+        return {"message": {"content": "Bitcoin is worth about $64,000 right now."}}
+
+    monkeypatch.setattr(ai_mod, "get_tool_definitions", fake_get_tool_definitions)
+    monkeypatch.setattr(ai_mod, "_call_plugin_tool", fake_call_plugin_tool)
+    monkeypatch.setattr(ai_mod, "_ollama_chat", fake_ollama_chat)
+
+    result = await ai_mod._chat_with_tools(
+        {"messages": [{"role": "user", "content": "price of bitcoin?"}]}, None
+    )
+
+    assert result == {
+        "message": {"content": "Bitcoin is worth about $64,000 right now."}
+    }
+    assert call_count == 0

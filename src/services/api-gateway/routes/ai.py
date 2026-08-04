@@ -179,6 +179,31 @@ def _normalize_tool_args(args: object) -> Dict:
     return args if isinstance(args, dict) else {}
 
 
+def _parse_content_tool_call(content: object, meta_by_name: Dict) -> Optional[Dict]:
+    """#250: bounded robustness net for models that emit a tool call as JSON text in
+    ``content`` instead of native ``tool_calls`` — e.g. qwen2.5-coder returning
+    ``{"name": "get_crypto_price", "arguments": {"coin": "bitcoin"}}`` as content.
+
+    Deliberately narrow to avoid false positives on ordinary prose that happens to
+    look JSON-ish: content must parse as a JSON *object* whose ``name`` is an EXACT
+    match for one of the tools actually offered this turn. Returns a synthetic
+    tool_calls-shaped entry (fed through the same normalize/dispatch path as a real
+    tool call) or None if content doesn't match this shape.
+    """
+    if not isinstance(content, str):
+        return None
+    try:
+        parsed = json.loads(content)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    name = parsed.get("name")
+    if not isinstance(name, str) or name not in meta_by_name:
+        return None
+    return {"function": {"name": name, "arguments": parsed.get("arguments") or {}}}
+
+
 async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
     """Offer plugin tools to the model and run any tool_calls it makes (opt-in path).
 
@@ -211,7 +236,10 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
         message = resp.get("message", {})
         tool_calls = message.get("tool_calls")
         if not tool_calls:
-            return resp
+            synthetic = _parse_content_tool_call(message.get("content"), meta_by_name)
+            if not synthetic:
+                return resp
+            tool_calls = [synthetic]
         messages.append(message)
         for call in tool_calls:
             fn = call.get("function", {})
