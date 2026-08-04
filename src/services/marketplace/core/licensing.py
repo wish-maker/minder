@@ -2,8 +2,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
-from services.marketplace.core.database import get_pool
-from services.marketplace.core.security import LicenseGenerator
+from core.database import get_pool
+from core.security import LicenseGenerator
 
 license_generator = LicenseGenerator()
 

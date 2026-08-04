@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from neo4j import AsyncGraphDatabase
 
-from services.marketplace.config import settings
+from config import settings
 
 logger = logging.getLogger("minder.neo4j_client")
 

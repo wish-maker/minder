@@ -2,11 +2,11 @@
 import logging
 from typing import Any, Dict, List
 
+from core.ai_tools_importer import sync_plugin_tools
+from core.database import get_pool
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from services.marketplace.core.ai_tools_importer import sync_plugin_tools
-from services.marketplace.core.database import get_pool
 from shared.auth.jwt_middleware import get_current_user, get_current_user_or_service
 
 logger = logging.getLogger(__name__)
@@ -268,7 +268,7 @@ async def deactivate_plugin_tools(
 
     Called when a plugin is disabled or uninstalled.
     """
-    from services.marketplace.core.ai_tools_importer import deactivate_plugin_ai_tools
+    from core.ai_tools_importer import deactivate_plugin_ai_tools
 
     pool = await get_pool()
 
