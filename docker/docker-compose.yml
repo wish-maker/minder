@@ -979,8 +979,15 @@ services:
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
     - RAG_ENABLED=true
-    - MINDER_API_GATEWAY_URL=http://minder-api-gateway:8000
-    - MINDER_AI_TOOLS_ENABLED=true
+    # Real, documented Open WebUI mechanism (#251) for pre-registering an OpenAPI
+    # tool server on first startup -- NOT an invented/unread env var (that was
+    # MINDER_API_GATEWAY_URL/MINDER_AI_TOOLS_ENABLED, removed here; see #24 for the
+    # prior MINDER_FUNCTIONS_CONFIG precedent of the same mistake). Points at the
+    # api-gateway's dynamic, read-only-only tool spec (GET /v1/ai/tools/openapi.json,
+    # #254) -- known upstream gap: some Open WebUI versions only fully activate a
+    # pre-seeded connection after an admin opens Settings -> Admin -> Tool Servers
+    # once and saves it: https://github.com/open-webui/open-webui/issues/18140
+    - 'TOOL_SERVER_CONNECTIONS=[{"url":"http://minder-api-gateway:8000/v1/ai/tools/openapi.json","path":"","type":"openapi","auth_type":"none","config":{"enable":true},"info":{"name":"Minder Plugin Tools","description":"Read-only crypto/weather/news/fund-price tools from the Minder plugin registry"}}]'
     - DATABASE_URL=postgresql://minder:${POSTGRES_PASSWORD}@postgres:5432/minder
     - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-change-this-to-a-random-secret-key}
     - WEBUI_AUTH=${WEBUI_AUTH:-true}

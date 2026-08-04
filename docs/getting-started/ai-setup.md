@@ -290,6 +290,24 @@ Web chat frontend (reached via Traefik) with:
 - RAG integration
 - Tool calling support
 
+**Plugin tools in the chat UI (#251).** Beyond calling `/v1/ai/chat/completions`
+directly with `"minder_tools": true`, Minder's read-only plugin tools
+(`get_crypto_price`, `get_weather`, `get_news`, `get_fund_price`) are exposed as
+an OpenAPI tool server at `GET /v1/ai/tools/openapi.json` on the api-gateway — a
+real, documented Open WebUI extension point (Settings → Admin → Tool Servers,
+type `openapi`), not an invented format. `docker-compose.yml` pre-registers it
+via the `TOOL_SERVER_CONNECTIONS` environment variable on first startup.
+
+> **Known upstream gap:** some Open WebUI versions only fully activate a
+> pre-seeded tool-server connection after an admin opens **Settings → Admin →
+> Tool Servers** once and clicks Save (even though it's already listed there) —
+> see [open-webui#18140](https://github.com/open-webui/open-webui/issues/18140).
+> If a chat with tools enabled doesn't see Minder's tools, do that once.
+
+Only read-only tools appear in this spec by design — mutating plugin actions
+(e.g. `refresh`) stay JWT-gated (#254) and are never exposed as a freely
+callable tool to a connected model.
+
 ## Troubleshooting
 
 ### Models Not Downloading
