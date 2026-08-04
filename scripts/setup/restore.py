@@ -28,6 +28,7 @@ failed) that is surfaced in the final summary line — mirroring backup.py's own
 `skipped` list for the same "silent partial success" failure mode (#177).
 """
 
+import re
 import shutil
 import subprocess
 import sys
@@ -37,10 +38,29 @@ from pathlib import Path
 
 from . import backup, config, docker, infra, log
 
+# #289: the postgres image's own entrypoint always (re)creates this bootstrap
+# role fresh from POSTGRES_USER/POSTGRES_PASSWORD, and it's the ONLY role in
+# this deployment (no separate "postgres" superuser) — the very role the
+# restore connects AS. `DROP ROLE IF EXISTS minder;`/`CREATE ROLE minder;`/
+# `ALTER ROLE minder WITH ...;` in the dump can never succeed (Postgres refuses
+# to let a role drop itself) and there is nothing to restore about it anyway,
+# so these statements are filtered out before the dump reaches psql.
+_OWN_ROLE_STMT_RE = re.compile(
+    rb"^(DROP ROLE IF EXISTS minder;|CREATE ROLE minder;|ALTER ROLE minder\b)"
+)
+
+
+def _strip_own_role_statements(sql_bytes: bytes) -> bytes:
+    return b"".join(
+        ln
+        for ln in sql_bytes.splitlines(keepends=True)
+        if not _OWN_ROLE_STMT_RE.match(ln)
+    )
+
 
 def _restore_postgres(sql_file: Path) -> bool:
     """bash `docker exec -i <pg> psql -U minder -d postgres -v ON_ERROR_STOP=1
-    -f - < file &>/dev/null 2>&1`: feed the dump on stdin, discard all output;
+    -f -` fed the (role-statement-filtered) dump on stdin, discard all output;
     True on exit 0. Bare (un-gated).
 
     -d postgres (found live, 2026-08-04, while verifying #281 on hantal): psql
@@ -59,32 +79,35 @@ def _restore_postgres(sql_file: Path) -> bool:
     error on every CREATE DATABASE/CREATE TABLE as "already exists", yet still
     report "PostgreSQL restored". With ON_ERROR_STOP, a real error now actually
     surfaces as a non-zero exit → the caller's existing warn branch fires
-    instead of a false success."""
+    instead of a false success. #289: this ALSO means the dump's own-role
+    statements (see above) must be filtered out first — they always error
+    ("current user cannot be dropped") and would otherwise hard-abort the
+    restore before any real data is touched."""
     try:
-        with open(sql_file, "rb") as fh:
-            return (
-                subprocess.run(
-                    [
-                        "docker",
-                        "exec",
-                        "-i",
-                        docker.container_name("postgres"),
-                        "psql",
-                        "-U",
-                        "minder",
-                        "-d",
-                        "postgres",
-                        "-v",
-                        "ON_ERROR_STOP=1",
-                        "-f",
-                        "-",
-                    ],
-                    stdin=fh,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode
-                == 0
-            )
+        sql_bytes = _strip_own_role_statements(sql_file.read_bytes())
+        return (
+            subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    "-i",
+                    docker.container_name("postgres"),
+                    "psql",
+                    "-U",
+                    "minder",
+                    "-d",
+                    "postgres",
+                    "-v",
+                    "ON_ERROR_STOP=1",
+                    "-f",
+                    "-",
+                ],
+                input=sql_bytes,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            ).returncode
+            == 0
+        )
     except OSError:
         return False
 

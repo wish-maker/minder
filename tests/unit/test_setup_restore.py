@@ -1,8 +1,9 @@
-"""Unit tests for restore's corrupt-archive guard, skipped-store tracking, and
-network-recreation-before-postgres (restore.py, #281/#282/#283/#288). No
-Docker: container probes, docker.run/compose, and the un-gated psql/rabbitmqctl
-helpers are stubbed. Archives are real tar.gz files built in tmp_path so
-tarfile extraction runs for real.
+"""Unit tests for restore's corrupt-archive guard, skipped-store tracking,
+network-recreation-before-postgres, and own-role-statement stripping
+(restore.py, #281/#282/#283/#288/#289). No Docker: container probes,
+docker.run/compose, and the un-gated psql/rabbitmqctl helpers are stubbed.
+Archives are real tar.gz files built in tmp_path so tarfile extraction runs
+for real.
 """
 
 import tarfile
@@ -10,6 +11,8 @@ import tarfile
 import pytest
 
 from scripts.setup import restore
+
+_REAL_RESTORE_POSTGRES = restore._restore_postgres
 
 
 def _make_archive(tmp_path, name="minder-20200101-000000", files=None):
@@ -153,3 +156,72 @@ def test_postgres_not_running_recreates_network_first(monkeypatch, stubbed, tmp_
     assert rc == 0
     assert calls[0] == "create_networks"
     assert ("up", "-d", "postgres") in calls[1:]
+
+
+def test_strip_own_role_statements_removes_only_bootstrap_role_lines():
+    """#289: found live on hantal — pg_dumpall --clean's `DROP/CREATE/ALTER
+    ROLE minder` can never succeed (minder is both the only role and the one
+    the restore connects as), so ON_ERROR_STOP would hard-abort the restore
+    before any real data is touched. Other roles/statements must survive."""
+    dump = (
+        b"-- Drop roles\n"
+        b"DROP ROLE IF EXISTS minder;\n"
+        b"DROP ROLE IF EXISTS readonly_reporter;\n"
+        b"CREATE ROLE minder;\n"
+        b"ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n"
+        b"CREATE ROLE readonly_reporter;\n"
+        b"DROP DATABASE IF EXISTS minder;\n"
+        b"CREATE DATABASE minder;\n"
+    )
+    filtered = restore._strip_own_role_statements(dump)
+    assert b"minder;\n" not in filtered.replace(
+        b"DROP DATABASE IF EXISTS minder;\n", b""
+    ).replace(b"CREATE DATABASE minder;\n", b"")
+    assert b"DROP ROLE IF EXISTS readonly_reporter;\n" in filtered
+    assert b"CREATE ROLE readonly_reporter;\n" in filtered
+    assert b"DROP DATABASE IF EXISTS minder;\n" in filtered
+    assert b"CREATE DATABASE minder;\n" in filtered
+    assert b"DROP ROLE IF EXISTS minder;\n" not in filtered
+    assert b"CREATE ROLE minder;\n" not in filtered
+    assert b"ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n" not in filtered
+
+
+def test_postgres_restore_strips_own_role_statements_before_psql(
+    monkeypatch, stubbed, tmp_path
+):
+    """#289: `_restore_postgres` must feed the FILTERED dump to psql, not the
+    raw file — otherwise ON_ERROR_STOP aborts on the bootstrap role's own
+    always-failing DROP/CREATE/ALTER ROLE statements."""
+    archive = _make_archive(
+        tmp_path,
+        files={
+            "postgres.sql": (
+                "DROP ROLE IF EXISTS minder;\n"
+                "CREATE ROLE minder;\n"
+                "ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n"
+                "DROP DATABASE IF EXISTS minder;\n"
+            )
+        },
+    )
+    warns, succs, errors = stubbed
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+    monkeypatch.setattr(restore, "_restore_postgres", _REAL_RESTORE_POSTGRES)
+    captured: dict = {}
+
+    def fake_run(argv, input=None, **kwargs):
+        captured["input"] = input
+
+        class _Result:
+            returncode = 0
+
+        return _Result()
+
+    monkeypatch.setattr(restore.subprocess, "run", fake_run)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    assert b"minder;\n" not in captured["input"].replace(
+        b"DROP DATABASE IF EXISTS minder;\n", b""
+    )
+    assert b"DROP DATABASE IF EXISTS minder;\n" in captured["input"]

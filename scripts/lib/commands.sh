@@ -361,10 +361,19 @@ cmd_restore() {
         # is pg_dumpall's own maintenance DB, excluded from the dump's DROP list.
         # -v ON_ERROR_STOP=1 (#281): without it, psql keeps going past SQL errors
         # and still exits 0 — a real restore error would otherwise report success.
+        # #289: the dump's own `DROP/CREATE/ALTER ROLE minder` statements can
+        # NEVER succeed (postgres refuses to let a role drop itself, and minder
+        # is the only role here, the very one restore connects as) — with
+        # ON_ERROR_STOP that would hard-abort before any real data is touched,
+        # so they are filtered out first. The bootstrap role already exists
+        # exactly as needed (postgres's own entrypoint (re)creates it from
+        # POSTGRES_USER/POSTGRES_PASSWORD) — there's nothing to restore there.
         if _is_dry_run; then
             run docker exec -i "$pg_cname" psql -U minder -d postgres -v ON_ERROR_STOP=1 -f -
-        elif ! docker exec -i "$pg_cname" \
-                 psql -U minder -d postgres -v ON_ERROR_STOP=1 -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
+        elif ! grep -vE '^(DROP ROLE IF EXISTS minder;|CREATE ROLE minder;|ALTER ROLE minder\b)' \
+                 "${restore_dir}/postgres.sql" \
+                 | docker exec -i "$pg_cname" \
+                       psql -U minder -d postgres -v ON_ERROR_STOP=1 -f - &>/dev/null 2>&1; then
             pg_ok=0
         fi
         spinner_stop
