@@ -5,7 +5,7 @@ import os
 import time
 from typing import Dict
 
-from services.marketplace.config import settings
+from config import settings
 
 
 class LicenseGenerator:

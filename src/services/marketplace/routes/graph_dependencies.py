@@ -12,9 +12,9 @@ import logging
 from enum import Enum
 from typing import List
 
+from core.neo4j_client import Neo4jClient, get_neo4j_client
 from fastapi import APIRouter, Depends, HTTPException
 
-from services.marketplace.core.neo4j_client import Neo4jClient, get_neo4j_client
 from shared.auth.jwt_middleware import get_current_user
 from shared.errors import backend_http_error
 

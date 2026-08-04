@@ -7,13 +7,36 @@ These lock that: an expired license reports expired (no TypeError), a future one
 validates.
 
 DB-free: `get_pool` is monkeypatched with a fake pool/conn.
+
+Loaded by path (#266): licensing.py does `from core.database import get_pool`
+(marketplace's own bare-import convention, matching every other service).
+conftest.py loads every service's main.py into this ONE shared test process, so
+a generic `core`/`config` module from an earlier-loaded service can already be
+cached in sys.modules by the time this file collects — stale-clear those slots
+and prepend marketplace's own dir so `core.database` resolves here.
 """
 
+import importlib.util
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
-from services.marketplace.core import licensing
+_MARKETPLACE_DIR = (
+    Path(__file__).resolve().parents[2] / "src" / "services" / "marketplace"
+)
+sys.path.insert(0, str(_MARKETPLACE_DIR))
+for _stale in list(sys.modules):
+    if _stale == "core" or _stale.startswith("core.") or _stale == "config":
+        del sys.modules[_stale]
+
+_spec = importlib.util.spec_from_file_location(
+    "_marketplace_licensing_under_test", _MARKETPLACE_DIR / "core" / "licensing.py"
+)
+licensing = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = licensing
+_spec.loader.exec_module(licensing)
 
 # What a naive TIMESTAMP column round-trips as (asyncpg gives naive datetimes).
 _NAIVE_NOW = datetime.now(timezone.utc).replace(tzinfo=None)

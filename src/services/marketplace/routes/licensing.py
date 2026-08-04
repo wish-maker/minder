@@ -1,14 +1,10 @@
 # services/marketplace/routes/licensing.py
 import logging
 
+from core.licensing import create_license, get_user_licenses, validate_license
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
 
-from services.marketplace.core.licensing import (
-    create_license,
-    get_user_licenses,
-    validate_license,
-)
 from shared.auth.jwt_middleware import get_current_user
 from shared.errors import backend_http_error
 from shared.models.tiers import normalize_tier

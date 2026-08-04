@@ -1,8 +1,8 @@
 # services/marketplace/routes/management.py
+from core.database import get_pool
 from fastapi import APIRouter, Depends, HTTPException, Query
+from models.installation import InstallationResponse
 
-from services.marketplace.core.database import get_pool
-from services.marketplace.models.installation import InstallationResponse
 from shared.auth.jwt_middleware import get_current_user
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])

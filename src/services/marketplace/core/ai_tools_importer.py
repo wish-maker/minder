@@ -215,7 +215,7 @@ async def sync_plugin_tools(
     Returns:
         Synchronization result
     """
-    from services.marketplace.core.database import get_pool
+    from core.database import get_pool
 
     pool = await get_pool()
 

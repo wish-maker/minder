@@ -4,12 +4,36 @@ The marketplace list endpoints now accept the platform-standard ``limit``/``offs
 (canonical) alongside the deprecated ``page``/``page_size``, and return both
 vocabularies in one response. These guard the pure resolution + response-shaping
 helpers so the dual-scheme bridge stays correct and non-breaking.
+
+Loaded by path (#266): routes/marketplace.py does `from core.database import
+get_pool` (marketplace's own bare-import convention, matching every other
+service). conftest.py loads every service's main.py into this ONE shared test
+process, so a generic `core`/`config` module from an earlier-loaded service can
+already be cached in sys.modules by the time this file collects — stale-clear
+those slots and prepend marketplace's own dir so `core.database` resolves here.
 """
 
-from services.marketplace.routes.marketplace import (
-    _build_list_response,
-    _resolve_pagination,
+import importlib.util
+import sys
+from pathlib import Path
+
+_MARKETPLACE_DIR = (
+    Path(__file__).resolve().parents[2] / "src" / "services" / "marketplace"
 )
+sys.path.insert(0, str(_MARKETPLACE_DIR))
+for _stale in list(sys.modules):
+    if _stale == "core" or _stale.startswith("core.") or _stale == "config":
+        del sys.modules[_stale]
+
+_spec = importlib.util.spec_from_file_location(
+    "_marketplace_routes_under_test", _MARKETPLACE_DIR / "routes" / "marketplace.py"
+)
+_routes = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = _routes
+_spec.loader.exec_module(_routes)
+
+_build_list_response = _routes._build_list_response
+_resolve_pagination = _routes._resolve_pagination
 
 
 def test_limit_offset_win_when_supplied():

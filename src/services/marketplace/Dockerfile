@@ -21,9 +21,6 @@ RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || 
 # Copy application code
 COPY src/services/marketplace/ .
 
-# Copy the services package structure
-COPY src/services/ ./services/
-
 # Copy shared libraries
 COPY src/shared /app/src/shared
 

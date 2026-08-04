@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 # Add src to path for shared module imports (MUST be before other imports)
 sys.path.insert(0, "/app/src")
 
+from core.database import close_pool, get_pool  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
-from services.marketplace.config import settings  # noqa: E402
-from services.marketplace.core.database import close_pool, get_pool  # noqa: E402
+from config import settings  # noqa: E402
 from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     logger.info("Database pool initialized")
 
     # Run database migrations (idempotent schema initialization)
-    from services.marketplace.migrations import run_migrations
+    from migrations import run_migrations
 
     pool = await get_pool()
     await run_migrations(pool)
@@ -130,21 +130,13 @@ async def global_exception_handler(request, exc):
     )
 
 
-from services.marketplace.routes.ai_tools import router as ai_tools_router  # noqa: E402
-from services.marketplace.routes.graph_dependencies import (  # noqa: E402
-    router as graph_dependencies_router,
-)
-from services.marketplace.routes.licensing import (  # noqa: E402
-    router as licensing_router,
-)
-from services.marketplace.routes.management import (  # noqa: E402
-    router as management_router,
-)
+from routes.ai_tools import router as ai_tools_router  # noqa: E402
+from routes.graph_dependencies import router as graph_dependencies_router  # noqa: E402
+from routes.licensing import router as licensing_router  # noqa: E402
+from routes.management import router as management_router  # noqa: E402
 
 # Include routers
-from services.marketplace.routes.marketplace import (  # noqa: E402
-    router as marketplace_router,
-)
+from routes.marketplace import router as marketplace_router  # noqa: E402
 
 app.include_router(marketplace_router)
 app.include_router(management_router)

@@ -6,7 +6,7 @@ from typing import Optional
 
 import asyncpg
 
-from services.marketplace.config import settings
+from config import settings
 
 # Shared pool factory owns the create_pool + auto-create-DB boilerplate (#49).
 if "/app/src" not in sys.path:

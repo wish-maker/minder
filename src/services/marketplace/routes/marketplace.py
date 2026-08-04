@@ -2,15 +2,10 @@
 import uuid
 from typing import Any, List, Optional
 
+from core.database import get_pool
 from fastapi import APIRouter, Depends, HTTPException, Query
+from models.plugin import PluginCreate, PluginListResponse, PluginResponse, PluginUpdate
 
-from services.marketplace.core.database import get_pool
-from services.marketplace.models.plugin import (
-    PluginCreate,
-    PluginListResponse,
-    PluginResponse,
-    PluginUpdate,
-)
 from shared.auth.jwt_middleware import get_current_user_or_service
 
 # Columns returned by the plugin SELECT/RETURNING clauses, shared by get/update.
