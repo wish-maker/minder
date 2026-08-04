@@ -1,6 +1,6 @@
 # Minder CI/CD Pipeline
 
-GitHub Actions workflows for this repository. Five workflows, each a single
+GitHub Actions workflows for this repository. Four workflows, each a single
 concern. There is **no** build/push or deploy workflow — this is a self-hosted
 Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 
@@ -45,23 +45,26 @@ closing the exposure window on an internet-exposed target. The weekly cron stays
 defense-in-depth. (#16 Option 2; the issue's written "scheduled-only" assumed heavy
 scans, which the runtime data disproved.)
 
-### 4. Docker Image Auto-Update — `docker-image-update.yml`
+### 4. Dependency Auto-Update — `dependency-updates.yml`
 **Triggers:** weekly cron (Mon 09:00 UTC), manual dispatch.
-**Behavior:** **issue-only** dependency engine. Reads
-`docker/docker-compose.yml`, classifies third-party image updates as
-safe/risky (local `minder/*` builds excluded), and opens (or updates) a single
-tracking **issue** — it does not open PRs or modify files.
+**Behavior:** **issue-only** dependency engine, one job covering both halves of
+the platform's 3rd-party footprint, sequential steps:
+- **Docker images**: reads `docker/docker-compose.yml` via
+  `scripts/check_docker_updates.py`, classifies third-party image updates as
+  safe/risky (local `minder/*` builds excluded), opens/updates a single
+  `[dependencies, docker]` tracking issue.
+- **Python pins**: runs `scripts/check_pip_updates.py` (stdlib `urllib`) to scan
+  every `src/**/requirements*.txt` against PyPI, classifies updates as
+  major/minor/patch, opens/updates a single `[dependencies, python]` tracking
+  issue.
+
+Neither check opens PRs or modifies files. Each check's own step has
+`continue-on-error: true`, so a crash in one script still lets the other run and
+report — the isolation the two used to need two separate workflow files for.
 
 > The older auto-PR workflow (`auto-update-pr.yml`) that edited files and opened
 > a PR was **retired** — it was superseded by the issue-only engine above (the
 > PR approach edited compose without a rebuild, a "deploy illusion").
-
-### 5. Dependency Update — `dependency-update.yml`
-**Triggers:** weekly cron, manual dispatch.
-**Behavior:** **issue-only** Python-dependency engine. Runs
-`scripts/check_pip_updates.py` (stdlib `urllib`) to scan every `src/**/requirements*.txt`
-against PyPI, classifies updates as major/minor/patch, and opens (or updates) a single
-`[dependencies, python]` tracking **issue**. The Docker-image counterpart is `#4`.
 
 ## Local checks
 

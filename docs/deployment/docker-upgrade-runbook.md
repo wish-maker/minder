@@ -24,10 +24,10 @@ dump/restore rather than an in-place volume swap).
   the compose file.
 - **`bash setup.sh update`** performs the update flow (pull + recreate) for the pinned
   images.
-- **CI (`.github/workflows/docker-image-update.yml`)** periodically checks upstream
-  registries and **proposes** version bumps via PR. A human reviews and merges; the merged
-  compose file is what ships. CI reads/edits the compose file directly — it never touches a
-  template.
+- **CI (`.github/workflows/dependency-updates.yml`)** periodically checks upstream
+  registries and opens (or updates) a tracking **issue** — issue-only, it never opens a PR
+  or edits the compose file itself. A human applies the bump by hand: edit the `image:` tag,
+  commit, `bash setup.sh update`.
 
 > Bottom line: to change an image version, edit the `image:` tag in
 > `docker/docker-compose.yml`, commit it, then apply with `bash setup.sh update`.

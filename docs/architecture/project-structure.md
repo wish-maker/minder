@@ -77,7 +77,7 @@ minder/                              # Project root
 > Compose as `docker compose --file docker/docker-compose.yml ...`.
 
 > **Shared dependencies live in `src/requirements/`** (`requirements.txt`, `requirements-dev.txt`,
-> `requirements-ml.txt`) — not in `src/config/` (that directory was removed). Python tooling
+> `requirements-typecheck.txt`) — not in `src/config/` (that directory was removed). Python tooling
 > config (black/isort/mypy/pytest) lives in the root `pyproject.toml`.
 
 ## Service Structure

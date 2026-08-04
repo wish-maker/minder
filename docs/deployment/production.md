@@ -261,7 +261,7 @@ Persistent state lives in Docker named volumes (`postgres_data`, `neo4j_data`,
 
 Image versions are pinned in `docker/docker-compose.yml` (hand-maintained).
 `scripts/setup/versions.py` (the native-Python version engine, via `update --check`) derives the list from the `image:` lines and reports drift; CI
-(`docker-image-update.yml`) proposes bumps via PR. Apply with `bash setup.sh update`. Full
+(`dependency-updates.yml`) opens a tracking issue (not a PR — issue-only). Apply with `bash setup.sh update`. Full
 procedure — including PostgreSQL major-version migration — is in
 `docker-upgrade-runbook.md`.
 

@@ -26,7 +26,13 @@ PIN_RE = re.compile(
 
 
 def find_requirements() -> List[str]:
-    return sorted(glob.glob("src/**/requirements.txt", recursive=True))
+    # `requirements*.txt` (not just the exact filename) so the shared dev/ml/
+    # typecheck pins under src/requirements/ are covered too, not just each
+    # service's own requirements.txt — requirements-typecheck.txt pins the real
+    # FastAPI/Pydantic versions the mypy gate type-checks against, and was
+    # silently invisible to this scan (the docs at .github/workflows/README.md
+    # already claimed this glob; the code just didn't match it yet).
+    return sorted(glob.glob("src/**/requirements*.txt", recursive=True))
 
 
 def parse_pins(path: str) -> List[Tuple[str, str, str]]:
@@ -89,8 +95,14 @@ def build_report() -> str:
         short = (
             path.replace("\\", "/")
             .replace("src/services/", "")
+            .replace("src/requirements/", "")
             .replace("/requirements.txt", "")
         )
+        if short.endswith(".txt"):
+            # Shared src/requirements/requirements-*.txt files (dev/ml/typecheck)
+            # don't match the "/requirements.txt" strip above; drop the extension
+            # so they read as "requirements-typecheck" rather than the raw filename.
+            short = short[: -len(".txt")]
         for pkg, extra, ver in parse_pins(path):
             key = pkg.lower()
             pkgs.setdefault(key, {}).setdefault(ver, []).append(short)
