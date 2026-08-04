@@ -347,12 +347,18 @@ cmd_restore() {
         spinner_start "Restoring PostgreSQL…"
         local pg_cname; pg_cname="$(container_name postgres)"
         local pg_ok=1
+        # -d postgres (found live, 2026-08-04, while verifying #281 on hantal):
+        # psql with no -d connects to a database NAMED AFTER THE USER — "minder",
+        # the very database the dump's `--clean` DROPs and recreates. `DROP
+        # DATABASE minder` while connected TO minder always fails ("cannot drop
+        # the currently open database"), regardless of ON_ERROR_STOP. `postgres`
+        # is pg_dumpall's own maintenance DB, excluded from the dump's DROP list.
         # -v ON_ERROR_STOP=1 (#281): without it, psql keeps going past SQL errors
         # and still exits 0 — a real restore error would otherwise report success.
         if _is_dry_run; then
-            run docker exec -i "$pg_cname" psql -U minder -v ON_ERROR_STOP=1 -f -
+            run docker exec -i "$pg_cname" psql -U minder -d postgres -v ON_ERROR_STOP=1 -f -
         elif ! docker exec -i "$pg_cname" \
-                 psql -U minder -v ON_ERROR_STOP=1 -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
+                 psql -U minder -d postgres -v ON_ERROR_STOP=1 -f - < "${restore_dir}/postgres.sql" &>/dev/null 2>&1; then
             pg_ok=0
         fi
         spinner_stop

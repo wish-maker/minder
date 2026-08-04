@@ -39,9 +39,19 @@ from . import backup, config, docker, log
 
 
 def _restore_postgres(sql_file: Path) -> bool:
-    """bash `docker exec -i <pg> psql -U minder -v ON_ERROR_STOP=1 -f - < file
-    &>/dev/null 2>&1`: feed the dump on stdin, discard all output; True on exit 0.
-    Bare (un-gated).
+    """bash `docker exec -i <pg> psql -U minder -d postgres -v ON_ERROR_STOP=1
+    -f - < file &>/dev/null 2>&1`: feed the dump on stdin, discard all output;
+    True on exit 0. Bare (un-gated).
+
+    -d postgres (found live, 2026-08-04, while verifying #281 on hantal): psql
+    with no -d connects to a database NAMED AFTER THE USER — here "minder", the
+    very database the dump's `--clean` DROPs and recreates. `DROP DATABASE
+    minder` while connected TO minder always fails ("cannot drop the currently
+    open database"), regardless of ON_ERROR_STOP — a pre-existing bug, just
+    invisible before #281 added ON_ERROR_STOP (psql printed the error and kept
+    going). `postgres` is pg_dumpall's own maintenance DB, deliberately excluded
+    from the dump's DROP list, so connecting there lets the restore drop/recreate
+    every real database including "minder" itself.
 
     -v ON_ERROR_STOP=1 (#281): without it, psql keeps going past SQL errors and
     still exits 0 — so restoring an old backup (dumped without --clean
@@ -62,6 +72,8 @@ def _restore_postgres(sql_file: Path) -> bool:
                         "psql",
                         "-U",
                         "minder",
+                        "-d",
+                        "postgres",
                         "-v",
                         "ON_ERROR_STOP=1",
                         "-f",
@@ -217,6 +229,8 @@ def run(archive: str = "") -> int:
                 "psql",
                 "-U",
                 "minder",
+                "-d",
+                "postgres",
                 "-v",
                 "ON_ERROR_STOP=1",
                 "-f",
