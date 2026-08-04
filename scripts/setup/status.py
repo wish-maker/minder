@@ -50,6 +50,22 @@ def _primary_reachable(hostport: str) -> bool:
         return False
 
 
+def _fallback_alive() -> bool:
+    """#279: is the internal failover backup actually responsive — not just "the
+    container exists in Running state" (it can be Up but hung), a live `ollama
+    list` call, the same liveness probe health.download_ollama_models already
+    uses. Checked regardless of whether the primary is currently reachable, so a
+    dead backup doesn't stay invisible while the primary happens to be up —
+    confirmed live (2026-08-04, the Pi): the backup container had silently died
+    (OOM-suspected) and every health/status check kept reporting the platform as
+    fully healthy the whole time, because the primary was still up."""
+    if not docker.container_running("ollama"):
+        return False
+    return docker.cmd_ok(
+        ["docker", "exec", docker.container_name("ollama"), "ollama", "list"]
+    )
+
+
 def _print_ollama_backend() -> None:
     """Show the active Ollama backend. In failover mode probe the primary so the user
     can see whether they are on the fast external primary or the internal fallback —
@@ -67,6 +83,12 @@ def _print_ollama_backend() -> None:
             log._emit(
                 f"  failover — primary {primary} UNREACHABLE "
                 "→ serving from the internal fallback"
+            )
+        if not _fallback_alive():
+            warn_icon = f"{log._YELLOW}⚠{log._NC}" if log._colors_on() else "⚠"
+            log._emit(
+                f"  {warn_icon} internal fallback container is not responding — "
+                "no safety net if the primary goes down"
             )
     elif base:
         log._emit(f"  external — {base}")
