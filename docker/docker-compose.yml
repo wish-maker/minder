@@ -27,7 +27,7 @@ services:
   # ==========================================================================
 
   traefik:
-    image: traefik:v3.7.9
+    image: traefik:v3.7.10
     container_name: minder-traefik
     restart: on-failure
     command:
@@ -82,7 +82,7 @@ services:
   # Re-enabled (#15): provides SSO/2FA via Traefik forwardAuth on 5 routers
   # (minio, api-gateway, grafana, openwebui, jaeger).
   authelia:
-    image: authelia/authelia:4.38.7
+    image: authelia/authelia:4.39.20
     container_name: minder-authelia
     restart: on-failure
     environment:
@@ -148,7 +148,7 @@ services:
   redis:
     labels:
     - minder.bundle=core
-    image: redis:8.8.1-alpine
+    image: redis:8.10.0-alpine
     container_name: minder-redis
     restart: on-failure
     environment:
@@ -346,7 +346,7 @@ services:
     # start_services, not a bundle capability (a bundle claim would start it in every
     # mode, since an explicitly-named profiled service starts regardless of profile).
     # Default primary=minder-ollama so a stray start is harmless.
-    image: nginx:1.27-alpine
+    image: nginx:1.31.3-alpine
     container_name: minder-ollama-router
     profiles: ["ollama-router"]
     restart: on-failure
@@ -781,7 +781,7 @@ services:
   influxdb:
     labels:
     - minder.bundle=monitoring
-    image: influxdb:3.10.3-core
+    image: influxdb:3.11.0-core
     container_name: minder-influxdb
     restart: on-failure
     command:
@@ -871,7 +871,7 @@ services:
   prometheus:
     labels:
     - minder.bundle=monitoring
-    image: prom/prometheus:v3.13.1
+    image: prom/prometheus:v3.13.2
     container_name: minder-prometheus
     restart: on-failure
     volumes:
@@ -930,7 +930,7 @@ services:
     - --storage.path=/alertmanager
     - --web.external-url=http://localhost:9093
   grafana:
-    image: grafana/grafana:13.1
+    image: grafana/grafana:13.1.1
     container_name: minder-grafana
     restart: on-failure
     environment:
@@ -967,7 +967,7 @@ services:
     - traefik.http.routers.grafana.middlewares=authelia-forwardauth@file
     - traefik.http.services.grafana.loadbalancer.server.port=3000
   openwebui:
-    image: ghcr.io/open-webui/open-webui:v0.10.2
+    image: ghcr.io/open-webui/open-webui:v0.11.0
     container_name: minder-openwebui
     restart: on-failure
     environment:
