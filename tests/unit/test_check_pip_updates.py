@@ -4,7 +4,13 @@ building). No network: latest_stable is monkeypatched wherever build_report
 is exercised.
 """
 
-from scripts.check_pip_updates import _tuple, build_report, classify, parse_pins
+from scripts.check_pip_updates import (
+    _tuple,
+    build_report,
+    classify,
+    find_requirements,
+    parse_pins,
+)
 
 
 def test_parse_pins_basic(tmp_path):
@@ -34,6 +40,28 @@ def test_parse_pins_ignores_non_exact_pins(tmp_path):
     reqs = tmp_path / "requirements.txt"
     reqs.write_text("fastapi>=0.100.0\nuvicorn~=0.30\nlocust==2.31.1\n")
     assert parse_pins(str(reqs)) == [("locust", "", "2.31.1")]
+
+
+def test_find_requirements_matches_shared_variants(monkeypatch, tmp_path):
+    (tmp_path / "src" / "requirements").mkdir(parents=True)
+    (tmp_path / "src" / "requirements" / "requirements.txt").write_text("")
+    (tmp_path / "src" / "requirements" / "requirements-dev.txt").write_text("")
+    (tmp_path / "src" / "requirements" / "requirements-typecheck.txt").write_text("")
+    (tmp_path / "src" / "services" / "api-gateway").mkdir(parents=True)
+    (tmp_path / "src" / "services" / "api-gateway" / "requirements.txt").write_text("")
+
+    monkeypatch.chdir(tmp_path)
+
+    found = find_requirements()
+
+    assert found == sorted(
+        [
+            "src/requirements/requirements-dev.txt",
+            "src/requirements/requirements-typecheck.txt",
+            "src/requirements/requirements.txt",
+            "src/services/api-gateway/requirements.txt",
+        ]
+    )
 
 
 def test_tuple_helper():
@@ -80,6 +108,25 @@ def test_build_report_categorizes_outdated_current_and_unknown(monkeypatch):
     assert "**uvicorn** `0.30.1`" in report
     assert "## 🔍 Could not check (1)" in report
     assert "**mystery-pkg** `1.0.0` — PyPI lookup failed" in report
+
+
+def test_build_report_labels_shared_requirements_variant_cleanly(monkeypatch):
+    monkeypatch.setattr(
+        "scripts.check_pip_updates.find_requirements",
+        lambda: ["src/requirements/requirements-typecheck.txt"],
+    )
+    monkeypatch.setattr(
+        "scripts.check_pip_updates.parse_pins",
+        lambda path: [("fastapi", "", "0.141.1")],
+    )
+    monkeypatch.setattr(
+        "scripts.check_pip_updates.latest_stable", lambda pkg, timeout=15.0: "0.141.1"
+    )
+
+    report = build_report()
+
+    assert "(requirements-typecheck)" in report
+    assert "requirements-typecheck.txt" not in report
 
 
 def test_build_report_no_outdated_shows_none(monkeypatch):

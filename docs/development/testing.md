@@ -300,8 +300,8 @@ CI runs across a small set of workflows:
 - **`quality.yml`** — fast gate: Black, isort, **flake8**, **mypy (real gate, per-service, no `|| true`)**, bandit, safety, shellcheck, hadolint, secret scan.
 - **`ci.yml`** — the test suite (pytest: unit/integration/e2e; deps via GitHub Actions `services:`).
 - **`security.yml`** — deeper scans (CodeQL, Trivy).
-- **`docker-image-update.yml`** — third-party image update automation.
-- **`dependency-update.yml`** — weekly Python-dependency (pip) update issue.
+- **`dependency-updates.yml`** — weekly issue-only dependency check, both halves: 3rd-party
+  Docker image updates and Python (pip) pin updates.
 
 Tests run on Python 3.11 / 3.12 to match the service runtimes.
 
