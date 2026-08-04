@@ -3,39 +3,23 @@ Plugin Registry Configuration
 Loads settings from environment variables with sensible defaults
 """
 
-from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+import sys
+
+# MinderBaseSettings + shared packages live under /app/src (#265).
+if "/app/src" not in sys.path:
+    sys.path.insert(0, "/app/src")
+
+from shared.config import MinderBaseSettings  # noqa: E402
 
 
-class Settings(BaseSettings):
+class Settings(MinderBaseSettings):
     """Plugin Registry Settings"""
 
     # Database
-    POSTGRES_HOST: str = "postgres"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "minder"
-    POSTGRES_PASSWORD: str  # Required: must be set via environment variable
-    POSTGRES_DB: str = "minder"
-
-    @field_validator("POSTGRES_PASSWORD")
-    @classmethod
-    def check_postgres_password(cls, v: str) -> str:
-        if not v:
-            raise ValueError("POSTGRES_PASSWORD must be set via environment variable")
-        return v
+    DB_NAME: str = "minder"
 
     # Service Discovery
     SERVICE_REGISTRY_BACKEND: str = "redis"
-    REDIS_HOST: str = "redis"
-    REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str  # Required: must be set via environment variable
-
-    @field_validator("REDIS_PASSWORD")
-    @classmethod
-    def check_redis_password(cls, v: str) -> str:
-        if not v:
-            raise ValueError("REDIS_PASSWORD must be set via environment variable")
-        return v
 
     # InfluxDB token passed to data plugins' write config. Optional (empty default —
     # dev influx runs --without-auth, #109) so we never bake in a weak fallback secret.
@@ -60,11 +44,7 @@ class Settings(BaseSettings):
     HEALTH_CHECK_TIMEOUT_SECONDS: int = 10
 
     # Application
-    LOG_LEVEL: str = "INFO"
-    ENVIRONMENT: str = "development"
     API_VERSION: str = "v1"
-
-    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
 
 
 # Global settings instance

@@ -31,11 +31,11 @@ async def verify_postgres_running():
     for attempt in range(max_attempts):
         try:
             conn = await asyncpg.connect(
-                host=settings.POSTGRES_HOST,
-                port=int(settings.POSTGRES_PORT),
-                user=settings.POSTGRES_USER,
-                password=settings.POSTGRES_PASSWORD,
-                database=settings.POSTGRES_DB,
+                host=settings.DB_HOST,
+                port=int(settings.DB_PORT),
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                database=settings.DB_NAME,
             )
             await conn.close()
             print("\n[OK] PostgreSQL test container ready")

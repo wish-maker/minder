@@ -67,6 +67,13 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: minder_test
+          # DB_* mirrors POSTGRES_* (#265): services on MinderBaseSettings read
+          # DB_HOST/PORT/USER/PASSWORD/NAME instead of the legacy POSTGRES_* names.
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: minder_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           # Dummy secrets so config-importing tests + the conftest service
@@ -154,6 +161,11 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: minder_test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: minder_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           REDIS_PASSWORD: test_password
@@ -217,6 +229,11 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: test_password
           POSTGRES_DB: minder_test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          DB_PASSWORD: test_password
+          DB_NAME: minder_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           REDIS_PASSWORD: test_password

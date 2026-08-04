@@ -46,11 +46,11 @@ async def get_pool() -> asyncpg.Pool:
 
         try:
             _pool = await create_pg_pool(
-                host=settings.MARKETPLACE_DATABASE_HOST,
-                port=settings.MARKETPLACE_DATABASE_PORT,
-                user=settings.MARKETPLACE_DATABASE_USER,
-                password=settings.POSTGRES_PASSWORD,
-                database=settings.MARKETPLACE_DATABASE_NAME,
+                host=settings.DB_HOST,
+                port=settings.DB_PORT,
+                user=settings.DB_USER,
+                password=settings.DB_PASSWORD,
+                database=settings.DB_NAME,
                 min_size=2,
                 max_size=10,
                 command_timeout=60,
