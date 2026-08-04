@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from models import STTResponse
 from prometheus_client import Counter
 
-from config import DEFAULT_STT_LANG, SUPPORTED_LANGUAGES
+from config import SUPPORTED_LANGUAGES, settings
 from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.tts-stt")
@@ -22,7 +22,7 @@ router = APIRouter()
 
 @router.post("/stt", response_model=STTResponse, tags=["STT"])
 async def speech_to_text(
-    file: UploadFile = File(...), language: str = Form(DEFAULT_STT_LANG)
+    file: UploadFile = File(...), language: str = Form(settings.DEFAULT_STT_LANG)
 ):
     """Convert speech to text"""
     if not STT_AVAILABLE:
@@ -61,6 +61,6 @@ async def get_stt_languages():
     return {
         "languages": SUPPORTED_LANGUAGES,
         "auto_detect": True,
-        "default": DEFAULT_STT_LANG,
+        "default": settings.DEFAULT_STT_LANG,
         "available": STT_AVAILABLE,
     }

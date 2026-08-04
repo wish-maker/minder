@@ -48,20 +48,20 @@ def test_piper_voice_path_none_for_unbundled_language(monkeypatch):
 
 def test_piper_voice_path_none_when_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(_mod, "PIPER_VOICES", {"en": "en_US-lessac-low"})
-    monkeypatch.setattr(_mod, "TTS_VOICES_DIR", str(tmp_path))
+    monkeypatch.setattr(_mod.settings, "TTS_VOICES_DIR", str(tmp_path))
     assert _mod._piper_voice_path("en") is None
 
 
 def test_piper_voice_path_found_when_file_exists(monkeypatch, tmp_path):
     monkeypatch.setattr(_mod, "PIPER_VOICES", {"en": "en_US-lessac-low"})
-    monkeypatch.setattr(_mod, "TTS_VOICES_DIR", str(tmp_path))
+    monkeypatch.setattr(_mod.settings, "TTS_VOICES_DIR", str(tmp_path))
     (tmp_path / "en_US-lessac-low.onnx").write_bytes(b"fake-onnx")
     path = _mod._piper_voice_path("en")
     assert path == str(tmp_path / "en_US-lessac-low.onnx")
 
 
 def test_synthesize_prefers_piper_when_voice_bundled(monkeypatch):
-    monkeypatch.setattr(_mod, "TTS_ENGINE", "piper")
+    monkeypatch.setattr(_mod.settings, "TTS_ENGINE", "piper")
     monkeypatch.setattr(_mod, "PIPER_AVAILABLE", True)
     monkeypatch.setattr(_mod, "GTTS_AVAILABLE", True)
     monkeypatch.setattr(
@@ -79,7 +79,7 @@ def test_synthesize_prefers_piper_when_voice_bundled(monkeypatch):
 
 
 def test_synthesize_falls_back_to_gtts_when_no_bundled_voice(monkeypatch):
-    monkeypatch.setattr(_mod, "TTS_ENGINE", "piper")
+    monkeypatch.setattr(_mod.settings, "TTS_ENGINE", "piper")
     monkeypatch.setattr(_mod, "PIPER_AVAILABLE", True)
     monkeypatch.setattr(_mod, "GTTS_AVAILABLE", True)
     # No bundled voice for this language -> Piper returns None (per its own contract)
@@ -92,7 +92,7 @@ def test_synthesize_falls_back_to_gtts_when_no_bundled_voice(monkeypatch):
 
 
 def test_synthesize_gtts_engine_setting_skips_piper_entirely(monkeypatch):
-    monkeypatch.setattr(_mod, "TTS_ENGINE", "gtts")
+    monkeypatch.setattr(_mod.settings, "TTS_ENGINE", "gtts")
     monkeypatch.setattr(_mod, "PIPER_AVAILABLE", True)
     monkeypatch.setattr(_mod, "GTTS_AVAILABLE", True)
 
@@ -107,7 +107,7 @@ def test_synthesize_gtts_engine_setting_skips_piper_entirely(monkeypatch):
 
 
 def test_synthesize_falls_back_to_gtts_when_piper_not_installed(monkeypatch):
-    monkeypatch.setattr(_mod, "TTS_ENGINE", "piper")
+    monkeypatch.setattr(_mod.settings, "TTS_ENGINE", "piper")
     monkeypatch.setattr(_mod, "PIPER_AVAILABLE", False)
     monkeypatch.setattr(_mod, "GTTS_AVAILABLE", True)
     monkeypatch.setattr(_mod, "_synthesize_gtts", lambda text, lang, slow: b"mp3-bytes")
@@ -117,7 +117,7 @@ def test_synthesize_falls_back_to_gtts_when_piper_not_installed(monkeypatch):
 
 
 def test_synthesize_raises_when_neither_engine_available(monkeypatch):
-    monkeypatch.setattr(_mod, "TTS_ENGINE", "piper")
+    monkeypatch.setattr(_mod.settings, "TTS_ENGINE", "piper")
     monkeypatch.setattr(_mod, "PIPER_AVAILABLE", False)
     monkeypatch.setattr(_mod, "GTTS_AVAILABLE", False)
 

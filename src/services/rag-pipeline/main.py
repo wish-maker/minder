@@ -11,14 +11,7 @@ from fastapi import FastAPI
 from routes.rag import router as rag_router
 from routes.system import router as system_router
 
-from config import (
-    APP_VERSION,
-    DEFAULT_EMBEDDING_MODEL,
-    DEFAULT_LLM_MODEL,
-    OLLAMA_HOST,
-    QDRANT_HOST,
-    QDRANT_PORT,
-)
+from config import settings
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
@@ -28,7 +21,7 @@ from shared.metrics import setup_metrics  # noqa: E402
 # Standardised on shared.log like the other 7 services (#49). basicConfig configures
 # the root logger, so the rag/domain package loggers propagate to it and log
 # consistently — no manual per-package handler wiring needed.
-logger = setup_logging("rag-pipeline")
+logger = setup_logging("rag-pipeline", level=settings.LOG_LEVEL)
 
 
 # ============================================================================
@@ -40,10 +33,10 @@ logger = setup_logging("rag-pipeline")
 async def lifespan(app: FastAPI):
     """Initialize storage/Ollama on startup (see body); no explicit shutdown work."""
     logger.info("🚀 Starting RAG Pipeline service...")
-    logger.info(f"Qdrant: {QDRANT_HOST}:{QDRANT_PORT}")
-    logger.info(f"Ollama: {OLLAMA_HOST}")
-    logger.info(f"Default LLM: {DEFAULT_LLM_MODEL}")
-    logger.info(f"Default Embedding: {DEFAULT_EMBEDDING_MODEL}")
+    logger.info(f"Qdrant: {settings.QDRANT_HOST}:{settings.QDRANT_PORT}")
+    logger.info(f"Ollama: {settings.OLLAMA_HOST}")
+    logger.info(f"Default LLM: {settings.OLLAMA_LLM_MODEL}")
+    logger.info(f"Default Embedding: {settings.OLLAMA_EMBEDDING_MODEL}")
 
     # Load data from PostgreSQL if available
     if state.PG_AVAILABLE:
@@ -113,7 +106,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Minder RAG Pipeline",
     description="Production RAG Pipeline with Ollama integration",
-    version=APP_VERSION,
+    version=settings.APP_VERSION,
     lifespan=lifespan,
 )
 

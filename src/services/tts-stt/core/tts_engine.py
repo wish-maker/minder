@@ -19,7 +19,7 @@ import tempfile
 import wave
 from typing import Any, Dict, Optional, Tuple
 
-from config import PIPER_VOICES, TTS_ENGINE, TTS_VOICES_DIR
+from config import PIPER_VOICES, settings
 
 logger = logging.getLogger("minder.tts-stt")
 
@@ -53,7 +53,7 @@ def _piper_voice_path(language: str) -> Optional[str]:
     name = PIPER_VOICES.get(language)
     if not name:
         return None
-    path = os.path.join(TTS_VOICES_DIR, f"{name}.onnx")
+    path = os.path.join(settings.TTS_VOICES_DIR, f"{name}.onnx")
     return path if os.path.isfile(path) else None
 
 
@@ -104,7 +104,7 @@ def synthesize(text: str, language: str, slow: bool) -> Tuple[bytes, str, str]:
     `language`; otherwise falls back to gTTS (online). Blocking (synthesis + I/O) —
     call via ``asyncio.to_thread`` so concurrent requests aren't stalled.
     """
-    if TTS_ENGINE != "gtts" and PIPER_AVAILABLE:
+    if settings.TTS_ENGINE != "gtts" and PIPER_AVAILABLE:
         data = _synthesize_piper(text, language, slow)
         if data is not None:
             return data, "audio/wav", "wav"

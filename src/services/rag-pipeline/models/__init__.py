@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from config import DEFAULT_EMBEDDING_MODEL, DEFAULT_LLM_MODEL
+from config import settings
 
 # Canonical set of selectable generation/retrieval-rewrite strategies (the `method`
 # field). "conversational" is NOT here — it is activated by passing `conversation_id`,
@@ -20,8 +20,8 @@ class KnowledgeBaseCreate(BaseModel):
     name: str
     # Optional — a description shouldn't be required to create a KB (#144).
     description: str = ""
-    embedding_model: str = DEFAULT_EMBEDDING_MODEL
-    llm_model: str = DEFAULT_LLM_MODEL
+    embedding_model: str = settings.OLLAMA_EMBEDDING_MODEL
+    llm_model: str = settings.OLLAMA_LLM_MODEL
     chunk_size: int = 512
     chunk_overlap: int = 50
 

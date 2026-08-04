@@ -3,10 +3,11 @@ Minder TTS/STT Service - Minimal Working Version
 Simple text-to-speech and speech-to-text functionality
 """
 
-import os
 import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+
+from config import settings
 
 # Shared library (needs src/ on the path) — must happen before routes.stt /
 # routes.tts below, since those import from `shared.*` at their own top level.
@@ -23,7 +24,7 @@ from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
-logger = setup_logging("tts-stt")
+logger = setup_logging("tts-stt", level=settings.LOG_LEVEL)
 
 
 # ============================================================================
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Minder TTS/STT",
     description="Text-to-Speech and Speech-to-Text service",
-    version="1.0.0",
+    version=settings.APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -92,7 +93,7 @@ async def health_check():
             "status": status,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "version": app.version,
-            "environment": os.getenv("ENVIRONMENT", "development"),
+            "environment": settings.ENVIRONMENT,
             "tts_available": TTS_AVAILABLE,
             "stt_available": STT_AVAILABLE,
             "checks": checks,
@@ -105,7 +106,7 @@ async def root():
     """Root endpoint"""
     return {
         "name": "Minder TTS/STT Service",
-        "version": "1.0.0",
+        "version": settings.APP_VERSION,
         "status": "operational",
         "tts_available": TTS_AVAILABLE,
         "stt_available": STT_AVAILABLE,
