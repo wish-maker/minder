@@ -37,7 +37,7 @@ in some cases via a Traefik route).
 |---------|-----------|-------|-------|-------|
 | PostgreSQL | `minder-postgres` | `postgres:18.4-trixie` | 5432 (internal) | Main DB + aux: `minder_marketplace`, `tefas_db`, `weather_db`, `news_db`, `crypto_db`, `minder_schemaregistry` |
 | Redis | `minder-redis` | `redis:8.8.0-alpine` | 6379 (internal) | Cache, rate-limit, sessions |
-| Qdrant | `minder-qdrant` | `qdrant/qdrant:v1.18.3` | 6333 (internal) | Vector DB for RAG |
+| Qdrant | `minder-qdrant` | `qdrant/qdrant:v1.19` | 6333 (internal) | Vector DB for RAG |
 | Neo4j | `minder-neo4j` | `neo4j:2026.06.0-community` | 7687 / 7474 (internal) | Graph DB (marketplace + graph-rag); 7474 Traefik-routed (IP-whitelisted) |
 | MinIO | `minder-minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` | 9000 / 9001 (internal) | **Real running container.** Buckets: rag-documents, tts-artifacts, fine-tuning-datasets, model-checkpoints, plugin-packages, backup-archives. Console (9001) Traefik-routed |
 | RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.2-management` | 5672 / 15672 (internal) | Queue + mgmt UI; 15672 Traefik-routed (IP-whitelisted) |

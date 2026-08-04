@@ -49,7 +49,7 @@ that hold real state include:
 | `postgres_data` | PostgreSQL (`postgres:18.4-trixie`) | Users, sessions, metadata + aux DBs (marketplace, tefas/weather/news/crypto, schema-registry) |
 | `redis_data` | Redis (`redis:8.8.0-alpine`) | Cache, rate-limit state, sessions |
 | `neo4j_data` | Neo4j (`neo4j:2026.06.0-community`) | Graph relationships (marketplace + graph-rag) |
-| `qdrant_data` | Qdrant (`qdrant/qdrant:v1.18.3`) | Vector embeddings for RAG |
+| `qdrant_data` | Qdrant (`qdrant/qdrant:v1.19`) | Vector embeddings for RAG |
 | `minio_data` | MinIO object store | See buckets below |
 | `rabbitmq_data` | RabbitMQ (`rabbitmq:4.3.2-management`) | Queues, pipeline triggers |
 | `influxdb_data` | InfluxDB (`influxdb:3.10.3-core`) | Time-series metrics |
