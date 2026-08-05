@@ -1,41 +1,47 @@
 """
 Comprehensive Plugin Functionality Tests
 Tests for all plugins: TEFAS, Weather, News, Crypto, Network, Fund
-Tests plugin discovery, configuration, execution, error handling, and lifecycle.
+Tests plugin discovery, structure, and lifecycle endpoints via
+gateway_test_client (tests/conftest.py) -- an in-process TestClient with no
+live plugin-registry running, so proxied requests deterministically get a
+real 503 (routes/proxy.py's ConnectError handling), while JWT-gated mutating
+routes (#254) return 401 at the gateway itself before ever reaching the proxy.
 
-SKIPPED: Plugin Registry Service not yet implemented
+Checked against the real plugin-registry routes (#333) -- the original
+version of this file used the `requests` library against a hardcoded
+http://localhost:8000 (needs a live docker-compose stack, incompatible with
+this job's environment) and asserted several fictional per-plugin business
+sub-routes (/tefas/funds, /weather/current, /news/headlines, /tefas/status --
+none of these exist; the only real per-plugin routes are /{name},
+/{name}/enable, /{name}/disable, /{name}/health, /{name}/collect,
+/{name}/actions/{action}, /{name}/config).
 """
 
 import pytest
-import requests
 
-pytestmark = pytest.mark.skip(reason="Plugin Registry Service not yet implemented")
+pytestmark = [pytest.mark.integration]
+
+REAL_PLUGINS = ["tefas", "weather", "news", "crypto", "network", "fund"]
 
 
 class TestPluginsDiscovery:
     """Test plugin discovery and listing"""
 
-    def test_list_all_plugins(self):
-        """Test listing all available plugins"""
-        response = requests.get("http://localhost:8000/v1/plugins")
-        assert response.status_code in [200, 401]  # 200 or 401 Unauthorized
+    def test_list_all_plugins(self, gateway_test_client):
+        response = gateway_test_client.get("/v1/plugins")
+        assert response.status_code in [200, 503]
 
         if response.status_code == 200:
             data = response.json()
             assert "plugins" in data
-            plugins = data["plugins"]
-            assert isinstance(plugins, list)
-            assert len(plugins) >= 5  # At least 5 plugins
+            assert isinstance(data["plugins"], list)
 
-    def test_plugin_list_structure(self):
-        """Test plugin list has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins")
+    def test_plugin_list_structure(self, gateway_test_client):
+        response = gateway_test_client.get("/v1/plugins")
 
         if response.status_code == 200:
-            data = response.json()
-            plugins = data["plugins"]
-
-            if len(plugins) > 0:
+            plugins = response.json()["plugins"]
+            if plugins:
                 plugin = plugins[0]
                 assert "name" in plugin
                 assert "version" in plugin
@@ -43,174 +49,34 @@ class TestPluginsDiscovery:
                 assert "status" in plugin
                 assert "enabled" in plugin
 
-    def test_plugin_detail_structure(self):
-        """Test plugin detail has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/tefas")
-
-        if response.status_code in [200, 404]:
-            if response.status_code == 200:
-                plugin = response.json()
-                assert isinstance(plugin, dict)
-                assert "name" in plugin
-                assert "version" in plugin
-                assert "description" in plugin
-                assert "author" in plugin
-                # endpoints field is optional, only check if it exists
-                if "endpoints" in plugin:
-                    assert isinstance(plugin["endpoints"], list)
-
-
-class TestTEFASPlugin:
-    """Test TEFAS plugin functionality"""
-
-    def test_tefas_plugin_exists(self):
-        """Test TEFAS plugin is discoverable"""
-        response = requests.get("http://localhost:8000/v1/plugins/tefas")
-        # 200 (found) or 404 (not found)
-        assert response.status_code in [200, 404]
-
-    def test_tefas_plugin_structure(self):
-        """Test TEFAS plugin has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/tefas")
+    def test_plugin_detail_structure(self, gateway_test_client):
+        response = gateway_test_client.get("/v1/plugins/tefas")
+        assert response.status_code in [200, 404, 503]
 
         if response.status_code == 200:
             plugin = response.json()
             assert isinstance(plugin, dict)
-            assert plugin["name"] == "tefas"
-            assert "description" in plugin
+            assert "name" in plugin
             assert "version" in plugin
-            assert "status" in plugin
-            assert "enabled" in plugin
-
-    def test_tefas_fund_analysis_endpoint(self):
-        """Test TEFAS fund analysis endpoint exists"""
-        # Try to call TEFAS plugin endpoint
-        response = requests.get("http://localhost:8000/v1/plugins/tefas/funds")
-
-        # Should be 401 (unauthorized) or 200 (success)
-        # If 404, plugin might not have this endpoint
-        assert response.status_code in [200, 401, 404]
-
-
-class TestWeatherPlugin:
-    """Test Weather plugin functionality"""
-
-    def test_weather_plugin_exists(self):
-        """Test Weather plugin is discoverable"""
-        response = requests.get("http://localhost:8000/v1/plugins/weather")
-        assert response.status_code in [200, 404]
-
-    def test_weather_plugin_structure(self):
-        """Test Weather plugin has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/weather")
-
-        if response.status_code == 200:
-            plugin = response.json()
-            assert isinstance(plugin, dict)
-            assert plugin["name"] == "weather"
             assert "description" in plugin
-            assert "version" in plugin
-            assert "status" in plugin
-            assert "enabled" in plugin
-
-    def test_weather_data_endpoint(self):
-        """Test Weather plugin data endpoint exists"""
-        response = requests.get("http://localhost:8000/v1/plugins/weather/current")
-
-        # Should be 401 (unauthorized) or 200 (success)
-        assert response.status_code in [200, 401, 404]
+            assert "author" in plugin
 
 
-class TestNewsPlugin:
-    """Test News plugin functionality"""
+@pytest.mark.parametrize("plugin_name", REAL_PLUGINS)
+class TestPluginExists:
+    """Each of the 6 real data plugins is discoverable via GET /v1/plugins/{name}."""
 
-    def test_news_plugin_exists(self):
-        """Test News plugin is discoverable"""
-        response = requests.get("http://localhost:8000/v1/plugins/news")
-        assert response.status_code in [200, 404]
+    def test_plugin_exists(self, gateway_test_client, plugin_name):
+        response = gateway_test_client.get(f"/v1/plugins/{plugin_name}")
+        assert response.status_code in [200, 404, 503]
 
-    def test_news_plugin_structure(self):
-        """Test News plugin has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/news")
+    def test_plugin_structure(self, gateway_test_client, plugin_name):
+        response = gateway_test_client.get(f"/v1/plugins/{plugin_name}")
 
         if response.status_code == 200:
             plugin = response.json()
             assert isinstance(plugin, dict)
-            assert plugin["name"] == "news"
-            assert "description" in plugin
-            assert "version" in plugin
-            assert "status" in plugin
-            assert "enabled" in plugin
-
-    def test_news_headlines_endpoint(self):
-        """Test News plugin headlines endpoint exists"""
-        response = requests.get("http://localhost:8000/v1/plugins/news/headlines")
-
-        # Should be 401 (unauthorized) or 200 (success)
-        assert response.status_code in [200, 401, 404]
-
-
-class TestCryptoPlugin:
-    """Test Crypto plugin functionality"""
-
-    def test_crypto_plugin_exists(self):
-        """Test Crypto plugin is discoverable"""
-        response = requests.get("http://localhost:8000/v1/plugins/crypto")
-        # 404 is expected (plugin not yet registered)
-        assert response.status_code in [200, 404]
-
-    def test_crypto_plugin_structure(self):
-        """Test Crypto plugin has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/crypto")
-
-        if response.status_code == 200:
-            plugin = response.json()
-            assert isinstance(plugin, dict)
-            assert plugin["name"] == "crypto"
-            assert "description" in plugin
-            assert "version" in plugin
-            assert "status" in plugin
-            assert "enabled" in plugin
-
-
-class TestNetworkPlugin:
-    """Test Network plugin functionality"""
-
-    def test_network_plugin_exists(self):
-        """Test Network plugin is discoverable"""
-        response = requests.get("http://localhost:8000/v1/plugins/network")
-        assert response.status_code in [200, 404]
-
-    def test_network_plugin_structure(self):
-        """Test Network plugin has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/network")
-
-        if response.status_code == 200:
-            plugin = response.json()
-            assert isinstance(plugin, dict)
-            assert plugin["name"] == "network"
-            assert "description" in plugin
-            assert "version" in plugin
-            assert "status" in plugin
-            assert "enabled" in plugin
-
-
-class TestFundPlugin:
-    """Test Fund plugin functionality"""
-
-    def test_fund_plugin_exists(self):
-        """Test Fund plugin is discoverable"""
-        response = requests.get("http://localhost:8000/v1/plugins/fund")
-        assert response.status_code in [200, 404]
-
-    def test_fund_plugin_structure(self):
-        """Test Fund plugin has correct structure"""
-        response = requests.get("http://localhost:8000/v1/plugins/fund")
-
-        if response.status_code == 200:
-            plugin = response.json()
-            assert isinstance(plugin, dict)
-            assert plugin["name"] == "fund"
+            assert plugin["name"] == plugin_name
             assert "description" in plugin
             assert "version" in plugin
             assert "status" in plugin
@@ -218,46 +84,26 @@ class TestFundPlugin:
 
 
 class TestPluginLifecycle:
-    """Test plugin enable/disable lifecycle"""
+    """enable/disable are real routes (#254: mutating, JWT-gated at the
+    gateway itself via _require_jwt_for_writes -- returns 401 before ever
+    reaching the unreachable-in-this-harness plugin-registry proxy)."""
 
-    def test_plugin_enable_endpoint_exists(self):
-        """Test plugin enable endpoint is accessible"""
-        # This would require authentication, so expect 401
-        response = requests.post("http://localhost:8000/v1/plugins/tefas/enable")
-        assert response.status_code in [200, 401, 404]
+    def test_plugin_enable_requires_auth(self, gateway_test_client):
+        response = gateway_test_client.post("/v1/plugins/tefas/enable")
+        assert response.status_code == 401
 
-    def test_plugin_disable_endpoint_exists(self):
-        """Test plugin disable endpoint is accessible"""
-        # This would require authentication, so expect 401
-        response = requests.post("http://localhost:8000/v1/plugins/tefas/disable")
-        assert response.status_code in [200, 401, 404]
-
-    def test_plugin_status_endpoint_exists(self):
-        """Test plugin status endpoint is accessible"""
-        response = requests.get("http://localhost:8000/v1/plugins/tefas/status")
-        # 404 is expected (plugin might not have this endpoint)
-        assert response.status_code in [200, 401, 404]
+    def test_plugin_disable_requires_auth(self, gateway_test_client):
+        response = gateway_test_client.post("/v1/plugins/tefas/disable")
+        assert response.status_code == 401
 
 
 class TestPluginErrorHandling:
     """Test plugin error handling and edge cases"""
 
-    def test_invalid_plugin_name(self):
-        """Test invalid plugin name returns 404"""
-        response = requests.get("http://localhost:8000/v1/plugins/invalid-plugin")
-        assert response.status_code == 404
+    def test_invalid_plugin_name(self, gateway_test_client):
+        response = gateway_test_client.get("/v1/plugins/invalid-plugin")
+        assert response.status_code in [404, 503]
 
-    def test_empty_plugin_name(self):
-        """Test empty plugin name returns plugin list"""
-        response = requests.get("http://localhost:8000/v1/plugins/")
-        # Empty name should return plugin list (200) or 404
-        assert response.status_code in [200, 404]
-
-    def test_plugin_not_found(self):
-        """Test non-existent plugin returns 404"""
-        response = requests.get("http://localhost:8000/v1/plugins/nonexistent")
-        assert response.status_code == 404
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    def test_plugin_not_found(self, gateway_test_client):
+        response = gateway_test_client.get("/v1/plugins/nonexistent")
+        assert response.status_code in [404, 503]
