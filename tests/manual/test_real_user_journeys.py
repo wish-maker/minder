@@ -367,6 +367,14 @@ def _pick_model(base_url: str) -> str:
 
 
 def main() -> int:
+    # Output has checkmark/emoji glyphs; a non-UTF-8 console codepage (e.g.
+    # Windows' cp125x/cp1254 defaults, seen live on hantal) raises
+    # UnicodeEncodeError partway through a run instead of printing a result.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url", default="http://localhost:8000")
     ap.add_argument(
