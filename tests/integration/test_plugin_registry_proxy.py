@@ -2,30 +2,17 @@
 Test Plugin Registry Proxy Functionality
 Tests for dynamic proxy routing to plugin microservices
 
-SKIPPED: Requires running Minder services
+Uses the plugin_registry_proxy_router_cls fixture (tests/conftest.py) to load
+the real ProxyRouter isolated from api-gateway's same-named routes package
+(#333) -- no live services, no DB, everything else here is mocked.
 """
 
-import sys
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
 
-pytestmark = pytest.mark.skip(reason="Requires running Minder services")
-
-# Skip this test if plugin registry dependencies are not available
-try:
-    # Add plugin registry to path
-    sys.path.insert(
-        0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry")
-    )
-    from routes.proxy import ProxyRouter
-
-    PROXY_ROUTER_AVAILABLE = True
-except ImportError:
-    PROXY_ROUTER_AVAILABLE = False
-    pytest.skip("Plugin Registry dependencies not available", allow_module_level=True)
+pytestmark = [pytest.mark.integration]
 
 
 # Define ServiceRegistration locally to avoid config issues
@@ -60,9 +47,9 @@ def services_db(sample_service):
 
 
 @pytest.fixture
-def proxy_router(services_db):
+def proxy_router(services_db, plugin_registry_proxy_router_cls):
     """Create proxy router instance"""
-    return ProxyRouter(services_db)
+    return plugin_registry_proxy_router_cls(services_db)
 
 
 @pytest.mark.asyncio

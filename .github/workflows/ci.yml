@@ -153,6 +153,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r src/requirements/requirements.txt
           pip install -r src/requirements/requirements-dev.txt
+          # tests/conftest.py loads every service's real main.py at collection
+          # time (api-gateway, plugin-registry, marketplace, rag-pipeline,
+          # model-management, tts-stt) -- each needs its own runtime deps too,
+          # not just the shared root set above (#333: this was silently
+          # failing before, unnoticed, since nothing depended on the load
+          # actually succeeding until real tests started using it).
+          pip install -r src/services/api-gateway/requirements.txt
+          pip install -r src/services/plugin-registry/requirements.txt
+          pip install -r src/services/marketplace/requirements.txt
+          pip install -r src/services/rag-pipeline/requirements.txt
+          pip install -r src/services/model-management/requirements.txt
+          pip install -r src/services/tts-stt/requirements.txt
 
       - name: Run integration tests
         env:

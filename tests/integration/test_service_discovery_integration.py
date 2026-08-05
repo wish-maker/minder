@@ -2,26 +2,16 @@
 Integration Test for Plugin Registry Service Discovery
 Tests the complete flow of service registration, discovery, and proxying
 
-SKIPPED: Service discovery infrastructure not yet implemented
+Uses the plugin_registry_proxy_router_cls fixture (tests/conftest.py) to load
+the real ProxyRouter isolated from api-gateway's same-named routes package
+(#333).
 """
 
-import asyncio
-import sys
-from pathlib import Path
-
 import pytest
+from fastapi import FastAPI
+from pydantic import BaseModel
 
-pytestmark = pytest.mark.skip(
-    reason="Service discovery infrastructure not yet implemented"
-)
-
-# Add plugin registry to path
-sys.path.insert(
-    0, str(Path(__file__).parent.parent.parent / "services" / "plugin-registry")
-)
-
-from fastapi import FastAPI  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+pytestmark = [pytest.mark.integration]
 
 
 class MockCryptoPlugin:
@@ -52,7 +42,7 @@ class MockCryptoPlugin:
             return {"request_count": 42, "avg_latency_ms": 12.5}
 
 
-async def test_service_discovery_flow():
+async def test_service_discovery_flow(plugin_registry_proxy_router_cls):
     """
     Integration test for complete service discovery flow
 
@@ -62,7 +52,7 @@ async def test_service_discovery_flow():
     3. Dynamic proxy routing
     4. Service discovery
     """
-    from routes.proxy import ProxyRouter
+    ProxyRouter = plugin_registry_proxy_router_cls
 
     # Define ServiceRegistration locally to avoid config import issues
     class ServiceRegistration(BaseModel):
@@ -120,7 +110,3 @@ async def test_service_discovery_flow():
     print("✅ Proxy router cleanup successful")
 
     print("\n🎉 Integration test completed successfully!")
-
-
-if __name__ == "__main__":
-    asyncio.run(test_service_discovery_flow())
