@@ -54,10 +54,14 @@ def test_read_only_action_via_gateway_proxy_unauthenticated(live_stack):
 
 
 def test_news_read_only_action_with_optional_params(live_stack):
+    # No `feed` filter -> fetches every configured RSS feed sequentially from
+    # real external servers; CI's network latency to those feeds is more
+    # variable than this sandbox's, so this needs more headroom than the
+    # other single-request plugin actions here (#318 phase 2 follow-up).
     resp = httpx.get(
         f"{live_stack.registry_url}/v1/plugins/news/actions/get_news",
         params={"limit": 3},
-        timeout=15.0,
+        timeout=30.0,
     )
     assert resp.status_code == 200
     result = resp.json()["result"]
