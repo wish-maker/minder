@@ -6,36 +6,27 @@ pydantic==2.13.4
 pydantic-settings==2.14.2
 
 # Database
-psycopg2-binary==2.9.12
 asyncpg==0.31.0
-sqlalchemy==2.0.51
 
 # Redis
 redis==8.1.0
 
 # Plugin system
-importlib-metadata==9.0.0
 pyyaml==6.0.3
 jsonschema==4.26.0
 
 # Plugin Dependencies
-aiohttp==3.14.3
 httpx==0.28.1
-psutil==7.2.2
-pandas==3.0.5
-numpy==2.5.1
-beautifulsoup4==4.15.0
-lxml==6.1.1
 
 # Monitoring
 prometheus-client==0.26.0
 
 # Utilities
-python-dotenv==1.2.2
-pyjwt==2.13.0
 python-jose[cryptography]==3.5.0
 
 # Plugin-specific dependencies (TEFAS, time-series)
-influxdb-client==1.50.0
 tefas-crawler==0.6.0
-borsapy==0.10.2  # needs httpx>=0.27 (bumped above); BIST/forex/funds
+# Not imported by any current plugin, but deliberately pre-installed for a
+# planned future BIST plugin (see src/plugins/tefas/__init__.py's own
+# docstring) -- kept, unlike this issue's other genuinely-dead pins (#341).
+borsapy==0.10.2

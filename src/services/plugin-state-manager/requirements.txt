@@ -7,7 +7,6 @@ pydantic-settings==2.14.2
 
 # Database
 asyncpg==0.31.0
-psycopg2-binary==2.9.12
 
 # HTTP client
 httpx==0.28.1
@@ -15,13 +14,5 @@ httpx==0.28.1
 # Metrics
 prometheus-client==0.26.0
 
-# Authentication & Security
-pyjwt==2.13.0
-python-dotenv==1.2.2
-
-# Logging
-python-json-logger==4.1.0
-
 # Utilities
-uuid
 pyyaml==6.0.3
