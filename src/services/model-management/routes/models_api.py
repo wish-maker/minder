@@ -106,7 +106,18 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
                     status_code=404, detail=f"Model '{model_id}' not found"
                 )
             details = await ollama_manager.show_model(model_id)
-            return {"id": model_id, "details": details, "status": "ready"}
+            # Promoted out of `details` (#328): "does this model support real
+            # tool-calling" was previously only inferable from behavior -- a
+            # live audit found a model answering fluently without ever
+            # invoking a real tool, with nothing to check beforehand. Ollama's
+            # own ShowResponse.capabilities (e.g. ["completion", "tools", ...])
+            # was already in `details` unfiltered, just not surfaced.
+            return {
+                "id": model_id,
+                "details": details,
+                "capabilities": details.get("capabilities") or [],
+                "status": "ready",
+            }
         except HTTPException:
             raise
         except Exception as e:
