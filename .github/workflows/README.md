@@ -18,7 +18,8 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
   dir is its own import root) with the pydantic plugin and installs
   `requirements-typecheck.txt` so FastAPI/Pydantic/httpx/etc. are checked with real
   types instead of `Any`. Config lives in the root `pyproject.toml` (`[tool.mypy]`),
-  passed via `--config-file`. Also covers `src/shared/` and `scripts/setup/`.
+  passed via `--config-file`. Also covers `src/shared/`, `scripts/setup/`, and
+  `scripts/check_pip_updates.py`/`scripts/check_docker_updates.py`.
 - Shell lint: `bash -n` + `shellcheck --shell=bash --severity=error` (**blocking**)
   on `setup.sh` (the thin shim) + `setup.bash.sh` (the frozen bash reference) + all
   `scripts/lib/*.sh`; full-severity shellcheck is informational (`continue-on-error`).
