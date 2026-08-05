@@ -126,7 +126,9 @@ async def test_chat_with_tools_routes_get_tool_args_as_params(ai_mod, monkeypatc
         {"messages": [{"role": "user", "content": "price of bitcoin?"}]}, None
     )
 
-    assert result == {"message": {"content": "The price is $42."}}
+    assert result["message"] == {"content": "The price is $42."}
+    assert result["minder_tools_offered"] is True
+    assert result["minder_tool_calls_made"] == 1
     assert len(calls) == 1
     assert calls[0]["params"] == {"coin": "bitcoin"}
     assert calls[0]["json_body"] is None
@@ -265,7 +267,9 @@ async def test_chat_with_tools_executes_content_embedded_tool_call(ai_mod, monke
         {"messages": [{"role": "user", "content": "price of bitcoin?"}]}, None
     )
 
-    assert result == {"message": {"content": "The price is $42."}}
+    assert result["message"] == {"content": "The price is $42."}
+    assert result["minder_tools_offered"] is True
+    assert result["minder_tool_calls_made"] == 1
     assert len(calls) == 1
     assert calls[0]["params"] == {"coin": "bitcoin"}
 
@@ -275,7 +279,12 @@ async def test_chat_with_tools_content_not_matching_any_tool_passes_through(
     ai_mod, monkeypatch
 ):
     """Ordinary prose in content (no matching tool name) returns the response
-    unchanged -- no false-positive tool execution."""
+    unchanged -- no false-positive tool execution. Also the #328 regression
+    guard: tools were genuinely offered but never invoked, so
+    minder_tool_calls_made must be 0 -- this is the exact silent-hallucination
+    shape a live audit caught (a model answering fluently without ever
+    calling the real tool, indistinguishable from a real answer without this
+    signal)."""
     tool = {
         "type": "function",
         "function": {"name": "get_crypto_price", "parameters": {}},
@@ -303,7 +312,7 @@ async def test_chat_with_tools_content_not_matching_any_tool_passes_through(
         {"messages": [{"role": "user", "content": "price of bitcoin?"}]}, None
     )
 
-    assert result == {
-        "message": {"content": "Bitcoin is worth about $64,000 right now."}
-    }
+    assert result["message"] == {"content": "Bitcoin is worth about $64,000 right now."}
+    assert result["minder_tools_offered"] is True
+    assert result["minder_tool_calls_made"] == 0
     assert call_count == 0
