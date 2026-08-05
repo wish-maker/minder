@@ -237,6 +237,17 @@ jobs:
           pip install -r src/services/plugin-registry/requirements.txt
           pip install -r src/services/rag-pipeline/requirements.txt
 
+      - name: Prepare /app (container-absolute-path symlinks, #318)
+        # tests/e2e/conftest.py symlinks /app/{src,plugins,services/plugin-registry}
+        # to the real checkout so every service's hardcoded
+        # sys.path.insert(0, "/app/src") resolves without changing any service
+        # code. The runner user can't create a directory at the filesystem
+        # root without sudo; conftest.py itself doesn't (and shouldn't) use
+        # sudo, so pre-create + chown it here instead.
+        run: |
+          sudo mkdir -p /app
+          sudo chown -R "$(id -u):$(id -g)" /app
+
       - name: Run E2E tests
         env:
           POSTGRES_HOST: localhost
