@@ -174,6 +174,13 @@ class LiveStack:
             timeout=5.0,
         )
 
+    def queue_generate_responses(self, responses):
+        httpx.post(
+            f"{self.ollama_url}/_control/generate_responses",
+            json={"responses": responses},
+            timeout=5.0,
+        )
+
 
 @pytest.fixture(scope="session")
 def live_stack():
