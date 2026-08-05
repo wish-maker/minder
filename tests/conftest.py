@@ -48,6 +48,55 @@ try:
 
     services_base = project_root / "src" / "services"
 
+    # Every service's main.py does bare `from routes import X` / `from core
+    # import Y` internally. Since load_service_module() below loads all six
+    # services in a fixed order and Python caches "routes"/"core" as *global*
+    # sys.modules entries keyed by those bare names, whichever service loads
+    # first (api-gateway) wins that name for the rest of the session -- any
+    # later attempt to import a DIFFERENT service's own routes/core submodule
+    # (e.g. plugin-registry's real routes.proxy.ProxyRouter) silently gets
+    # api-gateway's unrelated module instead (#333). This helper loads one
+    # service's main.py with those bare names evicted first and the service's
+    # own directory as the only sys.path entry, then restores whatever was
+    # cached before the call -- so it doesn't affect fixtures (like
+    # gateway_test_client below) that depend on api-gateway continuing to win
+    # the normal collision race.
+    _COLLISION_PRONE_NAMES = (
+        "core",
+        "routes",
+        "config",
+        "models",
+        "middleware",
+        "migrations",
+    )
+
+    def isolated_service_import(service_dir_name: str, module_name: str):
+        """Load <service_dir_name>/main.py fresh, isolated from other
+        services' same-named bare submodules already cached in sys.modules."""
+        service_path = services_base / service_dir_name
+        saved_path = list(sys.path)
+        saved_modules = {}
+        for name in _COLLISION_PRONE_NAMES:
+            for key in list(sys.modules):
+                if key == name or key.startswith(name + "."):
+                    saved_modules[key] = sys.modules.pop(key)
+        sys.path.insert(0, str(service_path))
+        try:
+            spec = importlib.util.spec_from_file_location(
+                module_name, service_path / "main.py"
+            )
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = module
+            spec.loader.exec_module(module)
+            return module
+        finally:
+            sys.path[:] = saved_path
+            for name in _COLLISION_PRONE_NAMES:
+                for key in list(sys.modules):
+                    if key == name or key.startswith(name + "."):
+                        sys.modules.pop(key, None)
+            sys.modules.update(saved_modules)
+
     # Load services individually to avoid one failure blocking all
     gateway_app = None
     registry_app = None
@@ -257,6 +306,22 @@ def gateway_test_client():
     """Create gateway test client"""
     # Access to FastAPI app from the module
     return TestClient(gateway_app.app) if gateway_app else TestClient(None)
+
+
+@pytest.fixture(scope="session")
+def marketplace_app_isolated():
+    """marketplace's real FastAPI app, loaded free of the core/routes
+    collision described above (#333)."""
+    return isolated_service_import("marketplace", "marketplace_isolated_main")
+
+
+@pytest.fixture(scope="session")
+def plugin_registry_proxy_router_cls():
+    """plugin-registry's real ProxyRouter class, loaded free of the
+    core/routes collision described above (#333) -- main.py's own
+    `from routes.proxy import ProxyRouter` binds it directly on the module."""
+    module = isolated_service_import("plugin-registry", "plugin_registry_isolated_main")
+    return module.ProxyRouter
 
 
 # Auth fixtures

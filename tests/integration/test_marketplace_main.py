@@ -1,19 +1,12 @@
 import pytest
 from fastapi.testclient import TestClient
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skip(
-        reason="Requires a running PostgreSQL (marketplace lifespan opens a DB pool)"
-    ),
-]
+pytestmark = [pytest.mark.integration]
 
 
-def test_marketplace_api_starts():
+def test_marketplace_api_starts(marketplace_app_isolated):
     """Test that marketplace API starts successfully"""
-    from services.marketplace.main import app
-
-    client = TestClient(app)
+    client = TestClient(marketplace_app_isolated.app)
 
     # Health check
     response = client.get("/health")
@@ -24,11 +17,9 @@ def test_marketplace_api_starts():
     assert data["service"] == "marketplace"
 
 
-def test_marketplace_api_docs_available():
+def test_marketplace_api_docs_available(marketplace_app_isolated):
     """Test that API documentation is available"""
-    from services.marketplace.main import app
-
-    client = TestClient(app)
+    client = TestClient(marketplace_app_isolated.app)
 
     # OpenAPI docs
     response = client.get("/docs")
