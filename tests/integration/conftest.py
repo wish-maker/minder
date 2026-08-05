@@ -6,6 +6,9 @@ Sets up test environment BEFORE any app code is imported
 import os
 import sys
 
+import pytest
+from fastapi.testclient import TestClient
+
 # Test environment - MUST match docker/docker-compose.test.yml
 # IMPORTANT: Set env vars BEFORE importing any app code
 os.environ.setdefault("POSTGRES_HOST", "localhost")
@@ -45,3 +48,15 @@ settings.DB_PORT = int(os.getenv("DB_PORT", "5433"))
 settings.DB_USER = os.getenv("DB_USER", "postgres")
 settings.DB_PASSWORD = os.getenv("DB_PASSWORD", "testpass")
 settings.DB_NAME = os.getenv("DB_NAME", "minder_test")
+
+
+@pytest.fixture(scope="session")
+def marketplace_schema_ready(marketplace_app_isolated):
+    """Ensure marketplace's real migrations (schema.sql, idempotent -- safe to
+    run more than once) have actually run against the real test DB before any
+    raw-asyncpg schema-introspection test connects (#333). Migrations only
+    run inside the app's lifespan (main.py's `from migrations import
+    run_migrations` is a deferred, function-body import), triggered here via
+    TestClient's context-manager __enter__/__exit__."""
+    with TestClient(marketplace_app_isolated.app):
+        pass

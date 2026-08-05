@@ -1,24 +1,35 @@
+import os
+
 import asyncpg
 import pytest
 
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skip(reason="Requires a running PostgreSQL (marketplace DB)"),
-]
+pytestmark = [pytest.mark.integration]
 
 
 async def get_db_connection():
-    """Create database connection for testing"""
+    """Real test-DB connection, matching what marketplace's own Settings
+    resolves to (env-driven, see tests/integration/conftest.py) -- the
+    original hardcoded host=localhost/user=minder/db=minder_marketplace never
+    matched CI's real postgres (user=postgres, db=minder_test) (#333)."""
     return await asyncpg.connect(
-        host="localhost",
-        port=5432,
-        user="minder",
-        database="minder_marketplace",
+        host=os.environ["DB_HOST"],
+        port=int(os.environ["DB_PORT"]),
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        database=os.environ["DB_NAME"],
     )
 
 
-async def test_database_schema_created():
-    """Test that marketplace database schema is created correctly"""
+async def test_database_schema_created(marketplace_schema_ready):
+    """Test that marketplace database schema is created correctly.
+
+    Assertions here are checked directly against the real, current
+    src/services/marketplace/schema.sql (#333) -- the original version of
+    this test also asserted named CHECK constraints, an updated_at trigger
+    function, and a NOT NULL author/author_email, none of which exist in the
+    real schema (it uses plain VARCHAR columns with no CHECK/trigger
+    machinery at all).
+    """
     conn = await get_db_connection()
 
     # Check tables exist
@@ -55,8 +66,12 @@ async def test_database_schema_created():
 
     index_names = [row["indexname"] for row in indexes]
     assert "idx_marketplace_plugins_name" in index_names
+    assert "idx_marketplace_plugins_status" in index_names
+    assert "idx_marketplace_plugins_pricing_model" in index_names
     assert "idx_marketplace_licenses_user_id" in index_names
-    assert "idx_marketplace_installations_user_plugin" in index_names
+    assert "idx_marketplace_licenses_plugin_id" in index_names
+    assert "idx_marketplace_installations_user_id" in index_names
+    assert "idx_marketplace_ai_tools_plugin_id" in index_names
 
     # Check foreign keys
     fks = await conn.fetch(
@@ -79,33 +94,9 @@ async def test_database_schema_created():
     # Should have foreign keys
     assert len(fks) > 0
 
-    # Check CHECK constraints were added
-    constraints = await conn.fetch(
-        """
-        SELECT
-            tc.table_name,
-            tc.constraint_name,
-            cc.check_clause
-        FROM information_schema.table_constraints tc
-        JOIN information_schema.check_constraints cc
-            ON tc.constraint_name = cc.constraint_name
-        WHERE tc.constraint_schema = 'public'
-            AND tc.constraint_type = 'CHECK'
-        ORDER BY tc.table_name
-    """
-    )
-
-    constraint_names = [row["constraint_name"] for row in constraints]
-
-    # Verify enum constraints
-    assert "check_role" in constraint_names
-    assert "check_status" in constraint_names
-    assert "check_pricing_model" in constraint_names
-    assert "check_distribution_type" in constraint_names
-    assert "check_price_monthly" in constraint_names
-    assert "check_price_yearly" in constraint_names
-
-    # Check NOT NULL constraints on plugins table
+    # Check nullability on marketplace_plugins -- name/display_name are the
+    # real NOT NULL columns; author/author_email are nullable (schema.sql
+    # declares them as plain `VARCHAR(255)` with no NOT NULL).
     plugins_columns = await conn.fetch(
         """
         SELECT column_name, is_nullable
@@ -118,53 +109,14 @@ async def test_database_schema_created():
 
     columns_dict = {row["column_name"]: row["is_nullable"] for row in plugins_columns}
 
-    # Author and author_email should be NOT NULL
-    assert columns_dict.get("author") == "NO"
-    assert columns_dict.get("author_email") == "NO"
+    assert columns_dict.get("name") == "NO"
+    assert columns_dict.get("display_name") == "NO"
+    assert columns_dict.get("author") == "YES"
+    assert columns_dict.get("author_email") == "YES"
 
-    # Check featured plugins index exists
-    featured_index = await conn.fetch(
-        """
-        SELECT indexname
-        FROM pg_indexes
-        WHERE schemaname = 'public'
-            AND indexname = 'idx_marketplace_plugins_featured'
-    """
-    )
-
-    assert len(featured_index) > 0, "Featured plugins index should exist"
-
-    # Check trigger function exists
-    trigger_func = await conn.fetch(
-        """
-        SELECT proname
-        FROM pg_proc
-        WHERE proname = 'update_updated_at_column'
-    """
-    )
-
-    assert len(trigger_func) > 0, "update_updated_at_column function should exist"
-
-    # Check triggers exist
-    triggers = await conn.fetch(
-        """
-        SELECT trigger_name
-        FROM information_schema.triggers
-        WHERE trigger_schema = 'public'
-            AND trigger_name LIKE 'update_%_updated_at'
-        ORDER BY trigger_name
-    """
-    )
-
-    trigger_names = [row["trigger_name"] for row in triggers]
-
-    # Should have triggers for tables with updated_at
-    assert "update_marketplace_categories_updated_at" in trigger_names
-    assert "update_marketplace_users_updated_at" in trigger_names
-    assert "update_marketplace_plugins_updated_at" in trigger_names
-    assert "update_marketplace_licenses_updated_at" in trigger_names
-
-    # Check CASCADE delete on user_id foreign keys
+    # Check CASCADE delete on user_id foreign keys (marketplace_licenses and
+    # marketplace_installations both reference marketplace_users(user_id)
+    # ON DELETE CASCADE)
     cascade_fks = await conn.fetch(
         """
         SELECT
@@ -184,7 +136,6 @@ async def test_database_schema_created():
 
     cascade_tables = [row["table_name"] for row in cascade_fks]
 
-    # Both licenses and installations should have CASCADE
     assert "marketplace_licenses" in cascade_tables
     assert "marketplace_installations" in cascade_tables
 
