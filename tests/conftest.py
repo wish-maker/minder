@@ -16,6 +16,18 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
+# RATE_LIMIT_ENABLED defaults to True (config.py) -- must be disabled BEFORE
+# the service-loading block below imports api-gateway's config/main.py, since
+# core/middleware.py only checks it once, at import time, to decide whether
+# to register the slowapi rate-limit middleware at all; setting the env var
+# any later (e.g. in tests/integration/conftest.py, a child conftest that
+# necessarily runs after this parent one) can't un-register it. Without this,
+# real Redis-backed rate limiting stays active for the whole session across
+# every gateway_test_client-based test, and enough cumulative requests (or
+# re-running the suite within the same rate-limit window) eventually trips a
+# real 429 for tests that have nothing to do with rate limiting (#333).
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 # Add project root to path for imports
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
