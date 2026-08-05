@@ -647,6 +647,11 @@ services:
     - DB_USER=minder
     - DB_PASSWORD=${POSTGRES_PASSWORD}
     - DB_NAME=minder_marketplace
+    # REDIS_* stays even though this service has no real Redis client code
+    # (#331): shared.config.MinderBaseSettings declares REDIS_PASSWORD as a
+    # required field with no default, so Settings() fails to construct
+    # without it. depends_on: redis was removed below since it's otherwise
+    # unused -- the string just needs to exist, not a running Redis.
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -662,8 +667,6 @@ services:
     - "127.0.0.1:8003:8003"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
       plugin-registry:
         condition: service_healthy
@@ -1051,6 +1054,11 @@ services:
     - DB_USER=minder
     - DB_PASSWORD=${POSTGRES_PASSWORD}
     - DB_NAME=minder_marketplace
+    # REDIS_* stays even though this service has no real Redis client code
+    # (#331): shared.config.MinderBaseSettings declares REDIS_PASSWORD as a
+    # required field with no default, so Settings() fails to construct
+    # without it. depends_on: redis was removed below since it's otherwise
+    # unused -- the string just needs to exist, not a running Redis.
     - REDIS_HOST=redis
     - REDIS_PORT=6379
     - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -1066,8 +1074,6 @@ services:
     - "127.0.0.1:8002:8002"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
       plugin-registry:
         condition: service_healthy

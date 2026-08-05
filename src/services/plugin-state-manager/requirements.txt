@@ -15,9 +15,6 @@ httpx==0.28.1
 # Metrics
 prometheus-client==0.26.0
 
-# Redis (caching)
-redis==8.1.0
-
 # Authentication & Security
 pyjwt==2.13.0
 python-dotenv==1.2.2
