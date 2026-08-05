@@ -25,9 +25,10 @@ COPY src/services/plugin-registry/requirements.txt .
 RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || \
     pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt
 
-# Plugin-specific deps (influxdb-client, tefas-crawler, borsapy) are pinned in
-# requirements.txt above — no separate install step (kept them from drifting: this
-# block previously re-pinned borsapy==0.8.7 / tefas-crawler==0.5.0, downgrading them).
+# Plugin-specific deps (tefas-crawler, borsapy) are pinned in requirements.txt
+# above — no separate install step. influxdb-client was removed (#341): it's
+# never actually imported (plugins write to InfluxDB via raw httpx
+# line-protocol calls instead).
 
 # Copy application code
 COPY src/services/plugin-registry/main.py .

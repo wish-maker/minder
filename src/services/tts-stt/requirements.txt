@@ -3,9 +3,7 @@ uvicorn==0.52.1
 pydantic==2.13.4
 pydantic-settings==2.14.2
 python-multipart==0.0.32
-aiofiles==25.1.0
 prometheus-client==0.26.0
-python-dotenv==1.2.2
 
 # TTS/STT (Minimal working set)
 piper-tts==1.6.0  # offline neural TTS (CPU/Pi-friendly, permissive voices) — default (#18)
