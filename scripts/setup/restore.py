@@ -194,7 +194,16 @@ def run(archive: str = "") -> int:
     log.spinner_start("Extracting archive…")
     try:
         with tarfile.open(archive, "r:gz") as tf:
-            tf.extractall(tmp_dir, filter="data")
+            try:
+                tf.extractall(tmp_dir, filter="data")
+            except TypeError:
+                # PEP 706's `filter` kwarg needs Python >=3.12 (or a backported
+                # patch release) -- found live on the Pi (3.11.2, no backport),
+                # which crashed every restore with an unhandled TypeError
+                # instead of ever reaching the corrupt-archive handling below.
+                # These are our own backup archives, not untrusted uploads, so
+                # falling back to the pre-3.12 unfiltered extract is fine.
+                tf.extractall(tmp_dir)
     except (OSError, tarfile.TarError):
         pass  # bash's `tar xzf` is unguarded too; a bad archive leaves restore_dir empty
     log.spinner_stop()

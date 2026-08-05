@@ -94,6 +94,33 @@ def test_full_restore_reports_clean_success(monkeypatch, stubbed, tmp_path):
     assert not any("NOT restored" in w for w in warns)
 
 
+def test_extract_falls_back_when_filter_kwarg_unsupported(
+    monkeypatch, stubbed, tmp_path
+):
+    """Found live on the Pi: Python 3.11.2 predates PEP 706's `filter` kwarg on
+    TarFile.extractall, so it raised an unhandled TypeError on every restore
+    instead of ever reaching the corrupt-archive handling. Must fall back to
+    an unfiltered extract (these are our own backup archives, not untrusted
+    uploads) rather than crash."""
+    archive = _make_archive(tmp_path, files={"postgres.sql": "-- dump\n"})
+    warns, succs, errors = stubbed
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+
+    real_extractall = tarfile.TarFile.extractall
+
+    def fake_extractall(self, path, *args, **kwargs):
+        if "filter" in kwargs:
+            raise TypeError("extractall() got an unexpected keyword argument 'filter'")
+        return real_extractall(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", fake_extractall)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    assert any("Restore complete — restart services" in s for s in succs)
+
+
 def test_not_running_store_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):
     """#282: archived data exists but its container isn't running — must be
     surfaced in the final summary, not silently dropped."""
