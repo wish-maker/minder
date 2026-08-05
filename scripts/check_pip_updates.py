@@ -32,7 +32,12 @@ def find_requirements() -> List[str]:
     # FastAPI/Pydantic versions the mypy gate type-checks against, and was
     # silently invisible to this scan (the docs at .github/workflows/README.md
     # already claimed this glob; the code just didn't match it yet).
-    return sorted(glob.glob("src/**/requirements*.txt", recursive=True))
+    # glob() returns OS-native separators (backslashes on Windows) -- normalize
+    # so every caller gets the same forward-slash paths regardless of host.
+    return sorted(
+        p.replace("\\", "/")
+        for p in glob.glob("src/**/requirements*.txt", recursive=True)
+    )
 
 
 def parse_pins(path: str) -> List[Tuple[str, str, str]]:
@@ -93,8 +98,7 @@ def build_report() -> str:
     extras: Dict[str, str] = {}
     for path in find_requirements():
         short = (
-            path.replace("\\", "/")
-            .replace("src/services/", "")
+            path.replace("src/services/", "")
             .replace("src/requirements/", "")
             .replace("/requirements.txt", "")
         )
