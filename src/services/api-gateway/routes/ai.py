@@ -270,13 +270,25 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
     Streaming isn't supported with the tool loop, so a streaming request falls back
     to a plain passthrough. Tool results (or errors — e.g. a 401 when unauthenticated)
     are fed back so the model can answer; a tool problem never aborts the chat.
+
+    Every return path also stamps `minder_tools_offered`/`minder_tool_calls_made`
+    onto the response (#328): a model can answer fluently without ever invoking a
+    real tool, and prior to this there was no signal anywhere — log or response —
+    to tell that apart from a real tool-backed answer. These fields make it
+    observable instead of silent; they don't change what's returned otherwise.
     """
     if body.get("stream"):
-        return await _ollama_chat(body)
+        resp = await _ollama_chat(body)
+        resp["minder_tools_offered"] = False
+        resp["minder_tool_calls_made"] = 0
+        return resp
 
     tools_full = (await get_tool_definitions()).get("tools", [])
     if not tools_full:
-        return await _ollama_chat(body)
+        resp = await _ollama_chat(body)
+        resp["minder_tools_offered"] = False
+        resp["minder_tool_calls_made"] = 0
+        return resp
 
     # Ollama wants clean {type, function} defs; keep metadata aside for routing.
     ollama_tools = [
@@ -291,6 +303,7 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
     }
 
     messages = list(body.get("messages", []))
+    tool_call_count = 0
     for _ in range(MAX_TOOL_ITERATIONS):
         resp = await _ollama_chat({**body, "messages": messages, "tools": ollama_tools})
         message = resp.get("message", {})
@@ -298,10 +311,18 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
         if not tool_calls:
             synthetic = _parse_content_tool_call(message.get("content"), meta_by_name)
             if not synthetic:
+                resp["minder_tools_offered"] = True
+                resp["minder_tool_calls_made"] = tool_call_count
+                if tool_call_count == 0:
+                    logger.warning(
+                        f"Chat completed without invoking any tool despite "
+                        f"{len(tools_full)} tool(s) being offered"
+                    )
                 return resp
             tool_calls = [synthetic]
         messages.append(message)
         for call in tool_calls:
+            tool_call_count += 1
             fn = call.get("function", {})
             name = fn.get("name")
             args = _normalize_tool_args(fn.get("arguments") or {})
@@ -335,7 +356,10 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
                     content = f"error: tool '{name}' failed: {te}"
             messages.append({"role": "tool", "content": content})
     # Iterations exhausted — one final answer without further tool offers.
-    return await _ollama_chat({**body, "messages": messages})
+    final = await _ollama_chat({**body, "messages": messages})
+    final["minder_tools_offered"] = True
+    final["minder_tool_calls_made"] = tool_call_count
+    return final
 
 
 @router.post("/chat/completions")

@@ -168,16 +168,31 @@ class Journey:
                 f"HTTP {resp.status_code}",
             )
             return
-        content = (resp.json().get("message") or {}).get("content", "")
-        if content.strip():
+        body = resp.json()
+        content = (body.get("message") or {}).get("content", "")
+        if not content.strip():
             self.record(
-                f"{plugin_label} tool chat returns real content",
+                f"{plugin_label} tool chat returns real content", FAIL, "empty content"
+            )
+            return
+        # #328: a fluent answer alone doesn't prove the real plugin was used --
+        # a live audit found the model hallucinating a confident, wrong price
+        # instead of calling the real crypto plugin, with no signal anywhere
+        # that happened. minder_tool_calls_made (added for exactly this) makes
+        # it checkable instead of assumed.
+        tool_calls_made = body.get("minder_tool_calls_made", 0)
+        if tool_calls_made >= 1:
+            self.record(
+                f"{plugin_label} tool chat actually invoked the real tool",
                 PASS,
                 content.strip()[:150],
             )
         else:
             self.record(
-                f"{plugin_label} tool chat returns real content", FAIL, "empty content"
+                f"{plugin_label} tool chat actually invoked the real tool",
+                WARN,
+                f"model answered without ever calling the real tool -- possible "
+                f"hallucination: {content.strip()[:150]}",
             )
 
     # ── Journey 4: full RAG document lifecycle ───────────────────────────

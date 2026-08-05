@@ -36,7 +36,13 @@ def test_plain_chat_without_tools_is_single_passthrough(live_stack):
         timeout=15.0,
     )
     assert resp.status_code == 200
-    assert resp.json()["message"]["content"] == "Hello there."
+    body = resp.json()
+    assert body["message"]["content"] == "Hello there."
+    # minder_tools omitted -> chat_completions calls _ollama_chat directly,
+    # never _chat_with_tools, so the minder_* fields aren't added here at all
+    # (this path must stay byte-identical to a raw Ollama response).
+    assert "minder_tools_offered" not in body
+    assert "minder_tool_calls_made" not in body
 
 
 def test_native_tool_calls_dispatches_to_real_plugin_registry(live_stack):
@@ -73,7 +79,10 @@ def test_native_tool_calls_dispatches_to_real_plugin_registry(live_stack):
         timeout=20.0,
     )
     assert resp.status_code == 200
-    assert resp.json()["message"]["content"] == "The price is $42."
+    body = resp.json()
+    assert body["message"]["content"] == "The price is $42."
+    assert body["minder_tools_offered"] is True
+    assert body["minder_tool_calls_made"] == 1
 
 
 def test_content_embedded_tool_call_fallback_dispatches_real_tool(live_stack):
@@ -104,7 +113,10 @@ def test_content_embedded_tool_call_fallback_dispatches_real_tool(live_stack):
         timeout=20.0,
     )
     assert resp.status_code == 200
-    assert resp.json()["message"]["content"] == "Bitcoin is currently $42."
+    body = resp.json()
+    assert body["message"]["content"] == "Bitcoin is currently $42."
+    assert body["minder_tools_offered"] is True
+    assert body["minder_tool_calls_made"] == 1
 
 
 def test_content_that_only_looks_like_a_tool_call_is_not_dispatched(live_stack):
@@ -126,4 +138,10 @@ def test_content_that_only_looks_like_a_tool_call_is_not_dispatched(live_stack):
         timeout=15.0,
     )
     assert resp.status_code == 200
-    assert resp.json()["message"]["content"] == '{"name": "delete_the_entire_database"}'
+    body = resp.json()
+    assert body["message"]["content"] == '{"name": "delete_the_entire_database"}'
+    # #328 regression guard: tools genuinely offered, but the loop must record
+    # that none were ever actually invoked -- not silently indistinguishable
+    # from a real tool-backed answer.
+    assert body["minder_tools_offered"] is True
+    assert body["minder_tool_calls_made"] == 0
