@@ -118,6 +118,38 @@ the top of `conftest.py` to point elsewhere).
 pytest tests/e2e/ -v
 ```
 
+#### Tool-calling model reliability (#328)
+
+A live audit (`tests/manual/test_real_user_journeys.py`) found the deployed
+default model, `granite3-moe:latest`, answering a confident, wrong,
+hallucinated Bitcoin price instead of calling the real crypto plugin — no
+signal anywhere distinguished that from a real tool-backed answer (fixed:
+every chat response now carries `minder_tools_offered`/
+`minder_tool_calls_made`, see `routes/ai.py`'s `_chat_with_tools`). Ollama's
+own `capabilities` metadata (`GET /v1/models/{id}`, promoted from
+`ShowResponse` in `model-management/routes/models_api.py`) reports `tools`
+support for essentially every installed model, `granite3-moe` included —
+capability metadata alone does **not** predict whether a model actually
+invokes a tool for a naturally-phrased question. Only a live check
+(`minder_tool_calls_made` on a real `minder_tools: true` request) does.
+
+Live-tested on the Raspberry Pi host against the same "What is the current
+price of bitcoin?" question:
+
+| Model | Reports `tools` capability | Actually invoked the real tool live |
+|---|---|---|
+| `granite3-moe:latest` (previous default) | yes | **no** — hallucinated a price |
+| `command-r:latest` | yes | yes — real price |
+| `llama3.2:latest` | yes | yes — real price |
+| `qwen3:30b` | yes | yes — real price |
+| `mistral-nemo:12b` | yes | yes — real price |
+
+**Recommendation:** use `command-r:latest`, `llama3.2:latest`, `qwen3:30b`,
+or `mistral-nemo:12b` — not `granite3-moe` — for any chat flow with
+`minder_tools: true`. Switching the deployed default is an ops decision, not
+made here; re-verify with a live check (not just the capabilities field)
+before trusting a new model with tool-augmented chat.
+
 ### 4. Performance Tests (`tests/performance/`)
 
 Home for throughput / latency tests (mark them `@pytest.mark.load`/`@pytest.mark.slow`;
