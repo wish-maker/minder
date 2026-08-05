@@ -206,6 +206,15 @@ jobs:
         ports:
           - 6379:6379
 
+      # No --health-cmd: qdrant's minimal image has no curl/wget to run one
+      # with. tests/e2e/conftest.py's own client-side health polling (rag-
+      # pipeline's /health, which itself probes qdrant) already tolerates
+      # qdrant's own startup lag, so nothing else needs to gate on it here.
+      qdrant:
+        image: qdrant/qdrant:v1.19
+        ports:
+          - 6333:6333
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -221,6 +230,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r src/requirements/requirements.txt
           pip install -r src/requirements/requirements-dev.txt
+          # tests/e2e/ runs each service's REAL app as a bound uvicorn process
+          # (not mocked) -- it needs each service's own runtime deps too, not
+          # just the shared root set above.
+          pip install -r src/services/api-gateway/requirements.txt
+          pip install -r src/services/plugin-registry/requirements.txt
+          pip install -r src/services/rag-pipeline/requirements.txt
 
       - name: Run E2E tests
         env:
