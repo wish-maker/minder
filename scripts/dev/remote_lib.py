@@ -83,6 +83,13 @@ JOBS = {
         "raw": [
             "POSTGRES_HOST=localhost POSTGRES_PORT=5432 POSTGRES_USER=postgres "
             "POSTGRES_PASSWORD=test_password POSTGRES_DB=minder_test "
+            # DB_* mirrors POSTGRES_* (#265): services on MinderBaseSettings (now
+            # including rag-pipeline/tts-stt/marketplace/plugin-state-manager,
+            # #313) read DB_HOST/PORT/USER/PASSWORD/NAME, not the legacy
+            # POSTGRES_* names — missing these fails Settings() at import time,
+            # aborting test collection entirely (not just a test failure).
+            "DB_HOST=localhost DB_PORT=5432 DB_USER=postgres "
+            "DB_PASSWORD=test_password DB_NAME=minder_test "
             "REDIS_HOST=localhost REDIS_PORT=6379 REDIS_PASSWORD=test_password "
             "JWT_SECRET=test_jwt_secret_for_ci NEO4J_AUTH=neo4j/test_password "
             "python3 -m pytest tests/unit/ -v --tb=short"
@@ -90,7 +97,11 @@ JOBS = {
         "powershell": [
             "$env:POSTGRES_HOST='localhost'; $env:POSTGRES_PORT='5432'; "
             "$env:POSTGRES_USER='postgres'; $env:POSTGRES_PASSWORD='test_password'; "
-            "$env:POSTGRES_DB='minder_test'; $env:REDIS_HOST='localhost'; "
+            "$env:POSTGRES_DB='minder_test'; "
+            "$env:DB_HOST='localhost'; $env:DB_PORT='5432'; "
+            "$env:DB_USER='postgres'; $env:DB_PASSWORD='test_password'; "
+            "$env:DB_NAME='minder_test'; "
+            "$env:REDIS_HOST='localhost'; "
             "$env:REDIS_PORT='6379'; $env:REDIS_PASSWORD='test_password'; "
             "$env:JWT_SECRET='test_jwt_secret_for_ci'; "
             "$env:NEO4J_AUTH='neo4j/test_password'; "

@@ -20,7 +20,12 @@ def _make_archive(tmp_path, name="minder-20200101-000000", files=None):
     src = tmp_path / name
     src.mkdir()
     for fname, contents in (files or {}).items():
-        (src / fname).write_text(contents)
+        # write_text() translates "\n" -> os.linesep on write, corrupting the
+        # LF-only dump fixture with CRLF on Windows before restore.py ever
+        # reads it (a real dump's bytes come straight off docker exec's
+        # stdout via backup.py's open(..., "wb"), never through Windows text-
+        # mode translation) -- write_bytes keeps this fixture host-independent.
+        (src / fname).write_bytes(contents.encode())
     archive = tmp_path / f"{name}.tar.gz"
     with tarfile.open(archive, "w:gz") as tf:
         tf.add(src, arcname=name)
