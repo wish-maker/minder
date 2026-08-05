@@ -87,7 +87,32 @@ docker compose -f docker/docker-compose.test.yml down -v
 
 ### 3. End-to-End Tests (`tests/e2e/`)
 
-Exercise complete workflows across multiple services.
+Real cross-service workflows — no mocks, no Docker. A session-scoped fixture
+(`conftest.py`'s `live_stack`) starts api-gateway, plugin-registry, and
+rag-pipeline as real `uvicorn` subprocesses bound to `127.0.0.1`, wired
+together via the same env vars `docker-compose.yml` uses (just `localhost`
+instead of `minder-<service>` hostnames), against a real Postgres/Redis/Qdrant
+and a small deterministic fake-Ollama stub (`fake_ollama.py`) — real Ollama
+(model pull + inference) is the slow, non-deterministic part; Minder's own
+code only needs to be tested for correctly *calling* Ollama, not for model
+output quality.
+
+Covers: harness/health smoke, plugin discovery + read-only action invocation
+(the #254 GET-unauthenticated/POST-JWT-gated split, direct and via the
+gateway proxy), the full RAG document lifecycle (create KB → upload → query
+→ cleanup) against a real Qdrant, the chat + tool-calling dispatch loop for
+both native `tool_calls` and the #250 content-embedded-JSON fallback, and
+downstream error propagation (404/400/503) through the gateway's generic
+proxy. Auth (register/login/JWT) is already covered for real in
+`tests/integration/test_auth_e2e.py` and isn't reproduced here. Deliberately
+**not** covered (no real feature exists to test): rate-limit thresholds,
+security fuzzing, circuit breakers, load balancing, message queues — see
+issue #318.
+
+Requires a real Postgres, Redis, and Qdrant reachable at
+`127.0.0.1:5432/6379/6333` (matching `ci.yml`'s `e2e-tests` job — locally,
+start them yourself with matching credentials; see the `E2E_*` env vars at
+the top of `conftest.py` to point elsewhere).
 
 ```bash
 pytest tests/e2e/ -v

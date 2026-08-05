@@ -29,9 +29,13 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 
 ### 2. CI — `ci.yml`
 **Triggers:** push & PR to `main`/`develop`, manual dispatch.
-**Jobs:** unit tests → integration tests → e2e tests (pytest, with Postgres + Redis
-service containers) → notify. Each stage `needs` the previous. Lint/scan gates live
-in `quality.yml` (separate workflow, run in parallel).
+**Jobs:** unit tests → integration tests → e2e tests → notify. Each stage `needs`
+the previous. Lint/scan gates live in `quality.yml` (separate workflow, run in
+parallel). The e2e job runs `tests/e2e/`'s real multi-service harness against
+Postgres + Redis + Qdrant service containers — api-gateway, plugin-registry,
+and rag-pipeline run as real bound `uvicorn` processes (no Docker build), with
+Ollama replaced by a small deterministic stub (see
+[`docs/development/testing.md`](../../docs/development/testing.md)).
 
 ### 3. Security Scan — `security.yml`
 **Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual
