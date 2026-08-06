@@ -79,11 +79,7 @@ def test_connectivity_failure_returns_503_without_leaking_exception_text():
     ollama_manager = type(
         "M",
         (),
-        {
-            "list_models": AsyncMock(
-                side_effect=ConnectionError(secret_looking_detail)
-            )
-        },
+        {"list_models": AsyncMock(side_effect=ConnectionError(secret_looking_detail))},
     )()
 
     r = _client(ollama_manager).get("/models")
