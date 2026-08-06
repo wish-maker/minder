@@ -177,6 +177,11 @@ async def update_plugin_in_database(plugin_name: str, **updates):
         import traceback
 
         logger.error(f"Traceback: {traceback.format_exc()}")
+        # #351: this used to swallow the exception entirely -- every caller in
+        # routes/plugins.py (install/enable/disable) awaits this and returns a
+        # 200 success response regardless of whether the DB write actually
+        # happened. Re-raise so callers can convert it into an honest error.
+        raise
 
 
 async def load_plugin_config(plugin_name: str) -> dict:

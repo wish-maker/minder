@@ -355,8 +355,32 @@ def check_updates_from_compose(
                         "current": current_tag,
                         "registry": registry,
                     }
+                else:
+                    # #351: latest_release resolved to None/falsy without
+                    # raising -- this used to fall through and add the
+                    # service to none of the six report dicts, so a real
+                    # resolution failure silently read as "nothing to
+                    # report" instead of "this needs a manual look."
+                    manual_check[service_name] = {
+                        "image": image_name,
+                        "current": current_tag,
+                        "latest": None,
+                        "registry": registry,
+                        "note": "Could not determine latest minio RELEASE tag — verify manually.",
+                    }
             except Exception as e:
                 print(f"    [X] {service_name}: Error - {e}")
+                # #351: an exception here used to leave the service out of
+                # every report dict entirely (only a print() the workflow
+                # doesn't capture) — a real check failure silently read as
+                # "nothing to report."
+                manual_check[service_name] = {
+                    "image": image_name,
+                    "current": current_tag,
+                    "latest": None,
+                    "registry": registry,
+                    "note": f"Error checking for minio updates: {e} — verify manually.",
+                }
             continue
 
         # ----------------------------------------------------------------

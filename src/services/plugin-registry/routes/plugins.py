@@ -124,6 +124,13 @@ def build_plugins_router(
             logger.info(f"Registered webhook route for plugin: {plugin_name}")
         except Exception as e:
             logger.error(f"Failed to register webhook: {e}")
+            # #351: this used to only log and fall through to a 200 "installed
+            # successfully" response including webhook_path -- the sibling
+            # reload_plugin_webhook (below) makes the identical call and
+            # correctly converts a failure to a 500, so match that.
+            raise HTTPException(
+                status_code=500, detail=f"Failed to register webhook: {e}"
+            )
 
         plugins_db[plugin_name] = PluginInfo(
             name=plugin_name,
@@ -171,10 +178,18 @@ def build_plugins_router(
         plugin = plugins_db.get(plugin_name)
         if not plugin:
             raise HTTPException(status_code=404, detail="Plugin not found")
+        # #351: persist BEFORE mutating in-memory state -- a DB failure here
+        # used to be silently swallowed by update_plugin_in_database while
+        # in-memory state (and this 200 response) already said "enabled",
+        # leaving the two out of sync until the next restart reloads from DB.
+        try:
+            await update_plugin_in_database(plugin_name, status="enabled", enabled=True)
+        except Exception as e:
+            logger.error(f"Failed to persist enable for {plugin_name}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to enable plugin: {e}")
         plugin.status = "enabled"
         if plugin_name in plugin_instances:
             plugin_instances[plugin_name].status = "ready"
-        await update_plugin_in_database(plugin_name, status="enabled", enabled=True)
         return {"message": f"Plugin {plugin_name} enabled"}
 
     @router.post("/v1/plugins/{plugin_name}/disable")
@@ -185,10 +200,18 @@ def build_plugins_router(
         plugin = plugins_db.get(plugin_name)
         if not plugin:
             raise HTTPException(status_code=404, detail="Plugin not found")
+        try:
+            await update_plugin_in_database(
+                plugin_name, status="disabled", enabled=False
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist disable for {plugin_name}: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to disable plugin: {e}"
+            )
         plugin.status = "disabled"
         if plugin_name in plugin_instances:
             plugin_instances[plugin_name].status = "registered"
-        await update_plugin_in_database(plugin_name, status="disabled", enabled=False)
         return {"message": f"Plugin {plugin_name} disabled"}
 
     @router.post("/v1/plugins/reload-webhook")

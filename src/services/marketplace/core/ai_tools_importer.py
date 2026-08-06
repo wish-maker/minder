@@ -164,8 +164,12 @@ async def import_ai_tools_from_manifest(
             logger.error(error_msg)
             errors.append(error_msg)
 
+    # #351: this used to return success=True unconditionally, even when every
+    # tool in the manifest failed (imported_count == 0, errors full) -- the
+    # /sync route returned it as-is with HTTP 200, so a total DB-write failure
+    # read as a clean sync at every layer up to plugin-registry's caller.
     return {
-        "success": True,
+        "success": not errors,
         "tools_imported": imported_count,
         "errors": errors,
         "message": f"Imported {imported_count} AI tools",
