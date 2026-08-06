@@ -25,12 +25,11 @@ minder/                              # Project root
 │   ├── troubleshooting/             # Common issues
 │   └── api/                         # API reference
 │
-├── docker/                          # Docker configuration
-│   ├── compose/                     # Deployment dir (compose runs from here)
-│   │   ├── docker-compose.yml       # HAND-MAINTAINED source of truth (31 services)
-│   │   ├── docker-compose.override.yml
-│   │   ├── docker-compose.test.yml  # local integration/e2e test deps (CI uses GH Actions services)
-│   │   └── .env                     # Auto-generated mirror of root ./.env (gitignored; do not edit)
+├── docker/                          # Docker configuration (compose runs from here directly)
+│   ├── docker-compose.yml           # HAND-MAINTAINED source of truth (34 services)
+│   ├── docker-compose.override.yml
+│   ├── docker-compose.test.yml      # local integration/e2e test deps (CI uses GH Actions services)
+│   ├── .env                         # Auto-generated mirror of root ./.env (gitignored; do not edit)
 │   └── services/                    # Per-service configs mounted into containers (incl. rabbitmq/, traefik/)
 │       ├── postgres/                # DB init (init.sql)
 │       ├── prometheus/              # Metrics config
@@ -124,7 +123,7 @@ services/api-gateway/
 
 ## Infrastructure Components
 
-32 containers total (Authelia is defined, enabled, and counted).
+34 containers total (Authelia + docker-socket-proxy defined, enabled, and counted).
 
 **Edge / Security**:
 - Traefik (v3) - Reverse proxy, TLS termination, routing

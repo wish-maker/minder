@@ -19,7 +19,7 @@ and where it is headed.
 
 ## What Exists Today
 
-The platform runs as 32 Docker containers provisioned by `bash setup.sh`. See
+The platform runs as 34 Docker containers provisioned by `bash setup.sh`. See
 `docs/architecture/overview.md` and `docs/architecture/microservices.md` for the current,
 authoritative service breakdown.
 

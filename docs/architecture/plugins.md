@@ -122,6 +122,16 @@ any `tool_calls` against the plugin action endpoints **forwarding the caller's J
 run as the calling user), and feeds results back for the final answer. A tool failure (e.g.
 a 401 when unauthenticated) is fed back to the model, never aborting the chat.
 
+**Read-only actions bypass JWT entirely (#254):** a plugin can additionally declare a
+`READ_ONLY_ACTIONS` subset of its `ACTIONS` (e.g. `get_weather`, `get_crypto_price`,
+`get_fund_price`, `get_news`) that's reachable **unauthenticated** via
+`GET /v1/plugins/<name>/actions/<action>?<query params>`, separate from the POST/JWT path
+above. Only actions in that declared subset are exposed this way — mutating actions (e.g.
+`refresh`) stay POST-only and JWT-gated. This exists because pure data-lookup tools were
+previously gated behind the same JWT requirement as mutating actions purely because both
+shared one POST route; a plugin author opts a method into this path deliberately, it isn't
+automatic for every action.
+
 ## API Endpoints
 
 Plugins are managed through the Plugin Registry (`:8001`), typically reached via the API Gateway

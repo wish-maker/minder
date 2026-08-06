@@ -14,7 +14,7 @@
 
 ## Summary of the Current Posture
 
-- **Reverse proxy:** Traefik v3.7.8 (TLS termination, routing via Docker labels,
+- **Reverse proxy:** Traefik v3.7.10 (TLS termination, routing via Docker labels,
   `exposedByDefault: false`). There is **no Nginx** in this stack.
 - **Authentication:** The **API Gateway** implements real JWT (HS256) authentication with
   bcrypt-hashed credentials, plus Redis-backed rate limiting (60s window, fail-open).
@@ -40,7 +40,7 @@ that carry Traefik router labels are exposed through it (`exposedByDefault: fals
 ```yaml
 # Only Traefik binds the public host ports
 traefik:
-  image: traefik:v3.7.8
+  image: traefik:v3.7.10
   ports:
     - "80:80"
     - "443:443"

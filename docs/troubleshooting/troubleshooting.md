@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-07-10
 **Platform Version:** 1.0.0
-**Scale:** 32 containers (development environment on Raspberry Pi 4)
+**Scale:** 34 containers (development environment on Raspberry Pi 4)
 
 ---
 
@@ -82,12 +82,14 @@ docker compose up -d --force-recreate <service>
 
 ## Healthchecks: What "no-healthcheck" Means
 
-29 of the 32 containers have Docker healthchecks. **Three do not, by design** — their base
-images lack the tooling (e.g. `nc`) to run one:
+29 of the 34 containers have an active Docker healthcheck. **Three do not, by design** —
+their base images lack the tooling (e.g. `nc`) to run one:
 
 - `minder-otel-collector`
 - `minder-redis-exporter`
 - `minder-rabbitmq-exporter`
+
+Two more simply don't have one configured: `minder-authelia`, `minder-docker-socket-proxy`.
 
 These show as **`no-healthcheck`** (or blank health) in `docker ps`. **This is not a
 failure.** Older docs that called `redis-exporter` or `otel-collector` "unhealthy" were
