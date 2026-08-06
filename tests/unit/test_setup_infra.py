@@ -83,7 +83,9 @@ def test_migrate_volume_names_aborts_on_failed_copy(monkeypatch, _quiet_log):
         "volume_exists",
         lambda name: any(name.endswith(k) for k in infra._VOLUME_RENAMES),
     )
-    monkeypatch.setattr(infra.docker, "run", lambda *a, **k: 1)  # create + copy both fail
+    monkeypatch.setattr(
+        infra.docker, "run", lambda *a, **k: 1
+    )  # create + copy both fail
     succeeded = []
     monkeypatch.setattr(infra.log, "success", lambda m: succeeded.append(m))
     errored = []
@@ -102,7 +104,9 @@ def test_migrate_volume_names_reports_success_on_real_copy(monkeypatch, _quiet_l
         "volume_exists",
         lambda name: any(name.endswith(k) for k in infra._VOLUME_RENAMES),
     )
-    monkeypatch.setattr(infra.docker, "run", lambda *a, **k: 0)  # create + copy both succeed
+    monkeypatch.setattr(
+        infra.docker, "run", lambda *a, **k: 0
+    )  # create + copy both succeed
     succeeded = []
     monkeypatch.setattr(infra.log, "success", lambda m: succeeded.append(m))
 
