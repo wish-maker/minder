@@ -4,10 +4,11 @@ import asyncio
 from datetime import datetime, timezone
 
 from core import state
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from config import settings
+from shared.errors import backend_http_error
 from shared.health import DependencyCheck, evaluate_dependencies
 
 router = APIRouter()
@@ -117,7 +118,7 @@ async def initialize_ollama():
         await state.ollama_manager.initialize()
         return {"message": "Ollama client initialized successfully"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise backend_http_error(e, "Ollama client initialization")
 
 
 @router.get("/", tags=["Root"])

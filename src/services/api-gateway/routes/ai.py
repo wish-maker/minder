@@ -13,6 +13,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request
 
 from config import settings
+from shared.errors import backend_http_error
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1/ai", tags=["ai"])
@@ -381,7 +382,7 @@ async def chat_completions(request: Request):
             return await _ollama_chat(body)
         except Exception as e:
             logger.error(f"Chat completion failed: {e}")
-            raise HTTPException(status_code=502, detail=f"Chat failed: {str(e)}")
+            raise backend_http_error(e, "Chat completion")
 
     try:
         return await _chat_with_tools(body, request.headers.get("Authorization"))
@@ -393,4 +394,4 @@ async def chat_completions(request: Request):
             return await _ollama_chat(body)
         except Exception as e2:
             logger.error(f"Chat completion failed: {e2}")
-            raise HTTPException(status_code=502, detail=f"Chat failed: {str(e2)}")
+            raise backend_http_error(e2, "Chat completion")
