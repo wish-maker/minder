@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from models.plugin import PluginCreate, PluginListResponse, PluginResponse, PluginUpdate
 
 from shared.auth.jwt_middleware import get_current_user_or_service
+from shared.errors import backend_http_error
 
 # Columns returned by the plugin SELECT/RETURNING clauses, shared by get/update.
 _PLUGIN_COLUMNS = """id, name, display_name, description, author,
@@ -284,9 +285,7 @@ async def create_plugin(
             return _row_to_plugin_response(row)
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create plugin: {str(e)}"
-        )
+        raise backend_http_error(e, "Creating plugin")
 
 
 @router.get("/plugins/featured", response_model=PluginListResponse)

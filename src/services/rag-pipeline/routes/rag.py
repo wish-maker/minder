@@ -28,6 +28,7 @@ from rag.model_selection import resolve_llm_model
 from rag.text_utils import chunk_text, extract_text_from_file
 
 from config import EMBEDDING_DIMENSIONS, settings
+from shared.errors import backend_http_error
 from shared.pagination import paginate
 
 logger = logging.getLogger("minder.rag-pipeline")
@@ -82,9 +83,7 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
         logger.info(f"✅ Created Qdrant collection: {kb_id} (dim={embed_dim})")
     except Exception as e:
         logger.error(f"❌ Failed to create Qdrant collection: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to create collection: {str(e)}"
-        )
+        raise backend_http_error(e, "Creating vector collection")
 
     # Save to PostgreSQL if available
     if state.PG_AVAILABLE:
