@@ -5,6 +5,10 @@ Guards the two Windows crashes that killed the whole `update` verb mid-rebuild:
      codec (cp1252 on Windows) → UnicodeDecodeError on stray progress bytes.
   2. `out.stdout + out.stderr` when one side is None → TypeError.
 
+Also guards #346: a failed build must make `_rebuild()` return False and
+`run()` abort before the rolling restart, instead of silently continuing with
+whatever images were already local.
+
 No Docker: subprocess.run is stubbed.
 """
 
@@ -20,8 +24,8 @@ def _not_dry_run(monkeypatch):
     monkeypatch.setattr(update.config, "DRY_RUN", False)
 
 
-def _completed(stdout, stderr=""):
-    return types.SimpleNamespace(stdout=stdout, stderr=stderr)
+def _completed(stdout, stderr="", returncode=0):
+    return types.SimpleNamespace(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
 def test_decodes_utf8_with_replace(monkeypatch):
@@ -37,8 +41,9 @@ def test_decodes_utf8_with_replace(monkeypatch):
     emitted = []
     monkeypatch.setattr(update.log, "_emit", lambda m: emitted.append(m))
 
-    update._rebuild()
+    ok = update._rebuild()
 
+    assert ok is True
     assert seen.get("encoding") == "utf-8"
     assert seen.get("errors") == "replace"
     # only Step/Successfully/ERROR lines surface
@@ -54,15 +59,15 @@ def test_none_stdout_does_not_crash(monkeypatch):
         update.subprocess, "run", lambda *a, **k: _completed(None, None)
     )
     monkeypatch.setattr(update.log, "_emit", lambda m: None)
-    update._rebuild()  # no exception = pass
+    assert update._rebuild() is True  # no exception, returncode 0 → success
 
 
-def test_oserror_is_swallowed(monkeypatch):
+def test_oserror_returns_false(monkeypatch):
     def boom(*a, **k):
         raise OSError("docker missing")
 
     monkeypatch.setattr(update.subprocess, "run", boom)
-    update._rebuild()  # returns quietly
+    assert update._rebuild() is False
 
 
 def test_dry_run_skips_build(monkeypatch):
@@ -71,5 +76,37 @@ def test_dry_run_skips_build(monkeypatch):
     monkeypatch.setattr(
         update.subprocess, "run", lambda *a, **k: called.append(1) or _completed("")
     )
-    update._rebuild()
+    assert update._rebuild() is True
     assert called == []  # never shells out under --dry-run
+
+
+def test_nonzero_returncode_is_a_failure(monkeypatch):
+    """#346: a build that exits non-zero (e.g. a broken credential helper) must
+    be reported as a failure, not treated like a no-op success."""
+    monkeypatch.setattr(
+        update.subprocess,
+        "run",
+        lambda *a, **k: _completed("", "error getting credentials", returncode=1),
+    )
+    monkeypatch.setattr(update.log, "_emit", lambda m: None)
+    logged_errors = []
+    monkeypatch.setattr(update.log, "error", lambda m: logged_errors.append(m))
+
+    assert update._rebuild() is False
+    assert logged_errors  # a clear error was surfaced, not swallowed
+
+
+def test_run_aborts_before_rolling_restart_on_rebuild_failure(monkeypatch):
+    """#346: run() must not reach 'Performing rolling restart' (and print
+    'Update complete') when the rebuild failed."""
+    monkeypatch.setattr(update.versions, "pull_all_images", lambda: None)
+    monkeypatch.setattr(update, "_rebuild", lambda: False)
+    restarted = []
+    monkeypatch.setattr(
+        update.docker, "container_running", lambda svc: restarted.append(svc) or True
+    )
+
+    rc = update.run()
+
+    assert rc != 0
+    assert restarted == []  # never even checked which services to restart

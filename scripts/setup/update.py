@@ -12,12 +12,12 @@ import time
 from . import config, docker, log, versions
 
 
-def _rebuild() -> None:
+def _rebuild() -> bool:
     # bash: run compose build --pull --no-cache 2>&1 | tee -a LOG | grep -E 'Step|Successfully|ERROR' || true
     # Under DRY_RUN the [dry-run] echo is piped through the grep, which matches none
     # of Step/Successfully/ERROR → nothing reaches stdout, so this is silent.
     if config.DRY_RUN:
-        return
+        return True
     try:
         out = subprocess.run(
             [
@@ -39,13 +39,25 @@ def _rebuild() -> None:
             encoding="utf-8",
             errors="replace",
         )
-    except OSError:
-        return
+    except OSError as exc:
+        log.error(f"Failed to invoke docker compose build: {exc}")
+        return False
     # stdout/stderr can be None if capture failed → guard the concat (was a
     # TypeError: NoneType + str on the crash path above).
     for line in ((out.stdout or "") + (out.stderr or "")).splitlines():
         if re.search(r"Step|Successfully|ERROR", line):
             log._emit(line)
+    # #346: a failed build (e.g. a broken registry-credential helper) must not
+    # be treated the same as "nothing to rebuild" — the caller used to sail on
+    # to the rolling restart regardless, silently keeping whatever images were
+    # already local and printing the same "Update complete" either way.
+    if out.returncode != 0:
+        log.error(
+            f"docker compose build exited {out.returncode} — rebuild failed, "
+            "existing images were NOT updated"
+        )
+        return False
+    return True
 
 
 def run(arg: str = "") -> int:
@@ -60,7 +72,15 @@ def run(arg: str = "") -> int:
     versions.pull_all_images()
 
     log.info("Rebuilding custom Minder images…")
-    _rebuild()
+    if not _rebuild():
+        log.error(
+            "Aborting update — rebuild failed, so a rolling restart would only "
+            "recreate containers from stale images while reporting success. "
+            "Fix the build error above and re-run './{} update'.".format(
+                config.SCRIPT_NAME
+            )
+        )
+        return 1
 
     log.info("Performing rolling restart…")
     for svc in (
