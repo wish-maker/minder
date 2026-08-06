@@ -55,16 +55,27 @@ def add_cors_middleware(
     )
 
 
-def add_cors_from_string(app: FastAPI, cors_origins_str: str) -> None:
+def add_cors_from_string(
+    app: FastAPI,
+    cors_origins_str: Optional[str],
+    default_origins: Optional[List[str]] = None,
+) -> None:
     """
-    Add CORS middleware from comma-separated string of origins
+    Add CORS middleware from a comma-separated string of origins, falling back to
+    ``default_origins`` (or ``add_cors_middleware``'s own dev-origins default) when
+    ``cors_origins_str`` is unset/empty.
 
     Args:
         app: FastAPI application instance
-        cors_origins_str: Comma-separated list of origins
+        cors_origins_str: Comma-separated list of origins, or None/empty for the fallback
+        default_origins: Origins to use when cors_origins_str is unset/empty
+            (default: add_cors_middleware's built-in dev-origins list)
 
     Example:
-        >>> add_cors_from_string(app, "http://localhost:3000,http://localhost:8000")
+        >>> add_cors_from_string(app, settings.CORS_ALLOWED_ORIGINS, default_origins=["*"])
     """
-    allowed_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+    if cors_origins_str:
+        allowed_origins = [origin.strip() for origin in cors_origins_str.split(",")]
+    else:
+        allowed_origins = default_origins
     add_cors_middleware(app, allowed_origins=allowed_origins)
