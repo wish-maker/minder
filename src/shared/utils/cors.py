@@ -74,6 +74,7 @@ def add_cors_from_string(
     Example:
         >>> add_cors_from_string(app, settings.CORS_ALLOWED_ORIGINS, default_origins=["*"])
     """
+    allowed_origins: Optional[List[str]]
     if cors_origins_str:
         allowed_origins = [origin.strip() for origin in cors_origins_str.split(",")]
     else:
