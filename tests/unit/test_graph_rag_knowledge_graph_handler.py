@@ -42,16 +42,22 @@ def _isolated_import(module_path: str):
                 saved_modules[key] = sys.modules.pop(key)
 
     sys.path.insert(0, str(_SERVICE_DIR))
-    # routes/api.py imports EntityExtractor/GraphRetriever purely as type hints
-    # (never instantiated internally) -- fake out their real modules so this
-    # test doesn't need spacy/neo4j installed, matching the established
-    # precedent of faking schemas.validator in the plugin-registry tests.
+    # routes/api.py imports EntityExtractor/GraphRetriever/
+    # KnowledgeGraphConstructor purely as type hints (never instantiated
+    # internally) -- fake out their real modules so this test doesn't need
+    # spacy/neo4j installed, matching the established precedent of faking
+    # schemas.validator in the plugin-registry tests. Confirmed live on the
+    # Pi host: its system Python has neo4j installed but not spacy, and vice
+    # versa elsewhere -- don't assume either is present.
     fake_entity_extractor = ModuleType("core.entity_extractor")
     fake_entity_extractor.EntityExtractor = object
     fake_graph_retriever = ModuleType("core.graph_retriever")
     fake_graph_retriever.GraphRetriever = object
+    fake_graph_constructor = ModuleType("core.graph_constructor")
+    fake_graph_constructor.KnowledgeGraphConstructor = object
     sys.modules["core.entity_extractor"] = fake_entity_extractor
     sys.modules["core.graph_retriever"] = fake_graph_retriever
+    sys.modules["core.graph_constructor"] = fake_graph_constructor
 
     import importlib
 
