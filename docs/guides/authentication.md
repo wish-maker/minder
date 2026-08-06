@@ -78,6 +78,15 @@ POST /v1/auth/refresh
 Authorization: Bearer <access_token>
 ```
 
+### Changing your account password
+
+There is currently no account-level password-change/reset endpoint —
+`src/services/api-gateway/routes/auth.py` only implements `register`/`login`/
+`refresh`. (`./setup.sh sync-postgres-password` is an unrelated *operator*
+command for rotating the infra-level Postgres credential in `.env`, not an
+end-user account action.) This is a real gap, not an oversight to route
+around — file an issue if you need it.
+
 ### JWT secret
 
 Tokens are signed with `JWT_SECRET`, which lives in the root `./.env` file (see
