@@ -16,6 +16,7 @@ from models.tool_execution import (
 )
 
 from shared.errors import backend_http_error
+from shared.pagination import paginate
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,11 @@ async def list_all_tools(
     """
     try:
         result = await discover_tools(active_only=active_only, tier_filter=tier)
-        page = result.tools[offset : offset + limit]
+        page, total = paginate(result.tools, limit, offset)
         return ToolDiscoveryResponse(
             tools=page,
             count=len(page),
-            total=len(result.tools),
+            total=total,
             limit=limit,
             offset=offset,
         )
