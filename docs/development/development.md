@@ -99,7 +99,7 @@ LOG_LEVEL=DEBUG
 
 ```
 install [--profile] | start | stop | restart [service] | status [--json|--watch|--report|--fix] |
-logs | shell | migrate | backup | restore | doctor | update [--check] | bundle {status|enable|disable} |
+logs | shell | migrate | backup | restore | doctor | update [--check] | bundle {status|enable|disable|reconcile} |
 ollama-mode | sync-postgres-password | uninstall [--purge]
 ```
 
