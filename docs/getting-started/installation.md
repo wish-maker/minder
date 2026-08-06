@@ -41,7 +41,7 @@ bash setup.sh start
 That's it. The platform provisions itself with:
 
 **✨ AUTOMATIC FEATURES:**
-- 🤖 **AI Models:** Auto-pulls the models listed in `OLLAMA_PULL_MODELS` (default llama3.2 + nomic-embed-text) when the internal Ollama container runs
+- 🤖 **AI Models:** Auto-pulls the models listed in `OLLAMA_MODELS` (default llama3.2 + nomic-embed-text) when the internal Ollama container runs — the compose file maps this into the container as `OLLAMA_PULL_MODELS`, which `init-models.sh` actually reads; set `OLLAMA_MODELS` in `.env`, not `OLLAMA_PULL_MODELS`
 - 🔐 **Secrets:** Fills any `CHANGEME` values in `./.env` with generated secrets (JWT auth; passwords for Postgres/Redis/Neo4j/etc.)
 - 🗄️ **Databases:** Creates and initializes all required databases
 - 🌐 **Networking:** Sets up Docker networks automatically

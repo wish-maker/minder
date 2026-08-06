@@ -87,30 +87,43 @@ Plugins can also be **enabled/disabled** through the registry.
 
 ## Manifest
 
-A plugin is described by a manifest declaring its identity, capabilities, the storage
-backends it needs, and any AI tools it exposes. Illustrative shape:
+`POST /v1/plugins/install` validates the manifest against `schemas/mvp_manifest.py`'s
+`MVP_MANIFEST_SCHEMA` — a Kubernetes-style envelope around a single, MVP-scoped shape:
+webhook trigger → store-vector action. This is the **only** manifest shape the install
+route accepts today; a manifest describing anything else (a different trigger/action
+type, or the free-form `name`/`capabilities`/`storage`/`tools` shape older drafts of this
+doc used) fails validation with a 422 listing the schema errors.
 
 ```yaml
-name: example              # lowercase identifier
-version: 1.0.0
-description: Illustrative example plugin
-author: Your Name <email@example.com>
-
-capabilities:
-  - collect                # pull data from a source
-  - analyze                # analyze collected data
-
-# Storage backends this plugin needs write access to (see Storage Access)
-storage:
-  - postgres
-  - qdrant
-
-# Optional AI tools this plugin registers (see AI Tools)
-tools: []
+apiVersion: minder.dev/v1alpha1   # only this value is accepted
+kind: Plugin                      # only this value is accepted
+metadata:
+  name: discord-ingestor          # ^[a-z][a-z0-9-]*$, 2-63 chars
+  version: 0.1.0                  # semantic version
+  description: Ingest Discord messages to Qdrant
+spec:
+  trigger:
+    type: webhook                 # only "webhook" is supported in the MVP schema
+    webhook:
+      path: /discord/webhook      # -> POST /webhook/discord/webhook
+      secretRef: discord.webhook.secret   # optional
+  action:
+    type: store-vector            # only "store-vector" is supported in the MVP schema
+    store:
+      collection: discord-messages
+      input:
+        text: "{{ .content }}"           # template for the text to embed
+        metadata:
+          author: "{{ .author.username }}"
+          timestamp: "{{ .timestamp }}"
+      embedModel: all-minilm      # or nomic-embed-text, mxbai-embed-large
 ```
 
-The registry validates the manifest on install. Handlers referenced by the manifest must
-already exist as fixed handlers in the platform.
+This exact example ships as `DISCORD_INGESTOR_EXAMPLE` in `mvp_manifest.py` — copy that
+constant directly rather than retyping it. There is currently no manifest path for
+declaring a plugin's `capabilities`/`storage`/`tools` the way the disk-loaded module
+plugins (crypto/weather/network/news/tefas/telegraf) do in code — those six ship as
+fixed Python handlers, not manifests; see [Status](#status) and [AI Tools](#ai-tools).
 
 ## Storage Access
 
@@ -177,14 +190,14 @@ per platform convention.
 ```bash
 # Health / discovery
 curl http://localhost:8001/health
-curl http://localhost:8001/plugins
+curl http://localhost:8001/v1/plugins
 
-# Enable / disable a plugin
-curl -X POST http://localhost:8001/plugins/<name>/enable
-curl -X POST http://localhost:8001/plugins/<name>/disable
+# Enable / disable a plugin (JWT required)
+curl -X POST http://localhost:8001/v1/plugins/<name>/enable -H "Authorization: Bearer <token>"
+curl -X POST http://localhost:8001/v1/plugins/<name>/disable -H "Authorization: Bearer <token>"
 
 # Plugin health
-curl http://localhost:8001/plugins/<name>/health
+curl http://localhost:8001/v1/plugins/<name>/health
 ```
 
 > Exact route prefixes may differ by version; inspect the running service
