@@ -28,6 +28,8 @@ from models.plugin_state import (
     UpdatePluginConfigRequest,
 )
 
+from shared.pagination import paginate
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -71,11 +73,11 @@ async def list_all_plugin_states(
     async with db.acquire() as conn:
         states = await list_plugin_states(conn, state_filter)
 
-        page = states[offset : offset + limit]
+        page, total = paginate(states, limit, offset)
         return PluginStateListResponse(
             plugins=[PluginStateResponse(**s) for s in page],
             count=len(page),
-            total=len(states),
+            total=total,
             limit=limit,
             offset=offset,
         )
