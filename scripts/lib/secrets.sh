@@ -36,8 +36,13 @@ sync_postgres_password() {
 
     # Apply the .env password to the running database
     log_detail "Applying password from .env to running container…"
-    if docker exec "$(container_name postgres)" psql -U minder -d minder -c \
-        "ALTER USER minder PASSWORD '$new_password';" &>/dev/null; then
+    # Passed via psql's -v + :'pwd' substitution (not interpolated into the SQL
+    # text) -- a password containing a single quote would otherwise break out of
+    # the SQL literal and let arbitrary SQL run as the minder role. -v is a plain
+    # argv value (docker exec, no shell involved), and :'pwd' has psql itself
+    # apply correct SQL-literal quoting/escaping.
+    if docker exec "$(container_name postgres)" psql -U minder -d minder \
+        -v pwd="$new_password" -c "ALTER USER minder PASSWORD :'pwd';" &>/dev/null; then
         log_success "PostgreSQL password synced"
     else
         log_warn "Password sync failed (may already be set)"

@@ -160,7 +160,14 @@ def connect(alias: str):
     sock = _proxy_sock(env, prefix, host)
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # Load the user's own known_hosts first so a host key they've already verified
+    # (e.g. via a manual `ssh`) is checked against, not blindly trusted. AutoAddPolicy
+    # silently accepted ANY key with no record kept (not even TOFU -- it doesn't
+    # persist accepted keys), so neither a spoofed host nor a legitimately rotated
+    # key was ever distinguishable. WarningPolicy keeps this tool working against a
+    # never-seen host (still connects) but logs instead of silently trusting.
+    client.load_system_host_keys()
+    client.set_missing_host_key_policy(paramiko.WarningPolicy())
     if cfg["auth"] == "key":
         key_path = _require(env, f"{prefix}_KEY")
         key = paramiko.Ed25519Key.from_private_key_file(
