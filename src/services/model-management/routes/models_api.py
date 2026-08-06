@@ -15,6 +15,8 @@ from models import (
     ModelTestRequest,
 )
 
+from shared.errors import backend_http_error
+
 
 def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     router = APIRouter(tags=["Models"])
@@ -52,9 +54,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to list models: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to list models: {str(e)}"
-            )
+            raise backend_http_error(e, "Listing models")
 
     @router.post("/models", status_code=201)
     async def register_model(request: ModelPullRequest, response: Response):
@@ -87,9 +87,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to register model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to register model: {str(e)}"
-            )
+            raise backend_http_error(e, "Model registration")
 
     @router.get("/models/{model_id}")
     async def get_model(model_id: str):
@@ -122,9 +120,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to get model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to get model: {str(e)}"
-            )
+            raise backend_http_error(e, "Fetching model details")
 
     @router.delete("/models/{model_id}")
     async def delete_model(model_id: str):
@@ -149,9 +145,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to delete model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to delete model: {str(e)}"
-            )
+            raise backend_http_error(e, "Model deletion")
 
     @router.post("/models/{model_id}/test")
     async def test_model(model_id: str, request: ModelTestRequest):
@@ -167,9 +161,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             raise
         except Exception as e:
             logger.error(f"❌ Failed to test model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to test model: {str(e)}"
-            )
+            raise backend_http_error(e, "Model test")
 
     @router.post("/models/{model_id}/constraints")
     async def set_model_constraints(model_id: str, constraints: ModelConstraints):
