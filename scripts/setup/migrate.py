@@ -53,6 +53,7 @@ def run(target: str = "head") -> int:
         # installer still ran health checks and printed the success banner.
         raise SystemExit(1)
 
+    failed = []
     for svc in _MIGRATION_SERVICES:
         if not docker.container_running(svc):
             log.detail(f"{svc} — not running, skipping")
@@ -68,10 +69,20 @@ def run(target: str = "head") -> int:
                 log.success(f"{svc} — migrations applied")
             else:
                 log.warn(f"{svc} — migration failed (check logs)")
+                failed.append(svc)
         else:
             log.detail(
                 f"{svc} — schema self-initialized on startup (no Alembic), skipping"
             )
+
+    if failed:
+        # #348: same reason as the postgres-down guard above — install.py's
+        # migrate.run("head") call discards the return value, so a plain
+        # `return 1` here would be silently swallowed and the installer would
+        # proceed straight to health checks/"install complete" over a
+        # partially-migrated schema.
+        log.error(f"Migration run failed for: {', '.join(failed)}")
+        raise SystemExit(1)
 
     log.success("Migration run complete")
     return 0
