@@ -23,16 +23,23 @@ os.environ.setdefault("DB_PORT", os.environ["POSTGRES_PORT"])
 os.environ.setdefault("DB_USER", os.environ["POSTGRES_USER"])
 os.environ.setdefault("DB_PASSWORD", os.environ["POSTGRES_PASSWORD"])
 os.environ.setdefault("DB_NAME", os.environ["POSTGRES_DB"])
-os.environ["JWT_SECRET"] = "test_jwt_secret_for_e2e_tests"
-os.environ["JWT_ALGORITHM"] = "HS256"
-os.environ["JWT_EXPIRATION_MINUTES"] = "60"
-os.environ["REDIS_HOST"] = "localhost"
-os.environ["REDIS_PORT"] = "6379"
-os.environ["REDIS_PASSWORD"] = "testpass"
-os.environ["LOG_LEVEL"] = "INFO"
-os.environ["ENVIRONMENT"] = "test"
-os.environ["MINDER_PHASE"] = "1"
-os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ.setdefault("JWT_SECRET", "test_jwt_secret_for_e2e_tests")
+os.environ.setdefault("JWT_ALGORITHM", "HS256")
+os.environ.setdefault("JWT_EXPIRATION_MINUTES", "60")
+os.environ.setdefault("REDIS_HOST", "localhost")
+os.environ.setdefault("REDIS_PORT", "6379")
+# was an unconditional `os.environ[...] = "testpass"` -- silently
+# overriding CI's real Redis service-container password (ci.yml sets
+# REDIS_PASSWORD=test_password) with a value that doesn't match it. Any test
+# making a genuinely-authenticated real Redis connection (not the
+# patch_redis_globally mock, which only intercepts redis.from_url) would
+# fail to auth against CI's actual container -- confirmed live via a new
+# rate-limiting test that needs a real Redis connection to clear its counter.
+os.environ.setdefault("REDIS_PASSWORD", "testpass")
+os.environ.setdefault("LOG_LEVEL", "INFO")
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("MINDER_PHASE", "1")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 # Add api-gateway to path
 sys.path.insert(
