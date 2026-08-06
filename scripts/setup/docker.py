@@ -240,7 +240,25 @@ def wait_port(host: str, port: int, timeout: int = config.TIMEOUT_PORT) -> bool:
 
 
 def wait_postgres_ready(timeout: int = config.TIMEOUT_DB) -> bool:
-    """bash wait_postgres_ready: poll `pg_isready -U minder` every 2s."""
+    """bash wait_postgres_ready: poll `pg_isready -U minder` every 2s.
+
+    #351: `pg_isready` with no `-h` defaults to the local Unix socket. On a
+    truly fresh volume, the postgres image's own docker-entrypoint.sh starts a
+    TEMPORARY bootstrap server (Unix socket only, no TCP) to run
+    docker-entrypoint-initdb.d/init.sql, then stops it and starts the REAL,
+    persistent server (Unix socket AND TCP) -- confirmed live on the Pi via
+    `docker logs minder-postgres`. Without `-h`, this check passed against the
+    *temporary* server, so infra.py's initialize_database() started firing its
+    own CREATE DATABASE calls concurrently with init.sql's -- and when the
+    temporary server was stopped mid-race, in-flight calls failed with a
+    connection error that initialize_database() misreported as "already
+    exists" (any non-zero pg_isready/psql exit is indistinguishable from
+    "already exists" there). Result: minder_authelia/minder_schemaregistry/
+    news_db/crypto_db silently never got created on a fresh install, and
+    authelia/schema-registry crash-looped on "database ... does not exist"
+    forever. Forcing TCP via `-h 127.0.0.1` only succeeds once the real,
+    final server is listening, since the temporary one never binds TCP.
+    """
     log.spinner_start("Waiting for PostgreSQL…")
     elapsed = 0
     while elapsed < timeout:
@@ -251,6 +269,8 @@ def wait_postgres_ready(timeout: int = config.TIMEOUT_DB) -> bool:
                     "exec",
                     container_name("postgres"),
                     "pg_isready",
+                    "-h",
+                    "127.0.0.1",
                     "-U",
                     "minder",
                 ],
