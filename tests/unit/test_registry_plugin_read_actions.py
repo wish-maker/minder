@@ -194,3 +194,21 @@ def test_post_mutating_action_works_with_jwt(client):
     r = with_auth.post("/v1/plugins/crypto/actions/refresh", json={})
     assert r.status_code == 200
     assert instance.refresh_calls == 1
+
+
+def test_post_action_generic_failure_does_not_leak_exception_text(client, monkeypatch):
+    """#357: the generic `except Exception` catch-all used to return
+    HTTPException(500, detail=f"Action failed: {e}") -- leaking the raw
+    exception string. Now uses shared.errors.backend_http_error."""
+    with_auth, _, instance = client
+    secret_looking = "internal-db-password=hunter2"
+
+    async def boom():
+        raise RuntimeError(secret_looking)
+
+    monkeypatch.setattr(instance, "refresh", boom)
+
+    r = with_auth.post("/v1/plugins/crypto/actions/refresh", json={})
+
+    assert r.status_code == 500
+    assert secret_looking not in r.text

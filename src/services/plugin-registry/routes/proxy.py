@@ -9,6 +9,8 @@ from typing import Dict
 import httpx
 from fastapi import HTTPException, Request, Response
 
+from shared.errors import backend_http_error
+
 logger = logging.getLogger("minder.plugin-registry")
 
 
@@ -110,10 +112,7 @@ class ProxyRouter:
 
         except Exception as e:
             logger.error(f"Error proxying to {service_name}: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Proxy error: {str(e)}",
-            )
+            raise backend_http_error(e, f"Proxying to service '{service_name}'")
 
     async def health_check_proxy(self, service_name: str) -> Dict:
         """
@@ -166,10 +165,7 @@ class ProxyRouter:
 
         except Exception as e:
             logger.error(f"Health check failed for {service_name}: {e}")
-            raise HTTPException(
-                status_code=503,
-                detail=f"Health check failed: {str(e)}",
-            )
+            raise backend_http_error(e, f"Health check for service '{service_name}'")
 
     async def close(self):
         """Close HTTP client"""

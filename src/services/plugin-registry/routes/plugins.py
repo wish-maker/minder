@@ -18,6 +18,7 @@ from models import PluginInfo
 from schemas.validator import validate_manifest
 
 from shared.auth.jwt_middleware import enforce_rate_limit, get_current_user
+from shared.errors import backend_http_error
 from shared.pagination import paginate
 
 
@@ -115,9 +116,7 @@ def build_plugins_router(
             logger.info(f"Stored manifest for plugin: {plugin_name}")
         except Exception as e:
             logger.error(f"Failed to store manifest in database: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to store manifest: {e}"
-            )
+            raise backend_http_error(e, "Storing plugin manifest")
 
         try:
             await register_plugin_webhook(plugin_name, manifest)
@@ -128,9 +127,7 @@ def build_plugins_router(
             # successfully" response including webhook_path -- the sibling
             # reload_plugin_webhook (below) makes the identical call and
             # correctly converts a failure to a 500, so match that.
-            raise HTTPException(
-                status_code=500, detail=f"Failed to register webhook: {e}"
-            )
+            raise backend_http_error(e, "Webhook registration")
 
         plugins_db[plugin_name] = PluginInfo(
             name=plugin_name,
@@ -186,7 +183,7 @@ def build_plugins_router(
             await update_plugin_in_database(plugin_name, status="enabled", enabled=True)
         except Exception as e:
             logger.error(f"Failed to persist enable for {plugin_name}: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to enable plugin: {e}")
+            raise backend_http_error(e, "Enabling plugin")
         plugin.status = "enabled"
         if plugin_name in plugin_instances:
             plugin_instances[plugin_name].status = "ready"
@@ -206,9 +203,7 @@ def build_plugins_router(
             )
         except Exception as e:
             logger.error(f"Failed to persist disable for {plugin_name}: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to disable plugin: {e}"
-            )
+            raise backend_http_error(e, "Disabling plugin")
         plugin.status = "disabled"
         if plugin_name in plugin_instances:
             plugin_instances[plugin_name].status = "registered"
@@ -245,9 +240,7 @@ def build_plugins_router(
             logger.info(f"Re-registered webhook route for plugin: {plugin_name}")
         except Exception as e:
             logger.error(f"Failed to re-register webhook: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to register webhook: {e}"
-            )
+            raise backend_http_error(e, "Webhook re-registration")
 
         return {
             "message": f"Webhook re-registered for {plugin_name}",
@@ -356,7 +349,7 @@ def build_plugins_router(
             raise
         except Exception as e:
             logger.error(f"Read action {plugin_name}.{action} failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Action failed: {e}")
+            raise backend_http_error(e, f"Plugin action {plugin_name}.{action}")
         return {"plugin": plugin_name, "action": action, "result": result}
 
     @router.post("/v1/plugins/{plugin_name}/actions/{action}")
@@ -417,7 +410,7 @@ def build_plugins_router(
             raise
         except Exception as e:
             logger.error(f"Action {plugin_name}.{action} failed: {e}")
-            raise HTTPException(status_code=500, detail=f"Action failed: {e}")
+            raise backend_http_error(e, f"Plugin action {plugin_name}.{action}")
         logger.info(
             f"Action '{action}' invoked on plugin {plugin_name} | "
             f"User: {current_user.get('username', 'unknown')}"
