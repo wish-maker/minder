@@ -257,6 +257,8 @@ def test_redis_operation(mock_redis):
 ```python
 from unittest.mock import patch
 
+from shared.utils.redis_client import create_redis_client
+
 def test_redis_client_factory():
     with patch("redis.Redis") as mock_redis:
         client = create_redis_client(host="localhost")

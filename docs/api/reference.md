@@ -352,7 +352,7 @@ Model lifecycle over the Ollama runtime.
 |--------|------|-------------|
 | GET | `/models` | List local models (live from Ollama) |
 | POST | `/models` | Pull a model — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists |
-| GET | `/models/{model_id}` | Model details (**404** if unknown) |
+| GET | `/models/{model_id}` | Model details, including a `capabilities` list (e.g. `tools`) sourced from Ollama's own model metadata — **not** a guarantee the model reliably uses tools when offered them, see [testing.md](../development/testing.md#tool-calling-model-reliability-328) (**404** if unknown) |
 | DELETE | `/models/{model_id}` | Delete a local model (**404** if unknown) |
 | POST | `/models/{model_id}/test` | Quick test-prompt inference — body `{"prompt": "..."}` |
 | POST | `/models/{model_id}/constraints` | Set rate limits — **not implemented (501)** |
