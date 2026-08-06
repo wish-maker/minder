@@ -53,7 +53,9 @@ _MEASUREMENT = "crypto_price"
 # Symbols come from config (CRYPTO_SYMBOLS, API-settable) and are interpolated into
 # an InfluxDB SQL query + line protocol — restrict to a safe charset so a config
 # value can't break out into injection (or corrupt line protocol with a space/comma).
-_SAFE_SYMBOL = re.compile(r"^[A-Za-z0-9._-]+$")
+# \Z (not $) -- $ matches just before a trailing newline too, so "BTC-USD\n" would
+# pass this guard and then corrupt the line-protocol payload with an embedded newline.
+_SAFE_SYMBOL = re.compile(r"^[A-Za-z0-9._-]+\Z")
 
 
 class CryptoPlugin:
