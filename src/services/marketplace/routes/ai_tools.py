@@ -250,8 +250,17 @@ async def sync_ai_tools(
             manifest=request.manifest,
         )
 
+        if not result.get("success", True):
+            # #351: this used to return `result` as-is with HTTP 200 even when
+            # every tool failed to import -- plugin-registry's caller
+            # (marketplace_sync.py) only checks the status code, so a total
+            # DB-write failure read as a clean sync.
+            raise HTTPException(status_code=500, detail=result)
+
         return result
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"AI tools sync failed for {request.plugin_name}: {e}")
         raise HTTPException(

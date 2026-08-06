@@ -4,9 +4,17 @@ resolution). No network: only functions that don't call a registry.
 
 Extracted from docker-image-update.yml's previously-embedded ~450-line Python
 heredoc — this is its first test coverage of any kind.
+
+Also covers #351: check_updates_from_compose()'s minio RELEASE.* special case
+used to leave a service out of every report dict (updates/safe_updates/
+risky_updates/up_to_date/manual_check/excluded_local) when the lookup raised
+or resolved to no usable tag — a real check failure silently read as "nothing
+to report" instead of "this needs a manual look."
 """
 
+import scripts.check_docker_updates as check_docker_updates
 from scripts.check_docker_updates import (
+    check_updates_from_compose,
     classify_update,
     detect_version_scheme,
     get_latest_in_track,
@@ -17,6 +25,12 @@ from scripts.check_docker_updates import (
     parse_version_safe,
     should_skip_tag,
 )
+
+_MINIO_COMPOSE = """
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+"""
 
 
 def test_parse_tag_plain_semver():
@@ -116,3 +130,52 @@ def test_get_registry():
 def test_normalize_repo():
     assert normalize_repo("redis") == "library/redis"
     assert normalize_repo("grafana/grafana") == "grafana/grafana"
+
+
+def _write_compose(tmp_path):
+    p = tmp_path / "docker-compose.yml"
+    p.write_text(_MINIO_COMPOSE)
+    return str(p)
+
+
+def test_minio_lookup_exception_goes_to_manual_check(tmp_path, monkeypatch):
+    def boom(repo):
+        raise ConnectionError("registry unreachable")
+
+    monkeypatch.setattr(check_docker_updates, "fetch_all_tags", boom)
+
+    (
+        updates,
+        safe,
+        risky,
+        up_to_date,
+        manual_check,
+        excluded,
+    ) = check_updates_from_compose(_write_compose(tmp_path))
+
+    assert "minio" not in updates
+    assert "minio" not in up_to_date
+    assert "minio" in manual_check
+    assert "minio" not in excluded
+
+
+def test_minio_unresolvable_release_goes_to_manual_check(tmp_path, monkeypatch):
+    monkeypatch.setattr(check_docker_updates, "fetch_all_tags", lambda repo: [])
+    monkeypatch.setattr(
+        check_docker_updates,
+        "get_latest_minio_release",
+        lambda current, tags: (None, "no RELEASE tags found"),
+    )
+
+    (
+        updates,
+        safe,
+        risky,
+        up_to_date,
+        manual_check,
+        excluded,
+    ) = check_updates_from_compose(_write_compose(tmp_path))
+
+    assert "minio" not in updates
+    assert "minio" not in up_to_date
+    assert "minio" in manual_check
