@@ -35,13 +35,17 @@ def create_networks() -> None:
 
     if docker.network_exists(config.NETWORK_NAME):
         log.info(f"Network '{config.NETWORK_NAME}' already exists")
-    else:
-        docker.run("docker", "network", "create", config.NETWORK_NAME)
+    elif docker.run("docker", "network", "create", config.NETWORK_NAME) == 0:
         log.success(f"Network '{config.NETWORK_NAME}' created")
+    else:
+        # #348: a failed create used to still log "created" — the failure
+        # surfaces anyway on the next `compose up` ("network not found"), but
+        # that's a confusing place to first learn about it.
+        log.warn(f"Network '{config.NETWORK_NAME}' was NOT created")
 
     if docker.network_exists(config.MONITORING_NETWORK_NAME):
         log.info(f"Network '{config.MONITORING_NETWORK_NAME}' already exists")
-    else:
+    elif (
         docker.run(
             "docker",
             "network",
@@ -51,15 +55,21 @@ def create_networks() -> None:
             "bridge",
             "--attachable",
         )
+        == 0
+    ):
         log.success(f"Network '{config.MONITORING_NETWORK_NAME}' created")
+    else:
+        log.warn(f"Network '{config.MONITORING_NETWORK_NAME}' was NOT created")
 
 
 def remove_networks() -> None:
     log.step("Removing Docker networks")
     for name in (config.NETWORK_NAME, config.MONITORING_NETWORK_NAME):
         if docker.network_exists(name):
-            docker.run("docker", "network", "rm", name)
-            log.success(f"Network '{name}' removed")
+            if docker.run("docker", "network", "rm", name) == 0:
+                log.success(f"Network '{name}' removed")
+            else:
+                log.warn(f"Network '{name}' was NOT removed (may still be in use)")
         else:
             log.info(f"Network '{name}' already absent")
 
@@ -94,28 +104,47 @@ def migrate_volume_names() -> None:
     """
     log.step("Checking for volume-name migrations")
     migrated_any = False
+    failed = []
     for old_key, new_key in _VOLUME_RENAMES.items():
         old_name = f"{config.CONTAINER_PREFIX}_{old_key}"
         new_name = f"{config.CONTAINER_PREFIX}_{new_key}"
         if not docker.volume_exists(old_name) or docker.volume_exists(new_name):
             continue  # nothing to migrate, or already migrated
         log.info(f"Migrating volume '{old_name}' → '{new_name}'…")
-        docker.run("docker", "volume", "create", new_name)
-        docker.run(
-            "docker",
-            "run",
-            "--rm",
-            "-v",
-            f"{old_name}:/from",
-            "-v",
-            f"{new_name}:/to",
-            "alpine",
-            "sh",
-            "-c",
-            "cp -a /from/. /to/",
+        create_ok = docker.run("docker", "volume", "create", new_name) == 0
+        copy_ok = (
+            create_ok
+            and docker.run(
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{old_name}:/from",
+                "-v",
+                f"{new_name}:/to",
+                "alpine",
+                "sh",
+                "-c",
+                "cp -a /from/. /to/",
+            )
+            == 0
         )
-        log.success(f"Migrated: {old_key} → {new_key}")
-        migrated_any = True
+        if copy_ok:
+            log.success(f"Migrated: {old_key} → {new_key}")
+            migrated_any = True
+        else:
+            # #348: this used to log "Migrated" unconditionally — a failed copy
+            # (disk full, alpine pull failure, permission error) left `new_name`
+            # empty while the docstring's own advice ("remove manually once the
+            # new ones look right") could lead an operator who trusted the false
+            # success to delete `old_name`, the only good copy of the data.
+            log.error(
+                f"Failed to migrate volume: {old_key} → {new_key} "
+                f"— '{old_name}' was NOT copied, do not delete it"
+            )
+            failed.append(old_key)
+    if failed:
+        raise SystemExit(1)
     if migrated_any:
         log.detail(
             "Old volume(s) left in place — remove manually once the new ones look right."

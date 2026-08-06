@@ -20,7 +20,10 @@ from . import config, docker, log
 def run() -> int:
     log.step("Stopping all services")
 
-    docker.compose_all("down")
+    # #348: the return value used to be discarded here while "All services
+    # stopped" fired unconditionally at the end of this function — a failed
+    # `compose down` (a container refusing to stop) was reported as success.
+    down_ok = docker.compose_all("down") == 0
 
     if docker.network_exists(config.NETWORK_NAME):
         # bash: run docker network rm NAME && log_success || log_warn
@@ -42,5 +45,8 @@ def run() -> int:
             reclaimed = "unknown"
         log.success(f"Dangling images pruned — {reclaimed}")
 
-    log.success("All services stopped")
-    return 0
+    if down_ok:
+        log.success("All services stopped")
+        return 0
+    log.warn("Some services may not have stopped — check 'docker ps' before proceeding")
+    return 1

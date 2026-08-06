@@ -47,3 +47,21 @@ def test_postgres_running_completes_normally(monkeypatch, stubbed):
 
     assert rc == 0
     assert not stubbed
+
+
+def test_a_failed_service_migration_raises_systemexit(monkeypatch, stubbed):
+    """#348: a per-service `alembic upgrade` failure used to be only
+    `log.warn`'d while the function still ended with an unconditional
+    'Migration run complete' / `return 0` — install.py's discarded-return-value
+    call (same reason #290 exists) meant a real migration failure mid-install
+    was invisible. Only a raised SystemExit actually aborts the installer."""
+    monkeypatch.setattr(migrate.docker, "container_running", lambda s: True)
+    monkeypatch.setattr(migrate.docker, "container_name", lambda s: f"minder-{s}")
+    monkeypatch.setattr(migrate, "_has_alembic", lambda cname: True)
+    monkeypatch.setattr(migrate.docker, "run", lambda *a, **k: 1)  # every upgrade fails
+
+    with pytest.raises(SystemExit) as exc_info:
+        migrate.run("head")
+
+    assert exc_info.value.code == 1
+    assert any("Migration run failed" in e for e in stubbed)
