@@ -14,7 +14,7 @@ from config import settings  # noqa: E402
 from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
-from shared.utils.cors import add_cors_middleware  # noqa: E402
+from shared.utils.cors import add_cors_from_string  # noqa: E402
 
 logger = setup_logging("marketplace", level=settings.LOG_LEVEL)
 
@@ -62,12 +62,9 @@ _DEV_CORS_ORIGINS = [
     "http://localhost:8001",
     "http://localhost:8002",
 ]
-cors_origins = (
-    settings.CORS_ALLOWED_ORIGINS.split(",")
-    if settings.CORS_ALLOWED_ORIGINS
-    else _DEV_CORS_ORIGINS
+add_cors_from_string(
+    app, settings.CORS_ALLOWED_ORIGINS, default_origins=_DEV_CORS_ORIGINS
 )
-add_cors_middleware(app, allowed_origins=cors_origins)
 
 # Prometheus metrics: request-tracking middleware + /metrics endpoint
 setup_metrics(app)
