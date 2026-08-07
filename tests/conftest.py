@@ -336,6 +336,36 @@ def plugin_registry_proxy_router_cls():
     return module.ProxyRouter
 
 
+@pytest.fixture(scope="session")
+def api_gateway_rate_limited_app():
+    """A SEPARATE, freshly-imported api-gateway app with rate limiting
+    genuinely ENABLED (unlike gateway_test_client's shared app, which loads
+    with RATE_LIMIT_ENABLED=false per the comment at the top of this file --
+    core/middleware.py only checks the setting once, at import time, so no
+    test using the shared app can ever observe a real 429).
+
+    RATE_LIMIT_ENABLED/RATE_LIMIT_PER_MINUTE are overridden for the duration
+    of this ONE fresh import only (isolated_service_import's own sys.path/
+    sys.modules restore doesn't touch os.environ, so these are restored by
+    hand) -- a small per-minute limit (3) makes the real-blocking test fast
+    and deterministic instead of needing 60 requests."""
+    prior_enabled = os.environ.get("RATE_LIMIT_ENABLED")
+    prior_limit = os.environ.get("RATE_LIMIT_PER_MINUTE")
+    os.environ["RATE_LIMIT_ENABLED"] = "true"
+    os.environ["RATE_LIMIT_PER_MINUTE"] = "3"
+    try:
+        return isolated_service_import("api-gateway", "api_gateway_rate_limited_main")
+    finally:
+        if prior_enabled is None:
+            os.environ.pop("RATE_LIMIT_ENABLED", None)
+        else:
+            os.environ["RATE_LIMIT_ENABLED"] = prior_enabled
+        if prior_limit is None:
+            os.environ.pop("RATE_LIMIT_PER_MINUTE", None)
+        else:
+            os.environ["RATE_LIMIT_PER_MINUTE"] = prior_limit
+
+
 # Auth fixtures
 @pytest.fixture(scope="function")
 def test_token():

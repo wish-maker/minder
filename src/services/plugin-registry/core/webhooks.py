@@ -113,9 +113,6 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
         )
 
     # Execute using execution engine
-    import sys
-
-    sys.path.insert(0, "/app/services/plugin-registry")
     from core.execution_engine import get_execution_engine
 
     engine = get_execution_engine()

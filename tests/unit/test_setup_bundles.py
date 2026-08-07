@@ -273,3 +273,22 @@ def test_run_rejects_unknown_bundle(statefile):
 
 def test_run_enable_requires_a_name(statefile):
     assert bundles.run("enable", "") == 1
+
+
+# ── _load_claims() error handling (#372 audit) ─────────────────────────────
+def test_load_claims_missing_compose_file_raises_clean_error(tmp_path, monkeypatch):
+    """A missing/unreadable compose file must raise a clear, actionable RuntimeError
+    -- not let the raw OSError propagate as a confusing traceback. This module is
+    imported unconditionally by every setup verb, so this affects the whole CLI."""
+    monkeypatch.setattr(bundles.config, "COMPOSE_FILE", tmp_path / "does-not-exist.yml")
+    with pytest.raises(RuntimeError, match="Could not read"):
+        bundles._load_claims()
+
+
+def test_load_claims_missing_compose_file_error_chains_the_original(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(bundles.config, "COMPOSE_FILE", tmp_path / "does-not-exist.yml")
+    with pytest.raises(RuntimeError) as exc_info:
+        bundles._load_claims()
+    assert isinstance(exc_info.value.__cause__, OSError)

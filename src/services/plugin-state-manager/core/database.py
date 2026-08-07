@@ -3,6 +3,7 @@
 Database connection pool management
 """
 
+import asyncio
 import logging
 import pathlib
 import sys
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 # Global connection pool
 _pool: Optional[asyncpg.Pool] = None
+# Guards lazy pool creation so two concurrent first-callers don't each build a
+# pool (the second assignment would win, leaking the first pool's connections
+# and, with auto_create=True, potentially racing on CREATE DATABASE).
+_pool_lock = asyncio.Lock()
 
 
 def get_db_config() -> dict:
@@ -46,7 +51,13 @@ async def get_db_pool() -> asyncpg.Pool:
     """
     global _pool
 
-    if _pool is None:
+    if _pool is not None:
+        return _pool
+
+    async with _pool_lock:
+        if _pool is not None:
+            return _pool
+
         config = get_db_config()
         logger.info(f"Creating database connection pool for {config['database']}")
         _pool = await create_pg_pool(

@@ -46,7 +46,9 @@ _DEFAULT_START = "2015-01-01"
 # Fund codes come from config (TEFAS_FUNDS, API-settable) and are interpolated into
 # an InfluxDB SQL query + line protocol — restrict to a safe charset so a config
 # value can't break out into injection (or corrupt line protocol with a space/comma).
-_SAFE_CODE = re.compile(r"^[A-Za-z0-9._-]+$")
+# \Z (not $) -- $ matches just before a trailing newline too, so "CODE\n" would pass
+# this guard and then corrupt the line-protocol payload with an embedded newline.
+_SAFE_CODE = re.compile(r"^[A-Za-z0-9._-]+\Z")
 
 # NAME COLLISION: this plugin package is `plugins.tefas`, but /app/plugins is on
 # sys.path (main.py inserts it), so a bare `import tefas` would resolve to THIS

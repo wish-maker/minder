@@ -6,6 +6,7 @@ plus orchestration with mocked subprocess/backends so no real nmap/snmp/network 
 
 import asyncio
 import time
+from unittest.mock import AsyncMock, MagicMock
 
 import plugins.network as netmod
 from plugins.network import (
@@ -440,3 +441,44 @@ def test_reconcile_auto_apply_off_and_sinks_off(monkeypatch):
     r = asyncio.run(pl.reconcile())
     assert called == []  # AUTO_APPLY=0 → telegraf skipped; other sinks off
     assert r["sinks"] == {}
+
+
+def test_run_kills_process_on_timeout(monkeypatch):
+    """A timed-out subprocess must be killed + reaped, not left orphaned (regression)."""
+    pl = NetworkPlugin({})
+
+    fake_proc = MagicMock()
+    fake_proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    fake_proc.kill = MagicMock()
+    fake_proc.wait = AsyncMock()
+
+    async def fake_create_subprocess_exec(*cmd, **kwargs):
+        return fake_proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
+    rc, out = asyncio.run(pl._run("nmap", "-sT", timeout=0.01))
+
+    assert (rc, out) == (1, "")
+    fake_proc.kill.assert_called_once()
+    fake_proc.wait.assert_awaited_once()
+
+
+def test_sink_postgres_connect_failure_omits_raw_message(monkeypatch):
+    """The 'error' field must be the exception TYPE only -- connection errors can
+    embed host/user/password details that shouldn't reach an API response."""
+    import asyncpg
+
+    pl = NetworkPlugin({})
+
+    async def _boom(**kwargs):
+        raise OSError(
+            "connection to server at postgres:5432, user minder, "
+            "password 'hunter2' failed"
+        )
+
+    monkeypatch.setattr(asyncpg, "connect", _boom)
+    result = asyncio.run(pl._sink_postgres([], {}))
+
+    assert result["status"] == "error"
+    assert result["error"] == "OSError"
+    assert "hunter2" not in str(result)
