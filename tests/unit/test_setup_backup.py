@@ -71,3 +71,30 @@ def test_running_store_failure_marked(monkeypatch, stubbed):
     )  # postgres fails
     backup.run()
     assert any("Backup complete — NOT captured: PostgreSQL" in w for w in warns)
+
+
+def test_minio_snapshot_targets_data_dir(monkeypatch, stubbed):
+    """MinIO is snapshotted via a raw tar of its /data dir (mirrors Qdrant's
+    /qdrant/storage pattern) -- was a silent gap before this."""
+    calls: list[tuple] = []
+    monkeypatch.setattr(backup.docker, "run", lambda *cmd, **k: calls.append(cmd) or 0)
+    backup.run()
+    flat = [" ".join(str(a) for a in c) for c in calls]
+    assert any("/data" in f and "tar" in f and "minio" in f.lower() for f in flat)
+
+
+def test_minio_snapshot_failure_is_loud(monkeypatch, stubbed):
+    """A failed MinIO snapshot (running store) surfaces in the final line."""
+    warns, _ = stubbed
+
+    def run(*cmd, **k):
+        # Match the container name specifically -- tmp_path (used for
+        # config.BACKUP_DIR) contains this test's own name as a substring, so
+        # a loose "minio" check would false-positive-match every docker.run
+        # call's destination-path argument, not just the MinIO one.
+        return 1 if "minder-minio" in cmd else 0
+
+    monkeypatch.setattr(backup.docker, "run", run)
+    rc = backup.run()
+    assert rc == 0
+    assert any("Backup complete — NOT captured: MinIO" in w for w in warns)

@@ -31,7 +31,15 @@ _DOCTOR_PORTS = (
     9091,
     3000,
 )
-_WEAK_RE = re.compile(r"^(admin|password|secret|changeme|replace_me|minder)$")
+# Case-insensitive, and "changeme(_...)" also matches .env.example's actual
+# placeholder shape (CHANGEME_POSTGRES_SECRET_32_CHARS etc.) -- the exact-lowercase,
+# no-suffix version below used to only catch a literal "changeme", missing every
+# real placeholder in this repo. (env.py's self-heal already replaces these on a
+# normal `setup.sh start`, so this is a defense-in-depth check for a bypassed/
+# hand-edited .env, not the primary safeguard.)
+_WEAK_RE = re.compile(
+    r"^(admin|password|secret|changeme(_.*)?|replace_me|minder)$", re.IGNORECASE
+)
 
 
 def run() -> int:

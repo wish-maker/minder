@@ -1,8 +1,8 @@
 """`restore` verb — ported from scripts/lib/commands.sh cmd_restore (#7, Stage 2).
 
 `restore [archive]` — restore .env + PostgreSQL + Neo4j + InfluxDB + Qdrant +
-RabbitMQ definitions from a `backups/minder-<ts>.tar.gz` produced by `backup`.
-With no argument it
+MinIO + RabbitMQ definitions from a `backups/minder-<ts>.tar.gz` produced by
+`backup`. With no argument it
 lists the available archives (interactive pick), else it errors non-interactively.
 
 DRY_RUN (#55, fixed): the restore steps MUTATE live data, so they are now gated —
@@ -397,6 +397,39 @@ def run(archive: str = "") -> int:
     elif restore_dir and (restore_dir / "qdrant.tar.gz").is_file():
         log.warn("Qdrant not running — restore skipped")
         skipped.append("Qdrant")
+
+    # ── MinIO (mirrors the Qdrant #56 fix above: copy in AND extract the same
+    # /tmp/minio.tar.gz -- a backup.py addition, so older archives from before
+    # that change simply won't have minio.tar.gz and this whole block no-ops) ──
+    if (
+        restore_dir
+        and (restore_dir / "minio.tar.gz").is_file()
+        and docker.container_running("minio")
+    ):
+        log.spinner_start("Restoring MinIO…")
+        mname = docker.container_name("minio")
+        ok = (
+            docker.run(
+                "docker",
+                "cp",
+                str(restore_dir / "minio.tar.gz"),
+                f"{mname}:/tmp/minio.tar.gz",
+            )
+            == 0
+            and docker.run(
+                "docker", "exec", mname, "tar", "xzf", "/tmp/minio.tar.gz", "-C", "/"
+            )
+            == 0
+        )
+        log.spinner_stop()
+        if ok:
+            log.success("MinIO restored")
+        else:
+            log.warn("MinIO restore had errors")
+            skipped.append("MinIO")
+    elif restore_dir and (restore_dir / "minio.tar.gz").is_file():
+        log.warn("MinIO not running — restore skipped")
+        skipped.append("MinIO")
 
     # ── RabbitMQ definitions ──────────────────────────────────────────────
     if (

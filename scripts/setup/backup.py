@@ -1,16 +1,22 @@
 """`backup` verb — ported from scripts/lib/commands.sh cmd_backup (#7, Stage 2).
 
 Full platform backup into `backups/minder-<ts>.tar.gz`: .env + PostgreSQL dump +
-Neo4j dump + InfluxDB snapshot + Qdrant snapshot + RabbitMQ definitions, then a
-gzip archive and a keep-last-7 prune. Faithful to the bash original, including
-WHICH steps go through the dry-run seam and which do not:
+Neo4j dump + InfluxDB snapshot + Qdrant snapshot + MinIO snapshot + RabbitMQ
+definitions, then a gzip archive and a keep-last-7 prune. Faithful to the bash
+original, including WHICH steps go through the dry-run seam and which do not,
+PLUS one Python-only addition (MinIO — was a silent coverage gap, bash never
+had it either; no behavior change for anything bash already covered):
 
   un-gated (run for real even under DRY_RUN, exactly like bash):
     mkdir dest · cp .env → env.backup · the PostgreSQL `pg_dumpall` (a bare
     `docker exec … > file`, NOT wrapped in run) · the final `tar` archive + the
     keep-last-7 prune.
   dry-run-gated (docker.run → echoes under DRY_RUN):
-    Neo4j dump, InfluxDB backup+cp, Qdrant snapshot+cp, RabbitMQ export+cp.
+    Neo4j dump, InfluxDB backup+cp, Qdrant snapshot+cp, MinIO snapshot+cp
+    (new), RabbitMQ export+cp.
+
+Redis is deliberately NOT backed up — it's cache-only, not a store of record
+anywhere in this codebase, so its exclusion is intentional.
 
 Everything writes only into `backups/` (+ ephemeral container `/tmp`); the platform
 data is never mutated — a backup is read-only w.r.t. the live stack. Verified under
@@ -247,6 +253,44 @@ def run() -> int:
             skipped.append("Qdrant")
     else:
         log.warn("Qdrant not running — skipped")
+
+    # ── MinIO (raw data-dir snapshot; mirrors the Qdrant pattern above) ────
+    # Was a silent gap: every other stateful backend gets a backup entry, but
+    # MinIO (which plugins/services use for raw file/artifact storage — see
+    # docs/architecture/plugins.md) didn't. Redis is deliberately NOT backed up
+    # here — it's cache-only (nothing in this codebase treats it as a store of
+    # record), so its omission is intentional, not a gap.
+    if docker.container_running("minio"):
+        log.spinner_start("Snapshotting MinIO storage…")
+        mname = docker.container_name("minio")
+        minio_tar = dest / "minio.tar.gz"
+        if (
+            docker.run(
+                "docker",
+                "exec",
+                mname,
+                "tar",
+                "czf",
+                "/tmp/minio-backup.tar.gz",
+                "/data",
+            )
+            == 0
+            and docker.run(
+                "docker",
+                "cp",
+                f"{mname}:/tmp/minio-backup.tar.gz",
+                f"{dest}/minio.tar.gz",
+            )
+            == 0
+        ):
+            log.spinner_stop()
+            log.success(f"MinIO  ({_du_sh(minio_tar)})")
+        else:
+            log.spinner_stop()
+            log.warn("MinIO snapshot failed")
+            skipped.append("MinIO")
+    else:
+        log.warn("MinIO not running — skipped")
 
     # ── RabbitMQ (dry-run-gated export + cp) ──────────────────────────────
     if docker.container_running("rabbitmq"):

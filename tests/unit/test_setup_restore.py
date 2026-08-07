@@ -81,6 +81,7 @@ def test_full_restore_reports_clean_success(monkeypatch, stubbed, tmp_path):
             "neo4j.cypher": "MATCH () RETURN 1;\n",
             "influxdb.tar.gz": "fake",
             "qdrant.tar.gz": "fake",
+            "minio.tar.gz": "fake",
             "rabbitmq-definitions.json": "{}",
         },
     )
@@ -144,6 +145,56 @@ def test_not_running_store_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path)
     assert rc == 0
     assert any("Qdrant not running — restore skipped" in w for w in warns)
     assert any("Restore complete — NOT restored: Qdrant" in w for w in warns)
+
+
+def test_minio_not_running_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):
+    """Mirrors the Qdrant #282 test above -- archived MinIO data exists but its
+    container isn't running."""
+    archive = _make_archive(
+        tmp_path,
+        files={
+            "postgres.sql": "-- dump\n",
+            "minio.tar.gz": "fake",
+        },
+    )
+    warns, succs, errors = stubbed
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+
+    def container_running(service):
+        return service != "minio"
+
+    monkeypatch.setattr(restore.docker, "container_running", container_running)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    assert any("MinIO not running — restore skipped" in w for w in warns)
+    assert any("Restore complete — NOT restored: MinIO" in w for w in warns)
+
+
+def test_minio_restore_copies_in_and_extracts_same_archive(
+    monkeypatch, stubbed, tmp_path
+):
+    """Mirrors the Qdrant #56 fix -- must copy in AND extract the SAME
+    /tmp/minio.tar.gz, not a stale/absent filename (the bug #56 fixed for
+    Qdrant, avoided here from the start)."""
+    archive = _make_archive(
+        tmp_path,
+        files={"postgres.sql": "-- dump\n", "minio.tar.gz": "fake"},
+    )
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+    calls: list[tuple] = []
+    monkeypatch.setattr(restore.docker, "run", lambda *a, **k: calls.append(a) or 0)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    cp_calls = [c for c in calls if c[:2] == ("docker", "cp")]
+    exec_calls = [c for c in calls if c[:3] == ("docker", "exec", "minder-minio")]
+    assert any("/tmp/minio.tar.gz" in str(c) for c in cp_calls)
+    assert any(
+        "tar" in c and "xzf" in c and "/tmp/minio.tar.gz" in c for c in exec_calls
+    )
 
 
 def test_failed_store_restore_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):

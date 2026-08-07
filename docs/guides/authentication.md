@@ -130,6 +130,26 @@ DNS + TLS on the deploy.
 - Brute-force protection and session regulation — Authelia defaults
 - Access-control rules per domain — see `configuration.yml`'s `access_control` section
 
+### Rotating the admin password
+
+`docker/services/authelia/users_database.yml` is a **tracked file** — every
+clone of this repo ships the exact same `admin` account with the exact same
+password hash. That password is not written down anywhere (the file only
+holds a one-way argon2id hash), but it is still a single **shared secret
+identical across every Minder install** until you change it — treat it the
+same as any other default credential and rotate it before exposing this
+instance to any network beyond your own machine:
+
+```bash
+docker exec minder-authelia authelia crypto hash generate argon2 \
+  --memory 32768 --iterations 3 --parallelism 2 --password '<your new password>'
+```
+
+Paste the resulting `$argon2id$…` string over the `password:` value in
+`users_database.yml`, then `docker compose restart authelia` (or
+`bash setup.sh restart`) to apply it. There is currently no `setup.sh`
+verb that automates this — it's a manual step you need to remember to do.
+
 ---
 
 ## Troubleshooting
