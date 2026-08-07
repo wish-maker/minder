@@ -106,17 +106,18 @@ environment:
 
 ### GPU variables
 
-The compose file carries GPU-oriented env vars for hosts that have an accelerator:
+The compose file carries a GPU-oriented env var for hosts that have an accelerator:
 
 ```yaml
 environment:
   - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
-  - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
 ```
 
-The Raspberry Pi 4 has **no CUDA GPU**, so these have no effect on the Pi. The NVIDIA
+The Raspberry Pi 4 has **no CUDA GPU**, so this has no effect on the Pi. The NVIDIA
 `runtime:` line and the GPU `reservations` block are commented out for the same reason;
-they only matter if you redeploy to a GPU host.
+they only matter if you redeploy to a GPU host. (A `GPU_MEMORY_UTILIZATION` var used to
+be set alongside it — removed as dead config: it's a vLLM/TGI convention the `ollama`
+server doesn't read at all, so it never did anything even on a real GPU host.)
 
 ---
 

@@ -60,7 +60,19 @@ def _load_claims() -> dict:
     """Derive ``{bundle: (services...)}`` from the Compose `minder.bundle=` labels via
     the shared brain (compose = single source of truth, #65). Raises if no labels are
     present so the map never silently becomes empty."""
-    claims = parse_bundle_labels(config.COMPOSE_FILE.read_text(encoding="utf-8"))
+    try:
+        compose_text = config.COMPOSE_FILE.read_text(encoding="utf-8")
+    except OSError as e:
+        # This module is imported unconditionally by __main__ (every verb, not just
+        # `bundle`), so a missing/unreadable compose file previously surfaced as a
+        # raw, confusing OSError traceback for ANY command. Same clean-message
+        # convention as the "no labels found" case below instead.
+        raise RuntimeError(
+            f"Could not read {config.COMPOSE_FILE}: {e}. The bundle map is derived "
+            "from its Compose labels (#65) — the compose file must be present and "
+            "readable for any setup command to run."
+        ) from e
+    claims = parse_bundle_labels(compose_text)
     if CORE_BUNDLE not in claims:
         raise RuntimeError(
             f"No minder.bundle labels found in {config.COMPOSE_FILE}; the bundle map "
