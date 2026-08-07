@@ -41,6 +41,7 @@ This directory contains all documentation for the Minder platform.
 - [Authentication](guides/authentication.md) - Authelia SSO
 - [Security Setup](guides/security-setup.md) - Security best practices
 - [Performance Tuning](guides/performance.md) - Performance guidance
+- [Remote Access](guides/remote-access.md) - Reaching Minder from outside your LAN (Tailscale)
 
 ### 🐛 Troubleshooting (`troubleshooting/`)
 - [Common Issues](troubleshooting/common-issues.md) - Common problems
