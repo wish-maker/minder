@@ -7,51 +7,30 @@ and injects it into routes/models_api.py.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from fastapi import HTTPException
 
 from config import settings
-
-# Ollama client for real model management. Guarded so the module imports even when
-# the package is absent (e.g. lint/tests); OLLAMA_AVAILABLE gates real use.
-try:
-    from ollama import AsyncClient
-
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
-    logging.warning("ollama package not installed. Install with: pip install ollama")
+from shared.ai.ollama_client_base import (  # noqa: F401 -- re-exported for main.py
+    OLLAMA_AVAILABLE,
+    OllamaClientBase,
+)
 
 logger = logging.getLogger("minder.model-management")
 
 OLLAMA_HOST = settings.OLLAMA_HOST
 
 
-class OllamaManager:
+class OllamaManager(OllamaClientBase):
     """Manage Ollama client connections for model lifecycle"""
 
     def __init__(self):
-        self.client: Optional["AsyncClient"] = None
-        self._initialized = False
-
-    async def initialize(self):
-        """Initialize Ollama client"""
-        if not OLLAMA_AVAILABLE:
-            raise RuntimeError("Ollama package not installed")
-
-        try:
-            self.client = AsyncClient(host=OLLAMA_HOST)
-            self._initialized = True
-            logger.info(f"✅ Ollama client initialized: {OLLAMA_HOST}")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Ollama client: {e}")
-            raise
+        super().__init__(host=OLLAMA_HOST)
 
     async def list_models(self) -> List[Dict[str, Any]]:
         """List all models from Ollama"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         assert self.client is not None
         try:
@@ -67,8 +46,7 @@ class OllamaManager:
 
     async def pull_model(self, model_id: str) -> Dict[str, Any]:
         """Pull/download a model from Ollama library"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         try:
             logger.info(f"Pulling model: {model_id}")
@@ -83,8 +61,7 @@ class OllamaManager:
 
     async def show_model(self, model_id: str) -> Dict[str, Any]:
         """Show detailed information about a model"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         assert self.client is not None
         try:
@@ -98,8 +75,7 @@ class OllamaManager:
 
     async def delete_model(self, model_id: str) -> Dict[str, Any]:
         """Delete a model from local storage"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         try:
             logger.warning(f"Deleting model: {model_id}")
@@ -116,8 +92,7 @@ class OllamaManager:
         self, model_id: str, prompt: str = "Hello, test."
     ) -> Dict[str, Any]:
         """Test a model with a simple generation"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         assert self.client is not None
         try:

@@ -11,18 +11,21 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from config import settings
+from shared.ai.ollama_client_base import (  # noqa: F401 -- OLLAMA_AVAILABLE re-exported for state.py
+    OLLAMA_AVAILABLE,
+    AsyncClient,
+    OllamaClientBase,
+)
 
 logger = logging.getLogger(__name__)
 
-# Ollama client for real embeddings and LLM
+# ResponseError is rag-pipeline-specific (used by _describe_failover_404 below, not
+# part of the shared init lifecycle) -- OLLAMA_AVAILABLE above already covers whether
+# the real `ollama` package is installed.
 try:
-    from ollama import AsyncClient, ResponseError
-
-    OLLAMA_AVAILABLE = True
+    from ollama import ResponseError
 except ImportError:
-    OLLAMA_AVAILABLE = False
     ResponseError = Exception  # type: ignore[misc,assignment]  # unreachable without the package
-    logging.warning("ollama package not installed. Install with: pip install ollama")
 
 
 async def _describe_failover_404(model: str, base_error: str) -> str:
@@ -68,31 +71,18 @@ async def _describe_failover_404(model: str, base_error: str) -> str:
     )
 
 
-class OllamaManager:
+class OllamaManager(OllamaClientBase):
     """Manage Ollama client connections"""
 
     def __init__(self):
-        self.client: Optional["AsyncClient"] = None
+        super().__init__(host=settings.OLLAMA_HOST)
         self.embed_client: Optional["AsyncClient"] = None
-        self._initialized = False
 
-    async def initialize(self):
-        """Initialize Ollama clients"""
-        if not OLLAMA_AVAILABLE:
-            raise RuntimeError("Ollama package not installed")
-
-        try:
-            self.client = AsyncClient(host=settings.OLLAMA_HOST)
-            self.embed_client = AsyncClient(host=settings.OLLAMA_HOST)
-
-            # Test connection
-            await self._test_connection()
-            self._initialized = True
-            logger.info(f"✅ Ollama client initialized: {settings.OLLAMA_HOST}")
-
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Ollama client: {e}")
-            raise
+    async def _post_connect(self) -> None:
+        """Second client + connection test -- runs after `self.client` connects but
+        before `_initialized` is set True (see OllamaClientBase._post_connect)."""
+        self.embed_client = AsyncClient(host=self._host)
+        await self._test_connection()
 
     async def _test_connection(self):
         """Test Ollama connection"""
@@ -135,8 +125,7 @@ class OllamaManager:
         self, texts: List[str], model: str = settings.OLLAMA_EMBEDDING_MODEL
     ) -> List[List[float]]:
         """Generate embeddings using Ollama"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         await self.ensure_model(model)
 
@@ -170,8 +159,7 @@ class OllamaManager:
         temperature: float = 0.7,
     ) -> Dict[str, Any]:
         """Generate response using Ollama LLM"""
-        if not self._initialized:
-            await self.initialize()
+        await self._ensure_initialized()
 
         await self.ensure_model(model)
 
