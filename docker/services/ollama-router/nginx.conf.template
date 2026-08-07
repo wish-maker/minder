@@ -8,9 +8,23 @@
 # nginx image's envsubst from the container env. nginx runtime vars ($host, …) are
 # not in the environment, so envsubst leaves them intact.
 
+# #388: minder-ollama (a Docker hostname, unlike the primary which is usually a raw
+# IP) only resolves via Docker's embedded DNS while that container is actually
+# RUNNING -- a stopped-but-not-removed container (e.g. the "inference" bundle
+# disabled) is not resolvable at all. Without `resolve` below, nginx resolves
+# upstream server hostnames ONCE at config-load time and treats a miss as a fatal
+# `emerg` startup error -- so recreating this router (for any reason: an image
+# bump, a compose change, unrelated to ollama itself) while the internal ollama
+# happens to be stopped would crash-loop this container forever, since the
+# resolution never gets retried. `resolve` (open-source nginx 1.27.3+; this image
+# is 1.31.3) makes it re-check via the `resolver` below instead of failing once at
+# startup -- same upstream/backup/circuit-breaker behavior otherwise unchanged.
+resolver 127.0.0.11 valid=10s;
+
 upstream ollama_pool {
-    server ${OLLAMA_FAILOVER_PRIMARY} max_fails=1 fail_timeout=10s;
-    server minder-ollama:11434 backup;
+    zone ollama_pool_zone 64k;
+    server ${OLLAMA_FAILOVER_PRIMARY} max_fails=1 fail_timeout=10s resolve;
+    server minder-ollama:11434 backup resolve;
 }
 
 server {
