@@ -840,12 +840,14 @@ services:
     - ./services/telegraf/telegraf.runtime.conf:/etc/telegraf/telegraf.conf:ro
     - /proc:/host/proc:ro
     - /sys:/host/sys:ro
-    - /var/run/docker.sock:/var/run/docker.sock:ro
-    # inputs.docker reads docker.sock (root:docker on the Pi) — join the docker
-    # group so the plugin works even if telegraf runs non-root (#11). DOCKER_GID is
-    # auto-detected into .env by setup; :-0 is the safe dev-host fallback.
-    group_add:
-    - ${DOCKER_GID:-0}
+    # docker.sock (+ the matching group_add: ${DOCKER_GID:-0}) used to be mounted
+    # here for inputs.docker -- removed (#377): that plugin has been commented out
+    # in both telegraf.conf and telegraf.runtime.conf all along (confirmed via grep
+    # -- the network plugin's managed region only ever writes inputs.net_response/
+    # inputs.snmp, never inputs.docker), so the raw socket access was pure unused
+    # attack surface with zero functional purpose. If container-metrics collection
+    # is wanted later, route it through docker-socket-proxy instead of the raw
+    # socket, and uncomment/wire inputs.docker at that point.
     environment:
     - INFLUXDB_TOKEN=${INFLUXDB_TOKEN:-my-super-secret-auth-token}
     - HOSTNAME=minder-server
