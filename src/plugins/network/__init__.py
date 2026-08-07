@@ -252,9 +252,17 @@ class NetworkPlugin:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
             )
+        except OSError:
+            return 1, ""
+        try:
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
             return proc.returncode or 0, out.decode("utf-8", "replace")
-        except (OSError, asyncio.TimeoutError):
+        except asyncio.TimeoutError:
+            # Unlike OSError above, the process DID start -- it's still running
+            # unattended once wait_for gives up. Kill + wait so it doesn't leak as an
+            # orphaned/zombie child (real on any unreachable/slow host during a scan).
+            proc.kill()
+            await proc.wait()
             return 1, ""
 
     # ── discovery backends ───────────────────────────────────────────────────
@@ -593,8 +601,10 @@ class NetworkPlugin:
             await tg.set_managed_region(cfg, reload=True)
             self._applied_cfg = cfg
             return {"status": "applied", "bytes": len(cfg)}
-        except Exception as e:
-            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+        except (
+            Exception
+        ) as e:  # error field is the TYPE only -- the message may carry creds
+            return {"status": "error", "error": type(e).__name__}
 
     async def _sink_postgres(self, live: List[Dict], changes: Dict) -> Dict:
         try:
@@ -610,8 +620,10 @@ class NetworkPlugin:
                 database=os.environ.get("POSTGRES_DB", "minder"),
                 timeout=8,
             )
-        except Exception as e:
-            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+        except (
+            Exception
+        ) as e:  # error field is the TYPE only -- the message may carry creds
+            return {"status": "error", "error": type(e).__name__}
         try:
             await conn.execute(
                 """CREATE TABLE IF NOT EXISTS network_inventory (
@@ -655,8 +667,10 @@ class NetworkPlugin:
                 "marked_down": int(down.split()[-1]) if down else 0,
                 "purged": int(purged.split()[-1]) if purged else 0,
             }
-        except Exception as e:
-            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+        except (
+            Exception
+        ) as e:  # error field is the TYPE only -- the message may carry creds
+            return {"status": "error", "error": type(e).__name__}
         finally:
             await conn.close()
 
@@ -737,9 +751,11 @@ class NetworkPlugin:
                 "hosts": len(payload),
                 "errors": errs,
             }
-        except Exception as e:  # log the TYPE only — the message may carry creds
+        except (
+            Exception
+        ) as e:  # log AND return the TYPE only -- the message may carry creds
             logger.warning("network neo4j sink failed: %s", type(e).__name__)
-            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+            return {"status": "error", "error": type(e).__name__}
 
     async def _sink_rabbitmq(self, changes: Dict) -> Dict:
         events = [
@@ -788,9 +804,11 @@ class NetworkPlugin:
                 "routed": routed,
                 "errors": errors,
             }
-        except Exception as e:  # log the TYPE only — the message may carry creds
+        except (
+            Exception
+        ) as e:  # log AND return the TYPE only -- the message may carry creds
             logger.warning("network rabbitmq sink failed: %s", type(e).__name__)
-            return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+            return {"status": "error", "error": type(e).__name__}
 
     # ── analysis (read-only view) ─────────────────────────────────────────────
     async def analyze(self) -> Dict:
