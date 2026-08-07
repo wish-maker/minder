@@ -254,39 +254,33 @@ def run() -> int:
     else:
         log.warn("Qdrant not running — skipped")
 
-    # ── MinIO (raw data-dir snapshot; mirrors the Qdrant pattern above) ────
+    # ── MinIO (raw data-dir snapshot; mirrors the Qdrant pattern's INTENT, not
+    # its exact mechanism) ──────────────────────────────────────────────────
     # Was a silent gap: every other stateful backend gets a backup entry, but
     # MinIO (which plugins/services use for raw file/artifact storage — see
     # docs/architecture/plugins.md) didn't. Redis is deliberately NOT backed up
     # here — it's cache-only (nothing in this codebase treats it as a store of
     # record), so its omission is intentional, not a gap.
+    #
+    # Found live on the Pi: unlike Qdrant's image, MinIO's official image ships
+    # NO `tar` binary at all -- `docker exec … tar` fails with "executable file
+    # not found in $PATH". `docker cp` doesn't need any binary inside the
+    # target container (it's Docker's own copy mechanism), so this copies the
+    # raw tree out to a host-side temp dir first, then compresses with the same
+    # host-side `tarfile` _make_archive already uses for the final archive.
     if docker.container_running("minio"):
         log.spinner_start("Snapshotting MinIO storage…")
         mname = docker.container_name("minio")
+        minio_raw = dest / "minio_data_raw"
         minio_tar = dest / "minio.tar.gz"
-        if (
-            docker.run(
-                "docker",
-                "exec",
-                mname,
-                "tar",
-                "czf",
-                "/tmp/minio-backup.tar.gz",
-                "/data",
-            )
-            == 0
-            and docker.run(
-                "docker",
-                "cp",
-                f"{mname}:/tmp/minio-backup.tar.gz",
-                f"{dest}/minio.tar.gz",
-            )
-            == 0
-        ):
-            log.spinner_stop()
+        ok = docker.run(
+            "docker", "cp", f"{mname}:/data", str(minio_raw)
+        ) == 0 and _make_archive(minio_tar, dest, minio_raw.name)
+        shutil.rmtree(minio_raw, ignore_errors=True)
+        log.spinner_stop()
+        if ok:
             log.success(f"MinIO  ({_du_sh(minio_tar)})")
         else:
-            log.spinner_stop()
             log.warn("MinIO snapshot failed")
             skipped.append("MinIO")
     else:

@@ -88,11 +88,13 @@ def test_minio_snapshot_failure_is_loud(monkeypatch, stubbed):
     warns, _ = stubbed
 
     def run(*cmd, **k):
-        # Match the container name specifically -- tmp_path (used for
+        # Match the "docker cp minder-minio:/data ..." call specifically --
+        # the container ref is embedded in a combined "name:/data" string
+        # arg (not a standalone tuple element), and tmp_path (used for
         # config.BACKUP_DIR) contains this test's own name as a substring, so
         # a loose "minio" check would false-positive-match every docker.run
         # call's destination-path argument, not just the MinIO one.
-        return 1 if "minder-minio" in cmd else 0
+        return 1 if any(str(a).startswith("minder-minio:") for a in cmd) else 0
 
     monkeypatch.setattr(backup.docker, "run", run)
     rc = backup.run()

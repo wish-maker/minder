@@ -398,9 +398,12 @@ def run(archive: str = "") -> int:
         log.warn("Qdrant not running — restore skipped")
         skipped.append("Qdrant")
 
-    # ── MinIO (mirrors the Qdrant #56 fix above: copy in AND extract the same
-    # /tmp/minio.tar.gz -- a backup.py addition, so older archives from before
-    # that change simply won't have minio.tar.gz and this whole block no-ops) ──
+    # ── MinIO (mirrors the Qdrant #56 fix's INTENT above, not its mechanism --
+    # backup.py's MinIO section found live on the Pi that MinIO's official
+    # image ships no `tar` binary at all, so `docker exec ... tar` can't work
+    # for restore either. Extraction happens host-side via Python tarfile
+    # (binary-free), then the extracted tree is pushed INTO the container with
+    # `docker cp`, which needs no binary inside the target container) ────────
     if (
         restore_dir
         and (restore_dir / "minio.tar.gz").is_file()
@@ -408,19 +411,24 @@ def run(archive: str = "") -> int:
     ):
         log.spinner_start("Restoring MinIO…")
         mname = docker.container_name("minio")
-        ok = (
-            docker.run(
-                "docker",
-                "cp",
-                str(restore_dir / "minio.tar.gz"),
-                f"{mname}:/tmp/minio.tar.gz",
+        minio_extract = restore_dir / "minio_extracted"
+        ok = False
+        try:
+            with tarfile.open(restore_dir / "minio.tar.gz", "r:gz") as tf:
+                try:
+                    tf.extractall(minio_extract, filter="data")
+                except TypeError:
+                    tf.extractall(minio_extract)
+            minio_raw = minio_extract / "minio_data_raw"
+            # Trailing "/." tells `docker cp` to copy the source dir's
+            # CONTENTS into /data, not nest a "minio_data_raw" subdirectory.
+            ok = (
+                minio_raw.is_dir()
+                and docker.run("docker", "cp", f"{minio_raw}/.", f"{mname}:/data") == 0
             )
-            == 0
-            and docker.run(
-                "docker", "exec", mname, "tar", "xzf", "/tmp/minio.tar.gz", "-C", "/"
-            )
-            == 0
-        )
+        except (OSError, tarfile.TarError):
+            ok = False
+        shutil.rmtree(minio_extract, ignore_errors=True)
         log.spinner_stop()
         if ok:
             log.success("MinIO restored")
