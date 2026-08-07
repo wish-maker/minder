@@ -294,9 +294,10 @@ def wait_postgres_ready(timeout: int = config.TIMEOUT_DB) -> bool:
 def compose_services() -> list[str]:
     """Compose service names addressable by the restart/compose verbs.
 
-    Mirrors compose_all()'s profile set (monitoring + internal-ollama + ollama-router)
-    so every service a restart could target — including the profiled internal-ollama
-    and failover-router containers — is listed. Read-only (`config --services`), NOT dry-run
+    Mirrors compose_all()'s profile set (monitoring + internal-ollama + ollama-router +
+    internal-tts-stt + tts-stt-router, #65 item 4) so every service a restart could
+    target — including the profiled internal-ollama/internal-tts-stt and
+    failover-router containers — is listed. Read-only (`config --services`), NOT dry-run
     gated; returns [] if docker/compose can't be queried, letting callers fall
     back to compose's own error instead of a false 'unknown service'."""
     out = capture(
@@ -311,6 +312,10 @@ def compose_services() -> list[str]:
             "internal-ollama",
             "--profile",
             "ollama-router",
+            "--profile",
+            "internal-tts-stt",
+            "--profile",
+            "tts-stt-router",
             "config",
             "--services",
         ]
@@ -331,7 +336,8 @@ def compose_monitoring(*args: object) -> int:
 def compose_all(*args: object) -> int:
     """Teardown compose: activate ALL profiles so `down` also removes profiled
     containers (e.g. the internal-ollama container). #58 — with only the monitoring
-    profile, `down` leaves the internal ollama container running."""
+    profile, `down` leaves the internal ollama container running. internal-tts-stt +
+    tts-stt-router added alongside ollama's pair for the same reason (#65 item 4)."""
     return run(
         "docker",
         "compose",
@@ -343,5 +349,9 @@ def compose_all(*args: object) -> int:
         "internal-ollama",
         "--profile",
         "ollama-router",
+        "--profile",
+        "internal-tts-stt",
+        "--profile",
+        "tts-stt-router",
         *args,
     )

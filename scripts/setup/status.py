@@ -22,6 +22,7 @@ from . import config, docker, env, health, log
 
 _PREFIX = config.CONTAINER_PREFIX + "-"
 _ROUTER = _PREFIX + "ollama-router"
+_TTS_STT_ROUTER = _PREFIX + "tts-stt-router"
 
 
 def _primary_reachable(hostport: str) -> bool:
@@ -85,6 +86,78 @@ def _print_ollama_backend() -> None:
                 "→ serving from the internal fallback"
             )
         if not _fallback_alive():
+            warn_icon = f"{log._YELLOW}⚠{log._NC}" if log._colors_on() else "⚠"
+            log._emit(
+                f"  {warn_icon} internal fallback container is not responding — "
+                "no safety net if the primary goes down"
+            )
+    elif base:
+        log._emit(f"  external — {base}")
+    else:
+        log._emit("  internal — platform-managed container")
+    log._emit("")
+
+
+def _tts_stt_primary_reachable(hostport: str) -> bool:
+    """Same idea as _primary_reachable, probed from inside the tts-stt-router
+    container against tts-stt's own /health endpoint (#65 item 4)."""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "exec",
+                _TTS_STT_ROUTER,
+                "wget",
+                "-q",
+                "-T",
+                "3",
+                "-O",
+                "/dev/null",
+                f"http://{hostport}/health",
+            ],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    except OSError:
+        return False
+
+
+def _tts_stt_fallback_alive() -> bool:
+    """Same idea as _fallback_alive — is the internal backup actually responsive,
+    not just "container Running". No ollama-style CLI equivalent exists for
+    tts-stt, so this probes its own /health endpoint directly instead."""
+    if not docker.container_running("tts-stt"):
+        return False
+    return docker.cmd_ok(
+        [
+            "docker",
+            "exec",
+            docker.container_name("tts-stt"),
+            "curl",
+            "-sf",
+            "http://localhost:8006/health",
+        ]
+    )
+
+
+def _print_tts_stt_backend() -> None:
+    """Show the active tts-stt backend — mirrors _print_ollama_backend exactly
+    (#65 item 4, the second real external-binding case)."""
+    primary = env.get("TTS_STT_FAILOVER_PRIMARY")
+    base = env.get("TTS_STT_BASE_URL")
+    log._emit(log.bold("tts-stt Backend"))
+    if primary:
+        if _tts_stt_primary_reachable(primary):
+            log._emit(
+                f"  failover — primary {primary} REACHABLE "
+                "→ serving from the external primary"
+            )
+        else:
+            log._emit(
+                f"  failover — primary {primary} UNREACHABLE "
+                "→ serving from the internal fallback"
+            )
+        if not _tts_stt_fallback_alive():
             warn_icon = f"{log._YELLOW}⚠{log._NC}" if log._colors_on() else "⚠"
             log._emit(
                 f"  {warn_icon} internal fallback container is not responding — "
@@ -167,6 +240,7 @@ def _print_status() -> None:
     log._emit("")
 
     _print_ollama_backend()
+    _print_tts_stt_backend()
 
     health.run_health_checks()
 

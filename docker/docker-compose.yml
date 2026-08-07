@@ -1213,9 +1213,57 @@ services:
       retries: 3
     networks:
     - minder-network
+  tts-stt-router:
+    # tts-stt failover router (#65 item 4): external primary -> internal backup,
+    # auto-recovering. Mirrors ollama-router exactly, for the same reason: tts-stt
+    # is GPU-oriented/resource-heavy, so a Pi-class host may want to point at an
+    # external, more capable instance instead of running it locally. Present ONLY
+    # in failover mode — start_services activates the 'tts-stt-router' profile when
+    # TTS_STT_FAILOVER_PRIMARY is set (and explicitly ups this service), and
+    # consumers point at http://minder-tts-stt-router:8006 so failover is
+    # transparent. The 'internal-tts-stt' profile is co-activated so the backup
+    # (minder-tts-stt) is present. No minder.bundle label on purpose: it is a mode
+    # artifact managed by tts-stt-mode / start_services, not a bundle capability.
+    # Default primary=minder-tts-stt so a stray start is harmless.
+    image: nginx:1.31.3-alpine
+    container_name: minder-tts-stt-router
+    profiles: ["tts-stt-router"]
+    restart: on-failure
+    # PILLAR 5 (#379 pattern): thin nginx failover proxy, not itself model-serving --
+    # same limit as ollama-router.
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    environment:
+    - TTS_STT_FAILOVER_PRIMARY=${TTS_STT_FAILOVER_PRIMARY:-minder-tts-stt:8006}
+    volumes:
+    - ./services/tts-stt-router/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing -- moved here
+    # from the tts-stt container itself (which has no exposed port anymore, matching
+    # ollama's pattern: only the router or the internal docker network name reach it).
+    ports:
+    - "127.0.0.1:8006:8006"
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -qO- http://127.0.0.1:8006/healthz || exit 1
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+    - minder-network
   tts-stt:
     labels:
     - minder.bundle=voice
+    # Present ONLY in internal tts-stt mode (mirrors ollama's 'internal-ollama').
+    # In external mode (TTS_STT_BASE_URL set, no failover) start_services leaves
+    # this profile inactive -- consumers reach the external instance directly, no
+    # local container at all. In failover mode this profile is co-activated
+    # alongside tts-stt-router so the backup exists.
+    profiles: ["internal-tts-stt"]
     build:
       context: ../
       dockerfile: src/services/tts-stt/Dockerfile
@@ -1254,9 +1302,9 @@ services:
     #           count: all
     #           capabilities: [gpu, compute, utility]
     shm_size: '8gb'
-    # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
-    ports:
-    - "127.0.0.1:8006:8006"
+    # No exposed port here anymore -- moved to tts-stt-router (mirrors ollama, which
+    # also has zero exposed ports of its own; only reachable via the router or the
+    # internal docker network name).
     healthcheck:
       test:
       - CMD

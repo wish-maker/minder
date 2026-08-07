@@ -27,37 +27,80 @@ def _active(services: "tuple[str, ...]") -> "list[str]":
 def start_services() -> None:
     log.step("Starting all services")
 
+    # COMPOSE_PROFILES is one shared env var — ollama's and tts-stt's mode detection
+    # each contribute their own profile names into this set rather than overwriting
+    # each other's setting (#65 item 4 added tts-stt as the second binding alongside
+    # ollama; a naive `os.environ["COMPOSE_PROFILES"] = ...` per-service would clobber
+    # whichever ran second).
+    active_profiles: "set[str]" = set()
+
     # Ollama mode: an exported value wins (CLI override), else read .env.
     #  - OLLAMA_FAILOVER_PRIMARY set → failover: run BOTH the router (external primary)
     #    and the internal container (backup); consumers point at the router.
     #  - else OLLAMA_BASE_URL set → external: internal-ollama profile inactive.
     #  - else                     → internal: activate the internal-ollama profile.
     ollama_url = os.environ.get("OLLAMA_BASE_URL") or env.get("OLLAMA_BASE_URL")
-    failover_primary = os.environ.get("OLLAMA_FAILOVER_PRIMARY") or env.get(
+    ollama_failover_primary = os.environ.get("OLLAMA_FAILOVER_PRIMARY") or env.get(
         "OLLAMA_FAILOVER_PRIMARY"
     )
-    failover_mode = bool(failover_primary)
-    if failover_mode:
+    ollama_failover_mode = bool(ollama_failover_primary)
+    if ollama_failover_mode:
         log.info("🔀 Failover Ollama mode (external primary + internal fallback)")
-        log.info(f"   Primary: {failover_primary}  →  backup: internal minder-ollama")
+        log.info(
+            f"   Primary: {ollama_failover_primary}  →  backup: internal minder-ollama"
+        )
         log.info("   Consumers reach ollama via the minder-ollama-router")
-        os.environ["COMPOSE_PROFILES"] = "internal-ollama,ollama-router"
+        active_profiles.update({"internal-ollama", "ollama-router"})
     elif ollama_url:
         log.info("🌐 External Ollama mode (OLLAMA_BASE_URL set)")
         log.info(f"   OLLAMA_BASE_URL: {ollama_url}")
         log.info(
             "   Platform-managed ollama container will NOT start (compose 'internal-ollama' profile inactive)"
         )
-        os.environ.pop("COMPOSE_PROFILES", None)
     elif bundles.service_active("ollama"):
         # ollama is claimed by inference/rag/chat — start it if any of them is on.
         log.info(
             "🏠 Internal Ollama mode (platform-managed container, default zero-config)"
         )
         log.info("   OLLAMA_BASE_URL: (empty, using internal minder-ollama container)")
-        os.environ["COMPOSE_PROFILES"] = "internal-ollama"
+        active_profiles.add("internal-ollama")
     else:
         log.info("⏸️  no bundle claims ollama — internal ollama will NOT start")
+
+    # tts-stt mode (#65 item 4) — identical logic, second real external-binding case.
+    tts_stt_url = os.environ.get("TTS_STT_BASE_URL") or env.get("TTS_STT_BASE_URL")
+    tts_stt_failover_primary = os.environ.get("TTS_STT_FAILOVER_PRIMARY") or env.get(
+        "TTS_STT_FAILOVER_PRIMARY"
+    )
+    tts_stt_failover_mode = bool(tts_stt_failover_primary)
+    if tts_stt_failover_mode:
+        log.info("🔀 Failover tts-stt mode (external primary + internal fallback)")
+        log.info(
+            f"   Primary: {tts_stt_failover_primary}  →  backup: internal minder-tts-stt"
+        )
+        log.info("   Consumers reach tts-stt via the minder-tts-stt-router")
+        active_profiles.update({"internal-tts-stt", "tts-stt-router"})
+    elif tts_stt_url:
+        log.info("🌐 External tts-stt mode (TTS_STT_BASE_URL set)")
+        log.info(f"   TTS_STT_BASE_URL: {tts_stt_url}")
+        log.info(
+            "   Platform-managed tts-stt container will NOT start (compose 'internal-tts-stt' profile inactive)"
+        )
+    elif bundles.service_active("tts-stt"):
+        # tts-stt is claimed by voice — start it if that bundle is on.
+        log.info(
+            "🏠 Internal tts-stt mode (platform-managed container, default zero-config)"
+        )
+        log.info(
+            "   TTS_STT_BASE_URL: (empty, using internal minder-tts-stt container)"
+        )
+        active_profiles.add("internal-tts-stt")
+    else:
+        log.info("⏸️  no bundle claims tts-stt — internal tts-stt will NOT start")
+
+    if active_profiles:
+        os.environ["COMPOSE_PROFILES"] = ",".join(sorted(active_profiles))
+    else:
         os.environ.pop("COMPOSE_PROFILES", None)
 
     log.info("① Security layer…")
@@ -70,11 +113,13 @@ def start_services() -> None:
 
     # Failover: bring up the internal backup THEN the router. nginx resolves its
     # upstream hostnames at startup, so if minder-ollama isn't running yet the router
-    # dies with "host not found in upstream" and only recovers via restart:on-failure.
+    # dies with "host not found in upstream" and only recovers via restart:on-failure
+    # (#388 made this non-fatal — the router now tolerates it — but bringing the
+    # backup up first is still correct ordering, not just a workaround for that bug).
     # Neither has a depends_on pulling it in here (consumers only hold the router URL
     # as a string; they depend_on 'ollama' but start later, in group ④), so both are
     # brought up explicitly, in order. (#21)
-    if failover_mode:
+    if ollama_failover_mode:
         log.info("   ↳ internal ollama (failover backup) + ollama-router…")
         docker.compose("up", "-d", "ollama")
         docker.compose("up", "-d", "ollama-router")
@@ -106,6 +151,13 @@ def start_services() -> None:
         docker.compose("up", "-d", *ai_services)
     else:
         log.detail("no AI-enhancement bundles enabled (chat/voice) — skipped")
+    # Failover: same explicit-order reasoning as ollama's bring-up in ② — neither
+    # minder-tts-stt nor tts-stt-router has a depends_on pulling it in here. (#65
+    # item 4)
+    if tts_stt_failover_mode:
+        log.info("   ↳ internal tts-stt (failover backup) + tts-stt-router…")
+        docker.compose("up", "-d", "tts-stt")
+        docker.compose("up", "-d", "tts-stt-router")
     time.sleep(5)
 
     log.info("⑦ Metrics exporters…")
