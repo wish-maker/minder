@@ -242,7 +242,19 @@ jobs:
           path: ./
           base: ${{ github.event.before }}
           head: ${{ github.sha }}
-          extra_args: --only-verified
+          # --exclude-detectors=Lob: this repo's "Lob" findings are a confirmed false
+          # positive, not a real leak. Investigated 2026-08-06: every one of the 30+
+          # "verified Lob result" hits across full git history is a Python test
+          # function name (e.g. "test_success_false_when_every_tool_fails",
+          # "test_plugin_registry_webhook_persistence") -- Lob's key format is
+          # `test_`/`live_` + 35 alphanumeric chars, which coincidentally matches this
+          # (and any) codebase's long, descriptive snake_case test names purely on
+          # length/charset. Confirmed via a local TruffleHog run: excluding only the
+          # Lob detector drops verified_secrets to exactly 0 (every other detector
+          # already found nothing) -- this repo has no Lob integration at all (no
+          # mail/address-verification functionality anywhere), so this costs zero real
+          # coverage. Do not remove this exclusion without re-verifying the same way.
+          extra_args: --only-verified --exclude-detectors=Lob
 
   license-compliance:
     name: License Compliance
