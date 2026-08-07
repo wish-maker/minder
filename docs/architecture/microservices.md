@@ -4,7 +4,7 @@ Detailed microservices architecture for the Minder Platform.
 
 ## Current Service Status
 
-**Total Containers:** 32 (Authelia is enabled and counted)
+**Total Containers:** 34 (Authelia + docker-socket-proxy included, both enabled)
 **With Health Checks:** 28
 **No-Healthcheck (by design):** 3 (otel-collector, redis-exporter, rabbitmq-exporter — their images lack the tooling for a healthcheck)
 **Unhealthy:** 0
@@ -41,7 +41,7 @@ backed by internal data stores and a monitoring stack. All services are Python 3
 
 **Responsibilities**: request routing, TLS, security headers, `forwardauth` integration
 
-**Version**: `traefik:v3.7.8`
+**Version**: `traefik:v3.7.10`
 
 **Configuration**: `docker/services/traefik/`
 
@@ -299,8 +299,9 @@ limits in `docker-compose.yml`.
 - Never commit `.env`
 
 ### Health Checks
-28/31 services define container healthchecks (`/health` for the core APIs). Three services lack a
-healthcheck because their images cannot run one.
+29/34 services define an active container healthcheck (`/health` for the core APIs). Five lack
+one: `otel-collector`, `rabbitmq-exporter`, and `redis-exporter` because their images cannot run
+one; `authelia` and `docker-socket-proxy` simply don't have one configured.
 
 ### Restart Policies
 Services use `restart: on-failure`.

@@ -43,12 +43,17 @@ not from other machines; everything else is internal-only. External access is vi
 
 ## Healthcheck Status (Important)
 
-29 of 32 containers define a Docker healthcheck. **Three do not, by design** — the base
-images lack the tooling (e.g. `nc`) a healthcheck would need:
+29 of 34 containers define an active Docker healthcheck. **Three do not, by design** — the
+base images lack the tooling (e.g. `nc`) a healthcheck would need:
 
 - `minder-otel-collector`
 - `minder-redis-exporter`
 - `minder-rabbitmq-exporter`
+
+Two more simply don't have one configured (not a base-image limitation):
+
+- `minder-authelia`
+- `minder-docker-socket-proxy`
 
 These show as **"no healthcheck"** in `docker ps`, which is **not the same as
 "unhealthy"**. Any older note claiming redis-exporter or otel-collector is "unhealthy"

@@ -76,7 +76,7 @@ The claim graph has three sources, merged into one `service → claimants` map:
    installing the plugin adds its claims to the graph.
 3. **Marketplace** — installs new plugins (hence new bundles/claims) at runtime.
 
-## Bundle map (all 32 services assigned)
+## Bundle map (all 34 services assigned)
 
 | Bundle | Services | Default |
 |--------|----------|---------|
@@ -293,6 +293,13 @@ separated from tracked config.
   reaches it at `tcp://docker-socket-proxy:2375` (`DOCKER_HOST`). Authelia gates the API
   perimeter but does **not** contain a compromised registry process — this is the
   least-privilege half.
+  **Residual gaps found in a later audit (not yet fixed):** the proxy's
+  `-allowfrom=0.0.0.0/0` trusts source IP from the *whole* `minder-network`, not just
+  plugin-registry — any other compromised container on that network can also reach its
+  allowlisted endpoints (issue #378). Separately, `traefik` and `telegraf` still mount
+  the raw `docker.sock:ro` directly instead of going through this proxy (issue #377) —
+  the "no service still holds the raw socket" framing above is only true for the
+  registry.
 - **Conflict/version resolution** (two bundles want a shared service at different
   versions/config) → owned by the marketplace dependency+conflict graph.
 - **External-binding health** in `bundle status` (reachability probe) — Phase 4.

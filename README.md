@@ -89,7 +89,7 @@ bash setup.sh start           # auto-fills remaining secrets, sets perms, starts
 ```
 
 > **`./.env` is the one file you edit.** `setup.sh` copies it to
-> `docker/compose/.env` (the file Compose actually reads) on every install/start/
+> `docker/.env` (the file Compose actually reads) on every install/start/
 > restart — that copy is auto-generated, **do not edit it directly**. Your filled
 > secrets stay visible in `./.env`; change one by editing `./.env` and re-running.
 
@@ -116,7 +116,7 @@ CUDA_VISIBLE_DEVICES=all                # Enable GPU support
 **⚠️ Security Best Practices:**
 
 - ✅ Never commit `.env` to version control (already in `.gitignore`)
-- ✅ `setup.sh` keeps `./.env` (and its `docker/compose/.env` copy) at `600`
+- ✅ `setup.sh` keeps `./.env` (and its `docker/.env` copy) at `600`
 - ✅ Regenerate secrets if `.env` is ever exposed
 - ✅ Use strong unique passwords for production deployments
 
@@ -199,7 +199,7 @@ Minder provides a **local AI orchestration platform** with 8 core services (all 
 - Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry Collector, InfluxDB, Telegraf
 - Exporters: postgres, redis, rabbitmq, node, cAdvisor, blackbox
 
-**Total:** 32 containers (8 core APIs + 8 data stores + 2 inference/UI + 7 observability + 6 exporters + Traefik + Authelia, enabled/included). `bash setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start all 32). Deploys on a Raspberry Pi 4 (ARM).
+**Total:** 34 containers (the 8 core APIs + 8 data stores + inference/UI + observability + exporters above, plus Traefik, Authelia, the least-privilege `docker-socket-proxy`, and the failover-mode `ollama-router`, enabled/included). `bash setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start all 34). Deploys on a Raspberry Pi 4 (ARM).
 
 ---
 

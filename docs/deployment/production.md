@@ -87,9 +87,10 @@ bash setup.sh stop
 
 ## Service Map
 
-32 containers run on the Pi (Authelia SSO/2FA is **enabled** by default and included in the
-count). Only Traefik and the app/monitoring services below expose host ports; all
-storage backends are **internal-only** and reached over the Docker network or via Traefik.
+34 containers run on the Pi (Authelia SSO/2FA and the `docker-socket-proxy` are both
+**enabled** by default and included in the count). Only Traefik and the app/monitoring
+services below expose host ports; all storage backends are **internal-only** and reached
+over the Docker network or via Traefik.
 
 ### Core API services (8 — all FastAPI)
 
@@ -136,7 +137,7 @@ See `monitoring.md` for the full stack and instrumentation details.
 
 ### Reverse proxy & auth
 
-- **Traefik** (`traefik:v3.7.8`) — the reverse proxy, TLS termination, and router. Routing
+- **Traefik** (`traefik:v3.7.10`) — the reverse proxy, TLS termination, and router. Routing
   is via Docker labels (`exposedByDefault: false`). Host ports 80/443 and 8081 (dashboard,
   IP-whitelisted). **Minder does not use Nginx.**
 - **Authelia** — **enabled** (a live, active service in compose with no profile gate;
@@ -193,9 +194,10 @@ curl http://localhost:3000/api/health  # grafana
 docker exec minder-ollama ollama list
 ```
 
-29 of 32 containers define a Docker healthcheck. Three do **not**, by design
+29 of 34 containers define an active Docker healthcheck. Three do **not**, by design
 (`otel-collector`, `redis-exporter`, `rabbitmq-exporter`) — their base images lack the
-tooling. They show as "no healthcheck", which is **not** the same as "unhealthy".
+tooling. They show as "no healthcheck", which is **not** the same as "unhealthy". Two more
+(`authelia`, `docker-socket-proxy`) simply don't have one configured.
 
 ---
 

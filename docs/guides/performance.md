@@ -21,7 +21,7 @@ are, in rough order:
 1. **LLM inference (Ollama).** Model size and quantization dominate everything.
    A 7B model on a Pi is slow and memory-hungry; small quantized models are far
    more usable. This is almost always the bottleneck for RAG and chat.
-2. **Memory pressure.** 32 containers plus an LLM can exceed available RAM,
+2. **Memory pressure.** 34 containers plus an LLM can exceed available RAM,
    causing swap and severe slowdowns. Trim what you don't need.
 3. **Vector search (Qdrant)** and **graph queries (Neo4j)** for RAG / graph-RAG.
 4. **Startup time.** Cold starts (especially services that download models or
@@ -36,7 +36,8 @@ are, in rough order:
 Model choice is the single highest-impact lever. Prefer small, quantized models
 on constrained ARM hardware.
 
-- Models are pulled via `OLLAMA_PULL_MODELS` (set in the root `./.env`).
+- Models are pulled via `OLLAMA_MODELS` (set in the root `./.env`; compose maps it internally
+  to `OLLAMA_PULL_MODELS` for the container — set the former, not the latter).
 - Ollama storage lives in the `/root/.ollama/models` volume.
 - List what is loaded (11434 is internal-only, so query it from inside the container):
   ```bash

@@ -4,12 +4,12 @@
 
 **Platform Version:** 1.0.0
 **Last Updated:** 2026-07-10
-**Containers:** 32 defined (Authelia included — enabled). `setup.sh install` seeds the
+**Containers:** 34 defined (Authelia + docker-socket-proxy included — enabled). `setup.sh install` seeds the
 **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and
 voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start
-all 31). `start` then honours the recorded bundle state (`bundles.state.json`). Started
-services run healthy; only 3 carry no healthcheck by design (otel-collector,
-redis-exporter, rabbitmq-exporter). See [Service Bundles](bundles.md).
+all 34). `start` then honours the recorded bundle state (`bundles.state.json`). Started
+services run healthy; 5 carry no active healthcheck (otel-collector, redis-exporter,
+rabbitmq-exporter, authelia, docker-socket-proxy). See [Service Bundles](bundles.md).
 **Core API Services:** 8 (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, tts-stt, graph-rag)
 **Data Stores:** 7 (PostgreSQL, Redis, Qdrant, Neo4j, RabbitMQ, MinIO, schema-registry)
 **AI Runtime:** Ollama with local LLM support (profile-gated; disabled when using an external/native Ollama host)
@@ -21,7 +21,9 @@ redis-exporter, rabbitmq-exporter). See [Service Bundles](bundles.md).
 **Enabled:**
 - ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 5 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger).
 
-> Three services (`otel-collector`, `redis-exporter`, `rabbitmq-exporter`) ship without a healthcheck because their images lack the tooling to run one. They report "no-healthcheck", not "unhealthy".
+> Five services ship without an active healthcheck: `otel-collector`, `redis-exporter`, and
+> `rabbitmq-exporter` because their images lack the tooling to run one (report "no-healthcheck",
+> not "unhealthy"); `authelia` and `docker-socket-proxy` simply don't have one configured.
 
 ## Architecture Overview
 
@@ -47,7 +49,7 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │                        SECURITY / EDGE                          │
 │  ┌──────────────┐              ┌──────────────────────────────┐ │
 │  │   Traefik    │ (80/443)     │  Authelia (9091) — ENABLED   │ │
-│  │ Reverse Proxy│ v3.7.8       │  (forward-auth, 5 routers)   │ │
+│  │ Reverse Proxy│ v3.7.10      │  (forward-auth, 5 routers)   │ │
 │  └──────────────┘              └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                  │
@@ -92,8 +94,8 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │  InfluxDB :8086 · Telegraf · OTel Collector · 6 exporters      │
 └─────────────────────────────────────────────────────────────────┘
 
-Total: 32 containers across core APIs, inference, storage, and observability
-(includes Authelia, which is enabled).
+Total: 34 containers across core APIs, inference, storage, and observability
+(includes Authelia and docker-socket-proxy, both enabled).
 ```
 
 ## Service Descriptions
@@ -103,7 +105,7 @@ Total: 32 containers across core APIs, inference, storage, and observability
 #### Traefik (Host 80/443, dashboard 8081)
 - Reverse proxy, TLS termination, routing via Docker labels (`exposedByDefault: false`)
 - The only host-facing entry point besides directly-exposed monitoring services
-- Version: `traefik:v3.7.8`
+- Version: `traefik:v3.7.10`
 
 #### Authelia (9091) — ✅ ENABLED
 - Provides SSO and 2FA, running as `minder-authelia` in `docker-compose.yml`
@@ -151,7 +153,8 @@ All eight core APIs are FastAPI services with real implementations.
 #### Ollama (internal 11434)
 - Local LLM runtime. Profile-gated (`internal-ollama`): runs only when `OLLAMA_BASE_URL` is empty
   (local mode). When set, an external/native host is used and the container stays inactive.
-  Models are auto-pulled via `OLLAMA_PULL_MODELS` into the `/root/.ollama/models` volume.
+  Models are auto-pulled into the `/root/.ollama/models` volume; set `OLLAMA_MODELS` in
+  `.env` to choose which (compose maps it internally to `OLLAMA_PULL_MODELS` for the container).
 - **Third mode: failover.** A mode-gated `minder-ollama-router` (nginx, profile `ollama-router`)
   fronts an external primary with automatic fallback to the internal container, transparent to
   every consumer (`OLLAMA_BASE_URL` points at the router). See
@@ -232,7 +235,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
   node, cAdvisor, blackbox); Telegraf feeds InfluxDB for time-series data.
 - **Dashboards**: Grafana.
 - **Tracing**: Jaeger + an OpenTelemetry collector.
-- **Health checks**: `/health` endpoints on the core APIs; container-level healthchecks on 28/31
+- **Health checks**: `/health` endpoints on the core APIs; container-level healthchecks on 29/34
   services.
 
 ## Development Workflow
