@@ -12,6 +12,28 @@ from pathlib import Path
 
 import paramiko
 
+
+class _KnownHostsPolicy(paramiko.MissingHostKeyPolicy):
+    """Reject any host key not already in the user's known_hosts -- but check via
+    HostKeys.check() (hash-aware), not paramiko.RejectPolicy directly. SSHClient.connect()
+    looks up `self._system_host_keys.get(hostname)` (a PLAIN dict lookup) before ever
+    calling this policy; when known_hosts was written with OpenSSH's default
+    HashKnownHosts=yes (hostnames stored as `|1|salt|hash`, as on this box), that lookup
+    always misses even for an already-trusted host, so THIS policy runs for every
+    connection regardless. HostKeys.check() correctly hashes `hostname` and compares,
+    so a genuinely-known host (confirmed via `ssh` at least once) still succeeds; only a
+    truly unrecognized or changed key is rejected.
+    """
+
+    def missing_host_key(self, client, hostname, key):
+        if client.get_host_keys().check(hostname, key):
+            return
+        raise paramiko.SSHException(
+            f"host key for {hostname!r} not found in known_hosts (or the key "
+            "changed) -- run `ssh` to it manually once to verify and trust it"
+        )
+
+
 ENV_PATH = Path(__file__).with_name(".env")
 
 # alias -> config used by connect()/build_command().
@@ -160,14 +182,19 @@ def connect(alias: str):
     sock = _proxy_sock(env, prefix, host)
 
     client = paramiko.SSHClient()
-    # Load the user's own known_hosts first so a host key they've already verified
-    # (e.g. via a manual `ssh`) is checked against, not blindly trusted. AutoAddPolicy
-    # silently accepted ANY key with no record kept (not even TOFU -- it doesn't
-    # persist accepted keys), so neither a spoofed host nor a legitimately rotated
-    # key was ever distinguishable. WarningPolicy keeps this tool working against a
-    # never-seen host (still connects) but logs instead of silently trusting.
+    # Load the user's own known_hosts so a host key they've already verified (e.g. via
+    # a manual `ssh`) is checked against, then REJECT anything not in there.
+    # AutoAddPolicy silently accepted ANY key with no record kept (not even TOFU -- it
+    # doesn't persist accepted keys), so neither a spoofed host nor a legitimately
+    # rotated key was ever distinguishable. WarningPolicy (tried first) still connects
+    # to an unknown/changed key, only logging -- CodeQL correctly flags that as unsafe
+    # too. paramiko.RejectPolicy itself doesn't work here (see _KnownHostsPolicy) since
+    # this box's known_hosts is hashed; _KnownHostsPolicy does the same reject, correctly.
+    # Requires `ssh pi`/`ssh hantal` to have been run manually at least once (populating
+    # the real ~/.ssh/known_hosts) before this tool works -- the correct tradeoff: a
+    # changed/spoofed key now hard-fails instead of quietly connecting.
     client.load_system_host_keys()
-    client.set_missing_host_key_policy(paramiko.WarningPolicy())
+    client.set_missing_host_key_policy(_KnownHostsPolicy())
     if cfg["auth"] == "key":
         key_path = _require(env, f"{prefix}_KEY")
         key = paramiko.Ed25519Key.from_private_key_file(
