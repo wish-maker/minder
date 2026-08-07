@@ -71,7 +71,8 @@ src/shared/
 │   └── jwt_middleware.py     # JWT create/verify + auth dependencies + rate limiting
 └── ai/
     ├── __init__.py           # (empty — import from submodule)
-    └── tool_validator.py     # validate_ai_tools(manifest)
+    ├── tool_validator.py     # validate_ai_tools(manifest)
+    └── ollama_client_base.py # OllamaClientBase: shared Ollama client init lifecycle (#367)
 ```
 
 > `auth/__init__.py` and `ai/__init__.py` are intentionally empty — import from the
