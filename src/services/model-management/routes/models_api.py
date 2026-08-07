@@ -21,9 +21,16 @@ from shared.errors import backend_http_error
 def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     router = APIRouter(tags=["Models"])
 
-    @router.get("/models", response_model=List[ModelInfo])
+    @router.get("/v1/models", response_model=List[ModelInfo])
+    @router.get(
+        "/models", response_model=List[ModelInfo], include_in_schema=False
+    )  # deprecated unversioned alias
     async def list_models():
-        """List all models from Ollama (real-time), refreshing the cache."""
+        """List all models from Ollama (real-time), refreshing the cache.
+
+        Served at both /v1/models and the legacy /models directly — the old /models
+        used a 301 redirect, which drops the method/body on non-GET clients (#147).
+        """
         try:
             ollama_models = await ollama_manager.list_models()
             result = []
@@ -56,13 +63,19 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             logger.error(f"❌ Failed to list models: {e}")
             raise backend_http_error(e, "Listing models")
 
-    @router.post("/models", status_code=201)
+    @router.post("/v1/models", status_code=201)
+    @router.post(
+        "/models", status_code=201, include_in_schema=False
+    )  # deprecated unversioned alias
     async def register_model(request: ModelPullRequest, response: Response):
         """Pull a model from the Ollama library (may download a lot).
 
         Body is just ``{"model_id": "..."}`` — the old design also demanded an ignored
         ModelInfo body and a query param (#145). Returns 201 on a fresh pull, 200 when
         the model already exists locally.
+
+        Served at both /v1/models and the legacy /models directly — the old /models
+        used a 301 redirect, which drops the method/body on non-GET clients (#147).
         """
         model_id = request.model_id
         try:
@@ -89,9 +102,17 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             logger.error(f"❌ Failed to register model {model_id}: {e}")
             raise backend_http_error(e, "Model registration")
 
-    @router.get("/models/{model_id}")
+    @router.get("/v1/models/{model_id}")
+    @router.get(
+        "/models/{model_id}", include_in_schema=False
+    )  # deprecated unversioned alias
     async def get_model(model_id: str):
-        """Get detailed model information from Ollama."""
+        """Get detailed model information from Ollama.
+
+        Served at both /v1/models/{model_id} and the legacy /models/{model_id}
+        directly — the old path used a 301 redirect, which drops the method/body on
+        non-GET clients (#147).
+        """
         try:
             exists = any(
                 m.get("model") == model_id for m in await ollama_manager.list_models()
@@ -122,9 +143,17 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             logger.error(f"❌ Failed to get model {model_id}: {e}")
             raise backend_http_error(e, "Fetching model details")
 
-    @router.delete("/models/{model_id}")
+    @router.delete("/v1/models/{model_id}")
+    @router.delete(
+        "/models/{model_id}", include_in_schema=False
+    )  # deprecated unversioned alias
     async def delete_model(model_id: str):
-        """Permanently delete a model from local Ollama storage."""
+        """Permanently delete a model from local Ollama storage.
+
+        Served at both /v1/models/{model_id} and the legacy /models/{model_id}
+        directly — the old path used a 301 redirect, which drops the method/body on
+        non-GET clients (#147).
+        """
         try:
             exists = any(
                 m.get("model") == model_id for m in await ollama_manager.list_models()
@@ -147,11 +176,18 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             logger.error(f"❌ Failed to delete model {model_id}: {e}")
             raise backend_http_error(e, "Model deletion")
 
-    @router.post("/models/{model_id}/test")
+    @router.post("/v1/models/{model_id}/test")
+    @router.post(
+        "/models/{model_id}/test", include_in_schema=False
+    )  # deprecated unversioned alias
     async def test_model(model_id: str, request: ModelTestRequest):
         """Quick test-prompt generation to verify a model works.
 
         Prompt is a JSON body (``{"prompt": "..."}``) rather than a query string (#145).
+
+        Served at both /v1/models/{model_id}/test and the legacy path directly — the
+        old path used a 301 redirect, which drops the method/body on non-GET clients
+        (#147).
         """
         try:
             result = await ollama_manager.test_model(model_id, request.prompt)
@@ -163,33 +199,54 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             logger.error(f"❌ Failed to test model {model_id}: {e}")
             raise backend_http_error(e, "Model test")
 
-    @router.post("/models/{model_id}/constraints")
+    @router.post("/v1/models/{model_id}/constraints")
+    @router.post(
+        "/models/{model_id}/constraints", include_in_schema=False
+    )  # deprecated unversioned alias
     async def set_model_constraints(model_id: str, constraints: ModelConstraints):
         """Set constraints for a model. **Not implemented** — returns 501 (#145).
 
         The ModelConstraints body is kept so /docs documents the intended shape.
+
+        Served at both /v1/models/{model_id}/constraints and the legacy path
+        directly — the old path used a 301 redirect, which drops the method/body on
+        non-GET clients (#147).
         """
         raise HTTPException(
             status_code=501,
             detail="Model constraints are not implemented in this service",
         )
 
-    @router.get("/models/{model_id}/metrics")
+    @router.get("/v1/models/{model_id}/metrics")
+    @router.get(
+        "/models/{model_id}/metrics", include_in_schema=False
+    )  # deprecated unversioned alias
     async def get_model_metrics(model_id: str):
         """Model performance metrics. **Not implemented** — returns 501 (#145).
 
         Previously returned a 200 body of zeros, which read as real data in /docs.
+
+        Served at both /v1/models/{model_id}/metrics and the legacy path directly —
+        the old path used a 301 redirect, which drops the method/body on non-GET
+        clients (#147).
         """
         raise HTTPException(
             status_code=501,
             detail="Metrics tracking is not implemented in this service",
         )
 
-    @router.post("/models/fine-tune")
+    @router.post("/v1/models/fine-tune")
+    @router.post(
+        "/models/fine-tune", include_in_schema=False
+    )  # deprecated unversioned alias
     async def fine_tune_model(request: FineTuneRequest):
         """Fine-tune request. **Not implemented** — returns 501 (#145).
 
         The FineTuneRequest body is kept so /docs documents the intended shape.
+
+        Served at both /v1/models/fine-tune and the legacy /models/fine-tune
+        directly — the old path used a 301 redirect, which drops the method/body on
+        non-GET clients (#147).
         """
         raise HTTPException(
             status_code=501,
