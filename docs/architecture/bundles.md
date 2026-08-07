@@ -4,11 +4,13 @@
 > external binding (#64), **Compose-label-derived bundle map (#65 item 3)**, the
 > **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**, the
 > **`GET /v1/bundles` registry API (#65 item 2, read-only)**, the **least-privilege
-> docker-socket-proxy (#65 item-2 PR1)**, and the **mutating `POST /v1/bundles/*`
-> registry endpoints (#65 item-2 PR2)**; remaining Phase 3 (binding model, plugin
-> manifest schema) tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the ad-hoc
-> `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`, renamed
-> to the bundle model in Phase 1 and merged as `feat/bundles`).
+> docker-socket-proxy (#65 item-2 PR1)**, the **mutating `POST /v1/bundles/*`
+> registry endpoints (#65 item-2 PR2)**, and **tts-stt as the second external
+> binding + failover case (#65 item 4, #396)**; remaining Phase 3 (the general
+> managed/self-host/prompt resolution matrix beyond ollama/tts-stt, plugin
+> manifest schema) tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the
+> ad-hoc `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`,
+> renamed to the bundle model in Phase 1 and merged as `feat/bundles`).
 
 ## Context
 
@@ -116,11 +118,16 @@ A claim resolves to a **binding**, per deployment:
 
 This generalises the proven `OLLAMA_BASE_URL` local/remote pattern to every service.
 
-> **Implemented so far (2026-07-19):** the control-plane already honours the ONE
-> binding that exists today — `ollama` via `OLLAMA_BASE_URL` (`bundles.EXTERNAL_BINDINGS`).
-> When it is set, `bundle status` shows ollama as `⇄ external → <url>` (not orphan-drift)
-> and `enable`/`reconcile` never start the internal container. The general resolution
-> matrix below (self-host / prompt) is still Phase 3.
+> **Implemented so far (2026-08-07):** the control-plane now honours TWO bindings
+> (`bundles.EXTERNAL_BINDINGS`) — `ollama` via `OLLAMA_BASE_URL` (2026-07-19) and
+> `tts-stt` via `TTS_STT_BASE_URL` (#65 item 4, #396), the second real case: same
+> reasoning (GPU-oriented/resource-heavy, worth pointing at an external instance on
+> a Pi-class host), same three-mode pattern (`internal`/`external`/`failover`) via
+> `tts-stt-mode`, `tts-stt-router` (nginx, mirrors `ollama-router`), and
+> `status`'s `_print_tts_stt_backend()`. When a binding's URL is set, `bundle
+> status` shows the service as `⇄ external → <url>` (not orphan-drift) and
+> `enable`/`reconcile` never start the internal container. The general resolution
+> matrix below (self-host / prompt) beyond these two is still Phase 3.
 
 Resolution matrix (per claim):
 
@@ -242,7 +249,8 @@ separated from tracked config.
   time, the base is never regenerated).
 - **Activation = explicit service list** computed from the claim graph
   (`compose -f … up -d <services>`); Compose profiles are not needed for bundles
-  (the `internal-ollama` profile stays for ollama binding only).
+  (`internal-ollama`/`internal-tts-stt` + their failover-router profiles stay for
+  binding resolution only, #65 item 4).
 - **All runtime state under one gitignored, self-healing hidden dir:**
   ```
   .minder/          # gitignored (like the existing .cache/)
