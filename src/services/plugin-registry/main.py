@@ -94,7 +94,6 @@ async def lifespan(app: FastAPI):
     await load_plugins_from_disk()
 
     # Initialize execution engine
-    sys.path.insert(0, "/app/services/plugin-registry")
     from core.execution_engine import ExecutionEngine, set_execution_engine
 
     engine = ExecutionEngine()
@@ -146,7 +145,6 @@ async def lifespan(app: FastAPI):
 
     # Close execution engine
     try:
-        sys.path.insert(0, "/app/services/plugin-registry")
         from core.execution_engine import get_execution_engine
 
         engine = get_execution_engine()
