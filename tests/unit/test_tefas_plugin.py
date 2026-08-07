@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import plugins.tefas as tefasmod
-from plugins.tefas import TefasPlugin, _DEFAULT_START
+from plugins.tefas import _DEFAULT_START, TefasPlugin
 
 
 # ── httpx stand-ins (InfluxDB HTTP calls only) ───────────────────────────────
