@@ -39,6 +39,11 @@ def sync_postgres_password() -> int:
     log.detail("Applying password from .env to running container…")
     # NOT dry-run-gated: bash runs this docker exec directly (outside run()).
     # &>/dev/null → suppress all output; branch on exit code only.
+    # Passed via psql's -v + :'pwd' substitution (not an f-string into the SQL
+    # text) -- a password containing a single quote would otherwise break out of
+    # the SQL literal and let arbitrary SQL run as the minder role. -v is a plain
+    # argv value (no shell involved), and :'pwd' has psql itself apply correct
+    # SQL-literal quoting/escaping.
     result = subprocess.run(
         [
             "docker",
@@ -49,8 +54,10 @@ def sync_postgres_password() -> int:
             "minder",
             "-d",
             "minder",
+            "-v",
+            f"pwd={new_password}",
             "-c",
-            f"ALTER USER minder PASSWORD '{new_password}';",
+            "ALTER USER minder PASSWORD :'pwd';",
         ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
