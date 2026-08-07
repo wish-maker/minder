@@ -1,0 +1,130 @@
+"""Unit tests for the shared Ollama client init lifecycle (#367).
+
+shared.ai.ollama_client_base.OllamaClientBase is the extraction of what
+model-management's and rag-pipeline's independent OllamaManager classes both
+duplicated: client/_initialized state, initialize()'s try/except, and the
+lazy-init guard. Covered directly here since it has no config/settings
+dependency (unlike the two services' own ollama_manager.py modules, which need
+their existing import-isolation helpers -- see
+test_model_management_ollama_manager.py / test_rag_pipeline_ollama_manager.py).
+"""
+
+import asyncio
+
+import pytest
+
+import shared.ai.ollama_client_base as base_mod
+from shared.ai.ollama_client_base import OllamaClientBase
+
+
+class _FakeAsyncClient:
+    def __init__(self, host):
+        self.host = host
+
+
+def test_init_sets_initial_state():
+    mgr = OllamaClientBase(host="http://ollama:11434")
+    assert mgr.client is None
+    assert mgr._initialized is False
+    assert mgr._host == "http://ollama:11434"
+
+
+def test_initialize_builds_client_and_flags_initialized(monkeypatch):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr(base_mod, "AsyncClient", _FakeAsyncClient)
+    mgr = OllamaClientBase(host="http://ollama:11434")
+    asyncio.run(mgr.initialize())
+    assert isinstance(mgr.client, _FakeAsyncClient)
+    assert mgr.client.host == "http://ollama:11434"
+    assert mgr._initialized is True
+
+
+def test_initialize_raises_when_ollama_unavailable(monkeypatch):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", False)
+    mgr = OllamaClientBase(host="http://ollama:11434")
+    with pytest.raises(RuntimeError, match="Ollama package not installed"):
+        asyncio.run(mgr.initialize())
+    assert mgr._initialized is False
+
+
+def test_initialize_propagates_client_construction_failure(monkeypatch):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+
+    def _boom(host):
+        raise ConnectionError("no route to host")
+
+    monkeypatch.setattr(base_mod, "AsyncClient", _boom)
+    mgr = OllamaClientBase(host="http://ollama:11434")
+    with pytest.raises(ConnectionError):
+        asyncio.run(mgr.initialize())
+    assert mgr._initialized is False
+    assert mgr.client is None
+
+
+def test_post_connect_is_a_noop_by_default(monkeypatch):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr(base_mod, "AsyncClient", _FakeAsyncClient)
+    mgr = OllamaClientBase(host="http://ollama:11434")
+    asyncio.run(mgr.initialize())  # would raise if _post_connect had a real body
+    assert mgr._initialized is True
+
+
+def test_subclass_post_connect_hook_runs_before_initialized_flag(monkeypatch):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr(base_mod, "AsyncClient", _FakeAsyncClient)
+    seen = {}
+
+    class _Sub(OllamaClientBase):
+        async def _post_connect(self):
+            # _initialized must still be False here -- the hook runs BEFORE it's set.
+            seen["initialized_during_hook"] = self._initialized
+            seen["client_set_during_hook"] = self.client is not None
+
+    mgr = _Sub(host="http://ollama:11434")
+    asyncio.run(mgr.initialize())
+    assert seen == {"initialized_during_hook": False, "client_set_during_hook": True}
+    assert mgr._initialized is True
+
+
+def test_subclass_post_connect_failure_propagates_and_leaves_uninitialized(
+    monkeypatch,
+):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr(base_mod, "AsyncClient", _FakeAsyncClient)
+
+    class _Sub(OllamaClientBase):
+        async def _post_connect(self):
+            raise RuntimeError("second client failed to connect")
+
+    mgr = _Sub(host="http://ollama:11434")
+    with pytest.raises(RuntimeError, match="second client failed to connect"):
+        asyncio.run(mgr.initialize())
+    assert mgr._initialized is False
+
+
+def test_ensure_initialized_calls_initialize_only_once(monkeypatch):
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr(base_mod, "AsyncClient", _FakeAsyncClient)
+    calls = {"n": 0}
+
+    class _Sub(OllamaClientBase):
+        async def initialize(self):
+            calls["n"] += 1
+            await super().initialize()
+
+    mgr = _Sub(host="http://ollama:11434")
+    asyncio.run(mgr._ensure_initialized())
+    asyncio.run(mgr._ensure_initialized())
+    asyncio.run(mgr._ensure_initialized())
+    assert calls["n"] == 1
+
+
+def test_ensure_initialized_noop_when_already_initialized(monkeypatch):
+    mgr = OllamaClientBase(host="http://ollama:11434")
+    mgr._initialized = True
+
+    async def _boom():
+        raise AssertionError("initialize() should not be called")
+
+    monkeypatch.setattr(mgr, "initialize", _boom)
+    asyncio.run(mgr._ensure_initialized())  # must not raise

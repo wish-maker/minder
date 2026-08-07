@@ -71,7 +71,8 @@ src/shared/
 │   └── jwt_middleware.py     # JWT create/verify + auth dependencies + rate limiting
 └── ai/
     ├── __init__.py           # (empty — import from submodule)
-    └── tool_validator.py     # validate_ai_tools(manifest)
+    ├── tool_validator.py     # validate_ai_tools(manifest)
+    └── ollama_client_base.py # OllamaClientBase: shared Ollama client init lifecycle (#367)
 ```
 
 > `auth/__init__.py` and `ai/__init__.py` are intentionally empty — import from the
@@ -268,6 +269,28 @@ from shared.ai.tool_validator import validate_ai_tools
 validate_ai_tools(manifest)   # validates a plugin's declared AI tools
 ```
 
+### AI — `ai/ollama_client_base.py`
+
+```python
+from shared.ai.ollama_client_base import OLLAMA_AVAILABLE, OllamaClientBase
+
+class OllamaManager(OllamaClientBase):
+    def __init__(self):
+        super().__init__(host=OLLAMA_HOST)
+    # add model-management/RAG-specific methods; call self._ensure_initialized()
+    # before using self.client. Override _post_connect() for extra per-service
+    # setup that must happen after the client connects but before _initialized
+    # is set True (e.g. rag-pipeline's second embed_client + connection test).
+```
+
+Deliberately narrow (#367): only the init lifecycle (`client`/`_initialized`
+state, `initialize()`'s try/except, the lazy-init guard) is shared. Each
+service keeps its own model-lifecycle/embedding/generation methods and its own
+error-handling style (model-management wraps failures as `HTTPException`;
+rag-pipeline doesn't) — both are on the model-serving hot path, so a subtly
+wrong extraction would surface as a production inference outage, not a test
+failure.
+
 ## 📊 Current adoption
 
 | Module | Used by |
@@ -276,6 +299,7 @@ validate_ai_tools(manifest)   # validates a plugin's declared AI tools
 | `health.evaluate_dependencies` | api-gateway, graph-rag, marketplace, model-management, plugin-registry, plugin-state-manager, rag-pipeline, tts-stt (8/8) |
 | `errors.backend_http_error` | api-gateway, graph-rag, marketplace, model-management, plugin-registry, plugin-state-manager, rag-pipeline, tts-stt (8/8, #357/#358/#359/#360/#361) |
 | `metrics.setup_metrics` | graph-rag, marketplace, model-management, plugin-registry, plugin-state-manager, rag-pipeline, tts-stt (7/8; api-gateway has its own) |
+| `ai.ollama_client_base` | model-management, rag-pipeline (2/2 Ollama-using services, #367) |
 | `auth.jwt_middleware` | api-gateway, marketplace, plugin-registry (all services with an auth surface) |
 | `pagination.paginate` | plugin-registry, plugin-state-manager, rag-pipeline (5 endpoints across 3 services, #357/#358) |
 | `db.pool.create_pg_pool` | api-gateway, marketplace, plugin-registry, plugin-state-manager, rag-pipeline (5/5 services with their own Postgres pool) |
