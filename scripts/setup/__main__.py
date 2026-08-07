@@ -26,6 +26,7 @@ from . import shell as shell_module
 from . import start as start_module
 from . import status as status_module
 from . import stop as stop_module
+from . import tts_stt as tts_stt_module
 from . import uninstall as uninstall_module
 from . import update as update_module
 
@@ -69,6 +70,13 @@ def main(argv: list[str]) -> int:
         mode = pos[1] if len(pos) > 1 else ""
         url = pos[2] if len(pos) > 2 else ""
         return ollama_module.run(mode, url)
+    if cmd == "tts-stt-mode":
+        # New verb (#65 item 4) — no bash equivalent, mirrors ollama-mode's own arg
+        # handling exactly.
+        pos = _positional(argv)
+        mode = pos[1] if len(pos) > 1 else ""
+        url = pos[2] if len(pos) > 2 else ""
+        return tts_stt_module.run(mode, url)
     if cmd == "sync-postgres-password":
         # setup.sh: sync_postgres_password (no args). Reads/writes .env + docker exec.
         return secrets_module.sync_postgres_password()

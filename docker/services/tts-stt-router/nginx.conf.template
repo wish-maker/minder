@@ -1,0 +1,60 @@
+# tts-stt failover router — mirrors ollama-router (#21) for the same reason: tts-stt
+# is GPU-oriented (Whisper/Coqui XTTS) and resource-heavy, so a Pi-class host may want
+# to point at an external, more capable tts-stt instance instead of running it
+# locally. Prefer the external primary; fall back to the platform-managed internal
+# tts-stt when the primary is unreachable, and return to the primary automatically
+# once it recovers. Consumers point at this router (http://minder-tts-stt-router:8006)
+# instead of the tts-stt container directly, so failover is transparent.
+#
+# ${TTS_STT_FAILOVER_PRIMARY} is host:port, filled by the nginx image's envsubst from
+# the container env. nginx runtime vars ($host, …) are not in the environment, so
+# envsubst leaves them intact.
+
+# Dynamic upstream resolution (#388's lesson, applied from the start here): without
+# `resolve`, nginx resolves upstream server hostnames ONCE at config-load time and
+# treats a miss as a fatal `emerg` startup error. minder-tts-stt (a Docker hostname)
+# only resolves via Docker's embedded DNS while that container is actually running --
+# in "external" mode (no failover) it's deliberately never started, which would
+# otherwise crash-loop this router forever. `resolve` (open-source nginx 1.27.3+)
+# makes it re-check via the `resolver` below instead of failing once at startup.
+resolver 127.0.0.11 valid=10s;
+
+upstream tts_stt_pool {
+    zone tts_stt_pool_zone 64k;
+    server ${TTS_STT_FAILOVER_PRIMARY} max_fails=1 fail_timeout=10s resolve;
+    server minder-tts-stt:8006 backup resolve;
+}
+
+server {
+    listen 8006;
+
+    # Liveness of the router itself (infra), decoupled from backend health — the
+    # container healthcheck hits this so a flapping backend doesn't mark nginx down.
+    location = /healthz {
+        access_log off;
+        return 200 "ok\n";
+    }
+
+    location / {
+        proxy_pass http://tts_stt_pool;
+
+        # Which backend actually served this response — the primary's host:port, or the
+        # internal backup on failover (both, comma-separated, if it failed over).
+        add_header X-Tts-Stt-Upstream $upstream_addr always;
+
+        # Fail over to the backup on a connect error / timeout / 5xx. `non_idempotent`
+        # so POSTs (/tts, /stt) also fail over — safe to retry on the fallback since
+        # the primary produced no usable response.
+        proxy_next_upstream error timeout http_502 http_503 http_504 non_idempotent;
+        proxy_next_upstream_tries 2;
+
+        # Fail FAST to trigger failover when the primary is down, but allow long
+        # audio generation/transcription once a backend is chosen.
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+    }
+}

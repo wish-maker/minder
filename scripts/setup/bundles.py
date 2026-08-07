@@ -35,12 +35,16 @@ _STATE_LOCK = STATE_FILE.parent / ".bundles.state.lock"
 
 # Services whose platform-managed container is replaced by an EXTERNAL endpoint when
 # its env var is non-empty — the exact binding lifecycle.start_services already reads
-# to gate the internal-ollama profile. For an externally-bound service we don't own a
-# container: `status` shows it as external (not orphan-drift) and `enable`/`reconcile`
-# skip starting it. This is the one binding that exists today (ollama via
-# OLLAMA_BASE_URL); the general managed/external/self-host model is Phase 3 (see
-# docs/architecture/bundles.md).
-EXTERNAL_BINDINGS: dict[str, str] = {"ollama": "OLLAMA_BASE_URL"}
+# to gate the internal-ollama/internal-tts-stt profiles. For an externally-bound
+# service we don't own a container: `status` shows it as external (not orphan-drift)
+# and `enable`/`reconcile` skip starting it. tts-stt (#65 item 4) is the second real
+# case — same reasoning as ollama (GPU-oriented/resource-heavy, worth pointing at an
+# external instance on a Pi-class host); the general managed/external/self-host model
+# beyond these two is still Phase 3 (see docs/architecture/bundles.md).
+EXTERNAL_BINDINGS: dict[str, str] = {
+    "ollama": "OLLAMA_BASE_URL",
+    "tts-stt": "TTS_STT_BASE_URL",
+}
 
 
 def external_binding(service: str) -> "str | None":

@@ -64,6 +64,12 @@ _HELP_TEMPLATE = """
                              failover [url] = external primary + internal fallback via the
                              ollama-router (auto-recovering). Flips .env only and prints a
                              "run restart to apply" hint — no restart.
+    tts-stt-mode internal|external|failover [url]
+                             Same idea, for tts-stt (#65 item 4) — GPU-oriented/resource-heavy
+                             like Ollama: internal = platform-managed container; external [url]
+                             = reach a URL (default http://host.docker.internal:8006);
+                             failover [url] = external primary + internal fallback via the
+                             tts-stt-router (auto-recovering). Flips .env only, no restart.
 
 {bold}BUNDLES{nc}  (capability groups of services — see docs/architecture/bundles.md)
     bundle status            Show each bundle's enable-state + its services and
