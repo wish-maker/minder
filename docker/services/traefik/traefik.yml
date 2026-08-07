@@ -29,7 +29,11 @@ entryPoints:
 
 providers:
   docker:
-    endpoint: "unix:///var/run/docker.sock"
+    # Least-privilege Docker API access via docker-socket-proxy (#377) -- NOT a
+    # raw socket mount. See docker-socket-proxy's allowlist comment in
+    # docker-compose.yml for exactly which endpoints this needs (version/_ping
+    # negotiation, container list/inspect, events stream).
+    endpoint: "tcp://docker-socket-proxy:2375"
     exposedByDefault: false
     network: minder-network
 

@@ -53,14 +53,17 @@ services:
     - 80:80      # HTTP
     - 443:443    # HTTPS
     - 8081:8080  # Traefik Dashboard (LAN access only - use IP whitelist)
+    # No raw docker.sock mount (#377) -- the Docker provider (traefik.yml)
+    # reaches the daemon through docker-socket-proxy instead.
     volumes:
-    - /var/run/docker.sock:/var/run/docker.sock:ro
     - ./services/traefik/traefik.yml:/etc/traefik/traefik.yml:ro
     # #25 Option B: single-file mount — only authelia-forwardauth loads; sibling
     # dynamic files (services/ssl/access-mode) stay unmounted + dormant by design.
     - ./services/traefik/dynamic/authelia-forwardauth.yml:/etc/traefik/dynamic/authelia-forwardauth.yml:ro
     - traefik_letsencrypt:/letsencrypt
     - traefik_logs:/var/log/traefik
+    depends_on:
+    - docker-socket-proxy
     healthcheck:
       test:
       - CMD-SHELL
@@ -521,8 +524,9 @@ services:
     group_add:
     - ${DOCKER_GID:-0}
     command:
-    # Reachable by the registry over the internal network; no host port is published
-    # and the whole surface is the two allowlisted paths, so allowfrom is open.
+    # Reachable by the registry + traefik over the internal network; no host port
+    # is published and the whole surface is the allowlisted paths below, so
+    # allowfrom is open (tightening this to the two real callers is #378).
     - -listenip=0.0.0.0
     - -allowfrom=0.0.0.0/0
     - -loglevel=INFO
@@ -532,6 +536,13 @@ services:
     # images/networks/swarm — so a compromised registry still can't host-takeover.
     - -allowGET=(/v[0-9.]+)?/containers/[^/]+/json
     - -allowPOST=(/v[0-9.]+)?/containers/[^/]+/(restart|start|stop)
+    # Traefik's Docker provider (#377) — exact allowlist from the proxy's own
+    # README example for Traefik: version negotiation (HEAD /_ping, required by
+    # Traefik >=2.11.31/>=3.6.1 or it falls back to a stale API version and the
+    # provider breaks), plus GET version/containers/events (list+inspect+watch,
+    # all read-only — no create/exec/kill).
+    - -allowHEAD=/_ping
+    - -allowGET=/v1\..{1,2}/(version|containers/.*|events.*)
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
