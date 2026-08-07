@@ -7,6 +7,7 @@ created lazily and lives here (it is the only reassigned piece of shared state);
 the in-memory caches live in ``core.state``.
 """
 
+import asyncio
 import json
 import pathlib
 import sys
@@ -29,6 +30,9 @@ _SCHEMA_PATH = pathlib.Path(__file__).parent.parent / "schema.sql"
 
 # Global connection pool (lazily created by get_postgres_connection)
 postgres_pool = None
+# Guards lazy pool creation so two concurrent first-callers don't each build a
+# pool (the second assignment would win, leaking the first pool's connections).
+_pool_lock = asyncio.Lock()
 
 
 def _json_list(val) -> list:
@@ -49,7 +53,13 @@ def _json_list(val) -> list:
 async def get_postgres_connection():
     """Get PostgreSQL connection pool (creating it on first use)."""
     global postgres_pool
-    if postgres_pool is None:
+    if postgres_pool is not None:
+        return postgres_pool
+
+    async with _pool_lock:
+        if postgres_pool is not None:
+            return postgres_pool
+
         # command_timeout=None preserves the previous behaviour (no per-command
         # timeout). hasattr fallbacks preserved for the same defaults as before.
         postgres_pool = await create_pg_pool(

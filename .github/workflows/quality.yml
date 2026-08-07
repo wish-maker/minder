@@ -64,6 +64,10 @@ jobs:
           done
           echo "── mypy src/shared/ ──"
           ( cd src/shared && mypy . --config-file "${CFG}" )
+          for d in src/plugins/*/; do
+            echo "── mypy ${d} ──"
+            ( cd "${d}" && mypy . --config-file "${CFG}" )
+          done
           echo "── mypy scripts/setup/ ──"
           mypy scripts/setup/ --config-file "${CFG}"
           echo "── mypy scripts/check_pip_updates.py + check_docker_updates.py ──"

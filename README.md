@@ -111,7 +111,6 @@ ENVIRONMENT=development                  # development|staging|production
 
 # GPU Acceleration (if available)
 CUDA_VISIBLE_DEVICES=all                # Enable GPU support
-GPU_MEMORY_UTILIZATION=0.9              # GPU memory allocation
 ```
 
 **⚠️ Security Best Practices:**

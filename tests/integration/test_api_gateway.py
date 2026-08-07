@@ -79,18 +79,62 @@ class TestAPIGatewayIntegration:
         assert response.status_code == 405
 
     def test_rate_limiting_does_not_block_a_single_request(self, gateway_test_client):
-        """Rate limiting is real (slowapi-backed, core/middleware.py) and its
-        in-memory/Redis-backed counter is keyed per client IP on the shared,
-        session-scoped gateway app -- deliberately hammering requests here
-        (as the original version of this test did, up to 20 in a loop) trips
-        the real limiter and then poisons every OTHER test in the session
-        sharing gateway_test_client with 429s, since RATE_LIMIT_ENABLED=false
-        (tests/integration/conftest.py) is set too late to affect the app
-        (already loaded by tests/conftest.py's collection-time import) to
-        actually disable it. This only confirms ordinary single-request
-        traffic isn't blocked."""
+        """Rate limiting is real (Redis-backed, core/middleware.py) and its
+        counter is keyed per client IP on the shared, session-scoped gateway
+        app -- deliberately hammering requests here (as the original version
+        of this test did, up to 20 in a loop) trips the real limiter and then
+        poisons every OTHER test in the session sharing gateway_test_client
+        with 429s, since RATE_LIMIT_ENABLED=false (tests/conftest.py) is set
+        before the shared app's collection-time import specifically so this
+        can't happen. This only confirms ordinary single-request traffic
+        isn't blocked; the real blocking path is covered by
+        test_rate_limiting_actually_blocks_the_nth_request below, against a
+        SEPARATE isolated app with rate limiting genuinely enabled."""
         response = gateway_test_client.get("/v1/plugins")
         assert response.status_code in [200, 503]
+
+    def test_rate_limiting_actually_blocks_the_nth_request(
+        self, api_gateway_rate_limited_app
+    ):
+        """#357: the real Redis-backed blocking path (a request past
+        RATE_LIMIT_PER_MINUTE actually getting a 429) had zero test coverage
+        anywhere -- the only existing rate-limit test (above) can't exercise
+        it, since it deliberately runs against an app with rate limiting
+        disabled. api_gateway_rate_limited_app (tests/conftest.py) is a
+        separate, freshly-imported app with RATE_LIMIT_ENABLED=true and
+        RATE_LIMIT_PER_MINUTE=3, isolated from the shared session app so this
+        can safely hammer requests without poisoning any other test."""
+        from fastapi.testclient import TestClient
+
+        from shared.utils.redis_client import create_redis_client_from_settings
+
+        app_module = api_gateway_rate_limited_app
+        client = TestClient(app_module.app)
+
+        # get_remote_address() keys the limiter by the caller's IP; clear any
+        # stale counter from a previous run so this test is deterministic.
+        redis_client = create_redis_client_from_settings(
+            app_module.settings, ping=False
+        )
+        # Starlette's TestClient sets request.client.host to the literal string
+        # "testclient" (not a real IP) -- verified directly; get_remote_address()
+        # only falls back to "127.0.0.1" when request.client is None entirely.
+        test_ip = "testclient"
+        redis_client.delete(f"ratelimit:{test_ip}")
+
+        try:
+            responses = [client.get("/v1/plugins") for _ in range(4)]
+        finally:
+            redis_client.delete(f"ratelimit:{test_ip}")
+
+        # First 3 (the configured RATE_LIMIT_PER_MINUTE) are real requests --
+        # 200/503 depending on the (unrunning) downstream, never 429 yet.
+        assert all(r.status_code != 429 for r in responses[:3])
+        # The 4th must be rejected -- this is the actual mechanism this test
+        # exists to prove works at all.
+        assert responses[3].status_code == 429
+        body = responses[3].json()
+        assert body["limit"] == 3
 
 
 class TestAPIGatewayErrorHandling:
