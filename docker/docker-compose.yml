@@ -524,11 +524,14 @@ services:
     group_add:
     - ${DOCKER_GID:-0}
     command:
-    # Reachable by the registry + traefik over the internal network; no host port
-    # is published and the whole surface is the allowlisted paths below, so
-    # allowfrom is open (tightening this to the two real callers is #378).
+    # No host port is published, and access is further scoped to just the two
+    # real callers (#378) -- socket-proxy resolves these hostnames to their
+    # current container IPs and checks the actual TCP source address against
+    # them (not anything the client claims), so any OTHER container on the
+    # shared minder-network (e.g. a compromised openwebui/tts-stt) is denied
+    # even though it's on the same network.
     - -listenip=0.0.0.0
-    - -allowfrom=0.0.0.0/0
+    - -allowfrom=plugin-registry,traefik
     - -loglevel=INFO
     # LEAST PRIVILEGE — the registry needs only: container inspect (GET …/json) +
     # restart (telegraf fallback) + start/stop (bundle enable/disable, #65 item-2
