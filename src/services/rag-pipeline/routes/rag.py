@@ -40,15 +40,33 @@ router = APIRouter()
 # `/knowledge-base[...]` forms are kept as hidden, deprecated aliases so the existing
 # documented flow and clients don't break (#144).
 @router.post(
-    "/knowledge-bases", response_model=KnowledgeBaseResponse, tags=["Knowledge Base"]
+    "/v1/knowledge-bases",
+    response_model=KnowledgeBaseResponse,
+    tags=["Knowledge Base"],
+)
+@router.post(
+    "/knowledge-bases",
+    response_model=KnowledgeBaseResponse,
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+@router.post(
+    "/v1/knowledge-base",
+    response_model=KnowledgeBaseResponse,
+    include_in_schema=False,
 )
 @router.post(
     "/knowledge-base",
     response_model=KnowledgeBaseResponse,
     include_in_schema=False,
-)
+)  # deprecated unversioned alias
 async def create_knowledge_base(request: KnowledgeBaseCreate):
-    """Create a new knowledge base"""
+    """Create a new knowledge base.
+
+    Served at both /v1/knowledge-bases and the legacy /knowledge-bases directly (and
+    their deprecated singular /knowledge-base aliases) — not a redirect, which would
+    drop the method/body on non-GET clients (#147).
+    """
     kb_id = str(uuid.uuid4())
 
     # Get embedding dimension
@@ -106,42 +124,81 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
 
 
 @router.get(
-    "/knowledge-bases",
+    "/v1/knowledge-bases",
     response_model=List[KnowledgeBaseResponse],
     tags=["Knowledge Base"],
 )
+@router.get(
+    "/knowledge-bases",
+    response_model=List[KnowledgeBaseResponse],
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
 async def list_knowledge_bases(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
-    """List knowledge bases (paginated via limit/offset, #147/C6)."""
+    """List knowledge bases (paginated via limit/offset, #147/C6).
+
+    Served at both /v1/knowledge-bases and the legacy /knowledge-bases directly — not
+    a redirect, which would drop the method/body on non-GET clients (#147).
+    """
     page, _total = paginate(list(state.knowledge_bases.values()), limit, offset)
     return page
 
 
 @router.get(
+    "/v1/knowledge-bases/{kb_id}",
+    response_model=KnowledgeBaseResponse,
+    tags=["Knowledge Base"],
+)
+@router.get(
     "/knowledge-bases/{kb_id}",
     response_model=KnowledgeBaseResponse,
     tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+@router.get(
+    "/v1/knowledge-base/{kb_id}",
+    response_model=KnowledgeBaseResponse,
+    include_in_schema=False,
 )
 @router.get(
     "/knowledge-base/{kb_id}",
     response_model=KnowledgeBaseResponse,
     include_in_schema=False,
-)
+)  # deprecated unversioned alias
 async def get_knowledge_base(kb_id: str):
-    """Get a single knowledge base by id."""
+    """Get a single knowledge base by id.
+
+    Served at both /v1/knowledge-bases/{kb_id} and the legacy /knowledge-bases/{kb_id}
+    directly (and their deprecated singular /knowledge-base aliases) — not a
+    redirect, which would drop the method/body on non-GET clients (#147).
+    """
     kb = state.knowledge_bases.get(kb_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
     return kb
 
 
-@router.delete("/knowledge-bases/{kb_id}", tags=["Knowledge Base"])
-@router.delete("/knowledge-base/{kb_id}", include_in_schema=False)
+@router.delete("/v1/knowledge-bases/{kb_id}", tags=["Knowledge Base"])
+@router.delete(
+    "/knowledge-bases/{kb_id}",
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+@router.delete("/v1/knowledge-base/{kb_id}", include_in_schema=False)
+@router.delete(
+    "/knowledge-base/{kb_id}", include_in_schema=False
+)  # deprecated unversioned alias
 async def delete_knowledge_base(kb_id: str):
     """Delete a knowledge base: its Qdrant collection, its PostgreSQL row, and the
-    in-memory entry. Idempotent-ish — 404 if the KB is unknown."""
+    in-memory entry. Idempotent-ish — 404 if the KB is unknown.
+
+    Served at both /v1/knowledge-bases/{kb_id} and the legacy /knowledge-bases/{kb_id}
+    directly (and their deprecated singular /knowledge-base aliases) — not a
+    redirect, which would drop the method/body on non-GET clients (#147).
+    """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
@@ -166,17 +223,34 @@ async def delete_knowledge_base(kb_id: str):
 
 
 @router.post(
+    "/v1/knowledge-bases/{kb_id}/upload",
+    response_model=DocumentUploadResponse,
+    tags=["Knowledge Base"],
+)
+@router.post(
     "/knowledge-bases/{kb_id}/upload",
     response_model=DocumentUploadResponse,
     tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+@router.post(
+    "/v1/knowledge-base/{kb_id}/upload",
+    response_model=DocumentUploadResponse,
+    include_in_schema=False,
 )
 @router.post(
     "/knowledge-base/{kb_id}/upload",
     response_model=DocumentUploadResponse,
     include_in_schema=False,
-)
+)  # deprecated unversioned alias
 async def upload_document(kb_id: str, file: UploadFile = File(...)):
-    """Upload document to knowledge base"""
+    """Upload document to knowledge base.
+
+    Served at both /v1/knowledge-bases/{kb_id}/upload and the legacy
+    /knowledge-bases/{kb_id}/upload directly (and their deprecated singular
+    /knowledge-base aliases) — not a redirect, which would drop the method/body on
+    non-GET clients (#147).
+    """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
@@ -273,9 +347,19 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     )
 
 
-@router.post("/pipeline", response_model=RAGPipelineResponse, tags=["Pipeline"])
+@router.post("/v1/pipeline", response_model=RAGPipelineResponse, tags=["Pipeline"])
+@router.post(
+    "/pipeline",
+    response_model=RAGPipelineResponse,
+    tags=["Pipeline"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
 async def create_rag_pipeline(request: RAGPipelineCreate):
-    """Create a RAG pipeline"""
+    """Create a RAG pipeline.
+
+    Served at both /v1/pipeline and the legacy /pipeline directly — not a redirect,
+    which would drop the method/body on non-GET clients (#147).
+    """
     pipeline_id = str(uuid.uuid4())
 
     # Validate knowledge bases exist
@@ -314,10 +398,20 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
     )
 
 
-@router.delete("/pipeline/{pipeline_id}", tags=["Pipeline"])
+@router.delete("/v1/pipeline/{pipeline_id}", tags=["Pipeline"])
+@router.delete(
+    "/pipeline/{pipeline_id}",
+    tags=["Pipeline"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
 async def delete_rag_pipeline(pipeline_id: str):
     """Delete a RAG pipeline (its PostgreSQL row + the in-memory entry). The KBs it
-    referenced are left intact. 404 if the pipeline is unknown."""
+    referenced are left intact. 404 if the pipeline is unknown.
+
+    Served at both /v1/pipeline/{pipeline_id} and the legacy /pipeline/{pipeline_id}
+    directly — not a redirect, which would drop the method/body on non-GET clients
+    (#147).
+    """
     if pipeline_id not in state.rag_pipelines:
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
@@ -333,10 +427,23 @@ async def delete_rag_pipeline(pipeline_id: str):
 
 
 @router.post(
-    "/pipeline/{pipeline_id}/query", response_model=QueryResponse, tags=["Pipeline"]
+    "/v1/pipeline/{pipeline_id}/query",
+    response_model=QueryResponse,
+    tags=["Pipeline"],
 )
+@router.post(
+    "/pipeline/{pipeline_id}/query",
+    response_model=QueryResponse,
+    tags=["Pipeline"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
 async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
-    """Query a RAG pipeline"""
+    """Query a RAG pipeline.
+
+    Served at both /v1/pipeline/{pipeline_id}/query and the legacy
+    /pipeline/{pipeline_id}/query directly — not a redirect, which would drop the
+    method/body on non-GET clients (#147).
+    """
     if pipeline_id not in state.rag_pipelines:
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
