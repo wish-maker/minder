@@ -25,7 +25,13 @@ funnels through `docker compose` — compose stays the single source of truth.
 import json
 import os
 
-from shared.bundle_graph import ClaimGraph, parse_bundle_labels, parse_state
+from shared.bundle_graph import (
+    ClaimGraph,
+    bindings_from_plugin_manifests,
+    claims_from_plugin_manifests,
+    parse_bundle_labels,
+    parse_state,
+)
 
 from . import config, docker, env, filelock, log  # config inserts src/ on the path
 
@@ -33,18 +39,39 @@ SCRIPT_NAME = config.SCRIPT_NAME
 STATE_FILE = config.BUNDLES_STATE
 _STATE_LOCK = STATE_FILE.parent / ".bundles.state.lock"
 
+
+def _plugin_manifest_texts() -> "list[str]":
+    """Read every ``src/plugins/<name>/manifest.yml`` that exists (#65 item 5) --
+    none do today (the 6 first-party module plugins are deliberately NOT
+    retrofitted with one, see bundle_graph.py's module docstring), so this returns
+    ``[]`` and every caller below is a no-op until a real self-hosting plugin ships
+    one."""
+    if not config.PLUGINS_DIR.is_dir():
+        return []
+    texts = []
+    for manifest_path in sorted(config.PLUGINS_DIR.glob("*/manifest.yml")):
+        try:
+            texts.append(manifest_path.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+    return texts
+
+
 # Services whose platform-managed container is replaced by an EXTERNAL endpoint when
 # its env var is non-empty — the exact binding lifecycle.start_services already reads
 # to gate the internal-ollama/internal-tts-stt profiles. For an externally-bound
 # service we don't own a container: `status` shows it as external (not orphan-drift)
 # and `enable`/`reconcile` skip starting it. tts-stt (#65 item 4) is the second real
 # case — same reasoning as ollama (GPU-oriented/resource-heavy, worth pointing at an
-# external instance on a Pi-class host); the general managed/external/self-host model
-# beyond these two is still Phase 3 (see docs/architecture/bundles.md).
+# external instance on a Pi-class host). Plugin-declared bindings (#65 item 5, a
+# claim's `address_env`) merge in here too, so a self-hosting plugin's claim can
+# resolve to an external address the same way, without hardcoding its service name --
+# a no-op today since no manifest exists yet.
 EXTERNAL_BINDINGS: dict[str, str] = {
     "ollama": "OLLAMA_BASE_URL",
     "tts-stt": "TTS_STT_BASE_URL",
 }
+EXTERNAL_BINDINGS.update(bindings_from_plugin_manifests(_plugin_manifest_texts()))
 
 
 def external_binding(service: str) -> "str | None":
@@ -62,9 +89,11 @@ CORE_BUNDLE = "core"
 
 
 def _load_claims() -> dict:
-    """Derive ``{bundle: (services...)}`` from the Compose `minder.bundle=` labels via
-    the shared brain (compose = single source of truth, #65). Raises if no labels are
-    present so the map never silently becomes empty."""
+    """Derive ``{bundle: (services...)}`` from the Compose `minder.bundle=` labels
+    (source 1) merged with any ``src/plugins/*/manifest.yml`` claims (source 2, #65
+    item 5 -- a no-op today, no manifest exists) via the shared brain (#65). Raises
+    if no compose labels are present so the map never silently becomes empty --
+    manifests are optional and additive, so their absence never raises."""
     try:
         compose_text = config.COMPOSE_FILE.read_text(encoding="utf-8")
     except OSError as e:
@@ -83,6 +112,13 @@ def _load_claims() -> dict:
             f"No minder.bundle labels found in {config.COMPOSE_FILE}; the bundle map "
             "is derived from Compose labels (#65) — the compose file must carry them."
         )
+    plugin_claims = claims_from_plugin_manifests(_plugin_manifest_texts())
+    for bundle, svcs in plugin_claims.items():
+        merged = list(claims.get(bundle, ()))
+        for svc in svcs:
+            if svc not in merged:
+                merged.append(svc)
+        claims[bundle] = tuple(merged)
     return claims
 
 

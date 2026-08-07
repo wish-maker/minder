@@ -45,6 +45,12 @@ TELEGRAF_RUNTIME = (
     REPO_ROOT / "docker" / "services" / "telegraf" / "telegraf.runtime.conf"
 )
 
+# Module plugins — the claim graph's second source (#65 item 5): a plugin MAY ship
+# src/plugins/<name>/manifest.yml declaring its own bundle/claims/binding metadata.
+# No plugin does today (see bundle_graph.py's module docstring on that section) —
+# this is just where bundles.py looks for one, if it ever exists.
+PLUGINS_DIR = REPO_ROOT / "src" / "plugins"
+
 # Tag cache (config.sh PATHS block). CACHE_TTL_HOURS: tag lists expire after 24h.
 CACHE_DIR = REPO_ROOT / ".cache"
 TAGS_CACHE_DIR = CACHE_DIR / "tags"

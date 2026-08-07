@@ -5,7 +5,14 @@ tested directly (independent of either front-end): label parsing, corrupt-tolera
 state parsing, and the reference-counted claim graph.
 """
 
-from shared.bundle_graph import ClaimGraph, parse_bundle_labels, parse_state
+from shared.bundle_graph import (
+    ClaimGraph,
+    bindings_from_plugin_manifests,
+    claims_from_plugin_manifests,
+    parse_bundle_labels,
+    parse_plugin_manifest,
+    parse_state,
+)
 
 _COMPOSE = """\
 services:
@@ -94,3 +101,103 @@ def test_orphaned_services_only_when_all_claimants_off():
     # model-management (claimed solely by inference) is.
     g = _graph({"inference": {"enabled": False}})
     assert g.orphaned_services() == ["model-management"]
+
+
+# ── Plugin manifest parsing (#65 item 5) ────────────────────────────────────────
+_MANIFEST_FULL = """\
+bundle: chat
+manager: true
+claims:
+  - service: my-vector-db
+    self_hostable: true
+    address_env: MY_VECTOR_DB_URL
+    spec_ref: service.yml
+  - service: another-service
+    self_hostable: false
+"""
+
+
+def test_parse_plugin_manifest_full_shape():
+    parsed = parse_plugin_manifest(_MANIFEST_FULL)
+    assert parsed["bundle"] == "chat"
+    assert parsed["manager"] is True
+    assert parsed["claims"] == [
+        {
+            "service": "my-vector-db",
+            "self_hostable": True,
+            "address_env": "MY_VECTOR_DB_URL",
+            "spec_ref": "service.yml",
+        },
+        {
+            "service": "another-service",
+            "self_hostable": False,
+            "address_env": None,
+            "spec_ref": None,
+        },
+    ]
+
+
+def test_parse_plugin_manifest_minimal_no_claims():
+    parsed = parse_plugin_manifest("bundle: monitoring\n")
+    assert parsed == {"bundle": "monitoring", "manager": False, "claims": []}
+
+
+def test_parse_plugin_manifest_no_bundle_key_is_fail_soft():
+    # A malformed/in-progress manifest must not raise -- just contributes nothing.
+    parsed = parse_plugin_manifest("claims:\n  - service: orphan-claim\n")
+    assert parsed["bundle"] is None
+
+
+def test_parse_plugin_manifest_empty_text():
+    assert parse_plugin_manifest("") == {"bundle": None, "manager": False, "claims": []}
+
+
+def test_claims_from_plugin_manifests_merges_multiple():
+    other = "bundle: chat\nclaims:\n  - service: yet-another\n"
+    merged = claims_from_plugin_manifests([_MANIFEST_FULL, other])
+    assert set(merged["chat"]) == {"my-vector-db", "another-service", "yet-another"}
+
+
+def test_claims_from_plugin_manifests_skips_bundleless():
+    merged = claims_from_plugin_manifests(
+        ["claims:\n  - service: orphan-claim\n", _MANIFEST_FULL]
+    )
+    assert "orphan-claim" not in [s for svcs in merged.values() for s in svcs]
+
+
+def test_claims_from_plugin_manifests_no_duplicate_services():
+    dup = "bundle: chat\nclaims:\n  - service: my-vector-db\n"
+    merged = claims_from_plugin_manifests([_MANIFEST_FULL, dup])
+    assert merged["chat"].count("my-vector-db") == 1
+
+
+def test_claims_from_plugin_manifests_empty_input():
+    assert claims_from_plugin_manifests([]) == {}
+
+
+def test_bindings_from_plugin_manifests_extracts_address_env():
+    bindings = bindings_from_plugin_manifests([_MANIFEST_FULL])
+    assert bindings == {"my-vector-db": "MY_VECTOR_DB_URL"}
+
+
+def test_bindings_from_plugin_manifests_skips_claims_without_address_env():
+    # "another-service" has self_hostable=false and no address_env -- a pure
+    # "I need this platform service" claim, not something bindable.
+    bindings = bindings_from_plugin_manifests([_MANIFEST_FULL])
+    assert "another-service" not in bindings
+
+
+def test_claims_from_plugin_manifests_merges_into_compose_claims():
+    """End-to-end: a plugin's claim + compose labels union into one claim graph,
+    exactly how _load_claims()/_load() are meant to merge the two sources."""
+    compose_claims = dict(parse_bundle_labels(_COMPOSE))
+    plugin_claims = claims_from_plugin_manifests([_MANIFEST_FULL])
+    for bundle, svcs in plugin_claims.items():
+        merged = list(compose_claims.get(bundle, ()))
+        for svc in svcs:
+            if svc not in merged:
+                merged.append(svc)
+        compose_claims[bundle] = tuple(merged)
+    # "chat" already claimed "ollama" via compose; now also claims the plugin's
+    # two services, without losing the original claim.
+    assert set(compose_claims["chat"]) == {"ollama", "my-vector-db", "another-service"}
