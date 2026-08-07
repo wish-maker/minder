@@ -20,11 +20,21 @@ stt_requests_total = Counter(
 router = APIRouter()
 
 
-@router.post("/stt", response_model=STTResponse, tags=["STT"])
+@router.post("/v1/stt", response_model=STTResponse, tags=["STT"])
+@router.post(
+    "/stt",
+    response_model=STTResponse,
+    tags=["STT"],
+    include_in_schema=False,  # deprecated unversioned alias
+)
 async def speech_to_text(
     file: UploadFile = File(...), language: str = Form(settings.DEFAULT_STT_LANG)
 ):
-    """Convert speech to text"""
+    """Convert speech to text.
+
+    Served at both /v1/stt and the legacy /stt directly — the old /stt
+    used a 301 redirect, which drops the method/body on non-GET clients (#147).
+    """
     if not STT_AVAILABLE:
         raise HTTPException(status_code=503, detail="STT not available")
 
@@ -55,9 +65,16 @@ async def speech_to_text(
         raise backend_http_error(e, "Speech-to-text")
 
 
-@router.get("/stt/languages", tags=["STT"])
+@router.get("/v1/stt/languages", tags=["STT"])
+@router.get(
+    "/stt/languages", tags=["STT"], include_in_schema=False
+)  # deprecated unversioned alias
 async def get_stt_languages():
-    """Get supported languages"""
+    """Get supported languages.
+
+    Served at both /v1/stt/languages and the legacy /stt/languages directly — the old
+    /stt/languages used a 301 redirect, which drops the method/body on non-GET clients (#147).
+    """
     return {
         "languages": SUPPORTED_LANGUAGES,
         "auto_detect": True,

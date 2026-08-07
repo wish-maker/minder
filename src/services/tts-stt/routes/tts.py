@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 @router.post(
-    "/tts",
+    "/v1/tts",
     tags=["TTS"],
     responses={
         200: {
@@ -35,8 +35,27 @@ router = APIRouter()
         }
     },
 )
+@router.post(
+    "/tts",
+    tags=["TTS"],
+    include_in_schema=False,  # deprecated unversioned alias
+    responses={
+        200: {
+            "content": {"audio/wav": {}, "audio/mpeg": {}},
+            "description": (
+                "Synthesised audio — WAV (Piper, offline) or MP3 (gTTS fallback). "
+                "The engine/format is reported in the X-Language header and the "
+                "Content-Type. Binary body, so there is no JSON response_model (#147/C9)."
+            ),
+        }
+    },
+)
 async def text_to_speech(request: TTSRequest):
-    """Convert text to speech (Piper → WAV offline, or gTTS → MP3 fallback)."""
+    """Convert text to speech (Piper → WAV offline, or gTTS → MP3 fallback).
+
+    Served at both /v1/tts and the legacy /tts directly — the old /tts
+    used a 301 redirect, which drops the method/body on non-GET clients (#147).
+    """
     if not TTS_AVAILABLE:
         raise HTTPException(status_code=503, detail="TTS not available")
 
@@ -72,9 +91,16 @@ async def text_to_speech(request: TTSRequest):
         raise backend_http_error(e, "Text-to-speech")
 
 
-@router.get("/tts/languages", tags=["TTS"])
+@router.get("/v1/tts/languages", tags=["TTS"])
+@router.get(
+    "/tts/languages", tags=["TTS"], include_in_schema=False
+)  # deprecated unversioned alias
 async def get_tts_languages():
-    """Get supported languages"""
+    """Get supported languages.
+
+    Served at both /v1/tts/languages and the legacy /tts/languages directly — the old
+    /tts/languages used a 301 redirect, which drops the method/body on non-GET clients (#147).
+    """
     return {
         "languages": SUPPORTED_LANGUAGES,
         "default": settings.DEFAULT_TTS_LANG,
