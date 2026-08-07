@@ -24,7 +24,12 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from shared.auth.jwt_middleware import get_current_user
-from shared.bundle_graph import ClaimGraph, parse_bundle_labels, parse_state
+from shared.bundle_graph import (
+    ClaimGraph,
+    claims_from_plugin_manifests,
+    parse_bundle_labels,
+    parse_state,
+)
 
 CORE_BUNDLE = "core"
 _DOCKER_TIMEOUT = 10.0
@@ -89,7 +94,9 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
         return _ContainerOps(base, settings.CONTAINER_PREFIX)
 
     def _load() -> "tuple[dict, dict]":
-        """Read the claim map (compose labels) + the enable-state, or 503."""
+        """Read the claim map (compose labels, source 1) merged with any
+        ``PLUGINS_PATH/*/manifest.yml`` claims (source 2, #65 item 5 -- a no-op
+        today, no manifest exists) + the enable-state, or 503."""
         try:
             compose_text = Path(settings.BUNDLES_COMPOSE_PATH).read_text(
                 encoding="utf-8"
@@ -105,6 +112,20 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
                 status_code=503,
                 detail="bundle map empty: compose file has no minder.bundle= labels",
             )
+        manifest_texts = []
+        plugins_path = getattr(settings, "PLUGINS_PATH", None)
+        if plugins_path:
+            for manifest_path in sorted(Path(plugins_path).glob("*/manifest.yml")):
+                try:
+                    manifest_texts.append(manifest_path.read_text(encoding="utf-8"))
+                except OSError:
+                    continue
+        for bundle, svcs in claims_from_plugin_manifests(manifest_texts).items():
+            merged = list(claims.get(bundle, ()))
+            for svc in svcs:
+                if svc not in merged:
+                    merged.append(svc)
+            claims[bundle] = tuple(merged)
         try:
             state = parse_state(
                 Path(settings.BUNDLES_STATE_PATH).read_text(encoding="utf-8")

@@ -28,6 +28,105 @@ _BUNDLE_LABEL_RE = re.compile(r"minder\.bundle=([A-Za-z0-9,_-]+)")
 CORE_BUNDLE = "core"
 
 
+# ── Plugin manifest derivation (#65 item 5) ────────────────────────────────────
+# The claim graph's second source (docs/architecture/bundles.md's "three sources"):
+# a plugin declares its own claims in `src/plugins/<name>/manifest.yml` — the ADR's
+# own described shape (`bundle`, `claims[]` with `self_hostable`/`address_env`/
+# `spec_ref`, `manager?`). No plugin ships one of these yet (deliberately not
+# retrofitted onto the 6 existing first-party module plugins, which own no service
+# of their own and are correctly gated by their own enable/disable flag instead,
+# not a bundle claim — see the ADR's `plugin` vocabulary entry) — this is
+# foundational infrastructure for a FUTURE self-hosting plugin, so with zero
+# manifests present today every function below returns empty, changing nothing.
+#
+# Same regex-line-scan convention as parse_bundle_labels (no YAML lib): a claim is
+# a 2-indent `- service: <name>` list item under a top-level `claims:` key, with
+# its own 4-indent sub-fields.
+_MANIFEST_BUNDLE_RE = re.compile(r"^bundle:\s*([A-Za-z0-9_-]+)\s*(#.*)?$")
+_MANIFEST_MANAGER_RE = re.compile(r"^manager:\s*(true|false)\s*(#.*)?$", re.IGNORECASE)
+_MANIFEST_CLAIMS_KEY_RE = re.compile(r"^claims:\s*(#.*)?$")
+_CLAIM_ITEM_RE = re.compile(r"^  -\s*service:\s*([A-Za-z0-9._-]+)\s*(#.*)?$")
+_CLAIM_FIELD_RE = re.compile(r"^    ([a-z_]+):\s*(\S+)\s*(#.*)?$")
+
+
+def parse_plugin_manifest(manifest_text: str) -> dict:
+    """Parse one ``manifest.yml``'s text → ``{"bundle": str|None, "manager": bool,
+    "claims": [{"service": str, "self_hostable": bool, "address_env": str|None,
+    "spec_ref": str|None}, ...]}``.
+
+    Fail-soft like ``parse_state``: a manifest with no ``bundle:`` key contributes
+    nothing (``bundle`` is ``None``) rather than raising — a malformed or
+    in-progress manifest shouldn't be able to crash the whole claim graph.
+    """
+    bundle: str | None = None
+    manager = False
+    claims: list[dict] = []
+    current: dict | None = None
+    for line in manifest_text.splitlines():
+        m = _MANIFEST_BUNDLE_RE.match(line)
+        if m:
+            bundle = m.group(1)
+            continue
+        m = _MANIFEST_MANAGER_RE.match(line)
+        if m:
+            manager = m.group(1).lower() == "true"
+            continue
+        if _MANIFEST_CLAIMS_KEY_RE.match(line):
+            continue
+        m = _CLAIM_ITEM_RE.match(line)
+        if m:
+            current = {
+                "service": m.group(1),
+                "self_hostable": False,
+                "address_env": None,
+                "spec_ref": None,
+            }
+            claims.append(current)
+            continue
+        m = _CLAIM_FIELD_RE.match(line)
+        if m and current is not None and m.group(1) in current:
+            key, value = m.group(1), m.group(2)
+            current[key] = (
+                (value.lower() == "true") if key == "self_hostable" else value
+            )
+    return {"bundle": bundle, "manager": manager, "claims": claims}
+
+
+def claims_from_plugin_manifests(
+    manifest_texts: "list[str]",
+) -> dict[str, tuple[str, ...]]:
+    """Merge many manifests' claims → the same ``{bundle: (services...)}`` shape
+    ``parse_bundle_labels`` produces, so a caller can union the two claim sources
+    before constructing a ``ClaimGraph``. A manifest with no ``bundle:`` (or no
+    ``claims:``) contributes nothing."""
+    claims: dict[str, list[str]] = {}
+    for text in manifest_texts:
+        parsed = parse_plugin_manifest(text)
+        bundle = parsed["bundle"]
+        if not bundle:
+            continue
+        for claim in parsed["claims"]:
+            svcs = claims.setdefault(bundle, [])
+            if claim["service"] not in svcs:
+                svcs.append(claim["service"])
+    return {bundle: tuple(svcs) for bundle, svcs in claims.items()}
+
+
+def bindings_from_plugin_manifests(manifest_texts: "list[str]") -> dict[str, str]:
+    """Merge many manifests' ``address_env`` fields → ``{service: env_var_name}``,
+    the same shape as ``bundles.EXTERNAL_BINDINGS`` — so a plugin-declared claim
+    can resolve to an external binding exactly like ollama/tts-stt do today, without
+    the caller hardcoding every service name. Claims with no ``address_env`` (pure
+    "I need this platform service" claims, not self-hostable/bindable ones) are
+    skipped."""
+    bindings: dict[str, str] = {}
+    for text in manifest_texts:
+        for claim in parse_plugin_manifest(text)["claims"]:
+            if claim["address_env"]:
+                bindings[claim["service"]] = claim["address_env"]
+    return bindings
+
+
 def parse_bundle_labels(compose_text: str) -> dict[str, tuple[str, ...]]:
     """Build ``{bundle: (services...)}`` from a compose file's ``minder.bundle=`` labels.
 

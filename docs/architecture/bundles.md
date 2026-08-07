@@ -5,12 +5,15 @@
 > **pure claim-graph brain extracted to `shared.bundle_graph` (#65 item 1)**, the
 > **`GET /v1/bundles` registry API (#65 item 2, read-only)**, the **least-privilege
 > docker-socket-proxy (#65 item-2 PR1)**, the **mutating `POST /v1/bundles/*`
-> registry endpoints (#65 item-2 PR2)**, and **tts-stt as the second external
-> binding + failover case (#65 item 4, #396)**; remaining Phase 3 (the general
-> managed/self-host/prompt resolution matrix beyond ollama/tts-stt, plugin
-> manifest schema) tracked in #65 · **Date:** 2026-07-18 · **Supersedes:** the
-> ad-hoc `plugin enable/disable` control-plane (branch `feat/plugin-lifecycle-gating`,
-> renamed to the bundle model in Phase 1 and merged as `feat/bundles`).
+> registry endpoints (#65 item-2 PR2)**, **tts-stt as the second external
+> binding + failover case (#65 item 4, #396)**, and the **plugin manifest
+> schema for bundle/claims/binding metadata (#65 item 5)** — the claim graph's
+> second source (`src/plugins/<name>/manifest.yml`, merged in both front-ends);
+> remaining Phase 3 (the general managed/self-host/prompt resolution matrix
+> beyond ollama/tts-stt, marketplace bundle contribution) tracked in #65 ·
+> **Date:** 2026-07-18 · **Supersedes:** the ad-hoc `plugin enable/disable`
+> control-plane (branch `feat/plugin-lifecycle-gating`, renamed to the bundle
+> model in Phase 1 and merged as `feat/bundles`).
 
 ## Context
 
@@ -74,8 +77,13 @@ it; refcount governs teardown. (Verified live: enabling telegraf showed influxdb
 The claim graph has three sources, merged into one `service → claimants` map:
 
 1. **Platform bundles** — declared via a Compose label on each service (below).
-2. **Plugin-contributed bundles** — a plugin declares its claims in its manifest;
-   installing the plugin adds its claims to the graph.
+2. **Plugin-contributed bundles** (#65 item 5, shipped) — a plugin declares its
+   claims in `src/plugins/<name>/manifest.yml`; both front-ends (the setup CLI
+   and the registry API) merge them into the same map compose labels populate,
+   via `shared.bundle_graph.claims_from_plugin_manifests`. No plugin ships one
+   yet — the 6 first-party module plugins own no service of their own, so
+   they're deliberately not retrofitted with one (see the `plugin` vocabulary
+   entry above); this is ready for a future self-hosting plugin.
 3. **Marketplace** — installs new plugins (hence new bundles/claims) at runtime.
 
 ## Bundle map (all 34 services assigned)
@@ -322,7 +330,7 @@ separated from tracked config.
 | **0** | This ADR (design lock) |
 | **1** | Rename `plugin`→`bundle` (verb, `bundles.state.json`, `BUNDLES` claim-graph, no owned/shared fields); binding managed/external; keep gate/tests green |
 | **2** | Real bundle map (Compose labels) + profiles + `start`→reconcile wiring; provider-chain (resolution-time) |
-| **3** | docker-socket-proxy + registry API → shared brain; plugin manifest schema; marketplace bundle contribution |
+| **3** | docker-socket-proxy + registry API → shared brain; **plugin manifest schema (shipped, #65 item 5)**; marketplace bundle contribution |
 | **4** | Binding polish (external health), `.minder/` state consolidation, Layer-2/#21 groundwork |
 
 > Layer 2 (#21 capacity-aware inference routing) is a separate epic; the
