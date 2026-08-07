@@ -13,17 +13,25 @@ minder-plugin-registry``, no image rebuild.
 Config (env on plugin-registry; all optional — keyless defaults):
   NEWS_FEEDS          ``name:url`` pairs, comma-sep (url may contain ':', split once).
                       Default = a broad global + local (Turkish) keyless RSS mix;
-                      override per deployment/region via the config API.
+                      override per deployment/region via the config API. URLs must
+                      be https and resolve to a public address (#370) — this is
+                      JWT-gated but a leaked token shouldn't turn "add a feed" into
+                      an internal-network probe; non-conforming URLs are silently
+                      skipped at fetch time (logged), matching this plugin's
+                      existing fail-soft style for unreachable/unparseable feeds.
   NEWS_MAX_ITEMS      max headlines kept per feed (default 10).
   NEWS_SINK_INFLUXDB  "1"/"0" — write the item-count metric (default "1").
   NEWS_HTTP_TIMEOUT   per-request timeout seconds (default 10).
 """
 
+import asyncio
+import ipaddress
 import logging
 import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -33,18 +41,48 @@ __all__ = ["NewsPlugin"]
 
 logger = logging.getLogger("minder.plugin.news")
 
+
+async def _is_safe_feed_url(url: str) -> bool:
+    """https-only + reject hosts that resolve to a private/loopback/link-local/
+    reserved/multicast address (RFC1918, 127.0.0.0/8, 169.254.0.0/16 incl. cloud
+    metadata endpoints, etc.) -- closes a limited SSRF-shaped primitive (#370):
+    NEWS_FEEDS is JWT-gated but this platform's trust boundaries are loose
+    (single-tenant/self-hosted), so a leaked token shouldn't be able to turn
+    "add an RSS feed" into "probe internal services every collection cycle".
+    Resolves the hostname rather than only checking literal IPs, since a
+    hostname can point at an internal address just as easily as an IP literal.
+    """
+    parts = urlsplit(url)
+    if parts.scheme != "https" or not parts.hostname:
+        return False
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(parts.hostname, None)
+    except OSError:
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            return False
+    return True
+
 # A broad default mix of GLOBAL + LOCAL (Turkish) keyless RSS feeds — all verified
 # reachable + parseable from the registry container. Fully overridable per deployment
 # via the NEWS_FEEDS config (GET/PUT /v1/plugins/news/config): pick your own region's
 # sources. Format is "name:url" pairs (url may contain ':', split once).
 _DEFAULT_FEEDS = ",".join(
     [
-        # global
-        "bbc:http://feeds.bbci.co.uk/news/rss.xml",
+        # global -- all https (#370: the fetcher now rejects non-https feeds)
+        "bbc:https://feeds.bbci.co.uk/news/rss.xml",
         "guardian:https://www.theguardian.com/world/rss",
         "aljazeera:https://www.aljazeera.com/xml/rss/all.xml",
         "hackernews:https://hnrss.org/frontpage",
-        "arstechnica:http://feeds.arstechnica.com/arstechnica/index",
+        "arstechnica:https://feeds.arstechnica.com/arstechnica/index",
         "nasa:https://www.nasa.gov/rss/dyn/breaking_news.rss",
         # local (Turkey)
         "bbc_turkce:https://feeds.bbci.co.uk/turkce/rss.xml",
@@ -71,7 +109,11 @@ class NewsPlugin:
             "key": "NEWS_FEEDS",
             "type": "string",
             "default": _DEFAULT_FEEDS,
-            "description": "RSS/Atom feeds as 'name:url' pairs, comma-separated.",
+            "description": (
+                "RSS/Atom feeds as 'name:url' pairs, comma-separated. Each url "
+                "must be https and resolve to a public address -- non-conforming "
+                "entries are silently skipped at fetch time."
+            ),
         },
         {
             "key": "NEWS_MAX_ITEMS",
@@ -182,7 +224,14 @@ class NewsPlugin:
 
     # ── fetching / parsing ─────────────────────────────────────────────────────
     async def _fetch_feed(self, url: str) -> List[Dict]:
-        """Fetch + parse one RSS/Atom feed into [{title, link, published}]. [] on error."""
+        """Fetch + parse one RSS/Atom feed into [{title, link, published}]. [] on error
+        or if the URL fails the https-only/public-address check (#370)."""
+        if not await _is_safe_feed_url(url):
+            logger.warning(
+                f"⚠️ news feed URL rejected (must be https and resolve to a "
+                f"public address): {url}"
+            )
+            return []
         try:
             async with httpx.AsyncClient(
                 timeout=self.http_timeout, follow_redirects=True
