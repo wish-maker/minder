@@ -13,11 +13,12 @@ import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config, docker, log
+from . import config, docker, filelock, log
 
 ENV_FILE = config.ENV_FILE
 ENV_EXAMPLE = config.ENV_EXAMPLE
 COMPOSE_ENV_FILE = config.COMPOSE_ENV_FILE
+_ENV_LOCK = ENV_FILE.parent / ".env.lock"
 
 # Authoritative secret-key set → "length[:format]" (env.sh SECRET_SPEC). Smart-fill
 # touches ONLY these keys; every other .env line is left exactly as written.
@@ -185,73 +186,77 @@ def fill_env_secrets() -> None:
     value is MISSING/EMPTY/a placeholder/(for prefixed specs) the bare prefix.
     Real user values are left untouched. Backs up .env before rewriting. SILENT
     no-op when nothing needs filling — this is what keeps the gate's start/stop/
-    restart traces unchanged, so it must stay silent."""
-    try:
-        raw = ENV_FILE.read_text(encoding="utf-8")
-    except OSError:
-        raw = ""
+    restart traces unchanged, so it must stay silent.
 
-    to_fill = []
-    for key, spec in SECRET_SPEC.items():
-        fmt = spec.split(":", 1)[1] if ":" in spec else ""
-        value = _first_env_value(raw, key)
-        if (
-            value is None
-            or value == ""
-            or _PLACEHOLDER_RE.search(value)
-            or (fmt and value == fmt)
-        ):
-            to_fill.append(key)
+    Holds an advisory lock (#374) for the whole read-modify-write so two concurrent
+    setup.sh invocations can't interleave writes and corrupt .env."""
+    with filelock.locked(_ENV_LOCK):
+        try:
+            raw = ENV_FILE.read_text(encoding="utf-8")
+        except OSError:
+            raw = ""
 
-    if not to_fill:
-        return  # fully populated → silent no-op (gate-critical)
+        to_fill = []
+        for key, spec in SECRET_SPEC.items():
+            fmt = spec.split(":", 1)[1] if ":" in spec else ""
+            value = _first_env_value(raw, key)
+            if (
+                value is None
+                or value == ""
+                or _PLACEHOLDER_RE.search(value)
+                or (fmt and value == fmt)
+            ):
+                to_fill.append(key)
 
-    to_fill.sort()  # deterministic log/apply order (spec iteration order is arbitrary)
+        if not to_fill:
+            return  # fully populated → silent no-op (gate-critical)
 
-    # #57: refuse to auto-(re)generate secrets while a provisioned stack is running —
-    # doing so would mirror new secrets into docker/.env and let start_services
-    # recreate the stateful cores, desyncing live services (redis/minio re-read their
-    # password on recreate). Only reached when secrets ACTUALLY need filling; the
-    # normal full-.env path returned above untouched, so healthy start/restart is
-    # unaffected. Override with MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally.
-    live = None if _regen_allowed() else _live_core()
-    if live:
-        joined = ", ".join(to_fill)
-        log.error(
-            f"Refusing to regenerate .env secrets — a provisioned stack is already running ({live})"
-        )
-        log.detail(f"Missing/placeholder secrets: {joined}")
-        log.detail(
-            "Regenerating would desync live services (redis/minio re-read their password on recreate)."
-        )
-        log.detail(
-            "Fix: restore the real secrets into .env, or set MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally."
-        )
-        raise SystemExit(1)
+        to_fill.sort()  # deterministic log/apply order (spec iteration order is arbitrary)
 
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    backup = ENV_FILE.parent / f".env.backup-{ts}"
-    backup.write_bytes(ENV_FILE.read_bytes())
-    log.detail(f"Backed up .env → {backup.name}")
-
-    for key in to_fill:
-        spec = SECRET_SPEC[key]
-        length = int(spec.split(":", 1)[0])
-        fmt = spec.split(":", 1)[1] if ":" in spec else ""
-        new_secret = f"{fmt}{gen_secret(length)}"
-        if re.search(rf"(?m)^{re.escape(key)}=", raw):
-            # sed "s|^key=.*|key=new|" — replace every matching line (function
-            # replacement so hex/prefix is never treated as a backreference).
-            raw = re.sub(
-                rf"(?m)^{re.escape(key)}=.*", lambda _m: f"{key}={new_secret}", raw
+        # #57: refuse to auto-(re)generate secrets while a provisioned stack is running —
+        # doing so would mirror new secrets into docker/.env and let start_services
+        # recreate the stateful cores, desyncing live services (redis/minio re-read their
+        # password on recreate). Only reached when secrets ACTUALLY need filling; the
+        # normal full-.env path returned above untouched, so healthy start/restart is
+        # unaffected. Override with MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally.
+        live = None if _regen_allowed() else _live_core()
+        if live:
+            joined = ", ".join(to_fill)
+            log.error(
+                f"Refusing to regenerate .env secrets — a provisioned stack is already running ({live})"
             )
-        else:
-            raw += f"{key}={new_secret}\n"  # bash printf … >> .env (no separator)
-        log.detail(f"✓ Generated secret for {key}")
+            log.detail(f"Missing/placeholder secrets: {joined}")
+            log.detail(
+                "Regenerating would desync live services (redis/minio re-read their password on recreate)."
+            )
+            log.detail(
+                "Fix: restore the real secrets into .env, or set MINDER_ALLOW_SECRET_REGEN=1 to rotate intentionally."
+            )
+            raise SystemExit(1)
 
-    with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(raw)
-    log.success(f"{len(to_fill)} secret(s) generated/healed in .env")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        backup = ENV_FILE.parent / f".env.backup-{ts}"
+        backup.write_bytes(ENV_FILE.read_bytes())
+        log.detail(f"Backed up .env → {backup.name}")
+
+        for key in to_fill:
+            spec = SECRET_SPEC[key]
+            length = int(spec.split(":", 1)[0])
+            fmt = spec.split(":", 1)[1] if ":" in spec else ""
+            new_secret = f"{fmt}{gen_secret(length)}"
+            if re.search(rf"(?m)^{re.escape(key)}=", raw):
+                # sed "s|^key=.*|key=new|" — replace every matching line (function
+                # replacement so hex/prefix is never treated as a backreference).
+                raw = re.sub(
+                    rf"(?m)^{re.escape(key)}=.*", lambda _m: f"{key}={new_secret}", raw
+                )
+            else:
+                raw += f"{key}={new_secret}\n"  # bash printf … >> .env (no separator)
+            log.detail(f"✓ Generated secret for {key}")
+
+        with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
+            fh.write(raw)
+        log.success(f"{len(to_fill)} secret(s) generated/healed in .env")
 
 
 # _write_default_env's heredoc body — extracted verbatim from env.sh (unquoted
