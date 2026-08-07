@@ -1,8 +1,8 @@
 """`restore` verb — ported from scripts/lib/commands.sh cmd_restore (#7, Stage 2).
 
 `restore [archive]` — restore .env + PostgreSQL + Neo4j + InfluxDB + Qdrant +
-RabbitMQ definitions from a `backups/minder-<ts>.tar.gz` produced by `backup`.
-With no argument it
+MinIO + RabbitMQ definitions from a `backups/minder-<ts>.tar.gz` produced by
+`backup`. With no argument it
 lists the available archives (interactive pick), else it errors non-interactively.
 
 DRY_RUN (#55, fixed): the restore steps MUTATE live data, so they are now gated —
@@ -397,6 +397,47 @@ def run(archive: str = "") -> int:
     elif restore_dir and (restore_dir / "qdrant.tar.gz").is_file():
         log.warn("Qdrant not running — restore skipped")
         skipped.append("Qdrant")
+
+    # ── MinIO (mirrors the Qdrant #56 fix's INTENT above, not its mechanism --
+    # backup.py's MinIO section found live on the Pi that MinIO's official
+    # image ships no `tar` binary at all, so `docker exec ... tar` can't work
+    # for restore either. Extraction happens host-side via Python tarfile
+    # (binary-free), then the extracted tree is pushed INTO the container with
+    # `docker cp`, which needs no binary inside the target container) ────────
+    if (
+        restore_dir
+        and (restore_dir / "minio.tar.gz").is_file()
+        and docker.container_running("minio")
+    ):
+        log.spinner_start("Restoring MinIO…")
+        mname = docker.container_name("minio")
+        minio_extract = restore_dir / "minio_extracted"
+        ok = False
+        try:
+            with tarfile.open(restore_dir / "minio.tar.gz", "r:gz") as tf:
+                try:
+                    tf.extractall(minio_extract, filter="data")
+                except TypeError:
+                    tf.extractall(minio_extract)
+            minio_raw = minio_extract / "minio_data_raw"
+            # Trailing "/." tells `docker cp` to copy the source dir's
+            # CONTENTS into /data, not nest a "minio_data_raw" subdirectory.
+            ok = (
+                minio_raw.is_dir()
+                and docker.run("docker", "cp", f"{minio_raw}/.", f"{mname}:/data") == 0
+            )
+        except (OSError, tarfile.TarError):
+            ok = False
+        shutil.rmtree(minio_extract, ignore_errors=True)
+        log.spinner_stop()
+        if ok:
+            log.success("MinIO restored")
+        else:
+            log.warn("MinIO restore had errors")
+            skipped.append("MinIO")
+    elif restore_dir and (restore_dir / "minio.tar.gz").is_file():
+        log.warn("MinIO not running — restore skipped")
+        skipped.append("MinIO")
 
     # ── RabbitMQ definitions ──────────────────────────────────────────────
     if (

@@ -44,17 +44,25 @@ security posture of the Minder platform.
 
 Secrets now live in a **single source of truth — the root `.env`** (seeded from
 `.env.example`; compose reads them via `${VAR}` interpolation, so there is no longer
-per-service duplication). Replace these placeholder defaults **once** in `.env` before
-any non-local deployment:
+per-service duplication). `.env.example` ships these as placeholders:
 
-- **POSTGRES_PASSWORD:** `dev_password_change_me`
-- **REDIS_PASSWORD:** `dev_password_change_me`
-- **JWT_SECRET:** `dev_jwt_secret_change_me`
-- **INFLUXDB_TOKEN:** `minder-super-secret-token-change-me-in-production`
+- **POSTGRES_PASSWORD:** `CHANGEME_POSTGRES_SECRET_32_CHARS`
+- **REDIS_PASSWORD:** `CHANGEME_REDIS_SECRET_32_CHARS`
+- **JWT_SECRET:** `CHANGEME_JWT_SECRET_MINIMUM_64_CHARS_RECOMMENDED`
+- **INFLUXDB_TOKEN:** `CHANGEME_INFLUXDB_SECRET_40_CHARS`
 
-(`setup.sh` self-heals missing secrets into `.env` and chmods it 600. A couple of
-in-code fallbacks to these dev values remain as last-resort defaults — the real fix is
-setting them in `.env`, which overrides them.)
+You don't need to replace these by hand: `setup.sh start`/`install` self-heals any
+`CHANGEME_*`/missing secret in `.env` into a strong random value automatically (and
+chmods the file 600), so a fresh install already has real secrets, not the
+placeholders above. Only set your own value if you specifically want a memorable
+one instead of a generated one — anything you put in `.env` wins over the
+auto-generated default.
+
+Separately, **Authelia's `admin` user password is NOT covered by this self-heal** —
+it's a fixed hash in the tracked `docker/services/authelia/users_database.yml`,
+identical across every clone of this repo. See
+`docs/guides/authentication.md#rotating-the-admin-password` to change it — do this
+before exposing the instance to any network beyond your own machine.
 
 **Risk Level:** CRITICAL
 - Default credentials allow unauthorized access
@@ -187,8 +195,10 @@ test -f .env && echo "✅ .env exists" || echo "❌ .env missing"
 ### 2. Verify No Default Credentials
 
 ```bash
-grep -l "dev_password_change_me\|dev_jwt_secret_change_me\|minder-super-secret-token" .env
-# Should return: "Binary file .env matches" (if found, BAD!)
+grep "CHANGEME_" .env
+# Should print nothing -- setup.sh's self-heal replaces these on first run. If
+# this prints any lines, those secrets were never generated; re-run
+# `bash setup.sh start` or set them yourself.
 ```
 
 ### 3. Check File Permissions

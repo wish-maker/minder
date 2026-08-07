@@ -6,6 +6,7 @@ Archives are real tar.gz files built in tmp_path so tarfile extraction runs
 for real.
 """
 
+import shutil
 import tarfile
 
 import pytest
@@ -16,7 +17,10 @@ _REAL_RESTORE_POSTGRES = restore._restore_postgres
 
 
 def _make_archive(tmp_path, name="minder-20200101-000000", files=None):
-    """Build a real `minder-<ts>.tar.gz` with the given {filename: contents}."""
+    """Build a real `minder-<ts>.tar.gz` with the given {filename: contents}.
+    `contents` may be a str (encoded) or raw bytes (written as-is -- needed for
+    minio.tar.gz, which restore.py now actually tarfile.opens, unlike the other
+    per-store archives which just get docker-cp'd/exec'd opaquely)."""
     src = tmp_path / name
     src.mkdir()
     for fname, contents in (files or {}).items():
@@ -25,11 +29,32 @@ def _make_archive(tmp_path, name="minder-20200101-000000", files=None):
         # reads it (a real dump's bytes come straight off docker exec's
         # stdout via backup.py's open(..., "wb"), never through Windows text-
         # mode translation) -- write_bytes keeps this fixture host-independent.
-        (src / fname).write_bytes(contents.encode())
+        (src / fname).write_bytes(
+            contents if isinstance(contents, bytes) else contents.encode()
+        )
     archive = tmp_path / f"{name}.tar.gz"
     with tarfile.open(archive, "w:gz") as tf:
         tf.add(src, arcname=name)
     return archive
+
+
+def _make_minio_inner_archive(tmp_path):
+    """A real nested tar.gz shaped like backup.py's MinIO output: a top-level
+    'minio_data_raw' dir (the raw tree `docker cp`'d out of the container's
+    /data). restore.py now tarfile.opens minio.tar.gz for real (host-side
+    extraction, since MinIO's image has no `tar` binary), so a placeholder
+    string like "fake" is no longer good enough wherever a container IS
+    running and the extraction actually executes."""
+    src = tmp_path / "_minio_src" / "minio_data_raw"
+    src.mkdir(parents=True)
+    (src / "somefile").write_bytes(b"bucket-data")
+    inner = tmp_path / "_minio_inner.tar.gz"
+    with tarfile.open(inner, "w:gz") as tf:
+        tf.add(src, arcname="minio_data_raw")
+    data = inner.read_bytes()
+    inner.unlink()
+    shutil.rmtree(tmp_path / "_minio_src")
+    return data
 
 
 @pytest.fixture
@@ -81,6 +106,7 @@ def test_full_restore_reports_clean_success(monkeypatch, stubbed, tmp_path):
             "neo4j.cypher": "MATCH () RETURN 1;\n",
             "influxdb.tar.gz": "fake",
             "qdrant.tar.gz": "fake",
+            "minio.tar.gz": _make_minio_inner_archive(tmp_path),
             "rabbitmq-definitions.json": "{}",
         },
     )
@@ -144,6 +170,58 @@ def test_not_running_store_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path)
     assert rc == 0
     assert any("Qdrant not running — restore skipped" in w for w in warns)
     assert any("Restore complete — NOT restored: Qdrant" in w for w in warns)
+
+
+def test_minio_not_running_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):
+    """Mirrors the Qdrant #282 test above -- archived MinIO data exists but its
+    container isn't running."""
+    archive = _make_archive(
+        tmp_path,
+        files={
+            "postgres.sql": "-- dump\n",
+            "minio.tar.gz": "fake",
+        },
+    )
+    warns, succs, errors = stubbed
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+
+    def container_running(service):
+        return service != "minio"
+
+    monkeypatch.setattr(restore.docker, "container_running", container_running)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    assert any("MinIO not running — restore skipped" in w for w in warns)
+    assert any("Restore complete — NOT restored: MinIO" in w for w in warns)
+
+
+def test_minio_restore_copies_in_and_extracts_same_archive(
+    monkeypatch, stubbed, tmp_path
+):
+    """MinIO's image has no `tar` binary (found live on the Pi via backup.py),
+    so restore extracts minio.tar.gz host-side via Python tarfile and pushes
+    the resulting tree into the container with a single `docker cp`, instead
+    of the docker-exec-tar approach every other store uses."""
+    archive = _make_archive(
+        tmp_path,
+        files={
+            "postgres.sql": "-- dump\n",
+            "minio.tar.gz": _make_minio_inner_archive(tmp_path),
+        },
+    )
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+    calls: list[tuple] = []
+    monkeypatch.setattr(restore.docker, "run", lambda *a, **k: calls.append(a) or 0)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    cp_calls = [c for c in calls if c[:2] == ("docker", "cp")]
+    assert any(
+        "minio_data_raw" in str(c[2]) and c[3] == "minder-minio:/data" for c in cp_calls
+    )
 
 
 def test_failed_store_restore_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):

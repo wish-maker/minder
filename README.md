@@ -68,8 +68,16 @@ cd minder
 #     the setup CLI is native Python — needs Python 3, no bash required)
 bash setup.sh start
 
-# 3️⃣ Access your AI platform
-# Open: http://localhost:8000
+# 3️⃣ Access the chat UI (OpenWebUI, via Traefik — no real DNS by default,
+#    so add this host entry first):
+echo "127.0.0.1 chat.minder.local" | sudo tee -a /etc/hosts
+# Open: https://chat.minder.local  (self-signed cert — your browser will warn once)
+#
+# The API Gateway (http://localhost:8000) is for developers/integrations, not
+# the chat UI — see the printed banner for the full URL list + a JWT auth
+# quickstart, and docs/guides/authentication.md for the default Authelia
+# login (a shared default password baked into every clone — rotate it before
+# exposing this instance to any network).
 ```
 
 **That's it!** 🎉
@@ -524,7 +532,8 @@ Built with amazing open-source technologies:
 git clone git@github.com:wish-maker/minder.git
 cd minder
 bash setup.sh start
-# Open: http://localhost:8000
+# Then: echo "127.0.0.1 chat.minder.local" | sudo tee -a /etc/hosts
+# Open: https://chat.minder.local
 ```
 
 **Built with ❤️ for the open-source community**

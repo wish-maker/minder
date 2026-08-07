@@ -38,7 +38,7 @@ _HELP_TEMPLATE = """
                              live credential by itself — run this after changing it)
 
 {bold}DATA MANAGEMENT{nc}
-    backup                  Full backup: Postgres, Neo4j, InfluxDB, Qdrant, .env
+    backup                  Full backup: Postgres, Neo4j, InfluxDB, Qdrant, MinIO, .env
     restore [archive]       Restore from a backup archive (interactive if no path given)
     uninstall               Stop services, preserve data volumes
     uninstall --purge       Stop and DELETE all data (irreversible)
@@ -163,8 +163,16 @@ def print_success_banner() -> None:
 
     e(f"{b}{m}🔐 Security{nc}")
     e(f"   Traefik Dashboard  →  {c}http://localhost:8081{nc}")
-    e(f"   {y}Auth: register via POST /v1/auth/register on the API Gateway (JWT).{nc}")
-    e(f"   {y}Authelia SSO is currently disabled (see issue #15).{nc}")
+    e(
+        f"   {y}API auth: register via POST /v1/auth/register on the API Gateway (JWT).{nc}"
+    )
+    e(
+        f"   {y}Browser SSO (OpenWebUI/Grafana/MinIO/…) is behind Authelia — user 'admin',{nc}"
+    )
+    e(f"   {y}a SHARED default password baked into every clone. Rotate it before{nc}")
+    e(
+        f"   {y}exposing this instance: docs/guides/authentication.md#rotating-the-admin-password{nc}"
+    )
 
     e("")
     e(f"{b}{m}📍 Core APIs{nc}")
@@ -179,8 +187,16 @@ def print_success_banner() -> None:
         e(f"{b}{m}🤖 AI Services{nc}")
         if bundles.is_enabled("chat"):
             e(f"   OpenWebUI           →  {c}via Traefik (chat.minder.local){nc}")
+            e(
+                f"   {d}(add '127.0.0.1 chat.minder.local' to /etc/hosts first — no real DNS by default){nc}"
+            )
         if bundles.is_enabled("voice"):
-            e(f"   TTS / STT           →  {c}http://localhost:8006{nc}")
+            e(
+                f"   {d}TTS / STT           →  internal-network only by default (no exposed port){nc}"
+            )
+            e(
+                f"   {d}(./{s} tts-stt-mode external|failover <url> to reach it directly){nc}"
+            )
 
     if bundles.is_enabled("monitoring"):
         e("")
@@ -188,6 +204,12 @@ def print_success_banner() -> None:
         e(f"   Prometheus          →  {c}http://localhost:9090{nc}")
         e(f"   Grafana             →  {c}http://localhost:3000{nc}")
         e(f"   InfluxDB            →  {c}http://localhost:8086{nc}")
+    else:
+        e("")
+        e(
+            f"   {d}📊 Monitoring bundle is OFF — no Grafana/Prometheus dashboards until you{nc}"
+        )
+        e(f"   {d}enable it: ./{s} bundle enable monitoring{nc}")
 
     e("")
     e(f"{b}{m}🔧 Commands{nc}")
