@@ -26,7 +26,7 @@ from shared.metrics import (  # noqa: E402
     http_requests_in_progress,
     http_requests_total,
 )
-from shared.utils.cors import add_cors_middleware  # noqa: E402
+from shared.utils.cors import add_cors_from_string  # noqa: E402
 
 logger = logging.getLogger("minder.api-gateway")
 
@@ -34,13 +34,9 @@ logger = logging.getLogger("minder.api-gateway")
 def register_middleware(app: FastAPI) -> None:
     """Attach CORS, request-id/metrics, and (optional) rate-limit middleware."""
 
-    # CORS — parse CORS_ALLOWED_ORIGINS from environment (comma-separated)
-    cors_origins = (
-        settings.CORS_ALLOWED_ORIGINS.split(",")
-        if settings.CORS_ALLOWED_ORIGINS
-        else ["*"]
-    )
-    add_cors_middleware(app, allowed_origins=cors_origins)
+    # CORS — origins from env (comma-separated CORS_ALLOWED_ORIGINS), falling back
+    # to "*" (unrestricted) when unset.
+    add_cors_from_string(app, settings.CORS_ALLOWED_ORIGINS, default_origins=["*"])
 
     @app.middleware("http")
     async def request_id_middleware(request: Request, call_next):

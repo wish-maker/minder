@@ -240,10 +240,12 @@ redis_client = create_redis_client(host="redis", port=6379, password="secret")
 **CORS** (`utils/cors.py`):
 
 ```python
-from shared.utils.cors import add_cors_middleware
+from shared.utils.cors import add_cors_middleware, add_cors_from_string
 
 add_cors_middleware(app)                                  # uses built-in dev default origins
 add_cors_middleware(app, allowed_origins=["http://localhost:3000"])
+# or from a comma-separated env var, falling back when unset/empty:
+add_cors_from_string(app, settings.CORS_ALLOWED_ORIGINS, default_origins=["*"])
 ```
 
 ### Auth — `auth/jwt_middleware.py`
