@@ -27,10 +27,11 @@ import os
 
 from shared.bundle_graph import ClaimGraph, parse_bundle_labels, parse_state
 
-from . import config, docker, env, log  # config inserts src/ on the path (below)
+from . import config, docker, env, filelock, log  # config inserts src/ on the path
 
 SCRIPT_NAME = config.SCRIPT_NAME
 STATE_FILE = config.BUNDLES_STATE
+_STATE_LOCK = STATE_FILE.parent / ".bundles.state.lock"
 
 # Services whose platform-managed container is replaced by an EXTERNAL endpoint when
 # its env var is non-empty — the exact binding lifecycle.start_services already reads
@@ -154,15 +155,20 @@ def orphaned_services() -> "list[str]":
 
 def _set_enabled(name: str, on: bool) -> None:
     """Persist a bundle's enable-state to bundles.state.json (merge, don't clobber
-    other bundles). DRY_RUN previews without writing. sort_keys for a stable diff."""
+    other bundles). DRY_RUN previews without writing. sort_keys for a stable diff.
+
+    Holds an advisory lock (#374) around the read-modify-write so a concurrent
+    `bundle enable`/`disable`/`seed_profile` can't interleave writes and corrupt
+    bundles.state.json."""
     if config.DRY_RUN:
         log.detail(f"[dry-run] would set {name}.enabled={on} in {STATE_FILE.name}")
         return
-    state = _load_state()
-    state.setdefault(name, {})["enabled"] = on
-    STATE_FILE.write_text(
-        json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    with filelock.locked(_STATE_LOCK):
+        state = _load_state()
+        state.setdefault(name, {})["enabled"] = on
+        STATE_FILE.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
 
 def seed_profile(name: str) -> bool:
@@ -170,15 +176,21 @@ def seed_profile(name: str) -> bool:
     optional bundle's enabled state (core is always on). Returns False (a no-op) if
     the state file already exists (never clobber a user's choices on re-install) or
     under DRY_RUN. Silent so install_cmd_verify stays byte-identical; the resulting
-    set is visible via `bundle status`."""
-    if config.DRY_RUN or STATE_FILE.exists():
+    set is visible via `bundle status`.
+
+    The exists-check + write are both inside the lock (#374) -- otherwise two
+    concurrent fresh installs could both see "doesn't exist" and both write."""
+    if config.DRY_RUN:
         return False
-    on = set(PROFILES.get(name, PROFILES["standard"]))
-    state = {b: {"enabled": b in on} for b in _OPTIONAL_BUNDLES}
-    STATE_FILE.write_text(
-        json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-    return True
+    with filelock.locked(_STATE_LOCK):
+        if STATE_FILE.exists():
+            return False
+        on = set(PROFILES.get(name, PROFILES["standard"]))
+        state = {b: {"enabled": b in on} for b in _OPTIONAL_BUNDLES}
+        STATE_FILE.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return True
 
 
 def reset_state() -> bool:
