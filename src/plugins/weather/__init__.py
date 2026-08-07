@@ -23,7 +23,7 @@ Config (env on plugin-registry; all optional — keyless defaults):
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import httpx
 
@@ -160,7 +160,11 @@ class WeatherPlugin:
     # ── fetching ─────────────────────────────────────────────────────────────
     async def _fetch_current(self, lat: float, lon: float) -> Optional[Dict]:
         """Return {temperature, humidity, wind_speed} for a lat/lon, or None on error."""
-        params = {"latitude": lat, "longitude": lon, "current": _CURRENT_FIELDS}
+        params: Dict[str, Union[float, str]] = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": _CURRENT_FIELDS,
+        }
         try:
             async with httpx.AsyncClient(timeout=self.http_timeout) as client:
                 resp = await client.get(self.api_base, params=params)

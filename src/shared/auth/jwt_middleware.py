@@ -55,26 +55,6 @@ def create_jwt_token(data: Dict) -> str:
     return encoded_jwt
 
 
-def create_user_token(user_id: str, username: str, role: str = "user") -> str:
-    """
-    Create JWT token for a user
-
-    Args:
-        user_id: Unique user ID
-        username: Username
-        role: User role (default: 'user')
-
-    Returns:
-        JWT token string
-    """
-    payload = {
-        "sub": user_id,
-        "username": username,
-        "role": role,
-    }
-    return create_jwt_token(payload)
-
-
 def verify_jwt_token(token: str) -> Dict:
     """
     Verify and decode JWT token

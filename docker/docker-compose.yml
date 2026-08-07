@@ -77,6 +77,11 @@ services:
     - traefik.http.routers.traefik-dashboard.rule=Host(`traefik.minder.local`)
     - traefik.http.routers.traefik-dashboard.service=api@internal
     - traefik.http.routers.traefik-dashboard.middlewares=ipwhitelist
+    # Unlike every other internal router here, this one had no explicit entrypoints=
+    # -- Traefik attaches a router to ALL defined entrypoints by default, so the
+    # dashboard (ipwhitelist-gated either way) was also reachable via the plain-HTTP
+    # `web` entrypoint, not just the intended LAN-facing one. Scoped to match the rest.
+    - traefik.http.routers.traefik-dashboard.entrypoints=websecure
     # PILLAR 1: Expanded IP whitelist for local network access (LAN + VPN)
     - traefik.http.middlewares.ipwhitelist.ipallowlist.sourceRange=${TRAEFIK_TRUSTED_IPS:-192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,127.0.0.1/32}
   # Re-enabled (#15): provides SSO/2FA via Traefik forwardAuth on 5 routers
@@ -177,7 +182,10 @@ services:
     environment:
     - RABBITMQ_DEFAULT_USER=minder
     - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
-    - RABBITMQ_SERVER_ADDITIONAL_ERLANG_QUEUES=>>1
+    # RABBITMQ_SERVER_ADDITIONAL_ERLANG_QUEUES=">>1" used to be here -- removed as dead
+    # config: not a variable the RabbitMQ image's entrypoint recognizes (the real knob
+    # for Erlang VM args is RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS), and ">>1" isn't a
+    # valid erl arg fragment either way. Silently ignored, did nothing.
     - RABBITMQ_CONFIG_FILE=/etc/rabbitmq/rabbitmq.conf
     - RABBITMQ_LOGS=-
     - RABBITMQ_LOG_LEVEL=info
@@ -303,7 +311,10 @@ services:
     - OLLAMA_BASE_URL=
     - OLLAMA_ORIGINS=*
     - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
-    - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
+    # GPU_MEMORY_UTILIZATION used to be set here too -- removed as dead config: it's a
+    # vLLM/TGI-style variable, not something the ollama server reads at all (confirmed
+    # via its docs/source: no such env var exists). It silently did nothing regardless
+    # of GPU presence. CUDA_VISIBLE_DEVICES above is real and stays.
     # deploy:
     #   resources:
     #     limits:
@@ -758,13 +769,8 @@ services:
     # follow-up. Unified default minder-ollama:11434.
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
-    - MODELS_PATH=/app/models
-    - MODEL_CACHE_PATH=/app/model-cache
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
-    volumes:
-    - models_data:/app/models
-    - models_cache:/app/model-cache
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "127.0.0.1:8005:8005"
@@ -1153,7 +1159,9 @@ services:
     restart: on-failure
     environment:
     - NEO4J_URI=bolt://neo4j:7687
-    - NEO4J_USER=neo4j
+    # NEO4J_USER was here but is dead config: config.py's _neo4j_credentials() only
+    # falls back to it when NEO4J_AUTH lacks a "/", and NEO4J_AUTH is always
+    # required in "neo4j/password" format below -- that branch never runs.
     - NEO4J_AUTH=${NEO4J_AUTH}  # Required: must be set via .env (format: neo4j/password)
     - SPACY_MODEL=${SPACY_MODEL:-en_core_web_sm}
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -1429,10 +1437,6 @@ volumes:
   otel_collector_data:
     driver: local
   plugins_data:
-    driver: local
-  models_data:
-    driver: local
-  models_cache:
     driver: local
   tts_stt_data:
     driver: local

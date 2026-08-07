@@ -44,6 +44,22 @@ jobs:
   trivy:
     name: Trivy Container Scan
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Was api-gateway only -- a real coverage gap, since each service pulls its
+        # own pip deps (torch/spacy/qdrant-client/ollama-client/audio libs, etc.) on
+        # top of the shared python:3.12-slim base, so a CRITICAL/HIGH CVE unique to
+        # e.g. rag-pipeline's or tts-stt's dependencies was never scanned at all.
+        service:
+          - api-gateway
+          - graph-rag
+          - marketplace
+          - model-management
+          - plugin-registry
+          - plugin-state-manager
+          - rag-pipeline
+          - tts-stt
 
     steps:
       - name: Checkout code
@@ -51,21 +67,21 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker compose -f docker/docker-compose.yml build api-gateway
+          docker compose -f docker/docker-compose.yml build ${{ matrix.service }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'minder/api-gateway:1.0.0'
+          image-ref: 'minder/${{ matrix.service }}:1.0.0'
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: 'trivy-results.sarif'
-          category: 'trivy'
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+          category: 'trivy-${{ matrix.service }}'
 
   security-summary:
     name: Security Summary

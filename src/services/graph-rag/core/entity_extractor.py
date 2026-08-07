@@ -1,7 +1,7 @@
 """
 Entity Extraction Module for Graph RAG
 
-Hybrid entity extraction using spaCy and GLiNER for advanced NER.
+spaCy-based entity extraction and relationship inference.
 """
 
 import logging
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class EntityExtractor:
-    """Hybrid entity extraction using spaCy and GLiNER"""
+    """spaCy-based entity extraction"""
 
     def __init__(self, spacy_model: str = "en_core_web_sm"):
         """Initialize entity extractor with spaCy"""
@@ -25,14 +25,6 @@ class EntityExtractor:
                 f"⚠️  spaCy model {spacy_model} not found, using blank model"
             )
             self.nlp = spacy.blank("en")
-
-        # TODO: Add GLiNER support in Phase 2
-        # try:
-        #     from gliner import GLiNER
-        #     self.gliner_model = GLiNER.from_pretrained("urchade/gliner_medium")
-        # except ImportError:
-        #     logger.warning("GLiNER not available, using spaCy only")
-        #     self.gliner_model = None
 
     def extract_entities(
         self, text: str, extract_relationships: bool = True

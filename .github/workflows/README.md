@@ -41,10 +41,13 @@ Ollama replaced by a small deterministic stub (see
 ### 3. Security Scan — `security.yml`
 **Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual
 dispatch.
-**Jobs:** the **deep** scans — CodeQL (Python SAST) + Trivy (builds `api-gateway`
-from the compose file and scans the image for CVEs), plus a summary.
-**Kept push-triggered (not scheduled-only):** on this repo CodeQL is ~1 min and
-Trivy ~45 s, the repo is public (free CI minutes), and both run in parallel with
+**Jobs:** the **deep** scans — CodeQL (Python SAST) + Trivy (builds all 8 services
+from the compose file, one matrix leg each, and scans each image for CVEs — every
+service pulls its own pip deps on top of the shared base, so each has a distinct CVE
+surface), plus a summary.
+**Kept push-triggered (not scheduled-only):** on this repo CodeQL is ~1 min and each
+Trivy leg ~45 s (running in parallel), the repo is public (free CI minutes), and both
+jobs run in parallel with
 `ci.yml` off the critical path — so gating every push costs ~0 wall-clock while
 closing the exposure window on an internet-exposed target. The weekly cron stays as
 defense-in-depth. (#16 Option 2; the issue's written "scheduled-only" assumed heavy

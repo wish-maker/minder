@@ -20,6 +20,7 @@ _UNSAFE = [
     "a=b",  # '=' breaks line protocol
     "",  # empty
     "a\nb",  # newline (multi-line injection)
+    "BTC-USD\n",  # trailing newline -- `$` (not `\Z`) matches just before it
     "évil",  # non-ascii
 ]
 

@@ -18,7 +18,7 @@ on `sys.path`, so the import root is **`shared`** (NOT `services.shared`):
 from shared.config.base_settings import MinderBaseSettings
 from shared.models import HealthCheckResponse, SuccessResponse, ErrorResponse, LicenseTier
 from shared.utils.redis_client import create_redis_client_from_settings
-from shared.utils.cors import add_cors_middleware, add_cors_from_string
+from shared.utils.cors import add_cors_middleware
 from shared.metrics import setup_metrics
 from shared.auth.jwt_middleware import get_current_user, create_jwt_token
 from shared.ai.tool_validator import validate_ai_tools
@@ -64,7 +64,7 @@ src/shared/
 │   └── tiers.py               # LicenseTier / normalize_tier / tier_rank: canonical tier vocabulary (#142)
 ├── utils/
 │   ├── __init__.py           # exports cors + redis_client helpers
-│   ├── cors.py               # add_cors_middleware, add_cors_from_string
+│   ├── cors.py               # add_cors_middleware
 │   └── redis_client.py       # create_redis_client, create_redis_client_from_settings
 ├── auth/
 │   ├── __init__.py           # (empty — import from submodule)
@@ -240,10 +240,10 @@ redis_client = create_redis_client(host="redis", port=6379, password="secret")
 **CORS** (`utils/cors.py`):
 
 ```python
-from shared.utils.cors import add_cors_middleware, add_cors_from_string
+from shared.utils.cors import add_cors_middleware
 
 add_cors_middleware(app)                                  # uses built-in dev default origins
-add_cors_from_string(app, "http://localhost:3000,http://localhost:8000")
+add_cors_middleware(app, allowed_origins=["http://localhost:3000"])
 ```
 
 ### Auth — `auth/jwt_middleware.py`
@@ -252,7 +252,7 @@ The single source of truth for JWT (issue #49 — no service forks its own JWT l
 
 ```python
 from shared.auth.jwt_middleware import (
-    create_jwt_token, create_user_token, verify_jwt_token,
+    create_jwt_token, verify_jwt_token,
     get_current_user, get_current_user_optional, get_current_user_or_service,
     enforce_rate_limit,
 )
