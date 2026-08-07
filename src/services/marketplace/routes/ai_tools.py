@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from shared.auth.jwt_middleware import get_current_user, get_current_user_or_service
+from shared.errors import backend_http_error
 
 logger = logging.getLogger(__name__)
 
@@ -263,9 +264,7 @@ async def sync_ai_tools(
         raise
     except Exception as e:
         logger.error(f"AI tools sync failed for {request.plugin_name}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to sync AI tools: {str(e)}"
-        )
+        raise backend_http_error(e, f"AI tools sync for plugin '{request.plugin_name}'")
 
 
 @router.delete("/plugins/{plugin_id}/tools")
@@ -288,6 +287,4 @@ async def deactivate_plugin_tools(
 
     except Exception as e:
         logger.error(f"Failed to deactivate tools for plugin {plugin_id}: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to deactivate tools: {str(e)}"
-        )
+        raise backend_http_error(e, f"Deactivating tools for plugin '{plugin_id}'")

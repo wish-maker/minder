@@ -25,7 +25,18 @@ _SERVICE_DIR = Path(__file__).resolve().parents[2] / "src" / "services" / "rag-p
 _COLLISION_PRONE_NAMES = ("core", "routes", "models", "rag", "config", "domain")
 
 
-def _isolated_import(module_path: str):
+def _isolated_import(*module_paths: str):
+    """Import all `module_paths` within ONE evict/restore cycle.
+
+    core.state registers Prometheus Counters/Histograms at module level (a
+    process-wide global registry) -- calling this helper once per module
+    (across separate test files too) would evict+refresh-import core.state
+    multiple times, re-registering the same metric names and raising
+    DuplicateTimeseries. Every rag-pipeline test needing core.state (directly
+    or transitively) must do so via ONE combined call in THIS file -- confirmed
+    live: a separate test_rag_pipeline_error_handling.py file doing its own
+    fresh import of routes.rag crashed the whole session with exactly this
+    error, so those tests were merged in here instead."""
     saved_path = list(sys.path)
     saved_modules = {}
     for name in _COLLISION_PRONE_NAMES:
@@ -43,7 +54,7 @@ def _isolated_import(module_path: str):
     import importlib
 
     try:
-        return importlib.import_module(module_path)
+        return [importlib.import_module(p) for p in module_paths]
     finally:
         sys.path[:] = saved_path
         for name in _COLLISION_PRONE_NAMES:
@@ -53,7 +64,9 @@ def _isolated_import(module_path: str):
         sys.modules.update(saved_modules)
 
 
-retrieval = _isolated_import("core.retrieval")
+retrieval, rag_routes, system_routes = _isolated_import(
+    "core.retrieval", "routes.rag", "routes.system"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -160,3 +173,59 @@ async def test_retrieve_parent_child_returns_context_and_sources(monkeypatch):
 
     assert "Acme makes widgets." in result["context"]
     assert result["sources"][0]["source"] == "doc.txt"
+
+
+# ── Error handling (#357) ───────────────────────────────────────────────────
+# create_knowledge_base's Qdrant-collection-creation failure and system.py's
+# initialize_ollama failure both used to return HTTPException(500, detail=
+# f"...: {str(e)}") -- leaking the raw driver exception string. Switched to
+# shared.errors.backend_http_error.
+
+
+class _KBCreate:
+    name = "test-kb"
+    description = ""
+    embedding_model = "nomic-embed-text"
+    llm_model = "llama3.2"
+    chunk_size = 512
+    chunk_overlap = 50
+
+
+@pytest.mark.asyncio
+async def test_create_knowledge_base_qdrant_failure_does_not_leak_exception_text(
+    monkeypatch,
+):
+    secret_looking = "qdrant://internal-key=hunter2"
+
+    class _BoomClient:
+        def create_collection(self, **kwargs):
+            raise ConnectionError(secret_looking)
+
+    monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: _BoomClient())
+    monkeypatch.setattr(rag_routes.state, "PG_AVAILABLE", False)
+
+    with pytest.raises(Exception) as exc_info:
+        await rag_routes.create_knowledge_base(_KBCreate())
+
+    assert exc_info.value.status_code == 503
+    assert secret_looking not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_initialize_ollama_failure_does_not_leak_exception_text(monkeypatch):
+    secret_looking = "ollama internal token=hunter2"
+
+    async def boom():
+        raise ConnectionError(secret_looking)
+
+    monkeypatch.setattr(
+        system_routes.state,
+        "ollama_manager",
+        type("M", (), {"initialize": staticmethod(boom)})(),
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await system_routes.initialize_ollama()
+
+    assert exc_info.value.status_code == 503
+    assert secret_looking not in str(exc_info.value.detail)
