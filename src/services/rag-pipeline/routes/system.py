@@ -69,13 +69,19 @@ def _bm25_available() -> bool:
     return importlib.util.find_spec("rank_bm25") is not None
 
 
-@router.get("/capabilities", tags=["System"])
+@router.get("/v1/capabilities", tags=["System"])
+@router.get(
+    "/capabilities", tags=["System"], include_in_schema=False
+)  # deprecated unversioned alias
 async def capabilities():
     """Report which RAG methods/enhancers are active on THIS host.
 
     The advanced modules self-degrade by hardware: the reranker uses a cross-encoder
     when sentence-transformers (torch) is installed, otherwise a lightweight LLM
     re-rank. This endpoint makes that choice transparent (see #45).
+
+    Served at both /v1/capabilities and the legacy /capabilities directly — not a
+    redirect, which would drop the method/body on non-GET clients (#147).
     """
     st_available = _sentence_transformers_available()
     return {
@@ -111,9 +117,16 @@ async def capabilities():
     }
 
 
-@router.post("/initialize", tags=["System"])
+@router.post("/v1/initialize", tags=["System"])
+@router.post(
+    "/initialize", tags=["System"], include_in_schema=False
+)  # deprecated unversioned alias
 async def initialize_ollama():
-    """Initialize Ollama client"""
+    """Initialize Ollama client.
+
+    Served at both /v1/initialize and the legacy /initialize directly — not a
+    redirect, which would drop the method/body on non-GET clients (#147).
+    """
     try:
         await state.ollama_manager.initialize()
         return {"message": "Ollama client initialized successfully"}
