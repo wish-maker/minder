@@ -314,7 +314,9 @@ def test_analyze_returns_last_collection(monkeypatch):
     pl = NewsPlugin()
     pl.feeds = [("a", "https://a.example/rss")]
     monkeypatch.setattr(
-        pl, "_fetch_feed", AsyncMock(return_value=[{"title": "t", "link": "", "published": ""}])
+        pl,
+        "_fetch_feed",
+        AsyncMock(return_value=[{"title": "t", "link": "", "published": ""}]),
     )
     monkeypatch.setattr(pl, "_write_influxdb", AsyncMock(return_value=False))
     asyncio.run(pl.collect_data())
@@ -344,7 +346,9 @@ def test_get_news_filters_to_one_feed(monkeypatch):
     pl = NewsPlugin()
     pl.feeds = [("a", "https://a.example/rss"), ("b", "https://b.example/rss")]
     monkeypatch.setattr(
-        pl, "_fetch_feed", AsyncMock(return_value=[{"title": "x", "link": "", "published": ""}])
+        pl,
+        "_fetch_feed",
+        AsyncMock(return_value=[{"title": "x", "link": "", "published": ""}]),
     )
     out = asyncio.run(pl.get_news(feed="a"))
     assert list(out["headlines"].keys()) == ["a"]

@@ -224,18 +224,14 @@ def test_write_influxdb_noop_when_no_numeric_fields():
     pl = WeatherPlugin()
     pl.sink_influxdb = True
     pl.config = {"influxdb": {"enabled": True}}
-    readings = {
-        "Istanbul": {"temperature": None, "humidity": None, "wind_speed": None}
-    }
+    readings = {"Istanbul": {"temperature": None, "humidity": None, "wind_speed": None}}
     assert asyncio.run(pl._write_influxdb(readings)) is False
 
 
 def test_write_influxdb_success(monkeypatch):
     pl = WeatherPlugin()
     pl.sink_influxdb = True
-    pl.config = {
-        "influxdb": {"enabled": True, "host": "h", "port": 1, "token": "t"}
-    }
+    pl.config = {"influxdb": {"enabled": True, "host": "h", "port": 1, "token": "t"}}
     monkeypatch.setattr(
         weathermod.httpx, "AsyncClient", lambda **kw: _FakeAsyncClient(data={})
     )
@@ -280,7 +276,9 @@ def test_collect_data_skips_locations_with_none_fetch(monkeypatch):
     pl.locations = [("Good", 1.0, 1.0), ("Bad", 2.0, 2.0)]
 
     async def fake_fetch(lat, lon):
-        return None if lat == 2.0 else {"temperature": 1, "humidity": 1, "wind_speed": 1}
+        return (
+            None if lat == 2.0 else {"temperature": 1, "humidity": 1, "wind_speed": 1}
+        )
 
     monkeypatch.setattr(pl, "_fetch_current", fake_fetch)
     monkeypatch.setattr(pl, "_write_influxdb", AsyncMock(return_value=False))

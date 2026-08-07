@@ -219,7 +219,9 @@ def test_latest_influx_date_none_when_cfg_missing():
     assert asyncio.run(pl._latest_influx_date("BTC-USD")) is None
 
 
-def test_latest_influx_date_unsafe_symbol_skips_http_call_and_warns(monkeypatch, caplog):
+def test_latest_influx_date_unsafe_symbol_skips_http_call_and_warns(
+    monkeypatch, caplog
+):
     called = {"n": 0}
 
     class _ExplodingClient:
@@ -239,10 +241,13 @@ def test_latest_influx_date_unsafe_symbol_skips_http_call_and_warns(monkeypatch,
     assert any("unsafe symbol" in r.message for r in caplog.records)
 
 
-@pytest.mark.parametrize("t_value, expected", [
-    ("2024-01-15T00:00:00", date(2024, 1, 15)),
-    ("2024-01-15T00:00:00Z", date(2024, 1, 15)),
-])
+@pytest.mark.parametrize(
+    "t_value, expected",
+    [
+        ("2024-01-15T00:00:00", date(2024, 1, 15)),
+        ("2024-01-15T00:00:00Z", date(2024, 1, 15)),
+    ],
+)
 def test_latest_influx_date_parses_iso_date(monkeypatch, t_value, expected):
     monkeypatch.setattr(
         cryptomod.httpx,
