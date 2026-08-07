@@ -53,18 +53,3 @@ def add_cors_middleware(
         allow_methods=allow_methods,
         allow_headers=allow_headers,
     )
-
-
-def add_cors_from_string(app: FastAPI, cors_origins_str: str) -> None:
-    """
-    Add CORS middleware from comma-separated string of origins
-
-    Args:
-        app: FastAPI application instance
-        cors_origins_str: Comma-separated list of origins
-
-    Example:
-        >>> add_cors_from_string(app, "http://localhost:3000,http://localhost:8000")
-    """
-    allowed_origins = [origin.strip() for origin in cors_origins_str.split(",")]
-    add_cors_middleware(app, allowed_origins=allowed_origins)
