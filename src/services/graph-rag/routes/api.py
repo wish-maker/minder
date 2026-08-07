@@ -243,18 +243,35 @@ def build_graph_router(
     router = APIRouter()
 
     @router.post(
-        "/extract",
+        "/v1/extract",
         response_model=EntityExtractionResponse,
         tags=["Entity Extraction"],
     )
+    @router.post(
+        "/extract",
+        response_model=EntityExtractionResponse,
+        tags=["Entity Extraction"],
+        include_in_schema=False,  # deprecated unversioned alias
+    )
     async def extract_entities(request: EntityExtractionRequest):
-        """Extract entities and relationships from text"""
+        """Extract entities and relationships from text.
+
+        Served at both /v1/extract and the legacy /extract directly — the old
+        /extract used a 301 redirect, which drops the method/body on non-GET
+        clients (#147).
+        """
         return await extract_entities_handler(request, entity_extractor)
 
+    @router.post(
+        "/v1/construct-graph",
+        response_model=KnowledgeGraphResponse,
+        tags=["Knowledge Graph"],
+    )
     @router.post(
         "/construct-graph",
         response_model=KnowledgeGraphResponse,
         tags=["Knowledge Graph"],
+        include_in_schema=False,  # deprecated unversioned alias
     )
     async def construct_knowledge_graph(request: KnowledgeGraphRequest):
         """Build a knowledge graph from a document.
@@ -262,34 +279,70 @@ def build_graph_router(
         Idempotent on `document_id`: the document, entity, and relationship writes all
         use Cypher MERGE, so re-POSTing the same id upserts rather than duplicating
         nodes/edges (#147).
+
+        Served at both /v1/construct-graph and the legacy /construct-graph directly —
+        the old /construct-graph used a 301 redirect, which drops the method/body on
+        non-GET clients (#147).
         """
         return await construct_knowledge_graph_handler(
             request, entity_extractor, graph_constructor
         )
 
-    @router.delete("/graph/document/{document_id}", tags=["Knowledge Graph"])
+    @router.delete("/v1/graph/document/{document_id}", tags=["Knowledge Graph"])
+    @router.delete(
+        "/graph/document/{document_id}",
+        tags=["Knowledge Graph"],
+        include_in_schema=False,  # deprecated unversioned alias
+    )
     async def delete_document_graph(document_id: str):
-        """Delete a document's knowledge-graph nodes/relationships from Neo4j."""
+        """Delete a document's knowledge-graph nodes/relationships from Neo4j.
+
+        Served at both /v1/graph/document/{document_id} and the legacy
+        /graph/document/{document_id} directly — the old path used a 301 redirect,
+        which drops the method/body on non-GET clients (#147).
+        """
         return await delete_document_graph_handler(document_id, graph_constructor)
 
+    @router.post(
+        "/v1/retrieve",
+        response_model=GraphRetrievalResponse,
+        tags=["Graph Retrieval"],
+    )
     @router.post(
         "/retrieve",
         response_model=GraphRetrievalResponse,
         tags=["Graph Retrieval"],
+        include_in_schema=False,  # deprecated unversioned alias
     )
     async def retrieve_with_graph(request: GraphRetrievalRequest):
-        """Graph-based retrieval for RAG enhancement"""
+        """Graph-based retrieval for RAG enhancement.
+
+        Served at both /v1/retrieve and the legacy /retrieve directly — the old
+        /retrieve used a 301 redirect, which drops the method/body on non-GET
+        clients (#147).
+        """
         return await retrieve_with_graph_handler(
             request, entity_extractor, graph_retriever
         )
 
     @router.post(
-        "/entity-context",
+        "/v1/entity-context",
         response_model=EntityContextResponse,
         tags=["Entity Context"],
     )
+    @router.post(
+        "/entity-context",
+        response_model=EntityContextResponse,
+        tags=["Entity Context"],
+        include_in_schema=False,  # deprecated unversioned alias
+    )
     async def get_entity_context(request: EntityContextRequest):
-        """Get detailed context for an entity"""
+        """Get detailed context for an entity.
+
+        Served at both /v1/entity-context and the legacy /entity-context directly —
+        the old /entity-context used a 301 redirect, which drops the method/body on
+        non-GET clients (#147).
+        """
         return await get_entity_context_handler(request, graph_retriever)
 
     return router
