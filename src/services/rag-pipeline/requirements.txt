@@ -7,6 +7,8 @@ qdrant-client==1.19.0
 ollama==0.6.2
 pypdf==6.14.2
 python-multipart==0.0.32
+# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405)
+python-jose[cryptography]==3.5.0
 prometheus-client==0.26.0
 langchain-text-splitters==1.1.2
 asyncpg==0.31.0
