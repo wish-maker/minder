@@ -144,6 +144,17 @@ jobs:
           sed -E 's/CHANGEME[A-Z0-9_]*/0000000000000000000000000000000000000000000000000000000000000000/g' \
             .env.example > docker/.env
 
+      - name: Create the external networks compose expects
+        # docker-compose.yml declares minder-network/minder-monitoring as
+        # `external: true` (created once by `setup.sh`'s scripts/setup/infra.py
+        # create_networks(), not by Compose itself) -- confirmed live: `up`
+        # without this fails with "network minder-network declared as
+        # external, but could not be found" (the exact same error
+        # restore.py's own #288 fix comment describes for a stopped stack).
+        run: |
+          docker network create minder-network
+          docker network create minder-monitoring
+
       - name: Build + start the app services
         # `--wait` blocks until every named service (and anything it
         # depends_on with condition: service_healthy -- postgres, redis,
@@ -165,6 +176,7 @@ jobs:
         if: always()
         run: |
           docker compose -f docker/docker-compose.yml --env-file docker/.env down -v
+          docker network rm minder-network minder-monitoring || true
 
   integration-tests:
     name: Integration Tests
