@@ -22,6 +22,7 @@ COPY src/services/api-gateway/config.py .
 COPY src/services/api-gateway/schema.sql .
 COPY src/services/api-gateway/core /app/core
 COPY src/services/api-gateway/routes /app/routes
+COPY src/services/api-gateway/static /app/static
 
 # Copy shared libraries
 COPY src/shared /app/src/shared

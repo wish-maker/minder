@@ -148,6 +148,13 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | PUT | `/v1/plugins/{plugin_name}/config` | Update config: validate → persist → apply live, no restart (JWT-gated) |
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
+A browser UI for the two config endpoints above is served at
+`GET /plugin-config` on the API Gateway itself (e.g.
+`http://localhost:8000/plugin-config`, or via Traefik once reachable — see
+`docs/guides/remote-access.md`) — a form-based settings page for
+configurable plugins (news, weather, crypto, tefas today), instead of
+hand-crafting these requests.
+
 ### Webhooks
 
 | Method | Path | Description |
