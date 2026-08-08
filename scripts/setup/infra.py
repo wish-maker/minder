@@ -91,6 +91,65 @@ _VOLUME_RENAMES = {
     "docker_alertmanager_data": "alertmanager_data",
 }
 
+# Same idea as _VOLUME_RENAMES, but the OLD name is bare (no CONTAINER_PREFIX at
+# all) rather than "minder_docker_<key>" -- openwebui_data/qdrant_data were
+# created bare-named on the Pi at some point predating the rest of that stack
+# (every other volume there is correctly "minder_<name>"). Found live (#408):
+# a container recreate silently created a NEW, empty "minder_openwebui_data"
+# instead of reusing the real one, orphaning 1.1GB of real data -- `external:
+# true` with a hardcoded name (the first fix attempt) turned out to not
+# generalize to a second real host (hantal) that never had a bare volume at
+# all, so a plain `docker compose up` there would hit "external volume ...
+# not found". This migration is the actually-general fix: on a host with the
+# bare legacy volume, copy it in once; on any host without one (a fresh
+# install, or hantal), it's a no-op and Compose creates the standard-named
+# volume itself, same as any other `driver: local` volume.
+_BARE_VOLUME_RENAMES = {
+    "openwebui_data": "openwebui_data",
+    "qdrant_data": "qdrant_data",
+}
+
+
+def _migrate_one_volume(old_name: str, new_name: str, label: str) -> "bool | None":
+    """Copy `old_name` -> `new_name` via a throwaway alpine container.
+
+    Returns True on a real migration, False on a failed one, None when there
+    was nothing to do (old absent, or new already present).
+    """
+    if not docker.volume_exists(old_name) or docker.volume_exists(new_name):
+        return None  # nothing to migrate, or already migrated
+    log.info(f"Migrating volume '{old_name}' → '{new_name}'…")
+    create_ok = docker.run("docker", "volume", "create", new_name) == 0
+    copy_ok = (
+        create_ok
+        and docker.run(
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{old_name}:/from",
+            "-v",
+            f"{new_name}:/to",
+            "alpine",
+            "sh",
+            "-c",
+            "cp -a /from/. /to/",
+        )
+        == 0
+    )
+    if copy_ok:
+        log.success(f"Migrated: {label}")
+        return True
+    # #348: this used to log "Migrated" unconditionally — a failed copy (disk
+    # full, alpine pull failure, permission error) left `new_name` empty while
+    # the docstring's own advice ("remove manually once the new ones look
+    # right") could lead an operator who trusted the false success to delete
+    # `old_name`, the only good copy of the data.
+    log.error(
+        f"Failed to migrate volume: {label} — '{old_name}' was NOT copied, do not delete it"
+    )
+    return False
+
 
 def migrate_volume_names() -> None:
     """#262: copy data from each old (project-prefixed) volume to its renamed
@@ -101,6 +160,10 @@ def migrate_volume_names() -> None:
     on every start/restart: a no-op on a fresh install (no old volume) and a no-op
     once already migrated (new volume already exists). Never deletes the old
     volume — that's a manual step once the new one is confirmed good.
+
+    Also covers _BARE_VOLUME_RENAMES (#408/#414): same idea, but the old name has
+    no CONTAINER_PREFIX at all (openwebui_data/qdrant_data were created bare on
+    the Pi, unlike every project-prefixed volume elsewhere).
     """
     log.step("Checking for volume-name migrations")
     migrated_any = False
@@ -108,41 +171,18 @@ def migrate_volume_names() -> None:
     for old_key, new_key in _VOLUME_RENAMES.items():
         old_name = f"{config.CONTAINER_PREFIX}_{old_key}"
         new_name = f"{config.CONTAINER_PREFIX}_{new_key}"
-        if not docker.volume_exists(old_name) or docker.volume_exists(new_name):
-            continue  # nothing to migrate, or already migrated
-        log.info(f"Migrating volume '{old_name}' → '{new_name}'…")
-        create_ok = docker.run("docker", "volume", "create", new_name) == 0
-        copy_ok = (
-            create_ok
-            and docker.run(
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{old_name}:/from",
-                "-v",
-                f"{new_name}:/to",
-                "alpine",
-                "sh",
-                "-c",
-                "cp -a /from/. /to/",
-            )
-            == 0
-        )
-        if copy_ok:
-            log.success(f"Migrated: {old_key} → {new_key}")
+        result = _migrate_one_volume(old_name, new_name, f"{old_key} → {new_key}")
+        if result is True:
             migrated_any = True
-        else:
-            # #348: this used to log "Migrated" unconditionally — a failed copy
-            # (disk full, alpine pull failure, permission error) left `new_name`
-            # empty while the docstring's own advice ("remove manually once the
-            # new ones look right") could lead an operator who trusted the false
-            # success to delete `old_name`, the only good copy of the data.
-            log.error(
-                f"Failed to migrate volume: {old_key} → {new_key} "
-                f"— '{old_name}' was NOT copied, do not delete it"
-            )
+        elif result is False:
             failed.append(old_key)
+    for old_name, new_key in _BARE_VOLUME_RENAMES.items():
+        new_name = f"{config.CONTAINER_PREFIX}_{new_key}"
+        result = _migrate_one_volume(old_name, new_name, f"{old_name} → {new_name}")
+        if result is True:
+            migrated_any = True
+        elif result is False:
+            failed.append(old_name)
     if failed:
         raise SystemExit(1)
     if migrated_any:

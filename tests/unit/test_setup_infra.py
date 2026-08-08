@@ -113,3 +113,49 @@ def test_migrate_volume_names_reports_success_on_real_copy(monkeypatch, _quiet_l
     infra.migrate_volume_names()  # must not raise
 
     assert any("Migrated" in m for m in succeeded)
+
+
+def test_bare_volume_renames_covers_openwebui_and_qdrant():
+    """Regression guard (#408/#414): openwebui_data/qdrant_data were made
+    `external: true` with a hardcoded name at first -- that fixed the Pi
+    (which had them bare-named) but broke hantal (a second real deployment
+    with no bare volume at all, only the standard "minder_<name>" one) with
+    "external volume ... not found". The general fix is this migration
+    entry, not a compose-level pin -- if it's ever removed, the same
+    class of bug reappears for any host that still has the bare volume."""
+    assert infra._BARE_VOLUME_RENAMES == {
+        "openwebui_data": "openwebui_data",
+        "qdrant_data": "qdrant_data",
+    }
+
+
+def test_migrate_volume_names_migrates_bare_legacy_volume(monkeypatch, _quiet_log):
+    """A host with the Pi's bare "openwebui_data"/"qdrant_data" (no project
+    prefix, unlike every other volume) and no "minder_<name>" counterpart yet
+    must have it copied in -- exactly the scenario found live on the Pi."""
+    monkeypatch.setattr(
+        infra.docker,
+        "volume_exists",
+        lambda name: name in infra._BARE_VOLUME_RENAMES,  # only the bare names exist
+    )
+    monkeypatch.setattr(infra.docker, "run", lambda *a, **k: 0)
+    succeeded = []
+    monkeypatch.setattr(infra.log, "success", lambda m: succeeded.append(m))
+
+    infra.migrate_volume_names()  # must not raise
+
+    assert any("openwebui_data → minder_openwebui_data" in m for m in succeeded)
+    assert any("qdrant_data → minder_qdrant_data" in m for m in succeeded)
+
+
+def test_migrate_volume_names_noop_when_no_bare_legacy_volume(monkeypatch, _quiet_log):
+    """A host that never had the bare-named volume (a fresh install, or
+    hantal) must be a clean no-op -- Compose creates the standard-named
+    volume itself, same as any other `driver: local` volume."""
+    monkeypatch.setattr(infra.docker, "volume_exists", lambda name: False)
+    run_calls = []
+    monkeypatch.setattr(infra.docker, "run", lambda *a, **k: run_calls.append(a) or 0)
+
+    infra.migrate_volume_names()  # must not raise
+
+    assert run_calls == []

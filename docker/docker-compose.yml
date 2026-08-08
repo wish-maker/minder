@@ -1632,32 +1632,27 @@ volumes:
     driver: local
   ollama_data:
     driver: local
-  # external: true + a `name:` override (found live on the Pi, then found to
-  # NOT generalize to hantal -- see below): the Pi's openwebui_data/qdrant_data
-  # were bare-named ("openwebui_data", no project-name prefix), unlike every
-  # other volume on that host (postgres_data etc. are all "minder_<name>").
-  # A container recreate silently created a NEW, empty "minder_openwebui_data"
-  # instead of reusing the real one, orphaning 1.1GB of real data. Pinning
-  # `external: true` with a hardcoded bare name fixed the Pi -- but hantal (a
-  # second real deployment) has NO bare-named volume at all, only the
-  # correctly-prefixed "minder_openwebui_data"; a hardcoded bare name would
-  # have made Compose fail there with "external volume not found" on its next
-  # restart. The Pi's bare naming is this one host's own historical drift, not
-  # a fact about the compose file's normal behavior -- so the name is now an
-  # overridable variable, defaulting to the standard "minder_<name>" every
-  # fresh install (and hantal) actually has; only the Pi's .env sets
-  # OPENWEBUI_DATA_VOLUME_NAME/QDRANT_DATA_VOLUME_NAME to its legacy bare
-  # names.
+  # Found live on the Pi (#408): openwebui_data/qdrant_data were bare-named
+  # ("openwebui_data", no project-name prefix) there, unlike every other
+  # volume on that host (postgres_data etc. are all "minder_<name>") -- a
+  # container recreate silently created a NEW, empty "minder_openwebui_data"
+  # instead of reusing the real one, orphaning 1.1GB of real data.
+  # `external: true` with a hardcoded name fixed the Pi but didn't generalize
+  # to hantal (a second real deployment with no bare volume at all -- a
+  # hardcoded external name made `up` fail outright there with "external
+  # volume not found"). Fixed properly (#414): plain `driver: local`, same as
+  # every other volume, with the actual data-preservation handled by
+  # scripts/setup/infra.py's migrate_volume_names() (_BARE_VOLUME_RENAMES) --
+  # copies the Pi's bare legacy volume into the standard name once, and is a
+  # no-op anywhere that never had one (a fresh install, or hantal).
   openwebui_data:
-    external: true
-    name: ${OPENWEBUI_DATA_VOLUME_NAME:-minder_openwebui_data}
+    driver: local
   neo4j_data:
     driver: local
   neo4j_logs:
     driver: local
   qdrant_data:
-    external: true
-    name: ${QDRANT_DATA_VOLUME_NAME:-minder_qdrant_data}
+    driver: local
   influxdb_data:
     driver: local
   otel_collector_data:

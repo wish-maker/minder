@@ -30,13 +30,28 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
 
 ### 2. CI — `ci.yml`
 **Triggers:** push & PR to `main`/`develop`, manual dispatch.
-**Jobs:** unit tests → integration tests → e2e tests → notify. Each stage `needs`
-the previous. Lint/scan gates live in `quality.yml` (separate workflow, run in
-parallel). The e2e job runs `tests/e2e/`'s real multi-service harness against
-Postgres + Redis + Qdrant service containers — api-gateway, plugin-registry,
-and rag-pipeline run as real bound `uvicorn` processes (no Docker build), with
+**Jobs:** unit tests → {container smoke test, integration tests → e2e tests} → notify.
+Lint/scan gates live in `quality.yml` (separate workflow, run in parallel). The
+e2e job runs `tests/e2e/`'s real multi-service harness against Postgres +
+Redis + Qdrant service containers — api-gateway, plugin-registry, and
+rag-pipeline run as real bound `uvicorn` processes (no Docker build), with
 Ollama replaced by a small deterministic stub (see
 [`docs/development/testing.md`](../../docs/development/testing.md)).
+
+**Container Smoke Test** (parallel with integration-tests, both only need
+unit-tests): the only job in the whole pipeline that actually `docker run`s
+Minder's own images — `docker compose ... up -d --build --wait` on the same 8
+services Trivy's matrix covers, with a deterministic seeded `.env`, then fails
+if any container doesn't reach `healthy` within 5 minutes. Added after three
+separate live-deployment-only regressions (a missing pip dependency, a missing
+required env var, a bad compose volume assumption) all shipped past unit
+tests + integration/e2e (neither of which touches Docker) + Trivy (which
+scans the built image for CVEs but never runs it) in the same session.
+`model-management` is excluded from the `--wait` health bar (checked
+separately, just for "running, not crash-looping") since its `/health` probe
+correctly reports 503 without a live Ollama backend (`critical=True` by
+design — being an Ollama proxy is its whole job) and this job doesn't stand
+one up, unlike `tests/e2e/`'s `fake_ollama.py` stub.
 
 ### 3. Security Scan — `security.yml`
 **Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual

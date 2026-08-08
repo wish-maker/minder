@@ -105,6 +105,120 @@ jobs:
             coverage.xml
             htmlcov/
 
+  container-smoke:
+    name: Container Smoke Test
+    runs-on: ubuntu-latest
+    # Parallel with integration-tests (both only need unit-tests) -- this job's
+    # docker builds run independently of that job's own service containers.
+    needs: [unit-tests]
+
+    # Closes a real gap found live (not in CI) across three separate regressions
+    # in one session: a missing pip dependency, a missing required env var, and a
+    # bad docker-compose volume assumption all shipped past CI because NOTHING
+    # here actually builds+starts a real container and checks it stays up.
+    # Unit tests run against the host's own venv (different/more permissive deps
+    # than each service's actual Docker image); integration/e2e (below) run each
+    # service as a bare uvicorn process, never through Docker at all (see e2e's
+    # own docstring: "No Docker, no image builds — just real sockets, real
+    # FastAPI apps"); Trivy (security.yml) builds each image but only hands it to
+    # a CVE scanner, never runs it. This job is the first thing in CI that
+    # actually does `docker run` on Minder's own images and demands they reach
+    # a healthy state, not just that they build or lint clean.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Seed a deterministic .env
+        # Same approach as scripts/gate/run-gate.sh's seed_env(): every
+        # CHANGEME* placeholder in .env.example -> a fixed non-placeholder
+        # value, so every service's required-secret validation (JWT_SECRET,
+        # POSTGRES_PASSWORD, NEO4J_AUTH, etc.) passes without real secrets.
+        # Written to docker/.env, not root .env -- Compose resolves a
+        # relative --env-file (and each service's own `env_file: - .env`
+        # directive, e.g. plugin-state-manager's) against the COMPOSE FILE's
+        # own directory, not the CWD this job runs `docker compose` from
+        # (confirmed live: root .env alone hit "env file docker/.env not
+        # found"). scripts/setup/config.py's COMPOSE_ENV_FILE mirrors the
+        # same docker/.env path for the identical reason.
+        run: |
+          sed -E 's/CHANGEME[A-Z0-9_]*/0000000000000000000000000000000000000000000000000000000000000000/g' \
+            .env.example > docker/.env
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run the real pre-`up` bootstrap steps
+        # Calls the ACTUAL functions scripts/setup start/install run before
+        # compose ever touches networks/volumes, instead of reimplementing
+        # them in bash -- stays correct automatically as infra.py evolves.
+        # create_networks(): docker-compose.yml declares minder-network/
+        # minder-monitoring as `external: true` (never created by Compose
+        # itself) -- confirmed live: `up` without this fails with "network
+        # minder-network declared as external, but could not be found" (the
+        # same error restore.py's own #288 fix comment describes for a
+        # stopped stack). migrate_volume_names(): a no-op on this fresh
+        # runner (no legacy volume exists), included for parity with the
+        # real bootstrap sequence.
+        run: |
+          python -c "from scripts.setup import infra; infra.create_networks(); infra.migrate_volume_names()"
+
+      - name: Build + start the app services
+        # `--wait` blocks until every named service (and anything it
+        # depends_on with condition: service_healthy -- postgres, redis,
+        # neo4j, qdrant) reports healthy, and fails fast if any container
+        # exits/crash-loops instead. Same 8 services Trivy's matrix covers
+        # (security.yml) -- every first-party image with its own pip deps.
+        #
+        # model-management is built+started here but deliberately left out of
+        # the --wait list (checked separately below) -- its /health probe
+        # marks the "ollama" dependency `critical=True` (main.py) by design,
+        # since being an Ollama proxy IS this service's whole job, so it
+        # correctly reports 503 whenever no real Ollama is reachable. This
+        # runner never starts one (that's a heavy, non-deterministic external
+        # dependency out of scope for a smoke test -- tests/e2e/ solves this
+        # for its own suite with a `fake_ollama.py` stub instead). Requiring
+        # full health here would fail on the honestly-reported missing
+        # dependency, not on the crash-loop class of bug this job exists to
+        # catch.
+        run: |
+          docker compose -f docker/docker-compose.yml --env-file docker/.env \
+            up -d --build --wait --wait-timeout 300 \
+            api-gateway graph-rag marketplace \
+            plugin-registry plugin-state-manager rag-pipeline tts-stt
+          docker compose -f docker/docker-compose.yml --env-file docker/.env \
+            up -d --build model-management
+
+      - name: Verify model-management started without crash-looping
+        # Not held to the same --wait health bar as the other 7 (see comment
+        # above) -- just confirm the container is actually running, not
+        # restarting/exited, which is what a missing pip dep or required env
+        # var would cause. 15s is enough for an import-time crash to show up
+        # well before the container's own 30s healthcheck interval even runs
+        # once.
+        run: |
+          sleep 15
+          status=$(docker inspect -f '{{.State.Status}}' minder-model-management)
+          restarts=$(docker inspect -f '{{.RestartCount}}' minder-model-management)
+          echo "model-management status=$status restarts=$restarts"
+          if [ "$status" != "running" ]; then
+            echo "::error::model-management is '$status' (expected 'running') -- likely crash-looping on startup"
+            docker logs minder-model-management --tail 100
+            exit 1
+          fi
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          docker compose -f docker/docker-compose.yml --env-file docker/.env logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker/docker-compose.yml --env-file docker/.env down -v
+          docker network rm minder-network minder-monitoring || true
+
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -285,13 +399,14 @@ jobs:
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests, e2e-tests]
+    needs: [unit-tests, container-smoke, integration-tests, e2e-tests]
     if: always()
 
     steps:
       - name: Send notification
         run: |
           if [ "${{ needs.unit-tests.result }}" == "success" ] && \
+             [ "${{ needs.container-smoke.result }}" == "success" ] && \
              [ "${{ needs.integration-tests.result }}" == "success" ] && \
              [ "${{ needs.e2e-tests.result }}" == "success" ]; then
               echo "✅ All tests successful!"
