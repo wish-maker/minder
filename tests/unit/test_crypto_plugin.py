@@ -182,6 +182,32 @@ def test_fetch_history_returns_empty_on_http_exception(monkeypatch):
     assert out == []
 
 
+def test_fetch_history_unsafe_symbol_skips_http_call_and_warns(monkeypatch, caplog):
+    """get_price() (an unauthenticated read action) builds `symbol` from
+    caller-supplied `coin` and passes it straight to _fetch_history, which
+    used to concatenate it directly into the outbound Yahoo URL with no
+    character-set check -- unlike the InfluxDB-side helpers, which already
+    validate via _SAFE_SYMBOL. A caller could inject query-string characters
+    (?, &, #) into the request; this locks the fix at the actual URL-building
+    choke point, protecting every caller including get_price."""
+    called = False
+
+    def _boom(**kw):
+        nonlocal called
+        called = True
+        raise AssertionError("must not make an HTTP call for an unsafe symbol")
+
+    monkeypatch.setattr(cryptomod.httpx, "AsyncClient", _boom)
+    pl = CryptoPlugin()
+    with caplog.at_level("WARNING"):
+        out = asyncio.run(
+            pl._fetch_history("BTC?evil=1", date(2024, 1, 1), date(2024, 1, 2))
+        )
+    assert out == []
+    assert not called
+    assert any("unsafe symbol" in r.message for r in caplog.records)
+
+
 # ── _influx_cfg ──────────────────────────────────────────────────────────────
 def test_influx_cfg_none_when_sink_disabled():
     pl = CryptoPlugin()
