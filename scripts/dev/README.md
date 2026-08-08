@@ -97,6 +97,16 @@ python scripts/dev/hantal_ssh.py 'docker ps --format "{{.Names}}"'
 python scripts/dev/hantal_ssh.py --raw --no-cd 'whoami'   # skip cd + powershell wrapping
 ```
 
+`hantal_fix_docker_creds.py`: one-time fix for `docker pull`/`build` failing over
+SSH with `error getting credentials - err: exit status 1, out: "A specified
+logon session does not exist."` — Windows Credential Manager-backed helpers
+(`wincred`/`docker-credential-desktop`) need the interactive desktop session,
+which an OpenSSH-for-Windows session (Session 0) can't reach. Copy it to hantal
+and run it there (`python hantal_fix_docker_creds.py`) to give
+`~/.docker/config.json` an explicit empty auth entry for Docker Hub, skipping
+the broken helper for anonymous pulls. Only needed once per hantal setup (or
+after Docker Desktop resets its config) — already applied as of 2026-08-08.
+
 If the dev host running this script has no direct tailnet route (a sandboxed
 container with no `/dev/net/tun`, so `tailscaled` runs in
 `--tun=userspace-networking` mode), set `HANTAL_SOCKS5=host:port` in `.env` to

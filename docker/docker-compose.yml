@@ -838,11 +838,15 @@ services:
     - DB_USER=minder
     - DB_PASSWORD=${POSTGRES_PASSWORD}
     - DB_NAME=minder
-    # rag-pipeline holds no Redis/JWT state of its own — these exist only to
-    # satisfy MinderBaseSettings' required-secret validation (#267 platform-wide
-    # convergence); neither is ever read by this service's code.
+    # REDIS_PASSWORD exists only to satisfy MinderBaseSettings' required-secret
+    # validation (#267 platform-wide convergence) -- never read by this
+    # service's code. JWT_SECRET *used* to be the same kind of unused
+    # placeholder, but #405/#409 gave delete_knowledge_base/delete_rag_pipeline
+    # a real Depends(get_current_user_or_service) check, so it's genuinely
+    # read now (shared.auth.jwt_middleware fails fast at import if unset).
     - REDIS_PASSWORD=${REDIS_PASSWORD}
     - JWT_SECRET=${JWT_SECRET}
+    - SERVICE_SYNC_TOKEN=${SERVICE_SYNC_TOKEN:-}
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
@@ -886,6 +890,10 @@ services:
     # follow-up. Unified default minder-ollama:11434.
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - OLLAMA_HOST=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
+    # shared.auth.jwt_middleware (get_current_user_or_service, added for #405)
+    # fails fast at import if unset -- this service never needed it before.
+    - JWT_SECRET=${JWT_SECRET}
+    - SERVICE_SYNC_TOKEN=${SERVICE_SYNC_TOKEN:-}
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
@@ -1362,6 +1370,10 @@ services:
     - SPACY_MODEL=${SPACY_MODEL:-en_core_web_sm}
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
+    # shared.auth.jwt_middleware (get_current_user_or_service, added for #405)
+    # fails fast at import if unset -- this service never needed it before.
+    - JWT_SECRET=${JWT_SECRET}
+    - SERVICE_SYNC_TOKEN=${SERVICE_SYNC_TOKEN:-}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "127.0.0.1:8008:8008"
