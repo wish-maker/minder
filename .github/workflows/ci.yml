@@ -133,9 +133,16 @@ jobs:
         # CHANGEME* placeholder in .env.example -> a fixed non-placeholder
         # value, so every service's required-secret validation (JWT_SECRET,
         # POSTGRES_PASSWORD, NEO4J_AUTH, etc.) passes without real secrets.
+        # Written to docker/.env, not root .env -- Compose resolves a
+        # relative --env-file (and each service's own `env_file: - .env`
+        # directive, e.g. plugin-state-manager's) against the COMPOSE FILE's
+        # own directory, not the CWD this job runs `docker compose` from
+        # (confirmed live: root .env alone hit "env file docker/.env not
+        # found"). scripts/setup/config.py's COMPOSE_ENV_FILE mirrors the
+        # same docker/.env path for the identical reason.
         run: |
           sed -E 's/CHANGEME[A-Z0-9_]*/0000000000000000000000000000000000000000000000000000000000000000/g' \
-            .env.example > .env
+            .env.example > docker/.env
 
       - name: Build + start the app services
         # `--wait` blocks until every named service (and anything it
@@ -144,7 +151,7 @@ jobs:
         # exits/crash-loops instead. Same 8 services Trivy's matrix covers
         # (security.yml) -- every first-party image with its own pip deps.
         run: |
-          docker compose -f docker/docker-compose.yml --env-file .env \
+          docker compose -f docker/docker-compose.yml --env-file docker/.env \
             up -d --build --wait --wait-timeout 300 \
             api-gateway graph-rag marketplace model-management \
             plugin-registry plugin-state-manager rag-pipeline tts-stt
@@ -152,12 +159,12 @@ jobs:
       - name: Dump logs on failure
         if: failure()
         run: |
-          docker compose -f docker/docker-compose.yml --env-file .env logs --tail=200
+          docker compose -f docker/docker-compose.yml --env-file docker/.env logs --tail=200
 
       - name: Tear down
         if: always()
         run: |
-          docker compose -f docker/docker-compose.yml --env-file .env down -v
+          docker compose -f docker/docker-compose.yml --env-file docker/.env down -v
 
   integration-tests:
     name: Integration Tests
