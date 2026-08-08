@@ -1105,8 +1105,16 @@ services:
     restart: on-failure
     environment:
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
-    - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
-    - RAG_ENABLED=true
+    # RAG_PIPELINE_URL/RAG_ENABLED used to be here -- a THIRD instance of the exact
+    # same invented/unread-env-var mistake the comment below already documents twice
+    # over (MINDER_API_GATEWAY_URL/MINDER_AI_TOOLS_ENABLED in #251, MINDER_FUNCTIONS_
+    # CONFIG in #24). Open WebUI's process never reads either name -- its own Knowledge
+    # feature uses a completely separate, internal ChromaDB store, with no documented
+    # mechanism for pointing it at an external RAG microservice via env vars like this.
+    # RAG_PIPELINE_URL IS a real, used var (see shared/config/base_settings.py) --
+    # just not for THIS service; it belongs to api-gateway (line ~524 above), which
+    # actually proxies to rag-pipeline. Removed here rather than left as dead
+    # config that falsely implies an integration which doesn't exist.
     # Real, documented Open WebUI mechanism (#251) for pre-registering an OpenAPI
     # tool server on first startup -- NOT an invented/unread env var (that was
     # MINDER_API_GATEWAY_URL/MINDER_AI_TOOLS_ENABLED, removed here; see #24 for the
