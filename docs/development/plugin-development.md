@@ -125,6 +125,14 @@ declaring a plugin's `capabilities`/`storage`/`tools` the way the disk-loaded mo
 plugins (crypto/weather/network/news/tefas/telegraf) do in code — those six ship as
 fixed Python handlers, not manifests; see [Status](#status) and [AI Tools](#ai-tools).
 
+> **`secretRef` is not usable yet (#47/#270):** declaring it (as in the example
+> above) makes the webhook fail-closed with a `501` on every request — there is
+> no secrets store wired up to verify the referenced secret against yet.
+> Rejecting is the deliberate, safe posture (silently accepting an unverified
+> request would be a security bypass), but it means an authenticated webhook
+> genuinely cannot be built today. Omit `secretRef` (unauthenticated webhook)
+> until this is resolved.
+
 ## Storage Access
 
 Plugins may write to any of the platform's storage backends and publish async events. The
