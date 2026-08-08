@@ -269,6 +269,7 @@ def build_plugins_router(
     async def trigger_plugin_collection(
         plugin_name: str,
         background_tasks: BackgroundTasks,
+        request: Request,
         current_user: dict = Depends(get_current_user),
     ):
         """Manually trigger a plugin's background data collection."""

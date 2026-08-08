@@ -19,6 +19,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from config import settings
+from shared.auth.jwt_middleware import enforce_rate_limit
 
 logger = logging.getLogger("minder.api-gateway")
 
@@ -62,7 +63,8 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", status_code=201, response_model=RegisterResponse)
-async def register(body: RegisterRequest):
+@enforce_rate_limit(max_requests=10, window_minutes=1)
+async def register(body: RegisterRequest, request: Request):
     """Register a new user (username/email/password, min 8 chars). 201 on success."""
     try:
         user = await create_user(body.username, body.email, body.password, body.role)
@@ -85,7 +87,8 @@ async def register(body: RegisterRequest):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest):
+@enforce_rate_limit(max_requests=10, window_minutes=1)
+async def login(body: LoginRequest, request: Request):
     """Verify credentials (bcrypt) against PostgreSQL and return a JWT."""
     try:
         user = await verify_user_credentials(body.username, body.password)
