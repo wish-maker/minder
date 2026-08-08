@@ -190,9 +190,16 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Try to get request from kwargs (FastAPI dependency injection)
+            # FastAPI's request handler always calls the endpoint with EVERY
+            # resolved parameter (path/body/Depends/Request, all of them) as a
+            # keyword argument -- `dependant.call(**values)` in fastapi.routing's
+            # run_endpoint_function, never positionally. `args` is therefore
+            # always empty for a real request; only checking it here meant this
+            # decorator silently no-op'd on every endpoint it's applied to in
+            # production (confirmed via fastapi.routing source, and: zero tests
+            # existed for this function despite 5+ endpoints depending on it).
             request = None
-            for arg in args:
+            for arg in (*args, *kwargs.values()):
                 if isinstance(arg, Request):
                     request = arg
                     break
