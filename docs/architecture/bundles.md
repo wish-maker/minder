@@ -86,7 +86,11 @@ The claim graph has three sources, merged into one `service → claimants` map:
    entry above); this is ready for a future self-hosting plugin.
 3. **Marketplace** — installs new plugins (hence new bundles/claims) at runtime.
 
-## Bundle map (all 34 services assigned)
+## Bundle map (all 33 bundle-labeled services assigned)
+
+`ollama-router`/`tts-stt-router` (2 more services defined in compose) carry no
+`minder.bundle` label on purpose — they're failover-mode artifacts managed by
+`ollama-mode`/env vars, not the bundle enable/disable system, so they're not listed below.
 
 | Bundle | Services | Default |
 |--------|----------|---------|

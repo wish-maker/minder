@@ -87,8 +87,9 @@ bash setup.sh stop
 
 ## Service Map
 
-34 containers run on the Pi (Authelia SSO/2FA and the `docker-socket-proxy` are both
-**enabled** by default and included in the count). Only Traefik and the app/monitoring
+35 containers are defined for the Pi (Authelia SSO/2FA and the `docker-socket-proxy` are both
+**enabled** by default and included in the count); two are failover-mode sidecars inactive by
+default, so 33 run in the common case. Only Traefik and the app/monitoring
 services below expose host ports; all storage backends are **internal-only** and reached
 over the Docker network or via Traefik.
 
@@ -194,7 +195,7 @@ curl http://localhost:3000/api/health  # grafana
 docker exec minder-ollama ollama list
 ```
 
-29 of 34 containers define an active Docker healthcheck. Three do **not**, by design
+30 of 35 containers define an active Docker healthcheck. Three do **not**, by design
 (`otel-collector`, `redis-exporter`, `rabbitmq-exporter`) — their base images lack the
 tooling. They show as "no healthcheck", which is **not** the same as "unhealthy". Two more
 (`authelia`, `docker-socket-proxy`) simply don't have one configured.

@@ -1,6 +1,6 @@
 # Minder Platform - Project Structure Guide
 
-> **Last Updated:** 2026-07-16
+> **Last Updated:** 2026-08-08
 
 ## Directory Layout
 
@@ -26,7 +26,7 @@ minder/                              # Project root
 │   └── api/                         # API reference
 │
 ├── docker/                          # Docker configuration (compose runs from here directly)
-│   ├── docker-compose.yml           # HAND-MAINTAINED source of truth (34 services)
+│   ├── docker-compose.yml           # HAND-MAINTAINED source of truth (35 services)
 │   ├── docker-compose.override.yml
 │   ├── docker-compose.test.yml      # local integration/e2e test deps (CI uses GH Actions services)
 │   ├── .env                         # Auto-generated mirror of root ./.env (gitignored; do not edit)
@@ -123,7 +123,9 @@ services/api-gateway/
 
 ## Infrastructure Components
 
-34 containers total (Authelia + docker-socket-proxy defined, enabled, and counted).
+35 services defined total (Authelia + docker-socket-proxy included, enabled, and counted); two
+(`ollama-router`, `tts-stt-router`) are failover-mode sidecars inactive unless explicitly
+configured, so the common default runs 33.
 
 **Edge / Security**:
 - Traefik (v3) - Reverse proxy, TLS termination, routing
@@ -131,8 +133,8 @@ services/api-gateway/
 
 **Data Stores** (internal-only, not host-exposed):
 - PostgreSQL 18.4 - Primary database
-- Redis 8.8 - Cache, sessions, rate limiting
-- Qdrant 1.18 - Vector database for embeddings
+- Redis 8.10 - Cache, sessions, rate limiting
+- Qdrant 1.19 - Vector database for embeddings
 - Neo4j 2026.06 (community) - Graph database
 - MinIO - S3-compatible object store
 - RabbitMQ 4.3 - Async message bus
@@ -489,7 +491,7 @@ docker system prune -f
 # Increase Docker memory limit (Docker Desktop settings)
 ```
 
-See [troubleshooting.md](../troubleshooting/troubleshooting.md) for more details.
+See [Common Issues](../troubleshooting/common-issues.md) for more details.
 
 ## Contributing
 

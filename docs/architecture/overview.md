@@ -3,13 +3,17 @@
 ## Current Status
 
 **Platform Version:** 1.0.0
-**Last Updated:** 2026-07-10
-**Containers:** 34 defined (Authelia + docker-socket-proxy included — enabled). `setup.sh install` seeds the
+**Last Updated:** 2026-08-08
+**Containers:** 35 defined (Authelia + docker-socket-proxy included — enabled). Two are
+failover-mode sidecars (`ollama-router`, `tts-stt-router`) that stay inactive unless their
+respective `OLLAMA_FAILOVER_PRIMARY`/`TTS_STT_FAILOVER_PRIMARY` env var is set — the common
+default (internal mode, no failover) runs 33. `setup.sh install` seeds the
 **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and
 voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start
-all 34). `start` then honours the recorded bundle state (`bundles.state.json`). Started
-services run healthy; 5 carry no active healthcheck (otel-collector, redis-exporter,
-rabbitmq-exporter, authelia, docker-socket-proxy). See [Service Bundles](bundles.md).
+every non-failover-gated service). `start` then honours the recorded bundle state
+(`bundles.state.json`). Started services run healthy; 5 carry no active healthcheck
+(otel-collector, redis-exporter, rabbitmq-exporter, authelia, docker-socket-proxy). See
+[Service Bundles](bundles.md).
 **Core API Services:** 8 (api-gateway, plugin-registry, marketplace, plugin-state-manager, rag-pipeline, model-management, tts-stt, graph-rag)
 **Data Stores:** 7 (PostgreSQL, Redis, Qdrant, Neo4j, RabbitMQ, MinIO, schema-registry)
 **AI Runtime:** Ollama with local LLM support (profile-gated; disabled when using an external/native Ollama host)
@@ -94,8 +98,9 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │  InfluxDB :8086 · Telegraf · OTel Collector · 6 exporters      │
 └─────────────────────────────────────────────────────────────────┘
 
-Total: 34 containers across core APIs, inference, storage, and observability
-(includes Authelia and docker-socket-proxy, both enabled).
+Total: 35 services defined across core APIs, inference, storage, and observability
+(includes Authelia and docker-socket-proxy, both enabled); 33 run in the common default
+(internal Ollama/TTS-STT, no failover) — see Current Status above.
 ```
 
 ## Service Descriptions
@@ -192,7 +197,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 
 ### Backend
 - **Framework**: FastAPI on Python 3.11/3.12 (services use `python:3.12-slim`; graph-rag uses `python:3.11-slim`)
-- **Databases**: PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.06 (community)
+- **Databases**: PostgreSQL 18.4, Redis 8.10, Qdrant 1.19, Neo4j 2026.06 (community)
 - **Object store**: MinIO · **Message bus**: RabbitMQ 4.3 · **Schema registry**: Apicurio (SQL)
 - **LLM**: Ollama with local models
 - **Authentication**: JWT (bcrypt) at the gateway, plus Authelia SSO/2FA on 5 Traefik routers. No RBAC.
@@ -235,8 +240,8 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
   node, cAdvisor, blackbox); Telegraf feeds InfluxDB for time-series data.
 - **Dashboards**: Grafana.
 - **Tracing**: Jaeger + an OpenTelemetry collector.
-- **Health checks**: `/health` endpoints on the core APIs; container-level healthchecks on 29/34
-  services.
+- **Health checks**: `/health` endpoints on the core APIs; container-level healthchecks on 30/35
+  services (5 without an active one — see Current Status above).
 
 ## Development Workflow
 

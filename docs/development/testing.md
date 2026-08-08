@@ -1,7 +1,7 @@
 # Testing and Quality Guide
 
 **Version:** 1.0
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-08
 
 ---
 
@@ -357,7 +357,11 @@ isort --check-only src/
 CI runs across a small set of workflows:
 
 - **`quality.yml`** — fast gate: Black, isort, **flake8**, **mypy (real gate, per-service, no `|| true`)**, bandit, safety, shellcheck, hadolint, secret scan.
-- **`ci.yml`** — the test suite (pytest: unit/integration/e2e; deps via GitHub Actions `services:`).
+- **`ci.yml`** — unit tests → {**container smoke test** (builds + `docker compose up --wait`
+  on 7 of the 8 core service images — the only job that actually runs Minder's own containers),
+  integration tests → e2e tests} → notify; integration/e2e deps come via GitHub Actions
+  `services:`, e2e runs each service as a bare process (no Docker) with a deterministic
+  fake-Ollama stub.
 - **`security.yml`** — deeper scans (CodeQL, Trivy).
 - **`dependency-updates.yml`** — weekly issue-only dependency check, both halves: 3rd-party
   Docker image updates and Python (pip) pin updates.
@@ -407,4 +411,4 @@ def test_with_logging(caplog):
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-08
