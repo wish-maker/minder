@@ -18,7 +18,7 @@ from core.state import (
     list_plugin_states,
     resolve_dependencies,
 )
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models.plugin_state import (
     DisablePluginRequest,
     EnablePluginRequest,
@@ -28,6 +28,7 @@ from models.plugin_state import (
     UpdatePluginConfigRequest,
 )
 
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.pagination import paginate
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,11 @@ async def get_plugin_state_by_name(plugin_name: str):
 
 
 @router.post("/state/{plugin_name}/enable", response_model=PluginStateResponse)
-async def enable_plugin_endpoint(plugin_name: str, request: EnablePluginRequest):
+async def enable_plugin_endpoint(
+    plugin_name: str,
+    request: EnablePluginRequest,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """
     Enable a plugin
 
@@ -119,7 +124,11 @@ async def enable_plugin_endpoint(plugin_name: str, request: EnablePluginRequest)
 
 
 @router.post("/state/{plugin_name}/disable", response_model=PluginStateResponse)
-async def disable_plugin_endpoint(plugin_name: str, request: DisablePluginRequest):
+async def disable_plugin_endpoint(
+    plugin_name: str,
+    request: DisablePluginRequest,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """
     Disable a plugin
 
@@ -140,7 +149,11 @@ async def disable_plugin_endpoint(plugin_name: str, request: DisablePluginReques
 
 
 @router.patch("/state/{plugin_name}", response_model=PluginStateResponse)
-async def update_plugin_config(plugin_name: str, request: UpdatePluginConfigRequest):
+async def update_plugin_config(
+    plugin_name: str,
+    request: UpdatePluginConfigRequest,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """Update plugin configuration"""
     db = await get_db_pool()
 

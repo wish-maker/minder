@@ -6,7 +6,7 @@ injected by ``main`` — same pattern as the other services' route modules.
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from models import (
     FineTuneRequest,
     ModelConstraints,
@@ -15,6 +15,7 @@ from models import (
     ModelTestRequest,
 )
 
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
 
 
@@ -67,7 +68,11 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     @router.post(
         "/models", status_code=201, include_in_schema=False
     )  # deprecated unversioned alias
-    async def register_model(request: ModelPullRequest, response: Response):
+    async def register_model(
+        request: ModelPullRequest,
+        response: Response,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Pull a model from the Ollama library (may download a lot).
 
         Body is just ``{"model_id": "..."}`` — the old design also demanded an ignored
@@ -147,7 +152,10 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     @router.delete(
         "/models/{model_id}", include_in_schema=False
     )  # deprecated unversioned alias
-    async def delete_model(model_id: str):
+    async def delete_model(
+        model_id: str,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Permanently delete a model from local Ollama storage.
 
         Served at both /v1/models/{model_id} and the legacy /models/{model_id}
@@ -239,7 +247,10 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     @router.post(
         "/models/fine-tune", include_in_schema=False
     )  # deprecated unversioned alias
-    async def fine_tune_model(request: FineTuneRequest):
+    async def fine_tune_model(
+        request: FineTuneRequest,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Fine-tune request. **Not implemented** — returns 501 (#145).
 
         The FineTuneRequest body is kept so /docs documents the intended shape.

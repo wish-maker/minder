@@ -19,6 +19,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 _SERVICE_DIR = Path(__file__).resolve().parents[2] / "src" / "services" / "rag-pipeline"
 
@@ -229,3 +231,32 @@ async def test_initialize_ollama_failure_does_not_leak_exception_text(monkeypatc
 
     assert exc_info.value.status_code == 503
     assert secret_looking not in str(exc_info.value.detail)
+
+
+# ── #405: write endpoints must require auth ──────────────────────────────────
+# delete_knowledge_base and delete_rag_pipeline had NO application-level auth
+# in the route handler itself -- only api-gateway's proxy layer gated writes
+# for callers going through it, so a direct network caller (any container on
+# minder-network, or host access) could delete either with no credential.
+# Reuses this file's already-imported rag_routes (a second, independent
+# fresh-import of routes.rag would re-register rag-pipeline's process-global
+# Prometheus metrics and crash with DuplicateTimeseries -- confirmed live
+# while writing this, matching the warning in _isolated_import's docstring).
+
+
+def _rag_router_client():
+    app = FastAPI()
+    app.include_router(rag_routes.router)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_delete_knowledge_base_requires_auth():
+    client = _rag_router_client()
+    resp = client.delete("/v1/knowledge-bases/kb1")
+    assert resp.status_code == 401
+
+
+def test_delete_rag_pipeline_requires_auth():
+    client = _rag_router_client()
+    resp = client.delete("/v1/pipeline/p1")
+    assert resp.status_code == 401
