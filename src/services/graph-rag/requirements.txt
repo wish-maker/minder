@@ -5,4 +5,6 @@ pydantic-settings==2.14.2
 spacy==3.8.14
 neo4j==6.2.0
 python-multipart==0.0.32
+# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405)
+python-jose[cryptography]==3.5.0
 prometheus-client==0.26.0

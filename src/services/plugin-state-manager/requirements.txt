@@ -11,6 +11,9 @@ asyncpg==0.31.0
 # HTTP client
 httpx==0.28.1
 
+# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405)
+python-jose[cryptography]==3.5.0
+
 # Metrics
 prometheus-client==0.26.0
 
