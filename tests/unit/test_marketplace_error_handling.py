@@ -125,3 +125,13 @@ async def test_sync_ai_tools_generic_failure_does_not_leak_exception_text(
 # suite (other test files' own isolated imports evict the same cached
 # module). Not tested directly here; the pattern is already proven by the two
 # tests above.
+
+
+def test_plugin_updatable_whitelist_includes_author():
+    """Regression guard (#402): `author` was missing from both PluginUpdate and
+    this route's column whitelist, so a stale placeholder "Unknown" author
+    (from before the marketplace-sync fix in #404) could never be corrected
+    even via PUT /v1/marketplace/plugins/{id} -- confirmed live while
+    backfilling the Pi's pre-existing entries. If this regresses, author
+    becomes silently unfixable again."""
+    assert "author" in marketplace._PLUGIN_UPDATABLE

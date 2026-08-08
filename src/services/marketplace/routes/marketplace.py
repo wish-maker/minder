@@ -21,6 +21,7 @@ _PLUGIN_COLUMNS = """id, name, display_name, description, author,
 _PLUGIN_UPDATABLE = {
     "display_name",
     "description",
+    "author",
     "pricing_model",
     "base_tier",
     "status",
