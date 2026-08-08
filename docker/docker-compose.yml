@@ -1620,26 +1620,32 @@ volumes:
     driver: local
   ollama_data:
     driver: local
-  # external: true (found live on the Pi): these two were created bare-named
-  # ("openwebui_data"/"qdrant_data", no project-name prefix) at some point
-  # predating the rest of this stack's containers, which all correctly use
-  # Compose's normal "<project>_<key>" naming (confirmed: postgres_data,
-  # redis_data, neo4j_data, rabbitmq_data, minio_data are all live today as
-  # "minder_<name>"). Compose's default project name is derived from the
-  # CALLER's CWD basename (not a fixed value), so any `up` invoked from a
-  # differently-named working directory silently creates a NEW, empty
-  # "<other-project>_openwebui_data" volume instead of reusing the real one --
-  # exactly what happened here, orphaning 1.1GB of real OpenWebUI data behind
-  # a container recreate. `external: true` pins the exact pre-existing name so
-  # this can't drift again regardless of invocation context.
+  # external: true + a `name:` override (found live on the Pi, then found to
+  # NOT generalize to hantal -- see below): the Pi's openwebui_data/qdrant_data
+  # were bare-named ("openwebui_data", no project-name prefix), unlike every
+  # other volume on that host (postgres_data etc. are all "minder_<name>").
+  # A container recreate silently created a NEW, empty "minder_openwebui_data"
+  # instead of reusing the real one, orphaning 1.1GB of real data. Pinning
+  # `external: true` with a hardcoded bare name fixed the Pi -- but hantal (a
+  # second real deployment) has NO bare-named volume at all, only the
+  # correctly-prefixed "minder_openwebui_data"; a hardcoded bare name would
+  # have made Compose fail there with "external volume not found" on its next
+  # restart. The Pi's bare naming is this one host's own historical drift, not
+  # a fact about the compose file's normal behavior -- so the name is now an
+  # overridable variable, defaulting to the standard "minder_<name>" every
+  # fresh install (and hantal) actually has; only the Pi's .env sets
+  # OPENWEBUI_DATA_VOLUME_NAME/QDRANT_DATA_VOLUME_NAME to its legacy bare
+  # names.
   openwebui_data:
     external: true
+    name: ${OPENWEBUI_DATA_VOLUME_NAME:-minder_openwebui_data}
   neo4j_data:
     driver: local
   neo4j_logs:
     driver: local
   qdrant_data:
     external: true
+    name: ${QDRANT_DATA_VOLUME_NAME:-minder_qdrant_data}
   influxdb_data:
     driver: local
   otel_collector_data:
