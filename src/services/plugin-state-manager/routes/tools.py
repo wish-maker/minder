@@ -6,7 +6,7 @@ Tool discovery and execution endpoints
 import logging
 
 from core.execution import discover_plugin_tools, discover_tools, execute_tool
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from models.tool_execution import (
     LicenseValidationRequest,
     LicenseValidationResponse,
@@ -15,6 +15,7 @@ from models.tool_execution import (
     ToolExecutionResponse,
 )
 
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
 from shared.pagination import paginate
 
@@ -78,7 +79,11 @@ async def get_tool_details(tool_name: str):
 
 
 @router.post("/{tool_name}/execute", response_model=ToolExecutionResponse)
-async def execute_tool_endpoint(tool_name: str, request: ToolExecutionRequest):
+async def execute_tool_endpoint(
+    tool_name: str,
+    request: ToolExecutionRequest,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """
     Execute an AI tool
 

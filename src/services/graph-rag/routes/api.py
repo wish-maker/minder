@@ -9,7 +9,7 @@ import logging
 from core.entity_extractor import EntityExtractor
 from core.graph_constructor import KnowledgeGraphConstructor
 from core.graph_retriever import GraphRetriever
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from models.schemas import (
     EntityContextRequest,
     EntityContextResponse,
@@ -21,6 +21,7 @@ from models.schemas import (
     KnowledgeGraphResponse,
 )
 
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
 
 logger = logging.getLogger(__name__)
@@ -273,7 +274,10 @@ def build_graph_router(
         tags=["Knowledge Graph"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def construct_knowledge_graph(request: KnowledgeGraphRequest):
+    async def construct_knowledge_graph(
+        request: KnowledgeGraphRequest,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Build a knowledge graph from a document.
 
         Idempotent on `document_id`: the document, entity, and relationship writes all
@@ -294,7 +298,10 @@ def build_graph_router(
         tags=["Knowledge Graph"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def delete_document_graph(document_id: str):
+    async def delete_document_graph(
+        document_id: str,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Delete a document's knowledge-graph nodes/relationships from Neo4j.
 
         Served at both /v1/graph/document/{document_id} and the legacy

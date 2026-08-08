@@ -15,6 +15,7 @@ the real EntityExtractor/KnowledgeGraphConstructor.
 import sys
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -167,3 +168,66 @@ async def test_zero_entities_created_reports_zero_not_extracted_count():
 
     assert result.success is True
     assert result.entity_count == 0
+
+
+# ── #405: write endpoints must require auth ──────────────────────────────────
+# construct_knowledge_graph and delete_document_graph (the two mutating routes
+# in build_graph_router) had NO application-level auth at all -- graph-rag is
+# bound 127.0.0.1-only with no Traefik route AND isn't proxied through
+# api-gateway (confirmed: zero references to "graph-rag"/"8008" anywhere in
+# api-gateway), so there was no auth check anywhere in the request path.
+# Reuses this file's already-faked _api import (routes.api needs a second,
+# independent fresh-import site to avoid the spacy/neo4j dependency this file
+# already worked around, and this session's own precedent is that duplicate
+# fresh-import sites for the same service collide across test files).
+
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+
+def _graph_router_client():
+    router = _api.build_graph_router(
+        entity_extractor=_FakeExtractor(entities=[], relationships=[]),
+        graph_constructor=_FakeConstructor(entity_ids=[]),
+        graph_retriever=object(),
+    )
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_construct_graph_requires_auth():
+    client = _graph_router_client()
+    resp = client.post(
+        "/v1/construct-graph", json={"text": "hello", "document_id": "d1"}
+    )
+    assert resp.status_code == 401
+
+
+def test_delete_document_graph_requires_auth():
+    client = _graph_router_client()
+    resp = client.delete("/v1/graph/document/d1")
+    assert resp.status_code == 401
+
+
+def test_extract_entities_is_unaffected():
+    """Sanity check the fix is scoped to mutating endpoints -- /v1/extract is
+    a read-like POST (no persistent mutation) and must stay ungated."""
+    extractor = MagicMock()
+    extractor.extract_entities.return_value = {
+        "entities": [],
+        "relationships": [],
+        "entity_count": 0,
+        "relationship_count": 0,
+    }
+    router = _api.build_graph_router(
+        entity_extractor=extractor,
+        graph_constructor=_FakeConstructor(entity_ids=[]),
+        graph_retriever=object(),
+    )
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.post("/v1/extract", json={"text": "hello"})
+    assert resp.status_code == 200

@@ -13,7 +13,7 @@ from core.retrieval import (
     retrieve_parent_child,
 )
 from domain.retrievers.hybrid import BM25_AVAILABLE
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from models import (
     DocumentUploadResponse,
     KnowledgeBaseCreate,
@@ -28,6 +28,7 @@ from rag.model_selection import resolve_llm_model
 from rag.text_utils import chunk_text, extract_text_from_file
 
 from config import EMBEDDING_DIMENSIONS, settings
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
 from shared.pagination import paginate
 
@@ -191,7 +192,10 @@ async def get_knowledge_base(kb_id: str):
 @router.delete(
     "/knowledge-base/{kb_id}", include_in_schema=False
 )  # deprecated unversioned alias
-async def delete_knowledge_base(kb_id: str):
+async def delete_knowledge_base(
+    kb_id: str,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """Delete a knowledge base: its Qdrant collection, its PostgreSQL row, and the
     in-memory entry. Idempotent-ish — 404 if the KB is unknown.
 
@@ -404,7 +408,10 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
     tags=["Pipeline"],
     include_in_schema=False,
 )  # deprecated unversioned alias
-async def delete_rag_pipeline(pipeline_id: str):
+async def delete_rag_pipeline(
+    pipeline_id: str,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """Delete a RAG pipeline (its PostgreSQL row + the in-memory entry). The KBs it
     referenced are left intact. 404 if the pipeline is unknown.
 

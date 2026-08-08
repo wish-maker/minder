@@ -12,10 +12,11 @@ from core.license import (
     get_plugin_license_tier,
     update_plugin_license,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from models.plugin_state import LicenseTier
 from pydantic import BaseModel
 
+from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
 
 logger = logging.getLogger(__name__)
@@ -81,7 +82,9 @@ async def validate_plugin_license(
 
 @router.patch("/plugins/{plugin_name}/license")
 async def update_plugin_license_endpoint(
-    plugin_name: str, request: UpdateLicenseRequest
+    plugin_name: str,
+    request: UpdateLicenseRequest,
+    current_user: dict = Depends(get_current_user_or_service),
 ):
     """
     Update plugin's license information
