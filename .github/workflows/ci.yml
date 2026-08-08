@@ -144,16 +144,25 @@ jobs:
           sed -E 's/CHANGEME[A-Z0-9_]*/0000000000000000000000000000000000000000000000000000000000000000/g' \
             .env.example > docker/.env
 
-      - name: Create the external networks compose expects
-        # docker-compose.yml declares minder-network/minder-monitoring as
-        # `external: true` (created once by `setup.sh`'s scripts/setup/infra.py
-        # create_networks(), not by Compose itself) -- confirmed live: `up`
-        # without this fails with "network minder-network declared as
-        # external, but could not be found" (the exact same error
-        # restore.py's own #288 fix comment describes for a stopped stack).
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Run the real pre-`up` bootstrap steps
+        # Calls the ACTUAL functions scripts/setup start/install run before
+        # compose ever touches networks/volumes, instead of reimplementing
+        # them in bash -- stays correct automatically as infra.py evolves.
+        # create_networks(): docker-compose.yml declares minder-network/
+        # minder-monitoring as `external: true` (never created by Compose
+        # itself) -- confirmed live: `up` without this fails with "network
+        # minder-network declared as external, but could not be found" (the
+        # same error restore.py's own #288 fix comment describes for a
+        # stopped stack). migrate_volume_names(): a no-op on this fresh
+        # runner (no legacy volume exists), included for parity with the
+        # real bootstrap sequence.
         run: |
-          docker network create minder-network
-          docker network create minder-monitoring
+          python -c "from scripts.setup import infra; infra.create_networks(); infra.migrate_volume_names()"
 
       - name: Build + start the app services
         # `--wait` blocks until every named service (and anything it
