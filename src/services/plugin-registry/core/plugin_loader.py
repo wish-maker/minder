@@ -163,11 +163,16 @@ async def load_plugin_from_module(plugin_dir: Path):
             )
 
             # Auto-sync AI tools with marketplace. Module plugins have no manifest, so
-            # pass their in-code AI_TOOLS so the marketplace catalog is populated too.
+            # pass their in-code AI_TOOLS, plus their real description/author (found
+            # live: every module plugin was syncing with an empty description and no
+            # author because this wasn't threaded through, even though metadata has
+            # both right here) so the marketplace catalog isn't just placeholders.
             await sync_plugin_ai_tools(
                 plugin_name,
                 plugin_dir,
                 module_ai_tools=getattr(plugin_instance, "AI_TOOLS", None),
+                description=metadata.description,
+                author=metadata.author,
             )
 
     except Exception as e:

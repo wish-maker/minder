@@ -1203,10 +1203,20 @@ services:
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "127.0.0.1:8002:8002"
+    # Found live on the Pi: `depends_on: plugin-registry: condition: service_healthy`
+    # used to be here, but marketplace's own code never calls plugin-registry at all
+    # (PLUGIN_REGISTRY_URL is declared but unused -- grepped the whole service, zero
+    # references beyond the unused config field and a CORS origin string). Worse, it
+    # was actively HARMFUL: plugin-registry's lifespan runs load_plugins_from_disk()
+    # (which tries to sync each plugin to marketplace) BEFORE it ever starts serving
+    # /health, so this ordering guaranteed marketplace hadn't even been created yet
+    # when plugin-registry's marketplace-sync retries ran -- every module plugin's
+    # sync failed on every single boot (confirmed via `docker logs`: 4 retries of
+    # "Marketplace not ready (ConnectError)" then a permanent skip, for every
+    # AI_TOOLS-bearing plugin). Removing this lets both start once postgres is
+    # healthy, so plugin-registry's existing retry window actually has a chance.
     depends_on:
       postgres:
-        condition: service_healthy
-      plugin-registry:
         condition: service_healthy
     healthcheck:
       test:

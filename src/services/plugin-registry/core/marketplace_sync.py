@@ -96,6 +96,8 @@ async def sync_plugin_ai_tools(
     plugin_name: str,
     plugin_dir: Path,
     module_ai_tools: Optional[List[Dict]] = None,
+    description: Optional[str] = None,
+    author: Optional[str] = None,
 ):
     """
     Automatically sync AI tools from plugin manifest to marketplace
@@ -106,6 +108,13 @@ async def sync_plugin_ai_tools(
     Args:
         plugin_name: Name of the plugin
         plugin_dir: Path to plugin directory
+        module_ai_tools: in-code AI_TOOLS for module plugins (no manifest.yml)
+        description: the plugin's real description (module plugins only --
+            manifest plugins carry their own via manifest.yml). Found live:
+            every module plugin synced to the marketplace with an empty
+            description because this was never threaded through, even though
+            the caller (plugin_loader.py) already has it from PluginMetadata.
+        author: same gap, for the plugin's real author.
     """
     try:
         # Load a plugin manifest if one exists (manifest plugins).
@@ -132,9 +141,16 @@ async def sync_plugin_ai_tools(
             return
 
         # Normalise to the marketplace importer's shape, and ensure we have a manifest
-        # dict to describe the plugin (synthesised for module plugins).
+        # dict to describe the plugin (synthesised for module plugins, using the
+        # caller's real description/author instead of a blank placeholder).
         if manifest is None:
-            manifest = {"name": plugin_name, "version": "1.0.0", "description": ""}
+            manifest = {
+                "name": plugin_name,
+                "version": "1.0.0",
+                "description": description or "",
+            }
+            if author:
+                manifest["author"] = author
         manifest = {
             **manifest,
             "ai_tools": [_to_marketplace_tool(t) for t in raw_tools],
