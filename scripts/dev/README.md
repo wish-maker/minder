@@ -107,6 +107,18 @@ and run it there (`python hantal_fix_docker_creds.py`) to give
 the broken helper for anonymous pulls. Only needed once per hantal setup (or
 after Docker Desktop resets its config) — already applied as of 2026-08-08.
 
+`pi_reap_orphaned_pagers.sh`: kills orphaned PTY `pager` processes on the Pi
+(git's own pager, left running forever when its owning session died without
+cleanup — see the openclaw-rpi-context memory for the full incident, 32 of
+them drove load average to 33 on the Pi's 4 cores on 2026-08-08). Safe by
+design — only targets a process named `pager` whose parent is *also* orphaned
+(PPid 1) and has run 5+ minutes. Already folded into `/opt/openclaw-scripts/
+cleanup.sh`'s daily cron on the Pi itself (self-healing going forward); this
+copy is for running it by hand or on a different host if the same pattern
+shows up there — transfer + run it the same base64 way as
+`hantal_fix_docker_creds.py` above (`--dry-run` first to see what it would
+kill without touching anything).
+
 If the dev host running this script has no direct tailnet route (a sandboxed
 container with no `/dev/net/tun`, so `tailscaled` runs in
 `--tun=userspace-networking` mode), set `HANTAL_SOCKS5=host:port` in `.env` to
