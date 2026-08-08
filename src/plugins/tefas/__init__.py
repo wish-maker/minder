@@ -244,7 +244,10 @@ class TefasPlugin:
                 )
                 resp.raise_for_status()
                 rows = resp.json() or []
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                f"⚠️ InfluxDB resume query failed for {code}: {type(e).__name__}"
+            )
             return None
         t = rows[0].get("t") if rows else None
         if not t:

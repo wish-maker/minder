@@ -182,6 +182,17 @@ class CryptoPlugin:
 
         Never raises — returns [] on any API/network error.
         """
+        if not _SAFE_SYMBOL.match(symbol):
+            # get_price() (an unauthenticated read action) builds `symbol` from
+            # caller-supplied `coin` and passes it straight here -- unlike the
+            # InfluxDB-side helpers above, this used to concatenate it directly
+            # into the outbound Yahoo URL with no character-set check at all,
+            # letting a caller inject query-string characters (?, &, #) into
+            # the request. Host is hardcoded so this isn't SSRF to internal
+            # infra, but it's the same unvalidated-input-into-URL shape the
+            # news plugin's _is_safe_feed_url already guards against.
+            logger.warning(f"⚠️ Refusing Yahoo fetch for unsafe symbol: {symbol!r}")
+            return []
         p1 = int(
             datetime(
                 start.year, start.month, start.day, tzinfo=timezone.utc

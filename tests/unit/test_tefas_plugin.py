@@ -338,7 +338,12 @@ def test_latest_influx_date_none_when_t_falsy(monkeypatch):
     assert asyncio.run(pl._latest_influx_date("AFA")) is None
 
 
-def test_latest_influx_date_none_on_http_exception(monkeypatch):
+def test_latest_influx_date_none_on_http_exception_and_warns(monkeypatch, caplog):
+    """Mirrors crypto's identical helper, which logs this failure -- tefas's
+    version used to swallow it with a bare `except Exception: return None`,
+    so a persistently-failing resume query (bad token, InfluxDB down) was
+    invisible: every symbol looked like "no prior data," silently triggering
+    a full history refetch every cycle forever, with nothing in the logs."""
     pl = TefasPlugin()
     pl.sink_influxdb = True
     pl.config = dict(_ENABLED_CFG)
@@ -347,7 +352,9 @@ def test_latest_influx_date_none_on_http_exception(monkeypatch):
         "AsyncClient",
         lambda **kw: _FakeAsyncClient(exc=RuntimeError("boom")),
     )
-    assert asyncio.run(pl._latest_influx_date("AFA")) is None
+    with caplog.at_level("WARNING"):
+        assert asyncio.run(pl._latest_influx_date("AFA")) is None
+    assert any("resume query failed" in r.message for r in caplog.records)
 
 
 def test_latest_influx_date_none_on_unparseable_date(monkeypatch):
