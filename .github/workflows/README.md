@@ -47,6 +47,11 @@ separate live-deployment-only regressions (a missing pip dependency, a missing
 required env var, a bad compose volume assumption) all shipped past unit
 tests + integration/e2e (neither of which touches Docker) + Trivy (which
 scans the built image for CVEs but never runs it) in the same session.
+`model-management` is excluded from the `--wait` health bar (checked
+separately, just for "running, not crash-looping") since its `/health` probe
+correctly reports 503 without a live Ollama backend (`critical=True` by
+design — being an Ollama proxy is its whole job) and this job doesn't stand
+one up, unlike `tests/e2e/`'s `fake_ollama.py` stub.
 
 ### 3. Security Scan — `security.yml`
 **Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual

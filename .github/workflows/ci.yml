@@ -170,11 +170,43 @@ jobs:
         # neo4j, qdrant) reports healthy, and fails fast if any container
         # exits/crash-loops instead. Same 8 services Trivy's matrix covers
         # (security.yml) -- every first-party image with its own pip deps.
+        #
+        # model-management is built+started here but deliberately left out of
+        # the --wait list (checked separately below) -- its /health probe
+        # marks the "ollama" dependency `critical=True` (main.py) by design,
+        # since being an Ollama proxy IS this service's whole job, so it
+        # correctly reports 503 whenever no real Ollama is reachable. This
+        # runner never starts one (that's a heavy, non-deterministic external
+        # dependency out of scope for a smoke test -- tests/e2e/ solves this
+        # for its own suite with a `fake_ollama.py` stub instead). Requiring
+        # full health here would fail on the honestly-reported missing
+        # dependency, not on the crash-loop class of bug this job exists to
+        # catch.
         run: |
           docker compose -f docker/docker-compose.yml --env-file docker/.env \
             up -d --build --wait --wait-timeout 300 \
-            api-gateway graph-rag marketplace model-management \
+            api-gateway graph-rag marketplace \
             plugin-registry plugin-state-manager rag-pipeline tts-stt
+          docker compose -f docker/docker-compose.yml --env-file docker/.env \
+            up -d --build model-management
+
+      - name: Verify model-management started without crash-looping
+        # Not held to the same --wait health bar as the other 7 (see comment
+        # above) -- just confirm the container is actually running, not
+        # restarting/exited, which is what a missing pip dep or required env
+        # var would cause. 15s is enough for an import-time crash to show up
+        # well before the container's own 30s healthcheck interval even runs
+        # once.
+        run: |
+          sleep 15
+          status=$(docker inspect -f '{{.State.Status}}' minder-model-management)
+          restarts=$(docker inspect -f '{{.RestartCount}}' minder-model-management)
+          echo "model-management status=$status restarts=$restarts"
+          if [ "$status" != "running" ]; then
+            echo "::error::model-management is '$status' (expected 'running') -- likely crash-looping on startup"
+            docker logs minder-model-management --tail 100
+            exit 1
+          fi
 
       - name: Dump logs on failure
         if: failure()
