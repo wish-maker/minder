@@ -631,6 +631,12 @@ services:
     - -allowGET=/v1\..{1,2}/(version|containers/.*|events.*)
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
+    # NOTE: No healthcheck - distroless/nonroot image (see group_add comment
+    # above), no shell/curl/wget/nc for a CMD-based check, and nothing depends
+    # on its health status (plugin-registry's depends_on above uses
+    # `condition: service_started`, not `service_healthy`) -- same reasoning as
+    # the redis-exporter/otel-collector "NO healthcheck" notes elsewhere in
+    # this file.
     networks:
     - minder-network
   plugin-registry:
