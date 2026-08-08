@@ -5,7 +5,11 @@ import pytest
 from pydantic import ValidationError
 
 from services.marketplace.models.installation import InstallationResponse
-from services.marketplace.models.plugin import PluginCreate, PluginResponse
+from services.marketplace.models.plugin import (
+    PluginCreate,
+    PluginResponse,
+    PluginUpdate,
+)
 
 
 def test_plugin_create_model():
@@ -26,6 +30,14 @@ def test_plugin_create_model():
     assert plugin.name == "test-plugin"
     assert plugin.display_name == "Test Plugin"
     assert plugin.pricing_model == "free"
+
+
+def test_plugin_update_accepts_author():
+    """Regression guard (#402): author was previously not a PluginUpdate field
+    at all, so a stale placeholder "Unknown" author could never be corrected
+    via PUT /v1/marketplace/plugins/{id}."""
+    update = PluginUpdate(author="Real Author")
+    assert update.author == "Real Author"
 
 
 def test_plugin_response_model():

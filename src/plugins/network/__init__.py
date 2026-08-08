@@ -603,7 +603,8 @@ class NetworkPlugin:
             return {"status": "applied", "bytes": len(cfg)}
         except (
             Exception
-        ) as e:  # error field is the TYPE only -- the message may carry creds
+        ) as e:  # log AND return the TYPE only -- the message may carry creds
+            logger.warning("network telegraf sink failed: %s", type(e).__name__)
             return {"status": "error", "error": type(e).__name__}
 
     async def _sink_postgres(self, live: List[Dict], changes: Dict) -> Dict:
@@ -622,7 +623,8 @@ class NetworkPlugin:
             )
         except (
             Exception
-        ) as e:  # error field is the TYPE only -- the message may carry creds
+        ) as e:  # log AND return the TYPE only -- the message may carry creds
+            logger.warning("network postgres sink connect failed: %s", type(e).__name__)
             return {"status": "error", "error": type(e).__name__}
         try:
             await conn.execute(
@@ -669,7 +671,8 @@ class NetworkPlugin:
             }
         except (
             Exception
-        ) as e:  # error field is the TYPE only -- the message may carry creds
+        ) as e:  # log AND return the TYPE only -- the message may carry creds
+            logger.warning("network postgres sink failed: %s", type(e).__name__)
             return {"status": "error", "error": type(e).__name__}
         finally:
             await conn.close()

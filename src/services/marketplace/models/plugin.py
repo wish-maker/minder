@@ -68,6 +68,7 @@ class PluginUpdate(BaseModel):
 
     display_name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
+    author: Optional[str] = Field(None, max_length=100)
     pricing_model: Optional[PricingModel] = None
     base_tier: Optional[str] = None
     status: Optional[PluginStatus] = None
