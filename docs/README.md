@@ -24,6 +24,7 @@ This directory contains all documentation for the Minder platform.
 - [Testing](development/testing.md) - Test strategies
 - [Plugin Development](development/plugin-development.md) - Writing plugins
 - [Code Style](development/code-style.md) - Coding standards
+- [Setup CLI Migration](development/setup-cli-migration.md) - `setup.sh` bash → Python port history/status
 
 ### 🚀 Deployment (`deployment/`)
 - [Production Deployment](deployment/production.md) - Production deployment
