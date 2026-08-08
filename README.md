@@ -25,27 +25,18 @@ Run LLMs, RAG pipelines, and AI automation completely locally - No API keys need
 
 ## 🌟 **Why Minder?**
 
-> **"The only local AI platform that just works"**
+Minder is a **self-hosted local AI platform**: 8 FastAPI microservices (RAG, knowledge graph,
+plugins, model management, TTS/STT) behind a JWT-gated API gateway, plus OpenWebUI as the chat
+frontend — all provisioned by one command, no cloud API keys required.
 
-Minder isn't just another AI toolset — it's your **complete private AI infrastructure**. 
+- 🔒 **Privacy**: nothing leaves your machine — everything runs on your own hardware
+- 💰 **No per-call cost**: local inference via Ollama, not a metered API
+- 🔧 **Extensible**: a manifest-based plugin system (no arbitrary code execution)
+- 📊 **Observable**: Prometheus/Grafana/Jaeger built in, not bolted on
 
-### 🎯 **Perfect For You If:**
-- 🔒 **Privacy-conscious**: Want AI without sending data to cloud APIs
-- 💰 **Cost-aware**: Tired of paying per API call
-- 🏢 **Enterprise-ready**: Need professional-grade AI infrastructure
-- 🔧 **Developer-friendly**: Want to extend and customize everything
-- 🚀 **Performance-focused**: Need low-latency local AI processing
-
-### ⚡ **What Makes Us Different:**
-
-| Feature | Minder | Others |
-|---------|--------|--------|
-| **Setup Time** | ⚡ 30 seconds | ❌ Hours/days |
-| **External APIs** | ✅ None required | ❌ API keys needed |
-| **Privacy** | ✅ 100% local | ❌ Data sent to cloud |
-| **Extensibility** | ✅ Plugin system | ❌ Limited |
-| **Monitoring** | ✅ Built-in Grafana | ❌ Separate setup |
-| **Cost** | ✅ Free forever | ❌ Monthly fees |
+This is a **development environment** targeting a Raspberry Pi 4 (ARM) as its reference host —
+see [Current Status](docs/architecture/overview.md#current-status) for exactly what's
+production-hardened today and what isn't.
 
 ---
 
@@ -54,8 +45,7 @@ Minder isn't just another AI toolset — it's your **complete private AI infrast
 ### 📋 **Prerequisites**
 - Docker & Docker Compose
 - Python 3.11+ (the `setup.sh` CLI is native Python; `setup.sh` is a thin shim, no bash needed)
-- 4GB+ RAM recommended
-- 64GB+ free storage space
+- 4GB+ RAM recommended, 64GB+ free storage
 
 ### 🚀 **3 Simple Steps**
 
@@ -64,80 +54,36 @@ Minder isn't just another AI toolset — it's your **complete private AI infrast
 git clone git@github.com:wish-maker/minder.git
 cd minder
 
-# 2️⃣ Run the setup script  (setup.sh is a thin shim over `python -m scripts.setup`;
-#     the setup CLI is native Python — needs Python 3, no bash required)
+# 2️⃣ Run the setup script (fills any missing secrets in ./.env, then starts the stack)
 bash setup.sh start
 
 # 3️⃣ Access the chat UI (OpenWebUI, via Traefik — no real DNS by default,
 #    so add this host entry first):
 echo "127.0.0.1 chat.minder.local" | sudo tee -a /etc/hosts
 # Open: https://chat.minder.local  (self-signed cert — your browser will warn once)
-#
-# The API Gateway (http://localhost:8000) is for developers/integrations, not
-# the chat UI — see the printed banner for the full URL list + a JWT auth
-# quickstart, and docs/guides/authentication.md for the default Authelia
-# login (a shared default password baked into every clone — rotate it before
-# exposing this instance to any network).
 ```
 
-**That's it!** 🎉
+The API Gateway (`http://localhost:8000`) is for developers/integrations, not the chat UI — see
+the printed banner for the full URL list + a JWT auth quickstart, and
+[docs/guides/authentication.md](docs/guides/authentication.md) for the default Authelia login (a
+shared default password baked into every clone — rotate it before exposing this instance to any
+network).
 
 ### 🔐 **Environment Configuration**
 
-Minder uses a secure `.env` file for all secrets and configuration. The setup script automatically creates this for you on first run:
+**`./.env` is the one file you edit.** `setup.sh` mirrors it to `docker/.env` (auto-generated,
+Compose's actual input) on every install/start/restart — don't edit that copy directly.
 
 ```bash
-# Automatic setup (recommended)
-bash setup.sh start  # Fills any missing secrets in ./.env, then starts the stack
-
-# Manual configuration (optional)
-cp .env.example .env          # root ./.env is the single source of truth
-# Edit ./.env: leave CHANGEME values for setup.sh to auto-fill, or set your own
-bash setup.sh start           # auto-fills remaining secrets, sets perms, starts
+cp .env.example .env   # leave CHANGEME values for setup.sh to auto-fill, or set your own
+bash setup.sh start    # auto-fills remaining secrets, sets perms (600), starts
 ```
 
-> **`./.env` is the one file you edit.** `setup.sh` copies it to
-> `docker/.env` (the file Compose actually reads) on every install/start/
-> restart — that copy is auto-generated, **do not edit it directly**. Your filled
-> secrets stay visible in `./.env`; change one by editing `./.env` and re-running.
-
-**🔒 What gets auto-generated:**
-
-- Database passwords (PostgreSQL, Redis, RabbitMQ)
-- JWT secrets for API authentication
-- Encryption keys for Authelia SSO (Authelia is enabled by default and enforcing forward-auth)
-- Service credentials (Neo4j, InfluxDB, MinIO, Grafana)
-
-**📝 Key configuration options:**
-```bash
-# AI Models
-OLLAMA_MODELS=llama3.2,nomic-embed-text  # Models to auto-download
-
-# Security
-RATE_LIMIT_PER_MINUTE=60                # API rate limiting
-ENVIRONMENT=development                  # development|staging|production
-
-# GPU Acceleration (if available)
-CUDA_VISIBLE_DEVICES=all                # Enable GPU support
-```
-
-**⚠️ Security Best Practices:**
-
-- ✅ Never commit `.env` to version control (already in `.gitignore`)
-- ✅ `setup.sh` keeps `./.env` (and its `docker/.env` copy) at `600`
-- ✅ Regenerate secrets if `.env` is ever exposed
-- ✅ Use strong unique passwords for production deployments
-
-**🔧 Advanced configuration:** See [.env.example](.env.example) for all available options.
-
----
-
-Your complete AI platform is now running with:
-- ✅ Llama 3.2 (or choose from 10+ models)
-- ✅ RAG document processing
-- ✅ Vector database search
-- ✅ Knowledge graph analysis
-- ✅ Real-time monitoring dashboard
+Auto-generated on first run: database passwords (PostgreSQL/Redis/RabbitMQ), JWT secrets,
+Authelia SSO encryption keys, and service credentials (Neo4j/InfluxDB/MinIO/Grafana). See
+[.env.example](.env.example) for every available option, and
+[docs/guides/security-setup.md](docs/guides/security-setup.md) for hardening guidance before
+exposing an instance beyond your LAN.
 
 ---
 
@@ -148,395 +94,117 @@ Your complete AI platform is now running with:
 # Create a knowledge base (name required; description optional), then upload documents
 curl -X POST http://localhost:8004/knowledge-bases \
   -H "Content-Type: application/json" -d '{"name":"My Docs","description":"my documents"}'
-curl -X POST http://localhost:8004/knowledge-bases/<kb_id>/upload \
-  -F "file=@report.pdf"
+curl -X POST http://localhost:8004/knowledge-bases/<kb_id>/upload -F "file=@report.pdf"
 
 # Then create a pipeline over the KB and query it
 curl -X POST http://localhost:8004/pipeline \
   -H "Content-Type: application/json" -d '{"name":"my-pipe","knowledge_base_ids":["<kb_id>"]}'
 curl -X POST http://localhost:8004/pipeline/<pipeline_id>/query \
   -H "Content-Type: application/json" -d '{"question":"What is in my docs?","top_k":3}'
-# Note: generation needs a reachable ollama (OLLAMA_BASE_URL); see docs/getting-started/ai-setup.md.
+# Generation needs a reachable Ollama (OLLAMA_BASE_URL) — see docs/getting-started/ai-setup.md.
 ```
 
 ### 🤖 **"I want to run custom AI models locally"**
 ```bash
-# Ollama is internal-only (:11434 is NOT host-exposed). Manage models
-# from inside the container:
+# Ollama is internal-only (:11434 is NOT host-exposed) — manage models from inside the container:
 docker exec minder-ollama ollama list
 docker exec -it minder-ollama ollama run mistral
-
 # Or chat through OpenWebUI (served via Traefik).
 ```
 
 ### 📊 **"I need to monitor my AI system"**
-```bash
-# Access comprehensive dashboards
-# Grafana: http://localhost:3000 (user "admin"; password = GRAFANA_PASSWORD in .env)
-# Prometheus: http://localhost:9090
-# Jaeger (tracing): http://localhost:16686
-```
+- Grafana: `http://localhost:3000` (user `admin`; password = `GRAFANA_PASSWORD` in `.env`)
+- Prometheus: `http://localhost:9090` · Jaeger: `http://localhost:16686`
 
 ---
 
-## 🏗️ **Architecture Overview**
+## 🏗️ **Architecture at a Glance**
 
-Minder provides a **local AI orchestration platform** with 8 core services (all FastAPI):
+8 core FastAPI services (api-gateway, plugin-registry, marketplace, plugin-state-manager,
+rag-pipeline, model-management, tts-stt, graph-rag) behind Traefik, backed by
+PostgreSQL/Redis/Qdrant/Neo4j/RabbitMQ/MinIO/InfluxDB, with Ollama for local inference and
+OpenWebUI as the chat frontend — plus a full Prometheus/Grafana/Jaeger observability stack.
+`bash setup.sh install` seeds the **standard** bundle (core + inference + rag + chat); monitoring,
+graph-rag, and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` for
+all services).
 
-**Core API Services:**
-- `api-gateway` (:8000) — JWT auth, routing, Redis rate limiting
-- `plugin-registry` (:8001) — Plugin lifecycle, webhooks, service discovery
-- `marketplace` (:8002) — Plugin/tool catalog, license tiers, dependency graph
-- `plugin-state-manager` (:8003) — Plugin state + AI-tool execution
-- `rag-pipeline` (:8004) — Chunking, embedding, retrieval. Standard/Conversational/HyDE/Self-RAG/auto/corrective RAG all wired (`method` field) + `rerank`/`compress` flags and `hybrid`/`parent_context` retrievers; `GET /capabilities` reports what's active
-- `model-management` (:8005) — Ollama model lifecycle (partial)
-- `tts-stt` (:8006) — Text-to-speech / speech-to-text
-- `graph-rag` (:8008) — spaCy NER + Neo4j knowledge-graph construction
-
-**Data Stores** (internal-only, reached via Traefik or the docker network):
-- PostgreSQL (relational), Redis (cache), Qdrant (vector), Neo4j (graph)
-- RabbitMQ (messaging), MinIO (object storage), Apicurio (schema registry), InfluxDB (time-series)
-
-**Inference & Edge:**
-- Ollama (local LLM runtime, internal-only), OpenWebUI (chat UI, via Traefik)
-- Traefik v3 (reverse proxy / TLS). Authelia SSO is **enabled**, enforcing forward-auth on
-  5 routers (minio, api-gateway, grafana, openwebui, jaeger); full browser SSO still needs
-  real DNS + TLS on the deploy.
-
-**Observability:**
-- Prometheus, Grafana, Alertmanager, Jaeger, OpenTelemetry Collector, InfluxDB, Telegraf
-- Exporters: postgres, redis, rabbitmq, node, cAdvisor, blackbox
-
-**Total:** 34 containers (the 8 core APIs + 8 data stores + inference/UI + observability + exporters above, plus Traefik, Authelia, the least-privilege `docker-socket-proxy`, and the failover-mode `ollama-router`, enabled/included). `bash setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start all 34). Deploys on a Raspberry Pi 4 (ARM).
+**→ Full breakdown, ports, diagrams, data flow:** [docs/architecture/overview.md](docs/architecture/overview.md)
+**→ Feature-by-feature detail** (RAG methods, plugin system, security posture, observability):
+[docs/architecture/microservices.md](docs/architecture/microservices.md) ·
+[docs/architecture/plugins.md](docs/architecture/plugins.md) ·
+[docs/operations/security-architecture.md](docs/operations/security-architecture.md)
 
 ---
 
-## 🚀 **Core Features**
+## 📈 **Performance, Operations & Troubleshooting**
 
-### 🤖 **AI Capabilities**
-
-#### **Local LLM Inference**
-- **10+ Models Supported**: Llama 3.2, Mistral, Qwen2.5, and more
-- **GPU Acceleration**: Automatic NVIDIA GPU detection and usage
-- **Model Management**: Download, switch, and test-prompt local models via `model-management` (:8005)
-- **Zero Configuration**: Works out of the box
-
-#### **RAG Pipeline**
-- **Multi-Format Support**: PDF, TXT, and Markdown
-- **Vector Search**: Qdrant-powered semantic similarity search
-- **Knowledge Graphs**: Neo4j entity relationships and discovery
-- **Smart Retrieval**: Intelligent document ranking and context
-
-#### **Model Management**
-- **Ollama Lifecycle**: List, pull, delete, and test-prompt local models via `model-management` (:8005)
-- **Plugin Integration**: Extend with custom AI capabilities and function-calling tools
-- _Roadmap_: fine-tuning and model versioning/A-B testing are planned, not yet shipped
-
-### 🔌 **Plugin System**
-
-#### **Manifest-Based Architecture**
-- **No arbitrary code**: plugins declare identity, capabilities, and storage needs in a manifest — new actions are fixed handlers, not uploaded code (by design)
-- **Lifecycle (code reality)**: `register → initialize → health_check (60s loop) → collect_data (hourly/manual) → analyze → shutdown`; status is one of `registered / enabled / disabled / error`
-- **AI tools**: plugins can register as Ollama function-calling tools (`name, description, input_schema, endpoint`)
-- **Marketplace**: catalog with license tiers and a Neo4j dependency graph (`marketplace` :8002)
-
-#### **Multi-Database Support**
-- **PostgreSQL**: Structured data and user management
-- **Redis**: Caching and session management
-- **Qdrant**: Vector embeddings (1M+ vectors)
-- **Neo4j**: Graph relationships and correlation
-- **MinIO**: S3-compatible object storage
-- **InfluxDB**: Time-series metrics and analytics
-
-### 🔐 **Security**
-
-> This is a **development environment** — production hardening is not yet applied.
-
-- **Traefik v3 Reverse Proxy**: SSL/TLS termination and routing
-- **JWT Authentication**: bcrypt-hashed credentials, configurable token expiration (implemented)
-- **Rate Limiting**: Redis-backed, per-window limits at the API gateway
-- **Network Isolation**: Storage backends are internal-only on `minder-network`
-- **IP Whitelisting**: Traefik middleware on the dashboard / RabbitMQ / Neo4j routes
-- **Authelia SSO / 2FA**: wired into Traefik and **enabled**, enforcing forward-auth on 5
-  routers; full browser SSO still needs real DNS + TLS on the deploy (see issue #15)
-- _Not yet implemented_: role-based access control (RBAC), app-level audit logging
-
-### 📊 **Observability Stack**
-
-#### **Comprehensive Monitoring**
-- **Prometheus**: metrics collection with alerting rules and 6 exporters
-- **Grafana**: pre-provisioned dashboards and datasources
-- **Jaeger**: distributed tracing (OpenTelemetry Collector → Jaeger)
-- **Alertmanager**: alert routing
-- **InfluxDB + Telegraf**: time-series metrics collection
-
----
-
-## 📈 **Performance & Scale**
-
-Minder targets a **Raspberry Pi 4 (ARM)** as its reference host, so real-world
-latency depends heavily on the Ollama model size and available RAM/GPU. There are
-no synthetic benchmark numbers here — measure your own with the built-in
-Prometheus/Grafana/Jaeger stack. Key tuning levers:
-
-- **Model choice** — smaller Ollama models (e.g. `llama3.2:1b`) respond far faster on ARM
-- **Ollama mode** — run Ollama on a beefier native host via `OLLAMA_BASE_URL` (external mode)
-- **Resource limits** — set per-service `deploy.resources` in the compose file
-- **Vector/graph tuning** — Qdrant collection params and Neo4j heap sizing
-
-### 🎯 **Current Status**
-
-**Deploy-Ready Services (Proven on the dev host; ARM Pi validation tracked in #8):**
-- ✅ Clean install recovery: `docker compose down -v → bash setup.sh start` → all services healthy
-- ✅ All 8 core APIs: JWT auth, persistence, end-to-end functionality proven
-- ✅ 29/32 containers healthy (3 no-healthcheck: redis-exporter, rabbitmq-exporter, otel-collector)
-- ✅ 11/11 endpoints reachable (api-gateway + monitoring + AI services)
-
-**Deferred (NOT production-ready yet):**
-- ⏸️ Authelia SSO/2FA — Enabled and enforcing forward-auth; full browser SSO pending real DNS + TLS
-- ⏸️ Role-based auth — Auth-only (JWT) implemented
-- ⏸️ Uniform rate limiting — Service-specific, not standardized
-
-### 💾 **Resource Requirements**
-
-**Minimum (Development):**
-- CPU: 4 cores
-- RAM: 8GB
-- Storage: 64GB SSD
-
-**Recommended (Production):**
-- CPU: 8+ cores
-- RAM: 16GB+
-- Storage: 128GB+ SSD
-- Network: 1Gbps internal
-
----
-
-## 🔧 **Advanced Operations**
-
-### 🛠️ **System Management**
+Minder targets a Raspberry Pi 4 (ARM) as its reference host — no synthetic benchmark numbers are
+published; measure your own with the built-in Prometheus/Grafana/Jaeger stack. Common commands:
 
 ```bash
-# Complete system health check
-bash setup.sh doctor
-
-# Service status dashboard
-bash setup.sh status
-
-# Create full backup
-bash setup.sh backup
-
-# Restart one service (or the whole stack with no argument)
-bash setup.sh restart rag-pipeline
+bash setup.sh doctor              # full system health check + diagnostics
+bash setup.sh status              # service status dashboard
+bash setup.sh backup              # create a full backup
+bash setup.sh restart rag-pipeline  # restart one service (or the whole stack with no argument)
 ```
 
-### 📊 **Monitoring Dashboards**
-
-**Access comprehensive monitoring:**
-- **Grafana**: http://localhost:3000 (user `admin`; password = `GRAFANA_PASSWORD` in `.env`)
-  - System overview
-  - Service metrics
-  - Performance monitoring
-  - Custom alerts
-
-- **Prometheus**: http://localhost:9090
-  - Metrics scraping
-  - Alert management
-  - Query builder
-
-- **Jaeger**: http://localhost:16686
-  - Distributed tracing
-  - Request analysis
-  - Performance bottleneck identification
-
-### 🐛 **Troubleshooting**
-
-```bash
-# System diagnostics
-bash setup.sh doctor
-
-# Check specific service health
-curl http://localhost:8000/health  # API Gateway
-curl http://localhost:8004/health  # RAG Pipeline
-curl http://localhost:8001/health  # Plugin Registry
-
-# View service logs
-docker logs minder-api-gateway --tail 50 -f
-docker logs minder-rag-pipeline --tail 50 -f
-
-# Performance analysis
-docker stats --no-stream
-```
+**→ Tuning levers, resource sizing:** [docs/guides/performance.md](docs/guides/performance.md)
+**→ Diagnosing a stuck/unhealthy stack:** [docs/troubleshooting/common-issues.md](docs/troubleshooting/common-issues.md)
 
 ---
 
 ## 📖 **Documentation**
 
-### 🎯 **Quick Links**
-
-- **[📚 Documentation Index](./docs/README.md)** — Complete navigation guide
-- **[🏗️ Architecture Guide](./docs/architecture/overview.md)** — System design and patterns
-- **[🔌 API Documentation](./docs/guides/api.md)** — Complete API reference
-- **[📝 Development Guidelines](./docs/development/development.md)** — Coding standards
-- **[🤝 Contributing](./CONTRIBUTING.md)** — Contribution workflow
-
-### 🔗 **Interactive API Docs**
-
-Access interactive API documentation:
-- **API Gateway**: http://localhost:8000/docs
-- **RAG Pipeline**: http://localhost:8004/docs
-- **Plugin Registry**: http://localhost:8001/docs
-
----
-
-## 🤝 **Contributing**
-
-We welcome contributions from developers of all skill levels!
-
-### 🚀 **Quick Start**
-
-```bash
-# 1. Fork and clone
-git clone git@github.com:YOUR-USERNAME/minder.git
-cd minder
-
-# 2. Create feature branch
-git checkout -b feature/my-awesome-feature
-
-# 3. Make your changes
-# Add tests, update docs, follow code style
-
-# 4. Test thoroughly
-bash setup.sh doctor
-
-# 5. Submit pull request
-git push origin feature/my-awesome-feature
-```
-
-### 📋 **Contribution Areas**
-
-- 🐛 **Bug fixes**: Help us squash bugs
-- ✨ **New features**: Add exciting capabilities
-- 📚 **Documentation**: Improve guides and docs
-- 🧪 **Tests**: Increase test coverage
-- 🔌 **Plugins**: Create community plugins
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
+- **[📚 Documentation Index](./docs/README.md)** — full navigation
+- **[🏗️ Architecture Guide](./docs/architecture/overview.md)** — system design and patterns
+- **[🔌 API Documentation](./docs/guides/api.md)** — API reference (interactive docs also at `/docs` on api-gateway/rag-pipeline/plugin-registry)
+- **[📝 Development Guidelines](./docs/development/development.md)** — coding standards, plugin development, testing
+- **[🗺️ Roadmap](./docs/architecture/roadmap.md)** — where the platform is headed (GitHub issues are the live backlog)
 
 ---
 
 ## 🏗️ **Project Structure**
 
-Professional open-source architecture with clear separation:
-
 ```
 minder/
-├── .github/              # GitHub workflows & templates
-├── .claude/              # Claude Code configuration
-├── docker/               # All Docker configurations
-│   ├── compose/         # docker-compose files (hand-maintained source of truth)
-│   └── services/        # Per-service mounted config (postgres, grafana, traefik, …)
-├── src/                  # Source code
-│   ├── services/        # Microservices (api-gateway, rag-pipeline, etc.)
-│   ├── shared/          # Shared libraries and utilities
-│   ├── plugins/         # First-party module plugins (crypto, network, news, tefas, weather, telegraf)
-│   ├── bootstrap/       # Bootstrap config data (config/default_plugins.yml)
-│   └── requirements/    # Shared Python dependency sets
-├── scripts/              # Setup and utility scripts
-│   ├── setup/          # Native-Python setup CLI (python -m scripts.setup)
-│   ├── lib/            # Bash reference modules (behavior-gate parity only)
-│   └── gate/           # Behavior gate (verifies python ↔ bash-reference parity)
-├── docs/                 # Documentation
-│   ├── images/          # Logo and assets
-│   ├── api/            # API documentation
-│   ├── architecture/    # Architecture guides
-│   ├── deployment/     # Deployment guides
-│   ├── development/    # Development guidelines
-│   └── troubleshooting/ # Troubleshooting guides
-├── tests/                # Integration and unit tests
-├── .dockerignore
-├── .gitignore
-├── LICENSE
-├── CONTRIBUTING.md
-├── README.md
-├── setup.sh             # Entrypoint — thin shim → `python -m scripts.setup`
-└── setup.bash.sh        # Frozen bash reference (behavior-gate parity only)
+├── docker/               # Docker configuration (docker-compose.yml is the hand-maintained source of truth)
+├── src/                  # Source code: services/, shared/, plugins/, bootstrap/, requirements/
+├── scripts/              # setup/ (native-Python setup CLI), lib/ + gate/ (bash-parity reference)
+├── docs/                 # Documentation (see docs/README.md)
+├── tests/                # unit/, integration/, e2e/
+├── README.md, CONTRIBUTING.md, LICENSE
+└── setup.sh              # Entrypoint — thin shim → `python -m scripts.setup`
 ```
 
-### 🎯 **Key Standards**
-
-- **Centralized Config**: Shared dependencies in `src/requirements/`; Python tooling config in root `pyproject.toml`
-- **Modular Services**: Isolated dependencies per service
-- **Docker-First**: All infrastructure in `docker/`
-- **Security First**: No hardcoded secrets
-- **Professional**: Open-source ready structure
+**→ Full layout with every subdirectory explained:** [docs/architecture/project-structure.md](docs/architecture/project-structure.md)
 
 ---
 
-## 🎯 **Roadmap**
+## 🤝 **Contributing**
 
-### 🚧 **Current Development**
-- [ ] Web UI for RAG pipeline management
-- [ ] Advanced model fine-tuning interface
-- [ ] Multi-modal AI (image + text)
-- [ ] Voice assistant integration
-
-### 🎯 **Future Plans**
-- [ ] Mobile app for remote access
-- [ ] Cloud deployment options
-- [ ] Enhanced plugin marketplace
-- [ ] Distributed model training
-- [ ] Real-time collaboration features
+We welcome contributions from developers of all skill levels — bug fixes, features, docs, tests,
+and community plugins. See **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the full workflow, code
+style, and testing requirements.
 
 ---
 
 ## 📜 **License**
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
+MIT — see [LICENSE](LICENSE).
 
 ## 🙏 **Acknowledgments**
 
-Built with amazing open-source technologies:
-- **[Ollama](https://ollama.com)** for local LLM inference
-- **[Qdrant](https://qdrant.tech)** for vector database
-- **[FastAPI](https://fastapi.tiangolo.com)** for the web framework
-- **[Neo4j](https://neo4j.com)** for graph database
-- **All contributors** to the open-source community
-
----
+Built with [Ollama](https://ollama.com), [Qdrant](https://qdrant.tech),
+[FastAPI](https://fastapi.tiangolo.com), [Neo4j](https://neo4j.com), and the open-source community.
 
 ## 📞 **Contact & Community**
 
-### 🤝 **Get Involved**
-- **GitHub**: [wish-maker/minder](https://github.com/wish-maker/minder)
-- **Issues**: [Report bugs](https://github.com/wish-maker/minder/issues)
+- **Issues**: [Report bugs / request features](https://github.com/wish-maker/minder/issues)
 - **Discussions**: [Join conversations](https://github.com/wish-maker/minder/discussions)
-
-### 💬 **Community**
-- **⭐ Star us on GitHub** — it helps!
-- **🔔 Watch** for updates
-- **🐛 Report issues** to help improve
-- **💡 Share ideas** for features
-- **📖 Improve documentation**
 
 ---
 
 <div align="center">
-
-## **🚀 Ready to Build Your Private AI Infrastructure?**
-
-**Get started in 30 seconds:**
-```bash
-git clone git@github.com:wish-maker/minder.git
-cd minder
-bash setup.sh start
-# Then: echo "127.0.0.1 chat.minder.local" | sudo tee -a /etc/hosts
-# Open: https://chat.minder.local
-```
-
-**Built with ❤️ for the open-source community**
 
 **⭐ Star us on GitHub — it helps!**
 
