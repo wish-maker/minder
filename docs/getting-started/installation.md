@@ -73,9 +73,9 @@ cp .env docker/.env
 docker compose --file docker/docker-compose.yml up -d
 ```
 
-Compose defines 34 services; a default `setup.sh install` seeds the **standard** bundle
+Compose defines 35 services (33 in the common default); a default `setup.sh install` seeds the **standard** bundle
 profile (core + inference + rag + chat) — monitoring, graph-rag, and voice are opt-in
-(`install --profile full` starts all 34). The full set is grouped as:
+(`install --profile full` starts every non-failover-gated service). The full set is grouped as:
 - Reverse Proxy (1): Traefik v3
 - Auth (1): Authelia SSO/2FA — enabled by default, enforcing forward-auth on 5 routers (minio, api-gateway, grafana, openwebui, jaeger)
 - Storage (7, internal-only): PostgreSQL, Redis, Qdrant, Neo4j, MinIO, RabbitMQ, Apicurio schema-registry
@@ -262,7 +262,7 @@ redis-exporter, rabbitmq-exporter) have no healthcheck by design — they show a
 "no-healthcheck", not "unhealthy".
 
 **Known caveats:**
-- `install --profile full` (or enabling every bundle) starts all 34 containers; the default
+- `install --profile full` (or enabling every bundle) starts every non-failover-gated service; the default
   `standard` profile omits monitoring/graph-rag/voice. `install` additionally creates the
   MinIO buckets. `start` honours the recorded bundle state (`bundles.state.json`).
   See [Service Bundles](../architecture/bundles.md).

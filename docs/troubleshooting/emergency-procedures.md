@@ -236,7 +236,6 @@ curl http://localhost:8008/health      # graph-rag
 ## Related Documentation
 
 - [Common Issues](common-issues.md)
-- [Troubleshooting Guide](troubleshooting.md)
 - [Development Guide](../development/development.md)
 
 ---

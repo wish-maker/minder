@@ -1,14 +1,14 @@
 # Common Issues
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-08
 **Platform Version:** 1.0.0
 
 Common problems and solutions for the Minder platform (development environment, Raspberry
-Pi 4, 34 containers). Services run as Docker containers named `minder-<service>`. Compose is
+Pi 4, 35 containers defined, 33 in the common default). Services run as Docker containers named `minder-<service>`. Compose is
 at `docker/docker-compose.yml`; the root `./.env` is the single source of truth for
 configuration.
 
-For the broader guide, see [troubleshooting.md](troubleshooting.md).
+For crisis management (outages, data loss), see [Emergency Procedures](emergency-procedures.md).
 
 ---
 

@@ -1,7 +1,7 @@
 # Minder Platform Backup & Restore
 
 **Version:** 2.0.0
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-08
 **Status:** 🟢 Built into `setup.sh`
 
 > Deployment target is a Raspberry Pi 4 (RPi-4-01, ARM). This is a **development
@@ -47,12 +47,12 @@ that hold real state include:
 | Volume | Backs | Notes |
 |---|---|---|
 | `postgres_data` | PostgreSQL (`postgres:18.4-trixie`) | Users, sessions, metadata + aux DBs (marketplace, tefas/weather/news/crypto, schema-registry) |
-| `redis_data` | Redis (`redis:8.8.0-alpine`) | Cache, rate-limit state, sessions |
+| `redis_data` | Redis (`redis:8.10.0-alpine`) | Cache, rate-limit state, sessions |
 | `neo4j_data` | Neo4j (`neo4j:2026.06.0-community`) | Graph relationships (marketplace + graph-rag) |
 | `qdrant_data` | Qdrant (`qdrant/qdrant:v1.19`) | Vector embeddings for RAG |
 | `minio_data` | MinIO object store | See buckets below |
-| `rabbitmq_data` | RabbitMQ (`rabbitmq:4.3.2-management`) | Queues, pipeline triggers |
-| `influxdb_data` | InfluxDB (`influxdb:3.10.3-core`) | Time-series metrics |
+| `rabbitmq_data` | RabbitMQ (`rabbitmq:4.3.4-management`) | Queues, pipeline triggers |
+| `influxdb_data` | InfluxDB (`influxdb:3.11.0-core`) | Time-series metrics |
 | `ollama_data` | Ollama model storage | Pulled models under `/root/.ollama/models` |
 
 > Volume names are prefixed by the Compose project at runtime (e.g.

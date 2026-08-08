@@ -336,7 +336,7 @@ api-gateway, grafana, openwebui, and jaeger routers. Full browser SSO still need
 - [Code Style Guide](code-style.md)
 - [Testing Guide](testing.md)
 - [Plugin Development](plugin-development.md)
-- [Troubleshooting](../troubleshooting/troubleshooting.md)
+- [Troubleshooting](../troubleshooting/common-issues.md)
 
 ## Best Practices Summary
 

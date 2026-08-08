@@ -1,6 +1,6 @@
 # Minder Platform - Development Roadmap
 
-> **Last Updated:** 2026-07-10
+> **Last Updated:** 2026-08-08
 > **Status:** Development environment on a Raspberry Pi 4; production hardening ongoing.
 > **Live tracker:** GitHub issues in `wish-maker/minder` are the source of truth for planned work.
 
@@ -19,7 +19,8 @@ and where it is headed.
 
 ## What Exists Today
 
-The platform runs as 34 Docker containers provisioned by `bash setup.sh`. See
+The platform runs as 35 defined Docker services (33 in the common default — two are
+failover-mode sidecars) provisioned by `bash setup.sh`. See
 `docs/architecture/overview.md` and `docs/architecture/microservices.md` for the current,
 authoritative service breakdown.
 
@@ -33,7 +34,7 @@ authoritative service breakdown.
 - TTS/STT (8006) — Piper offline (default) + gTTS fallback + speech_recognition, ~12 languages
 - Graph RAG (8008) — spaCy NER + Neo4j knowledge graph
 
-**Storage (internal-only):** PostgreSQL 18.4, Redis 8.8, Qdrant 1.18, Neo4j 2026.06, MinIO,
+**Storage (internal-only):** PostgreSQL 18.4, Redis 8.10, Qdrant 1.19, Neo4j 2026.06, MinIO,
 RabbitMQ 4.3, Apicurio schema registry.
 
 **Inference & UI:** Ollama (profile-gated), OpenWebUI (chat frontend).
@@ -61,7 +62,14 @@ in `wish-maker/minder`.
 
 ### 1. Raspberry Pi Production Deploy (milestone)
 ARM deployment hardening: image/version pinning, Traefik router completion, resolving remaining
-per-service config landmines, and clean-install reliability on the Pi.
+per-service config landmines, and clean-install reliability on the Pi. One recurring landmine
+class is now resolved generically: legacy bare-named volumes (`openwebui_data`/`qdrant_data`
+predating this project's `minder_` naming convention) are migrated forward by
+`scripts/setup/infra.py`'s `migrate_volume_names()` on every `start`/`install` — self-healing on
+a host with the old name, a no-op everywhere else (a fresh install, or a second deployment host
+that never had one). An earlier attempt pinned these two volumes as `external: true` instead;
+that broke on any host without the exact hardcoded name, so it was reverted in favor of the
+existing migration mechanism.
 
 ### 2. RAG Enhancements
 HyDE, Self-RAG, auto (decision engine), corrective RAG, adaptive rerank/compress, and the
@@ -87,7 +95,12 @@ Image versions are derived from the compose file by the native-Python version en
 CI is consolidated into a fast quality gate (black/isort/flake8/**mypy — now a REAL gate, run
 per-service, no `|| true`**/bandit/safety/shellcheck/hadolint), a test workflow, a deep security
 workflow, and Docker-image + Python-dependency update workflows. mypy strictness was adopted
-(#33 done); coverage-fail-under remains optional/backlog.
+(#33 done); coverage-fail-under remains optional/backlog. The test workflow (`ci.yml`) also runs
+a **Container Smoke Test** job — `docker compose up --build --wait` on 7 of the 8 core service
+images (real `docker run`, not a mocked/bare-process test), added after three real regressions
+(a missing pip dependency, a missing required env var, a bad volume-naming assumption) shipped
+past unit + integration/e2e + Trivy in the same session, none of which ever ran an actual
+container.
 
 ### 6. Config Consolidation
 Per-service config lives under `docker/services/`; `docker/docker-compose.yml` is the
