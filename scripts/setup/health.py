@@ -135,6 +135,12 @@ def run_health_checks(json_mode: bool = False) -> int:
         if svc in config.SERVICE_PORTS:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
 
+    if not json_mode:
+        log._emit("\n" + log.bold("Admin UI"))
+    for svc in ("admin-ui",):
+        if svc in config.SERVICE_PORTS:
+            _check_endpoint(svc, config.SERVICE_PORTS[svc])
+
     ok_count = sum(1 for _, s, _ in results if s == "ok")
     warn_count = sum(1 for _, s, _ in results if s == "warn")
     # A service whose container isn't running (status "error") is a HARD failure,
