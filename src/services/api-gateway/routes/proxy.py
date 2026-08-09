@@ -132,6 +132,28 @@ async def proxy_to_plugin_registry(path: str, request: Request):
 
 
 # ============================================================================
+# Bundles (plugin-registry's bundle control-plane)
+# ============================================================================
+
+
+@router.get("/v1/bundles")
+async def list_bundles(request: Request):
+    """Proxy GET /v1/bundles to Plugin Registry"""
+    service_url = SERVICE_REGISTRY["plugin_registry"]
+    return await proxy_request(service_url, "v1/bundles", request)
+
+
+@router.api_route("/v1/bundles/{path:path}", methods=["GET", "POST"])
+async def proxy_to_bundles(path: str, request: Request):
+    """Proxy /v1/bundles/* (enable/disable/reconcile) to Plugin Registry.
+    Plugin Registry's own routes already carry the full `/v1/bundles/...`
+    prefix, so forward the full path back, not just `path` (writes require JWT)."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["plugin_registry"]
+    return await proxy_request(service_url, f"v1/bundles/{path}", request)
+
+
+# ============================================================================
 # RAG Pipeline
 # ============================================================================
 
