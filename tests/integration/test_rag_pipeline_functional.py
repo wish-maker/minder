@@ -75,6 +75,28 @@ def test_list_knowledge_bases():
     assert isinstance(r.json(), list)
 
 
+def test_list_pipelines_includes_created_pipeline(pipeline_id):
+    # #426: before this endpoint existed, a pipeline_id only ever existed in the
+    # create response -- confirm it's actually recoverable via list.
+    r = httpx.get(f"{BASE}/pipeline", timeout=10.0)
+    assert r.status_code == 200
+    ids = [p["id"] for p in r.json()]
+    assert pipeline_id in ids
+
+
+def test_get_pipeline_by_id(pipeline_id):
+    r = httpx.get(f"{BASE}/pipeline/{pipeline_id}", timeout=10.0)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"] == pipeline_id
+    assert body["knowledge_base_ids"]
+
+
+def test_get_unknown_pipeline_404s():
+    r = httpx.get(f"{BASE}/pipeline/does-not-exist", timeout=10.0)
+    assert r.status_code == 404
+
+
 def test_standard_query_grounded(pipeline_id):
     r = httpx.post(
         f"{BASE}/pipeline/{pipeline_id}/query",

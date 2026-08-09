@@ -3,16 +3,17 @@ import { useCallback, useEffect, useState } from "react";
 import { LoginPanel } from "../components/LoginPanel";
 import { ApiError, apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import {
-  addPipeline,
-  loadPipelines,
-  removePipeline,
-  type TrackedPipeline,
-} from "../lib/pipelineStore";
 
 interface KnowledgeBase {
   id: string;
   name: string;
+}
+
+interface RagPipeline {
+  id: string;
+  name: string;
+  knowledge_base_ids: string[];
+  created_at: string;
 }
 
 interface Capabilities {
@@ -60,7 +61,7 @@ function CreatePipelineForm({
 }: {
   token: string;
   kbs: KnowledgeBase[];
-  onCreated: (p: TrackedPipeline) => void;
+  onCreated: (p: RagPipeline) => void;
 }) {
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -370,7 +371,7 @@ function PipelineCard({
   capabilities,
   onDeleted,
 }: {
-  pipeline: TrackedPipeline;
+  pipeline: RagPipeline;
   token: string;
   capabilities: Capabilities | null;
   onDeleted: (id: string) => void;
@@ -428,10 +429,10 @@ function PipelineCard({
 }
 
 export function RagPipelinesPage() {
-  const { token, username } = useAuth();
+  const { token } = useAuth();
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
-  const [pipelines, setPipelines] = useState<TrackedPipeline[]>([]);
+  const [pipelines, setPipelines] = useState<RagPipeline[]>([]);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
 
@@ -443,12 +444,14 @@ export function RagPipelinesPage() {
   const load = useCallback(async () => {
     setStatusMsg("Loading…");
     try {
-      const [kbList, caps] = await Promise.all([
+      const [kbList, caps, pipelineList] = await Promise.all([
         apiFetch<KnowledgeBase[]>("/v1/rag/knowledge-bases?limit=100"),
         apiFetch<Capabilities>("/v1/rag/capabilities"),
+        apiFetch<RagPipeline[]>("/v1/rag/pipeline?limit=100"),
       ]);
       setKbs(kbList);
       setCapabilities(caps);
+      setPipelines(pipelineList);
       setStatusMsg("");
     } catch (e) {
       setStatusMsg(e instanceof Error ? e.message : String(e), true);
@@ -459,13 +462,8 @@ export function RagPipelinesPage() {
     load();
   }, [load]);
 
-  useEffect(() => {
-    setPipelines(username ? loadPipelines(username) : []);
-  }, [username]);
-
   function handlePipelineDeleted(id: string) {
-    if (!username) return;
-    setPipelines(removePipeline(username, id));
+    setPipelines((prev) => prev.filter((p) => p.id !== id));
   }
 
   return (
@@ -482,10 +480,7 @@ export function RagPipelinesPage() {
       <CreatePipelineForm
         token={token}
         kbs={kbs}
-        onCreated={(p) => {
-          if (!username) return;
-          setPipelines(addPipeline(username, p));
-        }}
+        onCreated={(p) => setPipelines((prev) => [...prev, p])}
       />
       {pipelines.length === 0 && (
         <p>No pipelines created yet — pick at least one knowledge base above.</p>
