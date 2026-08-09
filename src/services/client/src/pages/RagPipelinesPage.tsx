@@ -38,6 +38,14 @@ interface Capabilities {
 
 type Method = "standard" | "hyde" | "self_rag" | "auto" | "corrective";
 
+const METHOD_DESCRIPTIONS: Record<Method, string> = {
+  standard: "Embeds your question and retrieves the closest matching chunks — fast, and the right default for most questions.",
+  hyde: "Generates a hypothetical answer first, then searches using THAT instead of your raw question — often finds better matches for short or vaguely-worded questions.",
+  self_rag: "Retrieves, then critiques its own retrieval and answer, re-retrieving if the first pass looks weak — slower, but catches cases where the first search missed the point.",
+  auto: "Asks a small decision step to pick standard vs. a more expensive method per-question, so you don't have to guess in advance.",
+  corrective: "Grades retrieved chunks for relevance before generating, discarding anything off-topic — reduces answers that ramble off irrelevant context.",
+};
+
 interface Source {
   text: string;
   source: string;
@@ -53,6 +61,16 @@ interface QueryResponse {
   method: string;
   method_details?: { retrieval: string; degraded?: string[] } | null;
 }
+
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
+const primaryButtonClass =
+  "rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
+const dangerButtonClass =
+  "rounded-md border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950";
+const statusClass = (isError: boolean) =>
+  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
+const fieldHintClass = "mt-0.5 text-xs text-gray-500 dark:text-gray-400";
 
 function CreatePipelineForm({
   token,
@@ -114,36 +132,57 @@ function CreatePipelineForm({
   }
 
   return (
-    <section className="plugin-card">
-      <h2>Create a pipeline</h2>
+    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
+        ➕ Create a pipeline
+      </h2>
       {kbs.length === 0 ? (
-        <p className="hint">Create a knowledge base first.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Create a knowledge base first — a pipeline needs at least one to
+          search over.
+        </p>
       ) : (
-        <form onSubmit={handleSubmit}>
-          <div className="field">
-            <label>Name</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+        <form onSubmit={handleSubmit} className="mt-2 flex flex-col gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Name
+            </label>
+            <input
+              className={inputClass}
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
-          <div className="field">
-            <label>Knowledge bases</label>
-            {kbs.map((kb) => (
-              <div key={kb.id}>
-                <label>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Knowledge bases
+            </label>
+            <div className="flex flex-col gap-1">
+              {kbs.map((kb) => (
+                <label key={kb.id} className="flex items-center gap-2 text-sm">
                   <input
+                    className="h-4 w-4 rounded border-gray-300"
                     type="checkbox"
                     checked={selected.has(kb.id)}
                     onChange={() => toggle(kb.id)}
-                  />{" "}
+                  />
                   {kb.name}
                 </label>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-          <button type="submit" disabled={!token}>
-            Create
-          </button>
-          {!token && <span className="hint"> Log in to create a pipeline.</span>}
-          <div className="status">{status}</div>
+          <div className="flex items-center gap-3">
+            <button type="submit" disabled={!token} className={primaryButtonClass}>
+              Create
+            </button>
+            {!token && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Log in to create a pipeline.
+              </span>
+            )}
+            <span className="text-sm text-gray-500 dark:text-gray-400">{status}</span>
+          </div>
         </form>
       )}
     </section>
@@ -220,144 +259,195 @@ function QueryPanel({
   }
 
   return (
-    <div className="field">
-      <h3>Query</h3>
-      <form onSubmit={handleSubmit}>
-        <div className="field">
-          <label>Question</label>
+    <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        🔎 Query
+      </h3>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Question
+          </label>
           <textarea
+            className={inputClass}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             rows={2}
-            style={{ width: "100%", boxSizing: "border-box" }}
           />
         </div>
-        <div className="field">
-          <label>Top K</label>
-          <input
-            type="number"
-            value={topK}
-            onChange={(e) => setTopK(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label>Method</label>
-          <select value={method} onChange={(e) => setMethod(e.target.value as Method)}>
-            <option value="standard">standard</option>
-            <option value="hyde" disabled={!methodAvailable("hyde")}>
-              hyde{!methodAvailable("hyde") && " (unavailable on this host)"}
-            </option>
-            <option value="self_rag" disabled={!methodAvailable("self_rag")}>
-              self_rag{!methodAvailable("self_rag") && " (unavailable on this host)"}
-            </option>
-            <option value="auto" disabled={!methodAvailable("auto")}>
-              auto{!methodAvailable("auto") && " (unavailable on this host)"}
-            </option>
-            <option value="corrective" disabled={!methodAvailable("corrective")}>
-              corrective{!methodAvailable("corrective") && " (unavailable on this host)"}
-            </option>
-          </select>
-        </div>
-        <div className="field">
-          <label>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Top K
+            </label>
             <input
-              type="checkbox"
-              checked={rerank}
-              disabled={!rerankAvailable}
-              onChange={(e) => setRerank(e.target.checked)}
-            />{" "}
-            Rerank
-            {rerankAvailable
-              ? capabilities?.enhancers.rerank.backend &&
-                ` (${capabilities.enhancers.rerank.backend})`
-              : " (unavailable on this host)"}
-          </label>
+              className={inputClass}
+              type="number"
+              value={topK}
+              onChange={(e) => setTopK(e.target.value)}
+            />
+            <p className={fieldHintClass}>How many chunks to retrieve and hand to the model.</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Method
+            </label>
+            <select
+              className={inputClass}
+              value={method}
+              onChange={(e) => setMethod(e.target.value as Method)}
+            >
+              <option value="standard">standard</option>
+              <option value="hyde" disabled={!methodAvailable("hyde")}>
+                hyde{!methodAvailable("hyde") && " (unavailable on this host)"}
+              </option>
+              <option value="self_rag" disabled={!methodAvailable("self_rag")}>
+                self_rag{!methodAvailable("self_rag") && " (unavailable on this host)"}
+              </option>
+              <option value="auto" disabled={!methodAvailable("auto")}>
+                auto{!methodAvailable("auto") && " (unavailable on this host)"}
+              </option>
+              <option value="corrective" disabled={!methodAvailable("corrective")}>
+                corrective{!methodAvailable("corrective") && " (unavailable on this host)"}
+              </option>
+            </select>
+            <p className={fieldHintClass}>{METHOD_DESCRIPTIONS[method]}</p>
+          </div>
         </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={compress}
-              disabled={!compressAvailable}
-              onChange={(e) => setCompress(e.target.checked)}
-            />{" "}
-            Compress{!compressAvailable && " (unavailable on this host)"}
-          </label>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                className="h-4 w-4 rounded border-gray-300"
+                type="checkbox"
+                checked={rerank}
+                disabled={!rerankAvailable}
+                onChange={(e) => setRerank(e.target.checked)}
+              />
+              Rerank
+              {rerankAvailable && capabilities?.enhancers.rerank.backend
+                ? ` (${capabilities.enhancers.rerank.backend})`
+                : !rerankAvailable && " (unavailable on this host)"}
+            </label>
+            <p className={fieldHintClass}>
+              Re-scores retrieved chunks with a dedicated model for higher
+              precision, before generation — costs a bit of latency.
+            </p>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                className="h-4 w-4 rounded border-gray-300"
+                type="checkbox"
+                checked={compress}
+                disabled={!compressAvailable}
+                onChange={(e) => setCompress(e.target.checked)}
+              />
+              Compress{!compressAvailable && " (unavailable on this host)"}
+            </label>
+            <p className={fieldHintClass}>
+              Trims retrieved chunks down to the sentences actually relevant
+              to your question before they reach the model.
+            </p>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                className="h-4 w-4 rounded border-gray-300"
+                type="checkbox"
+                checked={hybrid}
+                disabled={!hybridAvailable || parentContext}
+                onChange={(e) => setHybrid(e.target.checked)}
+              />
+              Hybrid retrieval
+              {!hybridAvailable && " (unavailable on this host)"}
+              {hybridAvailable && parentContext && " (ignored while parent context is on)"}
+            </label>
+            <p className={fieldHintClass}>
+              Combines vector similarity with keyword search — catches exact
+              terms, codes, or names that pure embeddings sometimes miss.
+            </p>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                className="h-4 w-4 rounded border-gray-300"
+                type="checkbox"
+                checked={parentContext}
+                onChange={(e) => setParentContext(e.target.checked)}
+              />
+              Parent context retrieval
+            </label>
+            <p className={fieldHintClass}>
+              {capabilities?.retrievers.parent_child.note ||
+                "Returns the full surrounding section around a match, not just the matched chunk — more context per hit, at the cost of some precision."}
+            </p>
+          </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                className="h-4 w-4 rounded border-gray-300"
+                type="checkbox"
+                checked={continueConversation}
+                disabled={!conversationalAvailable}
+                onChange={(e) => {
+                  setContinueConversation(e.target.checked);
+                  if (!e.target.checked) setConversationId(null);
+                }}
+              />
+              Continue conversation
+              {!conversationalAvailable && " (unavailable on this host)"}
+            </label>
+            <p className={fieldHintClass}>
+              Keeps follow-up questions in the same session, so the model can
+              resolve references like "it" or "that" back to earlier turns.
+            </p>
+          </div>
         </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={hybrid}
-              disabled={!hybridAvailable || parentContext}
-              onChange={(e) => setHybrid(e.target.checked)}
-            />{" "}
-            Hybrid retrieval
-            {!hybridAvailable && " (unavailable on this host)"}
-            {hybridAvailable && parentContext && " (ignored while parent context is on)"}
-          </label>
-        </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={parentContext}
-              onChange={(e) => setParentContext(e.target.checked)}
-            />{" "}
-            Parent context retrieval
-          </label>
-          {capabilities?.retrievers.parent_child.note && (
-            <p className="hint">{capabilities.retrievers.parent_child.note}</p>
+
+        <div className="flex items-center gap-3">
+          <button type="submit" disabled={!token} className={primaryButtonClass}>
+            Ask
+          </button>
+          {!token && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Log in to query.
+            </span>
           )}
+          <span className="text-sm text-gray-500 dark:text-gray-400">{status}</span>
         </div>
-        <div className="field">
-          <label>
-            <input
-              type="checkbox"
-              checked={continueConversation}
-              disabled={!conversationalAvailable}
-              onChange={(e) => {
-                setContinueConversation(e.target.checked);
-                if (!e.target.checked) setConversationId(null);
-              }}
-            />{" "}
-            Continue conversation
-            {!conversationalAvailable && " (unavailable on this host)"}
-          </label>
-        </div>
-        <button type="submit" disabled={!token}>
-          Ask
-        </button>
-        {!token && <span className="hint"> Log in to query.</span>}
-        <div className="status">{status}</div>
       </form>
       {result && (
-        <div className="test-result">
-          <strong>Answer:</strong> {result.answer}
-          {"\n\n"}
-          <strong>Confidence:</strong> {Math.round(result.confidence * 100)}%{"\n"}
-          <strong>Model:</strong> {result.model_used}
-          {result.tokens_used != null && ` (${result.tokens_used} tokens)`}
-          {"\n"}
-          <strong>Method:</strong> {result.method}
-          {result.method_details?.retrieval && ` (${result.method_details.retrieval} retrieval)`}
+        <div className="mt-3 rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
+          <p className="mb-2 whitespace-pre-wrap">{result.answer}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Confidence: {Math.round(result.confidence * 100)}% · Model:{" "}
+            {result.model_used}
+            {result.tokens_used != null && ` (${result.tokens_used} tokens)`} ·
+            Method: {result.method}
+            {result.method_details?.retrieval &&
+              ` (${result.method_details.retrieval} retrieval)`}
+          </p>
           {result.method_details?.degraded && result.method_details.degraded.length > 0 && (
-            <>
-              {"\n"}
-              <strong>Degraded:</strong> {result.method_details.degraded.join(", ")}
-            </>
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              ⚠ Degraded: {result.method_details.degraded.join(", ")}
+            </p>
           )}
           {result.sources.length > 0 && (
-            <>
-              {"\n\n"}
-              <strong>Sources:</strong>
-              {result.sources.map((s, i) => (
-                <div key={i}>
-                  {"\n"}[{s.source}] score {s.score.toFixed(3)} — {s.text.slice(0, 200)}
-                  {s.text.length > 200 && "…"}
-                </div>
-              ))}
-            </>
+            <div className="mt-3 border-t border-gray-200 pt-2 dark:border-gray-700">
+              <p className="mb-1 text-xs font-semibold text-gray-600 dark:text-gray-400">
+                Sources
+              </p>
+              <ul className="flex flex-col gap-1">
+                {result.sources.map((s, i) => (
+                  <li key={i} className="text-xs text-gray-600 dark:text-gray-400">
+                    [{s.source}] score {s.score.toFixed(3)} — {s.text.slice(0, 200)}
+                    {s.text.length > 200 && "…"}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
@@ -402,22 +492,36 @@ function PipelineCard({
   }
 
   return (
-    <section className="plugin-card">
-      <h2>{pipeline.name}</h2>
-      <p className="hint">
-        id: <code>{pipeline.id}</code>{" "}
-        <button type="button" onClick={handleCopy}>
-          {copied ? "Copied" : "Copy"}
+    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            🧠 {pipeline.name}
+          </h2>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            id: <code>{pipeline.id}</code>{" "}
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="ml-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </p>
+          <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+            Knowledge bases: {pipeline.knowledge_base_ids.join(", ")}
+          </p>
+        </div>
+        <button className={dangerButtonClass} onClick={handleDelete} disabled={!token}>
+          🗑 Delete
         </button>
-      </p>
-      <p className="hint">
-        Knowledge bases: {pipeline.knowledge_base_ids.join(", ")}
-      </p>
-      <button className="danger" onClick={handleDelete} disabled={!token}>
-        Delete
-      </button>
-      {!token && <span className="hint"> Log in to delete.</span>}
-      <div className="status">{status}</div>
+      </div>
+      {!token && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Log in to delete this pipeline.
+        </p>
+      )}
+      <div className={statusClass(false)}>{status}</div>
       <QueryPanel
         pipelineId={pipeline.id}
         token={token}
@@ -468,22 +572,25 @@ export function RagPipelinesPage() {
 
   return (
     <>
-      <h1>RAG Pipelines</h1>
-      <p className="hint">
-        Build a pipeline over one or more knowledge bases and query it using
-        Minder's own RAG pipeline (standard, HyDE, Self-RAG, auto, or
-        corrective retrieval) — this is separate from OpenWebUI's own
-        disconnected Knowledge feature.
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        RAG Pipelines
+      </h1>
+      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+        Combine one or more knowledge bases into a queryable pipeline, then
+        ask it questions using Minder's own retrieval methods — this is
+        separate from OpenWebUI's own disconnected Knowledge feature.
       </p>
       <LoginPanel onStatus={setStatusMsg} />
-      <div className={`status${isError ? " error" : ""}`}>{status}</div>
+      <div className={statusClass(isError)}>{status}</div>
       <CreatePipelineForm
         token={token}
         kbs={kbs}
         onCreated={(p) => setPipelines((prev) => [...prev, p])}
       />
       {pipelines.length === 0 && (
-        <p>No pipelines created yet — pick at least one knowledge base above.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No pipelines created yet — pick at least one knowledge base above.
+        </p>
       )}
       {pipelines.map((p) => (
         <PipelineCard

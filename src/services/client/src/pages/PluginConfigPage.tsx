@@ -34,6 +34,9 @@ function fieldToInputType(field: ConfigField): "checkbox" | "password" | "number
   return "text";
 }
 
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
+
 function FieldInput({
   field,
   value,
@@ -48,6 +51,7 @@ function FieldInput({
   if (inputType === "checkbox") {
     return (
       <input
+        className="h-4 w-4 rounded border-gray-300"
         type="checkbox"
         checked={!!value}
         onChange={(e) => onChange(e.target.checked)}
@@ -57,6 +61,7 @@ function FieldInput({
   if (inputType === "password") {
     return (
       <input
+        className={inputClass}
         type="password"
         placeholder="unchanged (leave blank to keep current value)"
         onChange={(e) => onChange(e.target.value)}
@@ -66,6 +71,7 @@ function FieldInput({
   if (inputType === "number") {
     return (
       <input
+        className={inputClass}
         type="number"
         step={field.type === "float" ? "any" : undefined}
         defaultValue={value as number | string}
@@ -75,6 +81,7 @@ function FieldInput({
   }
   return (
     <input
+      className={inputClass}
       type="text"
       defaultValue={value as string}
       onChange={(e) => onChange(e.target.value)}
@@ -118,22 +125,39 @@ function PluginCard({
   }
 
   return (
-    <section className="plugin-card">
-      <h2>{plugin.name}</h2>
-      <form onSubmit={handleSubmit}>
+    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <h2 className="mb-3 text-base font-semibold capitalize text-gray-900 dark:text-gray-100">
+        {plugin.name}
+      </h2>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         {plugin.schema.map((field) => (
-          <div className="field" key={field.key}>
-            <label>{field.key}</label>
+          <div key={field.key}>
+            <label className="mb-1 block text-sm font-medium capitalize text-gray-700 dark:text-gray-300">
+              {field.key}
+            </label>
             <FieldInput
               field={field}
               value={plugin.values[field.key]}
               onChange={(v) => setDraft((d) => ({ ...d, [field.key]: v }))}
             />
-            {field.description && <p className="hint">{field.description}</p>}
+            {field.description && (
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                {field.description}
+              </p>
+            )}
           </div>
         ))}
-        <button type="submit">Save</button>
-        <span className="save-status">{saveStatus}</span>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+          >
+            Save
+          </button>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {saveStatus}
+          </span>
+        </div>
       </form>
     </section>
   );
@@ -184,18 +208,31 @@ export function PluginConfigPage() {
 
   return (
     <>
-      <h1>Plugin Configuration</h1>
-      <p className="hint">
-        Edit settings for plugins that expose a config schema (e.g. news
-        feeds, weather locations). Changes apply immediately, no restart
-        needed.
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Plugin Configuration
+      </h1>
+      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+        Edit settings for plugins that expose a config schema — for example a
+        news feed's RSS URLs, or a weather plugin's tracked locations.
+        Changes apply immediately, live, with no service restart needed.
       </p>
       <LoginPanel onStatus={setStatusMsg} />
-      <div className={`status${isError ? " error" : ""}`}>{status}</div>
+      <div
+        className={`mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`}
+      >
+        {status}
+      </div>
       <div>
-        {!isAuthenticated && <p>Log in to view plugin configuration.</p>}
+        {!isAuthenticated && (
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Log in above to view plugin configuration.
+          </p>
+        )}
         {isAuthenticated && plugins !== null && plugins.length === 0 && (
-          <p>No configurable plugins found.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            No configurable plugins found — plugins only appear here once
+            they expose a config schema (most first-party plugins do).
+          </p>
         )}
         {plugins?.map((p) => (
           <PluginCard key={p.name} plugin={p} token={token} />
