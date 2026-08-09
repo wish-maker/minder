@@ -88,6 +88,13 @@ data/
 *.jsonl
 !training-data/*.jsonl
 !requirements*.txt
+!src/services/client/package.json
+!src/services/client/package-lock.json
+!src/services/client/tsconfig*.json
+
+# Node (client -- the first Node-based service in this repo)
+src/services/client/node_modules/
+src/services/client/dist/
 
 # Test files
 tests/

@@ -186,37 +186,3 @@ class TestAPIGatewayDatabaseIntegration:
 
         data = response.json()
         assert "checks" in data
-
-
-class TestAPIGatewayPluginConfigUI:
-    """The plugin-config settings page (routes/admin_ui.py) -- a static file
-    served same-origin so it can call this gateway's own already-Traefik-
-    exposed, Authelia-gated /v1/plugins/*/config and /v1/auth/* endpoints
-    with no CORS/new-infra needed."""
-
-    def test_plugin_config_page_served(self, gateway_test_client):
-        response = gateway_test_client.get("/plugin-config")
-        assert response.status_code == 200
-        assert "text/html" in response.headers["content-type"]
-        assert "Plugin Configuration" in response.text
-
-    def test_plugin_config_page_not_in_openapi_schema(self, gateway_test_client):
-        """include_in_schema=False -- this is a UI page, not an API contract."""
-        schema = gateway_test_client.get("/openapi.json").json()
-        assert "/plugin-config" not in schema.get("paths", {})
-
-
-class TestAPIGatewayModelManagementUI:
-    """The model-management page (routes/admin_ui.py, #421) -- same pattern as
-    the plugin-config page: a static file served same-origin so it can call
-    this gateway's own already-proxied /v1/models/* and /v1/auth/* endpoints."""
-
-    def test_model_management_page_served(self, gateway_test_client):
-        response = gateway_test_client.get("/model-management")
-        assert response.status_code == 200
-        assert "text/html" in response.headers["content-type"]
-        assert "Model Management" in response.text
-
-    def test_model_management_page_not_in_openapi_schema(self, gateway_test_client):
-        schema = gateway_test_client.get("/openapi.json").json()
-        assert "/model-management" not in schema.get("paths", {})

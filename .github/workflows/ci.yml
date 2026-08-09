@@ -168,8 +168,9 @@ jobs:
         # `--wait` blocks until every named service (and anything it
         # depends_on with condition: service_healthy -- postgres, redis,
         # neo4j, qdrant) reports healthy, and fails fast if any container
-        # exits/crash-loops instead. Same 8 services Trivy's matrix covers
-        # (security.yml) -- every first-party image with its own pip deps.
+        # exits/crash-loops instead. Same 9 services Trivy's matrix covers
+        # (security.yml) -- every first-party image with its own pip deps
+        # (or, for client, its own npm deps).
         #
         # model-management is built+started here but deliberately left out of
         # the --wait list (checked separately below) -- its /health probe
@@ -186,9 +187,21 @@ jobs:
           docker compose -f docker/docker-compose.yml --env-file docker/.env \
             up -d --build --wait --wait-timeout 300 \
             api-gateway graph-rag marketplace \
-            plugin-registry plugin-state-manager rag-pipeline tts-stt
+            plugin-registry plugin-state-manager rag-pipeline tts-stt client
           docker compose -f docker/docker-compose.yml --env-file docker/.env \
             up -d --build model-management
+
+      - name: Verify the client's SPA routing actually works
+        # client (#421/#423) is a static React SPA -- nginx's `try_files`
+        # fallback is what makes direct hits on client-side routes like
+        # /plugin-config resolve instead of 404ing at the nginx layer. That's
+        # the one thing most likely to be silently broken by a bad nginx.conf,
+        # so it's the highest-value smoke check for this specific service.
+        run: |
+          curl -sf http://127.0.0.1:8009/health
+          curl -sf http://127.0.0.1:8009/ | grep -q '<div id="root">'
+          curl -sf http://127.0.0.1:8009/plugin-config | grep -q '<div id="root">'
+          curl -sf http://127.0.0.1:8009/model-management | grep -q '<div id="root">'
 
       - name: Verify model-management started without crash-looping
         # Not held to the same --wait health bar as the other 7 (see comment

@@ -25,6 +25,7 @@ EXPECTED = {
         "plugin-registry",
         "plugin-state-manager",
         "marketplace",
+        "client",
     },
     "monitoring": {
         "influxdb",

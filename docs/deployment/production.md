@@ -87,9 +87,9 @@ bash setup.sh stop
 
 ## Service Map
 
-35 containers are defined for the Pi (Authelia SSO/2FA and the `docker-socket-proxy` are both
+36 containers are defined for the Pi (Authelia SSO/2FA and the `docker-socket-proxy` are both
 **enabled** by default and included in the count); two are failover-mode sidecars inactive by
-default, so 33 run in the common case. Only Traefik and the app/monitoring
+default, so 34 run in the common case. Only Traefik and the app/monitoring
 services below expose host ports; all storage backends are **internal-only** and reached
 over the Docker network or via Traefik.
 
@@ -195,7 +195,7 @@ curl http://localhost:3000/api/health  # grafana
 docker exec minder-ollama ollama list
 ```
 
-30 of 35 containers define an active Docker healthcheck. Three do **not**, by design
+31 of 36 containers define an active Docker healthcheck. Three do **not**, by design
 (`otel-collector`, `redis-exporter`, `rabbitmq-exporter`) — their base images lack the
 tooling. They show as "no healthcheck", which is **not** the same as "unhealthy". Two more
 (`authelia`, `docker-socket-proxy`) simply don't have one configured.
@@ -313,7 +313,7 @@ bash setup.sh doctor
 - **DB connection issues** — `docker exec minder-postgres pg_isready -U "$POSTGRES_USER"`;
   if passwords diverged, run `bash setup.sh sync-postgres-password`.
 - **Auth not enforced on a route** — check that the route is one of the five
-  Authelia-protected routers (minio, api-gateway, grafana, openwebui, jaeger); Authelia
+  Authelia-protected routers (minio, api-gateway, grafana, openwebui, jaeger, client); Authelia
   itself is enabled and enforcing by default.
 
 ---
@@ -324,7 +324,7 @@ The items below are **not** done yet. They are the gap between this development 
 and a hardened one:
 
 - [ ] Complete DNS + real TLS for the deploy so Authelia SSO/MFA (already enabled and
-      enforcing forward-auth on 5 routers) works as full browser SSO.
+      enforcing forward-auth on 6 routers) works as full browser SSO.
 - [ ] Replace self-signed certs with real TLS (Let's Encrypt via Traefik or provided
       certs).
 - [ ] Configure real DNS for the public hostnames.

@@ -4,10 +4,10 @@
 
 **Platform Version:** 1.0.0
 **Last Updated:** 2026-08-08
-**Containers:** 35 defined (Authelia + docker-socket-proxy included — enabled). Two are
+**Containers:** 36 defined (Authelia + docker-socket-proxy included — enabled). Two are
 failover-mode sidecars (`ollama-router`, `tts-stt-router`) that stay inactive unless their
 respective `OLLAMA_FAILOVER_PRIMARY`/`TTS_STT_FAILOVER_PRIMARY` env var is set — the common
-default (internal mode, no failover) runs 33. `setup.sh install` seeds the
+default (internal mode, no failover) runs 34. `setup.sh install` seeds the
 **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag, and
 voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` to start
 every non-failover-gated service). `start` then honours the recorded bundle state
@@ -23,7 +23,7 @@ every non-failover-gated service). `start` then honours the recorded bundle stat
 - ⏸️ Role-based access control — NOT implemented. Only JWT authentication exists today.
 
 **Enabled:**
-- ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 5 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger).
+- ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 6 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger, client).
 
 > Five services ship without an active healthcheck: `otel-collector`, `redis-exporter`, and
 > `rabbitmq-exporter` because their images lack the tooling to run one (report "no-healthcheck",
@@ -53,7 +53,7 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │                        SECURITY / EDGE                          │
 │  ┌──────────────┐              ┌──────────────────────────────┐ │
 │  │   Traefik    │ (80/443)     │  Authelia (9091) — ENABLED   │ │
-│  │ Reverse Proxy│ v3.7.10      │  (forward-auth, 5 routers)   │ │
+│  │ Reverse Proxy│ v3.7.10      │  (forward-auth, 6 routers)   │ │
 │  └──────────────┘              └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                  │
@@ -98,8 +98,8 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │  InfluxDB :8086 · Telegraf · OTel Collector · 6 exporters      │
 └─────────────────────────────────────────────────────────────────┘
 
-Total: 35 services defined across core APIs, inference, storage, and observability
-(includes Authelia and docker-socket-proxy, both enabled); 33 run in the common default
+Total: 36 services defined across core APIs, inference, storage, and observability
+(includes Authelia and docker-socket-proxy, both enabled); 34 run in the common default
 (internal Ollama/TTS-STT, no failover) — see Current Status above.
 ```
 
@@ -200,7 +200,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 - **Databases**: PostgreSQL 18.4, Redis 8.10, Qdrant 1.19, Neo4j 2026.06 (community)
 - **Object store**: MinIO · **Message bus**: RabbitMQ 4.3 · **Schema registry**: Apicurio (SQL)
 - **LLM**: Ollama with local models
-- **Authentication**: JWT (bcrypt) at the gateway, plus Authelia SSO/2FA on 5 Traefik routers. No RBAC.
+- **Authentication**: JWT (bcrypt) at the gateway, plus Authelia SSO/2FA on 6 Traefik routers. No RBAC.
 
 ### Infrastructure
 - **Containers**: Docker + Docker Compose (`docker/docker-compose.yml`, hand-maintained)
@@ -240,7 +240,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
   node, cAdvisor, blackbox); Telegraf feeds InfluxDB for time-series data.
 - **Dashboards**: Grafana.
 - **Tracing**: Jaeger + an OpenTelemetry collector.
-- **Health checks**: `/health` endpoints on the core APIs; container-level healthchecks on 30/35
+- **Health checks**: `/health` endpoints on the core APIs; container-level healthchecks on 31/36
   services (5 without an active one — see Current Status above).
 
 ## Development Workflow

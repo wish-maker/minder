@@ -73,11 +73,11 @@ cp .env docker/.env
 docker compose --file docker/docker-compose.yml up -d
 ```
 
-Compose defines 35 services (33 in the common default); a default `setup.sh install` seeds the **standard** bundle
+Compose defines 36 services (34 in the common default); a default `setup.sh install` seeds the **standard** bundle
 profile (core + inference + rag + chat) — monitoring, graph-rag, and voice are opt-in
 (`install --profile full` starts every non-failover-gated service). The full set is grouped as:
 - Reverse Proxy (1): Traefik v3
-- Auth (1): Authelia SSO/2FA — enabled by default, enforcing forward-auth on 5 routers (minio, api-gateway, grafana, openwebui, jaeger)
+- Auth (1): Authelia SSO/2FA — enabled by default, enforcing forward-auth on 6 routers (minio, api-gateway, grafana, openwebui, jaeger, client)
 - Storage (7, internal-only): PostgreSQL, Redis, Qdrant, Neo4j, MinIO, RabbitMQ, Apicurio schema-registry
 - Inference (2): Ollama (internal-only), OpenWebUI (via Traefik)
 - Core APIs (8): API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management, TTS/STT, Graph-RAG
@@ -329,7 +329,7 @@ docker compose --file docker/docker-compose.yml build --no-cache <service>
 - Follow [Development Guide](../development/development.md) for development setup
 
 > Note on auth: the platform uses JWT-based authentication at the API Gateway.
-> Authelia SSO is **enabled and enforcing** forward-auth on 5 Traefik routers (minio,
+> Authelia SSO is **enabled and enforcing** forward-auth on 6 Traefik routers (minio,
 > api-gateway, grafana, openwebui, jaeger); completing DNS + real TLS for full browser
 > SSO is the remaining follow-up.
 

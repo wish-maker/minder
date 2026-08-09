@@ -173,6 +173,7 @@ SERVICE_PORTS = {
     "model-management": "8005/health",
     "tts-stt": "8006/health",
     "graph-rag": "8008/health",
+    "client": "8009/health",
     "prometheus": "9090/-/healthy",
     "grafana": "3000/api/health",
     "influxdb": "8086",
