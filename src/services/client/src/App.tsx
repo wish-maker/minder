@@ -9,11 +9,28 @@ import { RagPipelinesPage } from "./pages/RagPipelinesPage";
 export function App() {
   return (
     <AuthProvider>
-      <nav className="top-nav">
-        <Link to="/">Minder</Link>
-        <Link to="/plugin-config">Plugin Config</Link>
-        <Link to="/knowledge-bases">Knowledge Bases</Link>
-        <Link to="/rag-pipelines">RAG Pipelines</Link>
+      <nav className="mb-6 flex flex-wrap gap-x-5 gap-y-1 border-b border-gray-200 pb-3 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300">
+        <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/">
+          Minder
+        </Link>
+        <Link
+          className="hover:text-indigo-600 dark:hover:text-indigo-400"
+          to="/plugin-config"
+        >
+          Plugin Config
+        </Link>
+        <Link
+          className="hover:text-indigo-600 dark:hover:text-indigo-400"
+          to="/knowledge-bases"
+        >
+          Knowledge Bases
+        </Link>
+        <Link
+          className="hover:text-indigo-600 dark:hover:text-indigo-400"
+          to="/rag-pipelines"
+        >
+          RAG Pipelines
+        </Link>
       </nav>
       <Routes>
         <Route path="/" element={<LandingPage />} />

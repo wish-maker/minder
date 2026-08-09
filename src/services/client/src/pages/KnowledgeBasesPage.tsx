@@ -36,6 +36,18 @@ interface QueueItem {
   detail: string;
 }
 
+const inputClass =
+  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
+const primaryButtonClass =
+  "rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
+const secondaryButtonClass =
+  "rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800";
+const dangerButtonClass =
+  "rounded-md border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950";
+
+const statusClass = (isError: boolean) =>
+  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
+
 function UploadWidget({
   kb,
   token,
@@ -93,9 +105,12 @@ function UploadWidget({
   }
 
   return (
-    <div className="field">
-      <label>Upload documents (.pdf, .txt, .md)</label>
+    <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
+      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        Upload documents (.pdf, .txt, .md)
+      </label>
       <input
+        className="block text-sm text-gray-600 dark:text-gray-400"
         type="file"
         multiple
         accept=".pdf,.txt,.md"
@@ -104,7 +119,7 @@ function UploadWidget({
       />
       {queue.length > 0 && (
         <>
-          <ul>
+          <ul className="mt-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">
             {queue.map((item, idx) => (
               <li key={idx}>
                 {item.file.name} — {item.status}
@@ -112,12 +127,20 @@ function UploadWidget({
               </li>
             ))}
           </ul>
-          <button onClick={handleUploadAll} disabled={!token || uploading}>
+          <button
+            onClick={handleUploadAll}
+            disabled={!token || uploading}
+            className={`${secondaryButtonClass} mt-2`}
+          >
             {uploading ? "Uploading…" : "Upload all"}
           </button>
         </>
       )}
-      {!token && <p className="hint">Log in to upload documents.</p>}
+      {!token && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Log in to upload documents.
+        </p>
+      )}
     </div>
   );
 }
@@ -161,23 +184,39 @@ function DocumentsList({
   if (docs === null) return null;
 
   return (
-    <div className="field">
-      <label>Documents</label>
+    <div>
+      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        Documents
+      </label>
       {docs.length === 0 ? (
-        <p className="hint">No documents uploaded yet.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No documents uploaded yet — use the upload field below.
+        </p>
       ) : (
-        <ul>
+        <ul className="flex flex-col gap-1.5">
           {docs.map((d) => (
-            <li key={d.document_id}>
-              {d.filename} — {d.chunk_count} chunk{d.chunk_count === 1 ? "" : "s"}{" "}
-              <button onClick={() => handleDelete(d)} disabled={!token}>
-                Delete
+            <li
+              key={d.document_id}
+              className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-1.5 text-sm dark:bg-gray-800"
+            >
+              <span className="truncate">
+                📄 {d.filename} —{" "}
+                <span className="text-gray-500 dark:text-gray-400">
+                  {d.chunk_count} chunk{d.chunk_count === 1 ? "" : "s"}
+                </span>
+              </span>
+              <button
+                onClick={() => handleDelete(d)}
+                disabled={!token}
+                className={dangerButtonClass}
+              >
+                🗑 Delete
               </button>
             </li>
           ))}
         </ul>
       )}
-      <div className="status">{status}</div>
+      <div className={statusClass(false)}>{status}</div>
     </div>
   );
 }
@@ -218,25 +257,46 @@ function KnowledgeBaseCard({
   }
 
   return (
-    <section className="plugin-card">
-      <h2>{kb.name}</h2>
-      {kb.description && <p className="hint">{kb.description}</p>}
-      <p className="hint">
-        {kb.document_count} document{kb.document_count === 1 ? "" : "s"},{" "}
-        {kb.vector_count} vectors · embedding: {kb.embedding_model} · llm: {kb.llm_model}
-      </p>
-      <DocumentsList
-        kbId={kb.id}
-        token={token}
-        refreshToken={docsVersion}
-        onDeleted={refreshCounts}
-      />
-      <UploadWidget kb={kb} token={token} onUploaded={refreshCounts} />
-      <button className="danger" onClick={handleDelete} disabled={!token}>
-        Delete
-      </button>
-      {!token && <span className="hint"> Log in to delete.</span>}
-      <div className="status">{status}</div>
+    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+            📚 {kb.name}
+          </h2>
+          {kb.description && (
+            <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
+              {kb.description}
+            </p>
+          )}
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {kb.document_count} document{kb.document_count === 1 ? "" : "s"} ·{" "}
+            {kb.vector_count} vectors · embedding: {kb.embedding_model} · llm:{" "}
+            {kb.llm_model}
+          </p>
+        </div>
+        <button
+          className={dangerButtonClass}
+          onClick={handleDelete}
+          disabled={!token}
+        >
+          🗑 Delete KB
+        </button>
+      </div>
+      {!token && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Log in to delete this knowledge base.
+        </p>
+      )}
+      <div className="mt-3 flex flex-col gap-3">
+        <DocumentsList
+          kbId={kb.id}
+          token={token}
+          refreshToken={docsVersion}
+          onDeleted={refreshCounts}
+        />
+        <UploadWidget kb={kb} token={token} onUploaded={refreshCounts} />
+      </div>
+      <div className={statusClass(false)}>{status}</div>
     </section>
   );
 }
@@ -291,62 +351,92 @@ function CreateKbForm({
   }
 
   return (
-    <section className="plugin-card">
-      <h2>Create a knowledge base</h2>
-      <form onSubmit={handleSubmit}>
-        <div className="field">
-          <label>Name</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>Description</label>
+    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+      <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">
+        ➕ Create a knowledge base
+      </h2>
+      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Name
+          </label>
           <input
+            className={inputClass}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Description
+          </label>
+          <input
+            className={inputClass}
             type="text"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>Embedding model</label>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Embedding model
+          </label>
           <input
+            className={inputClass}
             type="text"
             placeholder="nomic-embed-text"
             value={embeddingModel}
             onChange={(e) => setEmbeddingModel(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>LLM model</label>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            LLM model
+          </label>
           <input
+            className={inputClass}
             type="text"
             placeholder="llama3.2"
             value={llmModel}
             onChange={(e) => setLlmModel(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>Chunk size</label>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Chunk size
+          </label>
           <input
+            className={inputClass}
             type="number"
             placeholder="512"
             value={chunkSize}
             onChange={(e) => setChunkSize(e.target.value)}
           />
         </div>
-        <div className="field">
-          <label>Chunk overlap</label>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Chunk overlap
+          </label>
           <input
+            className={inputClass}
             type="number"
             placeholder="50"
             value={chunkOverlap}
             onChange={(e) => setChunkOverlap(e.target.value)}
           />
         </div>
-        <button type="submit" disabled={!token}>
-          Create
-        </button>
-        {!token && <span className="hint"> Log in to create a knowledge base.</span>}
-        <div className="status">{status}</div>
+        <div className="flex items-center gap-3 sm:col-span-2">
+          <button type="submit" disabled={!token} className={primaryButtonClass}>
+            Create
+          </button>
+          {!token && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Log in to create a knowledge base.
+            </span>
+          )}
+          <span className="text-sm text-gray-500 dark:text-gray-400">{status}</span>
+        </div>
       </form>
     </section>
   );
@@ -380,19 +470,24 @@ export function KnowledgeBasesPage() {
 
   return (
     <>
-      <h1>Knowledge Bases</h1>
-      <p className="hint">
-        Create knowledge bases and upload documents for Minder's own RAG
-        pipeline. Browsing is open; log in to create, upload, or delete.
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Knowledge Bases
+      </h1>
+      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+        Create knowledge bases and upload documents — this is the data your{" "}
+        <em>RAG Pipelines</em> actually search over. Browsing is open for
+        everyone; log in to create, upload, or delete.
       </p>
       <LoginPanel onStatus={setStatusMsg} />
-      <div className={`status${isError ? " error" : ""}`}>{status}</div>
+      <div className={statusClass(isError)}>{status}</div>
       <CreateKbForm
         token={token}
         onCreated={(kb) => setKbs((prev) => [...(prev ?? []), kb])}
       />
       {kbs !== null && kbs.length === 0 && (
-        <p>No knowledge bases yet — create one above.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No knowledge bases yet — create one above to get started.
+        </p>
       )}
       {kbs?.map((kb) => (
         <KnowledgeBaseCard
