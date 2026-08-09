@@ -396,6 +396,14 @@ def _group_documents(records: List) -> List[DocumentInfo]:
     response_model=List[DocumentInfo],
     tags=["Knowledge Base"],
 )
+@router.get(
+    "/knowledge-bases/{kb_id}/documents",
+    response_model=List[DocumentInfo],
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias -- also what the gateway proxy actually calls
+# (it strips "v1/rag/" from "/v1/rag/knowledge-bases/{id}/documents" and forwards
+# the remainder, landing on this unversioned path, not /v1/...) (#144/#147)
 async def list_documents(kb_id: str):
     """List the documents uploaded into a knowledge base, one entry per
     upload (not per chunk) (#427). 404 if the KB is unknown."""
@@ -424,6 +432,11 @@ async def list_documents(kb_id: str):
     "/v1/knowledge-bases/{kb_id}/documents/{document_id}",
     tags=["Knowledge Base"],
 )
+@router.delete(
+    "/knowledge-bases/{kb_id}/documents/{document_id}",
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias -- see list_documents' comment above
 async def delete_document(
     kb_id: str,
     document_id: str,

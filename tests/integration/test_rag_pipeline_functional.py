@@ -248,3 +248,34 @@ def test_delete_document_unknown_kb_404s(auth_token):
         timeout=10.0,
     )
     assert r.status_code == 404
+
+
+def test_documents_endpoints_reachable_through_gateway(doc_kb_id, auth_token):
+    # Regression test: api-gateway's /v1/rag/{path:path} proxy strips "v1/rag/" and
+    # forwards the remainder VERBATIM (routes/proxy.py) -- it lands on the
+    # UNVERSIONED path here, not /v1/..., so a route missing that deprecated alias
+    # 404s through the gateway even though the direct /v1/... path (every other
+    # test in this file) works fine. This exact bug shipped once (#427) because
+    # nothing here had ever gone through the gateway before.
+    doc = io.BytesIO(b"Gateway-path regression test content.")
+    up = httpx.post(
+        f"{GATEWAY}/v1/rag/knowledge-bases/{doc_kb_id}/upload",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        files={"file": ("gateway-test.txt", doc, "text/plain")},
+        timeout=60.0,
+    )
+    assert up.status_code == 200, up.text
+    document_id = up.json()["document_id"]
+
+    listing = httpx.get(
+        f"{GATEWAY}/v1/rag/knowledge-bases/{doc_kb_id}/documents", timeout=10.0
+    )
+    assert listing.status_code == 200, listing.text
+    assert any(d["filename"] == "gateway-test.txt" for d in listing.json())
+
+    d = httpx.delete(
+        f"{GATEWAY}/v1/rag/knowledge-bases/{doc_kb_id}/documents/{document_id}",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        timeout=20.0,
+    )
+    assert d.status_code == 200, d.text
