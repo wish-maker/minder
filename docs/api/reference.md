@@ -93,6 +93,8 @@ Forwarded over the internal Docker network via httpx to the backing service.
 |--------|------|--------|
 | GET | `/v1/plugins` | plugin-registry (list) |
 | ANY | `/v1/plugins/{path:path}` | plugin-registry |
+| GET | `/v1/bundles` | plugin-registry (list, mirrors the `/v1/plugins` GET/wildcard split) |
+| GET/POST | `/v1/bundles/{path:path}` | plugin-registry's bundle control-plane (enable/disable/reconcile) — writes require JWT |
 | ANY | `/v1/rag/{path:path}` | rag-pipeline (prefix maps to the service root) |
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
@@ -221,6 +223,12 @@ visually distinct rather than merged into one list.
 | POST | `/v1/bundles/{name}/enable` | Enable a bundle (JWT-gated). Persists intent to `bundles.state.json` (same file the host CLI writes) and starts already-materialised claimed containers via the least-privilege docker-socket-proxy — it cannot *create* new containers, so a never-materialised service comes back as `pending_create` until the next host `setup.sh start`/`restart` converge |
 | POST | `/v1/bundles/{name}/disable` | Disable a bundle (JWT-gated); stops its claimed containers via the docker-socket-proxy, same persistence model as enable |
 | POST | `/v1/bundles/reconcile` | Re-apply the persisted enable-state to running containers (JWT-gated) — start/stop drift correction without changing intent |
+
+The `client` service has a `/platform/bundles` page (the "Platform" nav
+section's 2nd tab, alongside Models and Status) covering the four endpoints
+above — per-bundle enable/disable toggles (disabled for `core`, which 409s), a
+per-service active/claimant list, an orphaned-services callout, and a
+page-level Reconcile button.
 
 ### Containers
 
