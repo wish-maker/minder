@@ -18,6 +18,12 @@ checked as a literal `argv[0]` in its own branch, entirely separate from the
 scripts/dev/ isn't a package (`remote_ssh.py` does a bare `import remote_lib`,
 expecting `scripts/dev/` on sys.path) -- loaded by path + sys.path insert, same
 convention as this repo's other hyphenated/non-package directories.
+
+`remote_lib` imports `paramiko` at module level. It's a personal dev-workflow
+dependency (SSH to hantal/pi from scripts/dev/), not something any shipped
+service needs, so it's deliberately not in src/requirements/*.txt -- CI's Unit
+Tests job doesn't have it installed. Skip cleanly there instead of erroring;
+these tests still run for real wherever paramiko is available.
 """
 
 import importlib
@@ -25,6 +31,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+pytest.importorskip("paramiko")
 
 _DEV = Path(__file__).resolve().parents[2] / "scripts" / "dev"
 
