@@ -17,6 +17,11 @@ async def install_plugin(
 
     The user identity comes from the JWT (`sub`) — it used to be a redundant `user_id`
     in the request body/query that duplicated the authenticated principal (#147/C7).
+
+    plugin_id is str()-cast before InstallationResponse construction: asyncpg returns
+    UUID columns as uuid.UUID objects, and InstallationResponse.plugin_id is a `str`
+    field -- pydantic v2 does not coerce UUID -> str, so this 500'd on response
+    serialization for every install until fixed (#402, found live on hantal).
     """
     user_id = current_user["sub"]
     pool = await get_pool()
@@ -54,7 +59,7 @@ async def install_plugin(
             return InstallationResponse(
                 id=str(existing["id"]),
                 user_id=existing["user_id"],
-                plugin_id=existing["plugin_id"],
+                plugin_id=str(existing["plugin_id"]),
                 version=existing["version"],
                 status="installed",
                 enabled=True,
@@ -83,7 +88,7 @@ async def install_plugin(
         return InstallationResponse(
             id=str(row["id"]),
             user_id=row["user_id"],
-            plugin_id=row["plugin_id"],
+            plugin_id=str(row["plugin_id"]),
             version=row["version"],
             status=row["status"],
             enabled=row["enabled"],
