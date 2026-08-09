@@ -96,6 +96,30 @@ def test_nonzero_returncode_is_a_failure(monkeypatch):
     assert logged_errors  # a clear error was surfaced, not swallowed
 
 
+def test_rolling_restart_includes_client(monkeypatch):
+    """The client SPA's image gets rebuilt by `docker compose build` (it's a
+    regular service in the compose file) but was never in the rolling-restart
+    loop -- so a rebuilt client image never actually reached the running
+    container until something else (a full stop/start) recreated it. Confirmed
+    live on hantal: the served bundle was a stale, smaller build than the repo's
+    current HEAD despite `update` reporting success repeatedly."""
+    monkeypatch.setattr(update.versions, "pull_all_images", lambda: None)
+    monkeypatch.setattr(update, "_rebuild", lambda: True)
+    monkeypatch.setattr(update.time, "sleep", lambda *a: None)
+    monkeypatch.setattr(update.docker, "container_running", lambda svc: True)
+    restarted = []
+    monkeypatch.setattr(
+        update.docker,
+        "compose",
+        lambda *args: restarted.append(args[-1]) if args and args[-1] else None,
+    )
+
+    rc = update.run()
+
+    assert rc == 0
+    assert "client" in restarted
+
+
 def test_run_aborts_before_rolling_restart_on_rebuild_failure(monkeypatch):
     """#346: run() must not reach 'Performing rolling restart' (and print
     'Update complete') when the rebuild failed."""
