@@ -181,6 +181,8 @@ def print_success_banner() -> None:
     e(f"   {d}Plugin Config UI    →  http://localhost:8000/plugin-config{nc}")
     e(f"   {d}(edit news feeds, weather locations, etc. -- register/log in via{nc}")
     e(f"   {d}the page itself; reachable remotely too, see remote-access.md){nc}")
+    e(f"   {d}Model Management UI →  http://localhost:8000/model-management{nc}")
+    e(f"   {d}(list/pull/delete/test-prompt local Ollama models -- same login){nc}")
 
     # Only advertise a bundle's URLs when it is enabled — a standard install has
     # monitoring off, so showing Grafana/Prometheus would mislead. Everything

@@ -85,6 +85,13 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
 
+A browser UI for the model-management endpoints above is served at
+`GET /model-management` on the API Gateway itself (e.g.
+`http://localhost:8000/model-management`), same pattern as `/plugin-config`
+below — list/pull/delete/test-prompt local Ollama models instead of
+hand-crafting these requests (#421). Model constraints/metrics/fine-tuning
+are not implemented yet (#145) and have no UI for the same reason.
+
 ### AI / OpenWebUI integration (`/v1/ai`)
 
 | Method | Path | Description |
