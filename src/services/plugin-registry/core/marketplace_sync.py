@@ -191,6 +191,40 @@ async def sync_plugin_ai_tools(
         logger.error(f"Error syncing AI tools for {plugin_name}: {e}")
 
 
+async def _reconcile_marketplace_plugin(
+    plugin_id: str, plugin_name: str, display_name: str, description: str, author: str
+) -> None:
+    """Push the plugin's current display_name/description/author onto an
+    already-existing marketplace row.
+
+    Found live: 4 first-party plugins were created under the old sync code
+    (before description/author were threaded through at all) and stayed
+    stuck with empty description / author "Unknown" forever, since
+    get_or_create_marketplace_plugin's "found existing" branch returned the
+    id without ever writing the caller's (correct) metadata back (#402
+    point 4). Best-effort -- a failed PUT here shouldn't block the AI-tool
+    sync that follows, so log and move on rather than raising.
+    """
+    try:
+        response = await _mkt_request(
+            "PUT",
+            f"{MARKETPLACE_URL}/v1/marketplace/plugins/{plugin_id}",
+            json={
+                "display_name": display_name,
+                "description": description,
+                "author": author,
+            },
+            headers=_service_headers(),
+        )
+        if response.status_code != 200:
+            logger.warning(
+                f"Failed to reconcile marketplace metadata for {plugin_name}: "
+                f"{response.status_code}"
+            )
+    except Exception as e:
+        logger.warning(f"Error reconciling marketplace metadata for {plugin_name}: {e}")
+
+
 async def get_or_create_marketplace_plugin(
     plugin_name: str, manifest: dict
 ) -> Optional[str]:
@@ -205,6 +239,13 @@ async def get_or_create_marketplace_plugin(
         Plugin UUID or None if failed
     """
     try:
+        # Create display_name from description (first sentence, max 200 chars).
+        # Computed once so both the found-existing and create branches use the
+        # same current metadata instead of only the create path ever seeing it.
+        description = manifest.get("description", plugin_name)
+        display_name = description.split(".")[0][:200] if description else plugin_name
+        author = manifest.get("author", "Unknown")
+
         # Search for an existing plugin by name
         search_response = await _mkt_request(
             "GET",
@@ -220,21 +261,21 @@ async def get_or_create_marketplace_plugin(
             for plugin in plugins:
                 if plugin.get("name") == plugin_name:
                     logger.debug(f"Found existing marketplace plugin: {plugin_name}")
-                    return plugin.get("id")
+                    plugin_id = plugin.get("id")
+                    await _reconcile_marketplace_plugin(
+                        plugin_id, plugin_name, display_name, description, author
+                    )
+                    return plugin_id
 
         # Plugin doesn't exist, create it
         logger.info(f"Creating marketplace entry for plugin: {plugin_name}")
-
-        # Create display_name from description (first sentence, max 200 chars)
-        description = manifest.get("description", plugin_name)
-        display_name = description.split(".")[0][:200] if description else plugin_name
 
         # Build plugin data - only include repository_url if it's a valid URL
         plugin_data = {
             "name": plugin_name,
             "display_name": display_name,
             "description": description,
-            "author": manifest.get("author", "Unknown"),
+            "author": author,
             "pricing_model": "free",
             "base_tier": "community",
             "status": "approved",
