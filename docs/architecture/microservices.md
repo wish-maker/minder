@@ -183,12 +183,12 @@ The live query endpoint selects the RAG method via the `method` field: `standard
 #### Graph RAG (Port 8008)
 **Purpose**: Entity extraction and Neo4j knowledge-graph construction/retrieval
 
-**Endpoints**:
-- `POST /extract` — spaCy NER entity extraction
-- `POST /construct-graph` — build the knowledge graph in Neo4j
-- `POST /retrieve` — graph retrieval
-- `POST /entity-context` — entity context lookup
-- `DELETE /graph/document/{document_id}` — delete a document's graph (relationships + orphaned entities)
+**Endpoints** (each also has a legacy unversioned alias, e.g. `/extract` alongside `/v1/extract`):
+- `POST /v1/extract` — spaCy NER entity extraction
+- `POST /v1/construct-graph` — build the knowledge graph in Neo4j
+- `POST /v1/retrieve` — graph retrieval
+- `POST /v1/entity-context` — entity context lookup
+- `DELETE /v1/graph/document/{document_id}` — delete a document's graph (relationships + orphaned entities)
 
 ### Web UI
 
@@ -196,8 +196,12 @@ The live query endpoint selects the RAG method via the `method` field: `standard
 **Purpose**: Web-based chat interface (Ollama frontend)
 
 **Features**: chat, RAG integration, tool calling, model selection. Depends on postgres,
-rag-pipeline, and optionally ollama. This is the only user-facing web app; there is no custom
-frontend framework.
+rag-pipeline, and optionally ollama.
+
+#### client (host port 8009, `src/services/client/`)
+**Purpose**: Admin/control-plane frontend — everything OpenWebUI's chat UI
+doesn't cover. React/Vite SPA, not a FastAPI service (no `/docs`/OpenAPI
+schema). See `docs/api/reference.md` for the exact page-to-endpoint mapping.
 
 ### Monitoring
 

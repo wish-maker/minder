@@ -73,10 +73,10 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
                                  │
 ┌─────────────────────────────────────────────────────────────────┐
 │              INFERENCE + WEB UI (internal network)              │
-│  ┌──────────┐  ┌────────────────────────────────────────────┐  │
-│  │  Ollama  │  │ OpenWebUI (chat UI, reached via Traefik)   │  │
-│  │  :11434  │  │ (there is NO custom frontend app)          │  │
-│  └──────────┘  └────────────────────────────────────────────┘  │
+│  ┌──────────┐ ┌────────────────────┐ ┌─────────────────────┐    │
+│  │  Ollama  │ │OpenWebUI (chat UI) │ │ client :8009 (admin)│    │
+│  │  :11434  │ │reached via Traefik │ │ React/Vite, own repo│    │
+│  └──────────┘ └────────────────────┘ └─────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
                                  │
 ┌─────────────────────────────────────────────────────────────────┐
@@ -167,8 +167,16 @@ All eight core APIs are FastAPI services with real implementations.
   full internal/external/failover breakdown.
 
 #### OpenWebUI (internal 8080, reached via Traefik)
-- Web-based chat UI (the platform's only user-facing web app). Depends on postgres, rag-pipeline,
-  and optionally ollama. There is **no** custom Next.js/React frontend.
+- Web-based chat UI. Depends on postgres, rag-pipeline, and optionally ollama.
+
+#### client (host 8009, `src/services/client/`)
+- Bespoke React/Vite admin frontend — the control-plane for everything
+  OpenWebUI's chat UI doesn't cover: RAG (knowledge bases, pipelines, a
+  spaCy/Neo4j knowledge-graph explorer distinct from vector search), plugins
+  (marketplace, per-plugin config, AI-tool catalog), and platform ops (Ollama
+  model lifecycle, feature-bundle toggles, fleet health/logs, a TTS/STT
+  tester). A static SPA, not a FastAPI service — no `/docs`/OpenAPI schema of
+  its own. See `docs/api/reference.md` for the exact page-to-endpoint mapping.
 
 ## Data Flow
 
@@ -209,7 +217,8 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 - **CI/CD**: GitHub Actions
 
 ### Web UI
-- **OpenWebUI** (Ollama chat frontend). There is no bespoke frontend framework in this repo.
+- **OpenWebUI** (Ollama chat frontend) for chat.
+- **client** (React 18 + Vite + Tailwind CSS v4, `react-router-dom`) for everything else — the platform's admin/control-plane surface.
 
 ## Security Architecture
 

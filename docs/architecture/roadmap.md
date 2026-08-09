@@ -37,7 +37,12 @@ authoritative service breakdown.
 **Storage (internal-only):** PostgreSQL 18.4, Redis 8.10, Qdrant 1.19, Neo4j 2026.06, MinIO,
 RabbitMQ 4.3, Apicurio schema registry.
 
-**Inference & UI:** Ollama (profile-gated), OpenWebUI (chat frontend).
+**Inference & UI:** Ollama (profile-gated), OpenWebUI (chat frontend), and
+`client` (port 8009, `src/services/client/`) — a bespoke React/Vite admin
+frontend covering RAG (knowledge bases, pipelines, knowledge-graph explorer),
+plugins (marketplace, config, AI tools), and platform ops (models, bundles,
+health/logs, voice). Chat itself still lives in OpenWebUI; `client` is the
+control-plane for everything else.
 
 **Observability:** Prometheus, Grafana, InfluxDB, Telegraf, Alertmanager, Jaeger, OpenTelemetry
 collector, plus six exporters.
@@ -49,7 +54,6 @@ jaeger). Full browser SSO still needs real DNS + TLS on the deploy.
 **Not present / not implemented (do not expect these):**
 - Model fine-tuning service — **removed** (do not re-add)
 - Standalone `ai-service` — **removed**
-- Custom frontend app (Next.js/React) — there is none; the UI is OpenWebUI
 - RBAC — only JWT auth exists
 - Default domain plugins (crypto/weather/network/news/tefas) — SHIPPED as first-party module plugins in `src/plugins/`, on the central plugin-config API (#34 done)
 
