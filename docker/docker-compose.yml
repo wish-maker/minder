@@ -602,7 +602,7 @@ services:
       context: ../
       dockerfile: src/services/admin-ui/Dockerfile
       args:
-        VITE_API_BASE_URL: ${ADMIN_UI_API_BASE_URL:-https://api.minder.local}
+        VITE_API_BASE_URL: ${ADMIN_UI_API_BASE_URL:-http://localhost:8000}
     image: minder/admin-ui:1.0.0
     container_name: minder-admin-ui
     restart: on-failure

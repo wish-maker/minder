@@ -13,7 +13,16 @@ COPY src/services/admin-ui/ .
 # Baked in at BUILD time (Vite convention) -- changing this requires a
 # rebuild, not just a container restart. See docker-compose.yml's build.args
 # and .env.example's ADMIN_UI_API_BASE_URL.
-ARG VITE_API_BASE_URL=https://api.minder.local
+#
+# Defaults to the gateway's own loopback dev port, NOT the Traefik hostname:
+# confirmed live that api.minder.local isn't resolvable without a manual
+# /etc/hosts entry (same as every other *.minder.local route -- "no real DNS
+# by default"). localhost:8000 is what a fresh clone can already reach with
+# zero setup (api-gateway's own loopback port), matching the zero-config
+# property the old same-origin pages had. Override for a real deployment
+# where admin.minder.local is set up (which already implies api.minder.local
+# is too).
+ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 RUN npm run build
