@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import {
+  destructiveButtonClass,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  statusClass,
+} from "../lib/ui";
 
 interface KnowledgeBase {
   id: string;
@@ -35,18 +43,6 @@ interface QueueItem {
   status: "queued" | "uploading" | "done" | "error";
   detail: string;
 }
-
-const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
-const primaryButtonClass =
-  "rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800";
-const dangerButtonClass =
-  "rounded-md border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950";
-
-const statusClass = (isError: boolean) =>
-  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
 
 function UploadWidget({
   kb,
@@ -110,7 +106,7 @@ function UploadWidget({
         Upload documents (.pdf, .txt, .md)
       </label>
       <input
-        className="block text-sm text-gray-600 dark:text-gray-400"
+        className="block text-sm text-gray-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-400"
         type="file"
         multiple
         accept=".pdf,.txt,.md"
@@ -150,11 +146,13 @@ function DocumentsList({
   token,
   refreshToken,
   onDeleted,
+  confirm,
 }: {
   kbId: string;
   token: string;
   refreshToken: number;
   onDeleted: () => void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [docs, setDocs] = useState<KbDocument[] | null>(null);
   const [status, setStatus] = useState("");
@@ -166,7 +164,12 @@ function DocumentsList({
   }, [kbId, refreshToken]);
 
   async function handleDelete(doc: KbDocument) {
-    if (!confirm(`Delete document "${doc.filename}"?`)) return;
+    const ok = await confirm({
+      title: "Delete document?",
+      message: `This permanently removes "${doc.filename}" and its ${doc.chunk_count} chunk${doc.chunk_count === 1 ? "" : "s"} from this knowledge base.`,
+      danger: true,
+    });
+    if (!ok) return;
     setStatus("Deleting…");
     try {
       await apiFetch(`/v1/rag/knowledge-bases/${kbId}/documents/${doc.document_id}`, {
@@ -208,7 +211,7 @@ function DocumentsList({
               <button
                 onClick={() => handleDelete(d)}
                 disabled={!token}
-                className={dangerButtonClass}
+                className={destructiveButtonClass}
               >
                 🗑 Delete
               </button>
@@ -226,17 +229,24 @@ function KnowledgeBaseCard({
   token,
   onDeleted,
   onRefresh,
+  confirm,
 }: {
   kb: KnowledgeBase;
   token: string;
   onDeleted: (id: string) => void;
   onRefresh: (kb: KnowledgeBase) => void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [status, setStatus] = useState("");
   const [docsVersion, setDocsVersion] = useState(0);
 
   async function handleDelete() {
-    if (!confirm(`Delete knowledge base "${kb.name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title: "Delete knowledge base?",
+      message: `This permanently deletes "${kb.name}" and all ${kb.document_count} of its documents. This cannot be undone.`,
+      danger: true,
+    });
+    if (!ok) return;
     setStatus("Deleting…");
     try {
       await apiFetch(`/v1/rag/knowledge-bases/${kb.id}`, { method: "DELETE", token });
@@ -275,7 +285,7 @@ function KnowledgeBaseCard({
           </p>
         </div>
         <button
-          className={dangerButtonClass}
+          className={destructiveButtonClass}
           onClick={handleDelete}
           disabled={!token}
         >
@@ -293,6 +303,7 @@ function KnowledgeBaseCard({
           token={token}
           refreshToken={docsVersion}
           onDeleted={refreshCounts}
+          confirm={confirm}
         />
         <UploadWidget kb={kb} token={token} onUploaded={refreshCounts} />
       </div>
@@ -355,88 +366,93 @@ function CreateKbForm({
       <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">
         ➕ Create a knowledge base
       </h2>
-      <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Name
-          </label>
-          <input
-            className={inputClass}
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Description
-          </label>
-          <input
-            className={inputClass}
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Embedding model
-          </label>
-          <input
-            className={inputClass}
-            type="text"
-            placeholder="nomic-embed-text"
-            value={embeddingModel}
-            onChange={(e) => setEmbeddingModel(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            LLM model
-          </label>
-          <input
-            className={inputClass}
-            type="text"
-            placeholder="llama3.2"
-            value={llmModel}
-            onChange={(e) => setLlmModel(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Chunk size
-          </label>
-          <input
-            className={inputClass}
-            type="number"
-            placeholder="512"
-            value={chunkSize}
-            onChange={(e) => setChunkSize(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Chunk overlap
-          </label>
-          <input
-            className={inputClass}
-            type="number"
-            placeholder="50"
-            value={chunkOverlap}
-            onChange={(e) => setChunkOverlap(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center gap-3 sm:col-span-2">
-          <button type="submit" disabled={!token} className={primaryButtonClass}>
-            Create
-          </button>
-          {!token && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              Log in to create a knowledge base.
-            </span>
-          )}
-          <span className="text-sm text-gray-500 dark:text-gray-400">{status}</span>
-        </div>
+      <form onSubmit={handleSubmit}>
+        <fieldset
+          disabled={!token}
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        >
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Name
+            </label>
+            <input
+              className={inputClass}
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Description
+            </label>
+            <input
+              className={inputClass}
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Embedding model
+            </label>
+            <input
+              className={inputClass}
+              type="text"
+              placeholder="nomic-embed-text"
+              value={embeddingModel}
+              onChange={(e) => setEmbeddingModel(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              LLM model
+            </label>
+            <input
+              className={inputClass}
+              type="text"
+              placeholder="llama3.2"
+              value={llmModel}
+              onChange={(e) => setLlmModel(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Chunk size
+            </label>
+            <input
+              className={inputClass}
+              type="number"
+              placeholder="512"
+              value={chunkSize}
+              onChange={(e) => setChunkSize(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Chunk overlap
+            </label>
+            <input
+              className={inputClass}
+              type="number"
+              placeholder="50"
+              value={chunkOverlap}
+              onChange={(e) => setChunkOverlap(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <button type="submit" disabled={!token} className={primaryButtonClass}>
+              Create
+            </button>
+            {!token && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                Log in to create a knowledge base.
+              </span>
+            )}
+            <span className="text-sm text-gray-500 dark:text-gray-400">{status}</span>
+          </div>
+        </fieldset>
       </form>
     </section>
   );
@@ -444,6 +460,7 @@ function CreateKbForm({
 
 export function KnowledgeBasesPage() {
   const { token } = useAuth();
+  const { confirm, dialog } = useConfirm();
   const [kbs, setKbs] = useState<KnowledgeBase[] | null>(null);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
@@ -470,6 +487,7 @@ export function KnowledgeBasesPage() {
 
   return (
     <>
+      {dialog}
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Create knowledge bases and upload documents — this is the data your{" "}
         <em>RAG Pipelines</em> actually search over. Browsing is open for
@@ -495,6 +513,7 @@ export function KnowledgeBasesPage() {
           onRefresh={(fresh) =>
             setKbs((prev) => (prev ?? []).map((k) => (k.id === fresh.id ? fresh : k)))
           }
+          confirm={confirm}
         />
       ))}
     </>

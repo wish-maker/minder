@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { useDebouncedValue } from "../lib/useDebouncedValue";
+import {
+  badgeClass,
+  destructiveButtonClass,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  statusClass,
+} from "../lib/ui";
 
 interface Plugin {
   id: string;
@@ -77,19 +87,6 @@ interface Recommendation {
   score: number;
 }
 
-const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
-const primaryButtonClass =
-  "rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800";
-const dangerButtonClass =
-  "rounded-md border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950";
-const statusClass = (isError: boolean) =>
-  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
-const badgeClass =
-  "inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300";
-
 function PricingBadge({ plugin }: { plugin: Plugin }) {
   return (
     <span className={badgeClass}>
@@ -162,14 +159,16 @@ function PluginCard({
   onInstalled,
   onUninstalled,
   onToggleEnabled,
+  confirm,
 }: {
   plugin: Plugin;
   installation: Installation | undefined;
   token: string;
   isAuthenticated: boolean;
-  onInstalled: (plugin: Plugin) => void;
+  onInstalled: () => void;
   onUninstalled: (pluginId: string) => void;
   onToggleEnabled: (pluginId: string, enabled: boolean) => void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -182,7 +181,7 @@ function PluginCard({
         method: "POST",
         token,
       });
-      onInstalled(plugin);
+      onInstalled();
       setStatus("");
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
@@ -191,7 +190,12 @@ function PluginCard({
   }
 
   async function handleUninstall() {
-    if (!confirm(`Uninstall "${plugin.display_name}"?`)) return;
+    const ok = await confirm({
+      title: "Uninstall plugin?",
+      message: `This removes "${plugin.display_name}" and disables anything it was doing (data already collected is kept).`,
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     setStatus("Uninstalling…");
     try {
@@ -275,7 +279,7 @@ function PluginCard({
               <button
                 onClick={handleUninstall}
                 disabled={busy}
-                className={dangerButtonClass}
+                className={destructiveButtonClass}
               >
                 🗑 Uninstall
               </button>
@@ -321,16 +325,23 @@ function InstalledPluginRow({
   token,
   onUninstalled,
   onToggleEnabled,
+  confirm,
 }: {
   installation: Installation;
   token: string;
   onUninstalled: (pluginId: string) => void;
   onToggleEnabled: (pluginId: string, enabled: boolean) => void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [status, setStatus] = useState("");
 
   async function handleUninstall() {
-    if (!confirm(`Uninstall "${installation.display_name}"?`)) return;
+    const ok = await confirm({
+      title: "Uninstall plugin?",
+      message: `This removes "${installation.display_name}" and disables anything it was doing (data already collected is kept).`,
+      danger: true,
+    });
+    if (!ok) return;
     setStatus("Uninstalling…");
     try {
       await apiFetch(`/v1/marketplace/plugins/${installation.plugin_id}/uninstall`, {
@@ -371,7 +382,7 @@ function InstalledPluginRow({
         <button onClick={handleToggle} className={secondaryButtonClass}>
           {installation.enabled ? "Disable" : "Enable"}
         </button>
-        <button onClick={handleUninstall} className={dangerButtonClass}>
+        <button onClick={handleUninstall} className={destructiveButtonClass}>
           🗑 Uninstall
         </button>
       </span>
@@ -381,10 +392,12 @@ function InstalledPluginRow({
 
 export function MarketplacePage() {
   const { token, isAuthenticated } = useAuth();
+  const { confirm, dialog } = useConfirm();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
-  const [query, setQuery] = useState("");
+  const [queryInput, setQueryInput] = useState("");
+  const query = useDebouncedValue(queryInput, 300);
   const [myInstallations, setMyInstallations] = useState<Installation[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [status, setStatus] = useState("");
@@ -458,29 +471,6 @@ export function MarketplacePage() {
     return myInstallations.find((i) => i.plugin_id === pluginId);
   }
 
-  function handleInstalled(plugin: Plugin) {
-    setMyInstallations((prev) => [
-      ...prev,
-      {
-        installation_id: `pending-${plugin.id}`,
-        plugin_id: plugin.id,
-        version: plugin.current_version,
-        status: "installed",
-        enabled: true,
-        installed_at: new Date().toISOString(),
-        last_updated_at: new Date().toISOString(),
-        name: plugin.name,
-        display_name: plugin.display_name,
-        description: plugin.description,
-        current_version: plugin.current_version,
-        pricing_model: plugin.pricing_model,
-        base_tier: plugin.base_tier,
-        category_id: plugin.category_id,
-        author: plugin.author,
-      },
-    ]);
-  }
-
   function handleUninstalled(pluginId: string) {
     setMyInstallations((prev) => prev.filter((i) => i.plugin_id !== pluginId));
   }
@@ -493,6 +483,7 @@ export function MarketplacePage() {
 
   return (
     <>
+      {dialog}
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Browse and install Minder plugins. Browsing is open for everyone; log
         in to install, enable, disable, or uninstall.
@@ -513,6 +504,7 @@ export function MarketplacePage() {
                 token={token}
                 onUninstalled={handleUninstalled}
                 onToggleEnabled={handleToggleEnabled}
+                confirm={confirm}
               />
             ))}
           </ul>
@@ -525,7 +517,7 @@ export function MarketplacePage() {
         </section>
       )}
 
-      <SearchAndFilters query={query} onQueryChange={setQuery} />
+      <SearchAndFilters query={queryInput} onQueryChange={setQueryInput} />
 
       {plugins.length === 0 && (
         <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -541,9 +533,10 @@ export function MarketplacePage() {
           installation={installationFor(plugin.id)}
           token={token}
           isAuthenticated={isAuthenticated}
-          onInstalled={handleInstalled}
+          onInstalled={loadMyInstallations}
           onUninstalled={handleUninstalled}
           onToggleEnabled={handleToggleEnabled}
+          confirm={confirm}
         />
       ))}
       {plugins.length < total && (

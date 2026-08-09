@@ -1,11 +1,7 @@
 import { useState } from "react";
 
 import { useAuth } from "../lib/auth";
-
-const inputClass =
-  "rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
-const buttonClass =
-  "rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800";
+import { inlineInputClass, secondaryButtonClass } from "../lib/ui";
 
 export function LoginPanel({
   onStatus,
@@ -44,7 +40,7 @@ export function LoginPanel({
         <span>
           Logged in as <strong className="font-semibold">{username}</strong>
         </span>
-        <button type="button" onClick={logout} className={buttonClass}>
+        <button type="button" onClick={logout} className={secondaryButtonClass}>
           Log out
         </button>
       </div>
@@ -55,21 +51,21 @@ export function LoginPanel({
     <div className="mb-4 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
       <div className="flex flex-wrap items-center gap-2">
         <input
-          className={inputClass}
+          className={inlineInputClass}
           placeholder="username"
           autoComplete="username"
           value={user}
           onChange={(e) => setUser(e.target.value)}
         />
         <input
-          className={inputClass}
+          className={inlineInputClass}
           type="password"
           placeholder="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
-        <button type="button" onClick={handleLogin} className={buttonClass}>
+        <button type="button" onClick={handleLogin} className={secondaryButtonClass}>
           Log in
         </button>
         <button
@@ -83,13 +79,13 @@ export function LoginPanel({
       {showRegister && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
           <input
-            className={inputClass}
+            className={inlineInputClass}
             placeholder="email"
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
-          <button type="button" onClick={handleRegister} className={buttonClass}>
+          <button type="button" onClick={handleRegister} className={secondaryButtonClass}>
             Register
           </button>
         </div>

@@ -4,6 +4,7 @@ import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { badgeClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
 interface BundleService {
   name: string;
@@ -52,15 +53,6 @@ interface ReconcileResponse {
   already_stopped: string[];
   errors: string[];
 }
-
-const primaryButtonClass =
-  "rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800";
-const statusClass = (isError: boolean) =>
-  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
-const badgeClass =
-  "inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 
 function outcomeSummary(
   result: EnableResponse | DisableResponse | ReconcileResponse,
