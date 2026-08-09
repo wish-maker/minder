@@ -345,7 +345,9 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | GET | `/knowledge-bases` | List knowledge bases |
 | GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
 | DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
-| POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector) |
+| POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector). Response includes a `document_id`, one per upload call (#427) |
+| GET | `/knowledge-bases/{kb_id}/documents` | List documents in a KB, one entry per upload — not per chunk (404 if the KB is unknown, #427) |
+| DELETE | `/knowledge-bases/{kb_id}/documents/{document_id}` | Delete a single document's chunks/vectors, leaving the rest of the KB intact (404 if the KB or document is unknown, #427) |
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
 | GET | `/pipeline` | List RAG pipelines (#426) |
 | GET | `/pipeline/{pipeline_id}` | Get a single RAG pipeline (404 if unknown, #426) |
@@ -356,9 +358,16 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 
 > The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
 
+> **Document identity (#427)**: each upload call gets its own `document_id`, stamped on every
+> chunk's Qdrant payload — `source` (filename) alone can't tell two separate uploads of the
+> same filename apart. Chunks uploaded before this existed have no `document_id`; the list/
+> delete endpoints fall back to grouping those by `source`, with a synthetic `legacy:<filename>`
+> id (deleting one removes every chunk with that filename, the same granularity available
+> before this endpoint existed).
+
 > **Browser UI**: the `client` service (#421, port 8009) has `/knowledge-bases` and
-> `/rag-pipelines` pages covering all of the above (#401, #425). There's still no
-> per-document list/delete on a knowledge base (#427) — only aggregate counts.
+> `/rag-pipelines` pages covering all of the above, including per-document list/delete
+> (#401, #425, #427).
 
 ```bash
 # Create a knowledge base, then upload a document into it

@@ -140,3 +140,18 @@ class DocumentUploadResponse(BaseModel):
     chunks_processed: int
     vectors_created: int
     filename: str
+    document_id: str
+
+
+class DocumentInfo(BaseModel):
+    """A single uploaded document within a knowledge base (#427) -- aggregated
+    from its chunks' Qdrant payloads, not a separate stored record. `document_id`
+    is a per-upload UUID stamped on every chunk since #427; chunks uploaded
+    before that (no `document_id` in their payload) are grouped by `filename`
+    instead, with `document_id` synthesized as `legacy:<filename>` -- see
+    `_group_documents` in routes/rag.py for exactly how that fallback works."""
+
+    document_id: str
+    filename: str
+    chunk_count: int
+    uploaded_at: Optional[str] = None

@@ -15,6 +15,7 @@ from core.retrieval import (
 from domain.retrievers.hybrid import BM25_AVAILABLE
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from models import (
+    DocumentInfo,
     DocumentUploadResponse,
     KnowledgeBaseCreate,
     KnowledgeBaseResponse,
@@ -24,7 +25,14 @@ from models import (
     RAGPipelineInfo,
     RAGPipelineResponse,
 )
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 from rag.model_selection import resolve_llm_model
 from rag.text_utils import chunk_text, extract_text_from_file
 
@@ -301,6 +309,13 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     # Store in Qdrant
     client = state.get_qdrant_client()
 
+    # One id per upload call (not per chunk) so every chunk from THIS upload can be
+    # listed/deleted together via GET|DELETE .../documents/{document_id} (#427) --
+    # `source` (filename) alone can't distinguish two separate uploads of the same
+    # filename.
+    document_id = str(uuid.uuid4())
+    uploaded_at = datetime.now(timezone.utc).isoformat()
+
     points = []
     for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
         points.append(
@@ -312,6 +327,8 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
                     "source": filename,
                     "chunk_index": i,
                     "kb_id": kb_id,
+                    "document_id": document_id,
+                    "uploaded_at": uploaded_at,
                 },
             )
         )
@@ -349,7 +366,120 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
         chunks_processed=len(chunks),
         vectors_created=len(chunks),
         filename=filename,
+        document_id=document_id,
     )
+
+
+def _group_documents(records: List) -> List[DocumentInfo]:
+    """Aggregate a KB's Qdrant points into one entry per uploaded document
+    (#427). Points from before `document_id` existed are grouped by `source`
+    (filename) instead, with a synthetic `legacy:<filename>` id -- the finest
+    granularity available for that older data (see DocumentInfo's docstring)."""
+    groups: Dict[str, Dict] = {}
+    for record in records:
+        payload = record.payload or {}
+        source = payload.get("source", "")
+        doc_id = payload.get("document_id") or f"legacy:{source}"
+        entry = groups.setdefault(
+            doc_id,
+            {"document_id": doc_id, "filename": source, "chunk_count": 0},
+        )
+        entry["chunk_count"] += 1
+        uploaded_at = payload.get("uploaded_at")
+        if uploaded_at:
+            entry["uploaded_at"] = uploaded_at
+    return [DocumentInfo(**g) for g in groups.values()]
+
+
+@router.get(
+    "/v1/knowledge-bases/{kb_id}/documents",
+    response_model=List[DocumentInfo],
+    tags=["Knowledge Base"],
+)
+async def list_documents(kb_id: str):
+    """List the documents uploaded into a knowledge base, one entry per
+    upload (not per chunk) (#427). 404 if the KB is unknown."""
+    if kb_id not in state.knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    client = state.get_qdrant_client()
+    records: List = []
+    next_offset = None
+    while True:
+        batch, next_offset = await asyncio.to_thread(
+            client.scroll,
+            collection_name=kb_id,
+            limit=256,
+            offset=next_offset,
+            with_payload=["source", "document_id", "uploaded_at"],
+            with_vectors=False,
+        )
+        records.extend(batch)
+        if next_offset is None:
+            break
+    return _group_documents(records)
+
+
+@router.delete(
+    "/v1/knowledge-bases/{kb_id}/documents/{document_id}",
+    tags=["Knowledge Base"],
+)
+async def delete_document(
+    kb_id: str,
+    document_id: str,
+    current_user: dict = Depends(get_current_user_or_service),
+):
+    """Delete a single uploaded document's chunks/vectors from a knowledge
+    base (#427), without deleting the whole KB. 404 if the KB or the
+    document is unknown.
+
+    A `legacy:<filename>` id (see DocumentInfo) deletes every chunk with that
+    filename -- the same granularity available before this endpoint existed.
+    """
+    if kb_id not in state.knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    if document_id.startswith("legacy:"):
+        filter_ = Filter(
+            must=[
+                FieldCondition(
+                    key="source", match=MatchValue(value=document_id[len("legacy:") :])
+                )
+            ]
+        )
+    else:
+        filter_ = Filter(
+            must=[
+                FieldCondition(key="document_id", match=MatchValue(value=document_id))
+            ]
+        )
+
+    client = state.get_qdrant_client()
+    count_result = await asyncio.to_thread(
+        client.count, collection_name=kb_id, count_filter=filter_
+    )
+    if count_result.count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    await asyncio.to_thread(
+        client.delete, collection_name=kb_id, points_selector=filter_
+    )
+
+    # New chunk composition -> drop any cached BM25 index (#45), same as upload.
+    invalidate_hybrid_index(kb_id)
+
+    kb = state.knowledge_bases[kb_id]
+    kb["document_count"] = max(0, kb["document_count"] - 1)
+    kb["vector_count"] = max(0, kb["vector_count"] - count_result.count)
+
+    if state.PG_AVAILABLE:
+        try:
+            await state.save_kb_to_postgres(kb_id, kb)
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to update KB in PostgreSQL: {e}")
+
+    logger.info(f"✅ Deleted document {document_id} from KB {kb_id}")
+    return {"message": "Document deleted", "id": document_id}
 
 
 @router.post("/v1/pipeline", response_model=RAGPipelineResponse, tags=["Pipeline"])

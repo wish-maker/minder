@@ -20,6 +20,14 @@ interface UploadResponse {
   chunks_processed: number;
   vectors_created: number;
   filename: string;
+  document_id: string;
+}
+
+interface KbDocument {
+  document_id: string;
+  filename: string;
+  chunk_count: number;
+  uploaded_at?: string;
 }
 
 interface QueueItem {
@@ -114,6 +122,66 @@ function UploadWidget({
   );
 }
 
+function DocumentsList({
+  kbId,
+  token,
+  refreshToken,
+  onDeleted,
+}: {
+  kbId: string;
+  token: string;
+  refreshToken: number;
+  onDeleted: () => void;
+}) {
+  const [docs, setDocs] = useState<KbDocument[] | null>(null);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    apiFetch<KbDocument[]>(`/v1/rag/knowledge-bases/${kbId}/documents`)
+      .then(setDocs)
+      .catch(() => setDocs([]));
+  }, [kbId, refreshToken]);
+
+  async function handleDelete(doc: KbDocument) {
+    if (!confirm(`Delete document "${doc.filename}"?`)) return;
+    setStatus("Deleting…");
+    try {
+      await apiFetch(`/v1/rag/knowledge-bases/${kbId}/documents/${doc.document_id}`, {
+        method: "DELETE",
+        token,
+      });
+      setDocs((prev) => (prev ?? []).filter((d) => d.document_id !== doc.document_id));
+      setStatus("");
+      onDeleted();
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  if (docs === null) return null;
+
+  return (
+    <div className="field">
+      <label>Documents</label>
+      {docs.length === 0 ? (
+        <p className="hint">No documents uploaded yet.</p>
+      ) : (
+        <ul>
+          {docs.map((d) => (
+            <li key={d.document_id}>
+              {d.filename} — {d.chunk_count} chunk{d.chunk_count === 1 ? "" : "s"}{" "}
+              <button onClick={() => handleDelete(d)} disabled={!token}>
+                Delete
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="status">{status}</div>
+    </div>
+  );
+}
+
 function KnowledgeBaseCard({
   kb,
   token,
@@ -126,6 +194,7 @@ function KnowledgeBaseCard({
   onRefresh: (kb: KnowledgeBase) => void;
 }) {
   const [status, setStatus] = useState("");
+  const [docsVersion, setDocsVersion] = useState(0);
 
   async function handleDelete() {
     if (!confirm(`Delete knowledge base "${kb.name}"? This cannot be undone.`)) return;
@@ -145,6 +214,7 @@ function KnowledgeBaseCard({
     } catch {
       // best-effort refresh -- stale counts are harmless, leave as-is
     }
+    setDocsVersion((v) => v + 1);
   }
 
   return (
@@ -155,6 +225,12 @@ function KnowledgeBaseCard({
         {kb.document_count} document{kb.document_count === 1 ? "" : "s"},{" "}
         {kb.vector_count} vectors · embedding: {kb.embedding_model} · llm: {kb.llm_model}
       </p>
+      <DocumentsList
+        kbId={kb.id}
+        token={token}
+        refreshToken={docsVersion}
+        onDeleted={refreshCounts}
+      />
       <UploadWidget kb={kb} token={token} onUploaded={refreshCounts} />
       <button className="danger" onClick={handleDelete} disabled={!token}>
         Delete
