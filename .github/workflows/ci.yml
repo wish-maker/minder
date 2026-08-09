@@ -202,6 +202,7 @@ jobs:
           curl -sf http://127.0.0.1:8009/ | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/rag | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/rag/pipelines | grep -q '<div id="root">'
+          curl -sf http://127.0.0.1:8009/rag/graph | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/plugins | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/plugins/config | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/platform | grep -q '<div id="root">'

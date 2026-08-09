@@ -4,6 +4,7 @@ import { SectionTabs } from "./components/SectionTabs";
 import { AuthProvider } from "./lib/auth";
 import { AiToolsPage } from "./pages/AiToolsPage";
 import { BundleManagementPage } from "./pages/BundleManagementPage";
+import { GraphExplorerPage } from "./pages/GraphExplorerPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { MarketplacePage } from "./pages/MarketplacePage";
@@ -47,12 +48,14 @@ export function App() {
               tabs={[
                 { to: ".", label: "Knowledge Bases", end: true },
                 { to: "pipelines", label: "Pipelines" },
+                { to: "graph", label: "Graph" },
               ]}
             />
           }
         >
           <Route index element={<KnowledgeBasesPage />} />
           <Route path="pipelines" element={<RagPipelinesPage />} />
+          <Route path="graph" element={<GraphExplorerPage />} />
         </Route>
 
         <Route
