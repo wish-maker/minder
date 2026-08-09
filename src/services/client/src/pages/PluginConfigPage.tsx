@@ -208,10 +208,7 @@ export function PluginConfigPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Plugin Configuration
-      </h1>
-      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Edit settings for plugins that expose a config schema — for example a
         news feed's RSS URLs, or a weather plugin's tracked locations.
         Changes apply immediately, live, with no service restart needed.
