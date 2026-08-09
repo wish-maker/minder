@@ -36,9 +36,9 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 > Minder's own web client — a separate React/Vite frontend, a static SPA not a
 > FastAPI backend, so it has no `/docs`/OpenAPI schema and isn't part of the
 > API surface documented below. It's the browser UI for the plugin-config
-> endpoints and the RAG Pipeline knowledge-base/pipeline/query endpoints
-> listed here (#401), growing to cover marketplace (#402) next. It
-> deliberately does **not** duplicate model management — OpenWebUI's own
+> endpoints, the RAG Pipeline knowledge-base/pipeline/query endpoints (#401),
+> and the marketplace catalog/install/dependency-graph endpoints below
+> (#402). It deliberately does **not** duplicate model management — OpenWebUI's own
 > Admin Panel already covers pull/delete/update against the same Ollama
 > instance, more completely and integrated with the chat you'd use the model
 > in. It also doesn't duplicate OpenWebUI's own "Knowledge" feature — that's a
@@ -248,7 +248,9 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | GET | `/v1/marketplace/plugins/{plugin_id}/installations` | List installations for a plugin, all users (admin/debug-shaped — no auth) |
 | GET | `/v1/marketplace/installations/me` | List the *authenticated user's* installed plugins, across the whole catalog, with plugin metadata inlined (#402) — deliberately a disjoint prefix, not nested under `/plugins/`, since `GET /plugins/{plugin_id}` is registered first and would swallow a literal segment like `installed` as `{plugin_id}` |
 
-> **Install used to 500 for every real user (#402, fixed)**: `marketplace_installations.user_id` had a live FK to `marketplace_users`, a table nothing ever populated except one seed row (`user_id='admin'`) — any other user's install threw an unhandled `ForeignKeyViolationError`. Fixed by dropping the constraint (`schema.sql`) — `user_id` here is just an opaque JWT-derived identifier, not a real relationship to a marketplace-specific user directory that was never wired up. A second bug in the same path (`InstallationResponse.user_id`'s UUID-only regex pattern rejecting real non-UUID ids) was fixed alongside it.
+> **Install used to 500 for every real user (#402, fixed)**: three independent bugs, found live on hantal, all in the install path. (1) `marketplace_installations.user_id` had a live FK to `marketplace_users`, a table nothing ever populated except one seed row (`user_id='admin'`) — any other user's install threw an unhandled `ForeignKeyViolationError`; fixed by dropping the constraint (`schema.sql`) — `user_id` here is just an opaque JWT-derived identifier, not a real relationship to a marketplace-specific user directory that was never wired up. (2) `InstallationResponse.user_id` had a UUID-only regex pattern rejecting real non-UUID ids. (3) `install_plugin` never `str()`-cast `plugin_id` before building the response — asyncpg returns UUID columns as `uuid.UUID` objects, and pydantic v2 doesn't coerce those into a `str` field. Each bug alone was enough to 500 the whole endpoint; all three had to be fixed before install actually worked.
+
+> **Browser UI**: the `client` service (#421, port 8009) has a `/marketplace` page covering catalog browsing/search, install/uninstall/enable/disable, "My Installed Plugins," and a lazy dependency/conflict disclosure per plugin (#402).
 
 ### AI-tool catalog (`/v1/marketplace/ai`)
 
