@@ -10,7 +10,7 @@ import httpx
 from core.auth import verify_jwt_token
 from core.clients import SERVICE_REGISTRY, http_client
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 logger = logging.getLogger("minder.api-gateway")
 
@@ -72,6 +72,19 @@ async def proxy_request(service_url: str, path: str, request: Request):
             content=body,
             params=request.query_params,
         )
+
+        # Non-JSON bodies (e.g. tts-stt's synthesized WAV/MP3 audio) must pass
+        # through as raw bytes, not be force-decoded as JSON -- response.json()
+        # on binary audio raises, which the broad except below would otherwise
+        # turn into a misleading 500 "Internal proxy error".
+        content_type = response.headers.get("content-type", "")
+        if response.content and "application/json" not in content_type:
+            return Response(
+                status_code=response.status_code,
+                content=response.content,
+                media_type=content_type or None,
+                headers=_safe_response_headers(response.headers),
+            )
 
         return JSONResponse(
             status_code=response.status_code,
@@ -236,3 +249,88 @@ async def proxy_to_marketplace_graph(path: str, request: Request):
     _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY["marketplace"]
     return await proxy_request(service_url, f"v1/graph/{path}", request)
+
+
+# ============================================================================
+# TTS/STT
+# ============================================================================
+
+
+@router.api_route("/v1/tts/{path:path}", methods=["GET", "POST"])
+async def proxy_to_tts(path: str, request: Request):
+    """Proxy /v1/tts/* to the TTS/STT service (writes require JWT). Synthesis
+    (`POST /v1/tts`) returns binary WAV/MP3, not JSON -- proxy_request already
+    passes non-JSON bodies through raw."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["tts_stt"]
+    return await proxy_request(service_url, f"v1/tts/{path}", request)
+
+
+@router.api_route("/v1/tts", methods=["POST"])
+async def tts_root(request: Request):
+    """Proxy POST /v1/tts (no trailing path) -- {path:path} above requires at
+    least one path segment after /v1/tts/, so the bare synthesis call needs its
+    own route, mirroring the /v1/models root-route pattern."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["tts_stt"]
+    return await proxy_request(service_url, "v1/tts", request)
+
+
+@router.api_route("/v1/stt/{path:path}", methods=["GET", "POST"])
+async def proxy_to_stt(path: str, request: Request):
+    """Proxy /v1/stt/* to the TTS/STT service (writes require JWT)."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["tts_stt"]
+    return await proxy_request(service_url, f"v1/stt/{path}", request)
+
+
+@router.api_route("/v1/stt", methods=["POST"])
+async def stt_root(request: Request):
+    """Proxy POST /v1/stt (no trailing path) -- multipart audio upload, same
+    root-route need as /v1/tts above."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["tts_stt"]
+    return await proxy_request(service_url, "v1/stt", request)
+
+
+# ============================================================================
+# Graph RAG (knowledge-graph construction/retrieval -- distinct from
+# marketplace's /v1/graph/* dependency graph above)
+# ============================================================================
+
+
+@router.api_route(
+    "/v1/graph-rag/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
+async def proxy_to_graph_rag(path: str, request: Request):
+    """Proxy /v1/graph-rag/* to the Graph RAG service's own /v1/* routes (writes
+    require JWT). Graph RAG's real paths are unprefixed (`/v1/extract`,
+    `/v1/construct-graph`, `/v1/retrieve`, `/v1/entity-context`,
+    `/v1/graph/document/{id}`) -- the gateway adds the `graph-rag/` segment so
+    this doesn't collide with marketplace's own `/v1/graph/*` proxy above."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["graph_rag"]
+    return await proxy_request(service_url, f"v1/{path}", request)
+
+
+# ============================================================================
+# Tool Discovery & Execution (plugin-state-manager)
+# ============================================================================
+
+
+@router.get("/v1/tools")
+async def list_tools(request: Request):
+    """Proxy GET /v1/tools to Plugin State Manager"""
+    service_url = SERVICE_REGISTRY["plugin_state_manager"]
+    return await proxy_request(service_url, "v1/tools", request)
+
+
+@router.api_route("/v1/tools/{path:path}", methods=["GET", "POST"])
+async def proxy_to_tools(path: str, request: Request):
+    """Proxy /v1/tools/* (tool detail, `POST .../execute`, license `validate`) to
+    Plugin State Manager -- a deliberately separate prefix from
+    /v1/plugins/{path:path} above (which already routes to plugin-registry) so
+    the two services' plugin-adjacent APIs don't collide at the gateway."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["plugin_state_manager"]
+    return await proxy_request(service_url, f"v1/tools/{path}", request)

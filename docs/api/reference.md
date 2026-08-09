@@ -100,6 +100,11 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
 | ANY | `/v1/marketplace/{path:path}` | marketplace (prefix forwarded as-is, matching plugin-registry) — no proxy route existed here at all until #402 |
 | ANY | `/v1/graph/{path:path}` | marketplace's plugin dependency/conflict/recommendation graph — a second, disjoint route namespace the same service exposes (#402) |
+| GET/POST | `/v1/tts`, `/v1/tts/{path:path}` | tts-stt (writes require JWT). `POST /v1/tts` returns binary WAV/MP3 audio, not JSON — the proxy passes non-JSON bodies through raw instead of force-decoding them |
+| GET/POST | `/v1/stt`, `/v1/stt/{path:path}` | tts-stt (writes require JWT) — `POST /v1/stt` is a multipart audio upload |
+| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT) |
+| GET | `/v1/tools` | plugin-state-manager (tool discovery, list) |
+| GET/POST | `/v1/tools/{path:path}` | plugin-state-manager (tool detail, `.../execute`, license `validate`) — a deliberately separate prefix from `/v1/plugins/{path:path}` above so the two services' plugin-adjacent APIs don't collide at the gateway (writes require JWT; `execute` is also independently JWT-gated inside plugin-state-manager itself) |
 
 The `client` service (port 8009) has a `/platform` page (the "Platform" nav
 section's default "Models" tab) covering list/pull/delete/test-prompt against
@@ -351,6 +356,10 @@ Plugin state control, AI-tool discovery/execution, and per-plugin licensing.
 | GET | `/v1/tools/plugins/{plugin_id}/tools` | Tools for one plugin |
 | POST | `/v1/tools/validate` | Validate a license tier for a tool |
 
+The `/v1/tools*` endpoints above are reachable through the gateway
+(`GET /v1/tools`, `GET/POST /v1/tools/{path:path}`) — `/v1/plugins/state*` and
+the Licensing section below are not proxied (no gateway route for them today).
+
 ### Licensing (`/v1/licensing`)
 
 | Method | Path | Description |
@@ -452,31 +461,53 @@ Model lifecycle over the Ollama runtime.
 ## TTS / STT — `http://localhost:8006`
 
 Speech synthesis and recognition. ~12 languages supported; **Turkish is the default**.
+Every route below also has a legacy unversioned alias (e.g. `/tts` alongside
+`/v1/tts`) kept for compatibility (`include_in_schema=False`) — new callers
+should use the `/v1/` path.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages |
-| GET | `/tts/languages` | Supported TTS languages |
-| POST | `/stt` | Speech-to-text via `speech_recognition` (Google backend) |
-| GET | `/stt/languages` | Supported STT languages |
+| POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers |
+| GET | `/v1/tts/languages` | Supported TTS languages |
+| POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field |
+| GET | `/v1/stt/languages` | Supported STT languages |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
+
+Reachable through the gateway at `/v1/tts`/`/v1/tts/{path:path}` and
+`/v1/stt`/`/v1/stt/{path:path}` (writes require JWT) — see the API Gateway's
+Proxy routes table above. The `client` service has a `/platform/voice` page
+(the "Platform" nav section's 4th tab) for trying synthesis/transcription
+without `curl`.
 
 ---
 
 ## Graph-RAG — `http://localhost:8008`
 
 Entity extraction and knowledge-graph construction/retrieval, backed by **Neo4j**.
+Every route below also has a legacy unversioned alias kept for compatibility
+(`include_in_schema=False`) — new callers should use the `/v1/` path.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/extract` | spaCy NER entity extraction from text |
-| POST | `/construct-graph` | Build a Neo4j knowledge graph from documents/entities |
-| POST | `/retrieve` | Graph-based retrieval over entity relationships |
-| POST | `/entity-context` | Retrieve context / neighbors around an entity |
-| DELETE | `/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |
+| POST | `/v1/extract` | spaCy NER entity extraction from text |
+| POST | `/v1/construct-graph` | Build a Neo4j knowledge graph from documents/entities (idempotent — Cypher `MERGE`, so re-posting the same `document_id` upserts rather than duplicating) |
+| POST | `/v1/retrieve` | Graph-based retrieval over entity relationships |
+| POST | `/v1/entity-context` | Retrieve context / neighbors around an entity |
+| DELETE | `/v1/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
+
+Reachable through the gateway at `/v1/graph-rag/{path:path}` — forwards to
+this service's own `/v1/*` paths above, e.g. client calls
+`POST /v1/graph-rag/extract`, the gateway forwards to `POST /v1/extract` on
+graph-rag (writes require JWT). A distinct `graph-rag/` segment on purpose:
+this service's `/v1/graph/document/{id}` would otherwise collide with
+marketplace's own `/v1/graph/*` proxy (the plugin dependency graph — a
+completely different thing sharing a path prefix by coincidence). The `client`
+service has a `/rag/graph` page (the "RAG" nav section's 3rd tab, alongside
+Knowledge Bases and Pipelines) for building/exploring a knowledge graph from
+uploaded documents.
 
 ---
 

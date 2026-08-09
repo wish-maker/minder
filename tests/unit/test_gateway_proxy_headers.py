@@ -1,4 +1,5 @@
-"""Unit tests for api-gateway proxy response-header hygiene (#211 MED).
+"""Unit tests for api-gateway proxy response-header hygiene (#211 MED) and
+binary-body passthrough (Status/Voice pages).
 
 The proxy rebuilds the body from ``response.json()``, so copying the downstream's
 ``content-length``/``content-encoding`` (and hop-by-hop headers) onto the new
@@ -6,15 +7,23 @@ response is wrong — a downstream that gzips would make the client receive
 ``content-encoding: gzip`` on a plaintext body plus a mismatched length. These lock
 that those headers are stripped while normal headers pass through.
 
+``proxy_request`` also can't force EVERY downstream body through ``response.json()``
+— tts-stt's ``POST /v1/tts`` returns binary WAV/MP3 audio, which would raise inside
+the broad ``except Exception`` and surface as a misleading 500 "Internal proxy
+error" instead of the actual audio. The non-JSON branch added for this is tested
+below with a fake ``http_client``.
+
 api-gateway is a hyphenated service dir; ``proxy`` imports ``core.auth`` /
 ``core.clients`` at module top. Fakes are injected into ``sys.modules`` and restored
 so another service's ``core`` package isn't poisoned (the #142 gotcha).
 """
 
+import asyncio
 import importlib.util
+import json
 import sys
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import httpx
 import pytest
@@ -79,3 +88,74 @@ def test_keeps_normal_headers(proxy_mod):
         "x-request-id": "abc",
         "cache-control": "no-store",
     }
+
+
+class _FakeRequest:
+    """Duck-typed stand-in for FastAPI's Request -- proxy_request only reads
+    body()/headers/client.host/state.request_id/method/query_params, so a real
+    ASGI Request isn't needed."""
+
+    def __init__(self, method="GET"):
+        self.method = method
+        self.headers = {"authorization": "Bearer x"}
+        self.client = SimpleNamespace(host="127.0.0.1")
+        self.state = SimpleNamespace(request_id="test-req-id")
+        self.query_params = {}
+
+    async def body(self):
+        return b""
+
+
+class _FakeHTTPClient:
+    def __init__(self, response):
+        self._response = response
+
+    async def request(self, **kwargs):
+        return self._response
+
+
+def test_binary_response_passes_through_raw(proxy_mod):
+    """A non-JSON downstream body (tts-stt's synthesized WAV/MP3 audio) must be
+    returned as-is, not forced through response.json() -- that would raise and
+    surface as a misleading 500 instead of the actual audio."""
+    audio_bytes = b"RIFF....WAVEfmt "
+    fake_response = SimpleNamespace(
+        status_code=200,
+        content=audio_bytes,
+        headers=httpx.Headers({"content-type": "audio/wav", "content-length": "999"}),
+        json=lambda: (_ for _ in ()).throw(ValueError("not JSON")),
+    )
+    proxy_mod.http_client = _FakeHTTPClient(fake_response)
+
+    result = asyncio.run(
+        proxy_mod.proxy_request("http://tts-stt:8006", "v1/tts", _FakeRequest("POST"))
+    )
+
+    assert result.status_code == 200
+    assert result.body == audio_bytes
+    assert result.media_type == "audio/wav"
+    # _safe_response_headers strips the downstream's stale content-length
+    # (999, for the un-transformed body) -- Starlette computes its own from
+    # the actual bytes when the Response is rendered.
+    assert result.headers.get("content-length") != "999"
+
+
+def test_json_response_still_decoded_and_rewrapped(proxy_mod):
+    """A normal JSON downstream body keeps the existing decode-and-rewrap
+    behavior (unaffected by the new binary branch)."""
+    fake_response = SimpleNamespace(
+        status_code=200,
+        content=b'{"ok": true}',
+        headers=httpx.Headers({"content-type": "application/json"}),
+        json=lambda: {"ok": True},
+    )
+    proxy_mod.http_client = _FakeHTTPClient(fake_response)
+
+    result = asyncio.run(
+        proxy_mod.proxy_request(
+            "http://plugin-registry:8001", "v1/plugins", _FakeRequest()
+        )
+    )
+
+    assert result.status_code == 200
+    assert json.loads(result.body) == {"ok": True}

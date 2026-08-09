@@ -36,4 +36,7 @@ SERVICE_REGISTRY = {
     "rag_pipeline": settings.RAG_PIPELINE_URL,
     "model_management": settings.MODEL_MANAGEMENT_URL,
     "marketplace": settings.MARKETPLACE_URL,
+    "plugin_state_manager": settings.PLUGIN_STATE_MANAGER_URL,
+    "tts_stt": settings.TTS_STT_URL,
+    "graph_rag": settings.GRAPH_RAG_URL,
 }
