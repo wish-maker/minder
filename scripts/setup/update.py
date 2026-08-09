@@ -89,6 +89,7 @@ def run(arg: str = "") -> int:
         *config.API_SERVICES,
         *config.MONITORING_SERVICES,
         *config.AI_SERVICES,
+        "client",
     ):
         if docker.container_running(svc):
             # bash: `run compose up …` — run wraps the compose FUNCTION name, so
