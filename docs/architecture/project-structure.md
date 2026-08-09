@@ -26,7 +26,7 @@ minder/                              # Project root
 │   └── api/                         # API reference
 │
 ├── docker/                          # Docker configuration (compose runs from here directly)
-│   ├── docker-compose.yml           # HAND-MAINTAINED source of truth (35 services)
+│   ├── docker-compose.yml           # HAND-MAINTAINED source of truth (36 services)
 │   ├── docker-compose.override.yml
 │   ├── docker-compose.test.yml      # local integration/e2e test deps (CI uses GH Actions services)
 │   ├── .env                         # Auto-generated mirror of root ./.env (gitignored; do not edit)
@@ -42,7 +42,7 @@ minder/                              # Project root
 │       └── scripts/                 # Docker helper scripts
 │
 ├── src/                             # Application source
-│   ├── services/                    # Microservices (8 core APIs)
+│   ├── services/                    # Microservices (8 core APIs + 1 admin frontend)
 │   │   ├── api-gateway/             # API Gateway (port 8000)
 │   │   ├── plugin-registry/         # Plugin Registry (port 8001)
 │   │   ├── marketplace/             # Marketplace (port 8002)
@@ -50,7 +50,8 @@ minder/                              # Project root
 │   │   ├── rag-pipeline/            # RAG Pipeline (port 8004)
 │   │   ├── model-management/        # Model Management (port 8005)
 │   │   ├── tts-stt/                 # TTS / STT (port 8006)
-│   │   └── graph-rag/               # Graph RAG / knowledge graph (port 8008)
+│   │   ├── graph-rag/               # Graph RAG / knowledge graph (port 8008)
+│   │   └── admin-ui/                # React/Vite static frontend (port 8009) -- not a FastAPI backend
 │   ├── bootstrap/                   # Bootstrap config data (config/default_plugins.yml stub)
 │   ├── plugins/                     # First-party module plugins (telegraf, network, crypto, weather, news, tefas) + _contract.py
 │   ├── requirements/                # Shared Python dependency sets (see below)
@@ -123,9 +124,9 @@ services/api-gateway/
 
 ## Infrastructure Components
 
-35 services defined total (Authelia + docker-socket-proxy included, enabled, and counted); two
+36 services defined total (Authelia + docker-socket-proxy included, enabled, and counted); two
 (`ollama-router`, `tts-stt-router`) are failover-mode sidecars inactive unless explicitly
-configured, so the common default runs 33.
+configured, so the common default runs 34.
 
 **Edge / Security**:
 - Traefik (v3) - Reverse proxy, TLS termination, routing

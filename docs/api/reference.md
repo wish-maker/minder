@@ -1,7 +1,7 @@
 # Minder Platform — API Reference
 
 **Version:** 1.0.0
-**Last Updated:** 2026-08-02
+**Last Updated:** 2026-08-09
 **Base URL (via API Gateway):** `http://localhost:8000`
 
 ---
@@ -31,6 +31,11 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 | Model Management | `minder-model-management` | 8005 | Ollama list/pull/delete/test (some endpoints are placeholders) |
 | TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (Piper offline default, WAV; gTTS fallback, MP3), speech-to-text (`speech_recognition`) |
 | Graph-RAG | `minder-graph-rag` | 8008 | spaCy NER, Neo4j knowledge-graph construction and retrieval |
+
+> **Not a 9th API service**: `admin-ui` (port 8009, `src/services/admin-ui`) is a
+> separate React/Vite frontend — a static SPA, not a FastAPI backend, so it has no
+> `/docs`/OpenAPI schema and isn't part of the API surface documented below. It's the
+> browser UI for the plugin-config and model-management endpoints already listed here.
 
 **Conventions used below**
 - `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
@@ -85,10 +90,10 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
 
-A browser UI for the model-management endpoints above is served at
-`GET /model-management` on the API Gateway itself (e.g.
-`http://localhost:8000/model-management`), same pattern as `/plugin-config`
-below — list/pull/delete/test-prompt local Ollama models instead of
+A browser UI for the model-management endpoints above is served by the
+**separate `admin-ui` service** (`http://localhost:8009/model-management`,
+or `https://admin.minder.local` once DNS/TLS is set up — not an API Gateway
+route) — list/pull/delete/test-prompt local Ollama models instead of
 hand-crafting these requests (#421). Model constraints/metrics/fine-tuning
 are not implemented yet (#145) and have no UI for the same reason.
 
@@ -155,12 +160,11 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | PUT | `/v1/plugins/{plugin_name}/config` | Update config: validate → persist → apply live, no restart (JWT-gated) |
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
-A browser UI for the two config endpoints above is served at
-`GET /plugin-config` on the API Gateway itself (e.g.
-`http://localhost:8000/plugin-config`, or via Traefik once reachable — see
-`docs/guides/remote-access.md`) — a form-based settings page for
-configurable plugins (news, weather, crypto, tefas today), instead of
-hand-crafting these requests.
+A browser UI for the two config endpoints above is served by the **separate
+`admin-ui` service** (`http://localhost:8009/plugin-config`, or via Traefik
+once reachable — see `docs/guides/remote-access.md`) — a form-based settings
+page for configurable plugins (news, weather, crypto, tefas today), instead
+of hand-crafting these requests.
 
 ### Webhooks
 

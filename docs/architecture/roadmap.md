@@ -19,7 +19,7 @@ and where it is headed.
 
 ## What Exists Today
 
-The platform runs as 35 defined Docker services (33 in the common default — two are
+The platform runs as 36 defined Docker services (34 in the common default — two are
 failover-mode sidecars) provisioned by `bash setup.sh`. See
 `docs/architecture/overview.md` and `docs/architecture/microservices.md` for the current,
 authoritative service breakdown.

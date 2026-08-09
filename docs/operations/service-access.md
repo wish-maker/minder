@@ -8,7 +8,7 @@
 
 ## Overview
 
-Minder runs 35 defined containers (33 in the common default) behind **Traefik v3** (reverse proxy, TLS, routing via Docker
+Minder runs 36 defined containers (34 in the common default) behind **Traefik v3** (reverse proxy, TLS, routing via Docker
 labels). This guide describes how services are exposed and how to reach them.
 
 > **Reality check.**

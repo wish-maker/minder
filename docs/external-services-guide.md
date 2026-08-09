@@ -10,8 +10,8 @@ It also explains how to point selected data services (Redis, PostgreSQL, Qdrant)
 cloud providers instead of the local Docker containers, using environment variables and
 without modifying code.
 
-Minder defines **35 containers** (Authelia + docker-socket-proxy included/enabled) — 2 are
-failover-mode sidecars inactive by default, so the common default runs 33. `setup.sh install`
+Minder defines **36 containers** (Authelia + docker-socket-proxy included/enabled) — 2 are
+failover-mode sidecars inactive by default, so the common default runs 34. `setup.sh install`
 seeds the **standard** bundle profile (core + inference + rag + chat); monitoring, graph-rag,
 and voice are opt-in (`setup.sh bundle enable <name>`, or `install --profile full` for
 every non-failover-gated service), and `start` honours the recorded bundle state. The single
@@ -72,10 +72,10 @@ in some cases via a Traefik route).
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
 | Traefik | `minder-traefik` | `traefik:v3.7.10` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
-| Authelia | `minder-authelia` | `authelia/authelia:4.39.20` | — | **ENABLED** — live service in compose (no `profiles:` gate, runs by default); depends on postgres + redis being healthy. Traefik's `authelia-forwardauth` middleware is enforced on 5 routers (minio, api-gateway, grafana, openwebui, jaeger) — unauthenticated requests get a 302 redirect to the portal. Full browser SSO still needs real DNS + TLS on the deploy. No active healthcheck configured. Counted in the 35 containers |
+| Authelia | `minder-authelia` | `authelia/authelia:4.39.20` | — | **ENABLED** — live service in compose (no `profiles:` gate, runs by default); depends on postgres + redis being healthy. Traefik's `authelia-forwardauth` middleware is enforced on 5 routers (minio, api-gateway, grafana, openwebui, jaeger) — unauthenticated requests get a 302 redirect to the portal. Full browser SSO still needs real DNS + TLS on the deploy. No active healthcheck configured. Counted in the 36 containers |
 | Docker Socket Proxy | `minder-docker-socket-proxy` | `ghcr.io/wollomatic/socket-proxy:1.12.3` | — (internal only) | Least-privilege proxy in front of `docker.sock` for plugin-registry (core bundle) — see [bundles.md](architecture/bundles.md) for the allowlist model and its tracked gaps (#377/#378). No active healthcheck configured. |
 
-> **Healthchecks:** 30 of 35 containers have an active healthcheck. `otel-collector`,
+> **Healthchecks:** 31 of 36 containers have an active healthcheck. `otel-collector`,
 > `redis-exporter`, and `rabbitmq-exporter` intentionally have none (image tooling limits)
 > and appear as "no-healthcheck", not "unhealthy"; `authelia` and `docker-socket-proxy`
 > simply don't have one configured.
@@ -425,4 +425,4 @@ For issues or questions:
 
 ---
 
-*Last Updated: 2026-08-08 · 35 containers (33 in the common default) · Development environment*
+*Last Updated: 2026-08-08 · 36 containers (34 in the common default) · Development environment*

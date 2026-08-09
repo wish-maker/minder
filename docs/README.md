@@ -77,7 +77,7 @@ This directory contains all documentation for the Minder platform.
 ## 📊 Current System Status
 
 **Platform Version:** 1.0.0
-**Services:** 35 containers defined (2 are failover-mode sidecars, inactive by default — the common default runs 33); `setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat), monitoring/graph-rag/voice opt-in (`--profile full` = everything not failover-gated); 5 have no active healthcheck by design or omission
+**Services:** 36 containers defined (2 are failover-mode sidecars, inactive by default — the common default runs 34); `setup.sh install` seeds the **standard** bundle profile (core + inference + rag + chat), monitoring/graph-rag/voice opt-in (`--profile full` = everything not failover-gated); 5 have no active healthcheck by design or omission
 **Environment:** Development (production hardening not yet applied)
 **Host:** Raspberry Pi 4 (ARM)
 

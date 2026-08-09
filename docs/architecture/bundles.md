@@ -86,7 +86,7 @@ The claim graph has three sources, merged into one `service → claimants` map:
    entry above); this is ready for a future self-hosting plugin.
 3. **Marketplace** — installs new plugins (hence new bundles/claims) at runtime.
 
-## Bundle map (all 33 bundle-labeled services assigned)
+## Bundle map (all 34 bundle-labeled services assigned)
 
 `ollama-router`/`tts-stt-router` (2 more services defined in compose) carry no
 `minder.bundle` label on purpose — they're failover-mode artifacts managed by
@@ -94,7 +94,7 @@ The claim graph has three sources, merged into one `service → claimants` map:
 
 | Bundle | Services | Default |
 |--------|----------|---------|
-| **core** (always-on) | traefik, authelia, docker-socket-proxy, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry | ON (mandatory) |
+| **core** (always-on) | traefik, authelia, docker-socket-proxy, postgres, redis, rabbitmq, api-gateway, plugin-registry, plugin-state-manager, marketplace, neo4j, minio, schema-registry, admin-ui | ON (mandatory) |
 | **monitoring** | influxdb, telegraf, prometheus, grafana, alertmanager, jaeger, otel-collector, postgres-exporter, redis-exporter, rabbitmq-exporter, node-exporter, cadvisor, blackbox-exporter | **OFF** |
 | **inference** | ollama, model-management | ON |
 | **rag** | rag-pipeline, qdrant, ollama | ON |
@@ -118,6 +118,9 @@ Notes:
   to disable; core keeps running, just unobserved.
 - **chat → rag coupling:** `openwebui` declares `depends_on: rag-pipeline`, so
   enabling chat claims rag-pipeline anyway — hence chat and rag default together.
+- **`admin-ui` is not a "manager"** (see Vocabulary above) — it's a pure static
+  frontend (no backend logic, no bundle it configures), just core because it's
+  unconditionally available like the other core services.
 
 ## Binding — how a claimed service is provided
 

@@ -4,10 +4,10 @@ Detailed microservices architecture for the Minder Platform.
 
 ## Current Service Status
 
-**Total Containers:** 35 defined (Authelia + docker-socket-proxy included, both enabled); two
-(`ollama-router`, `tts-stt-router`) are failover-mode sidecars inactive by default, so 33 run
+**Total Containers:** 36 defined (Authelia + docker-socket-proxy included, both enabled); two
+(`ollama-router`, `tts-stt-router`) are failover-mode sidecars inactive by default, so 34 run
 in the common case
-**With Health Checks:** 30
+**With Health Checks:** 31
 **No-Healthcheck (by design):** 3 (otel-collector, redis-exporter, rabbitmq-exporter — their images lack the tooling for a healthcheck)
 **No-Healthcheck (not configured):** 2 (authelia, docker-socket-proxy)
 **Unhealthy:** 0
@@ -302,7 +302,7 @@ limits in `docker-compose.yml`.
 - Never commit `.env`
 
 ### Health Checks
-30/35 services define an active container healthcheck (`/health` for the core APIs). Five lack
+31/36 services define an active container healthcheck (`/health` for the core APIs). Five lack
 one: `otel-collector`, `rabbitmq-exporter`, and `redis-exporter` because their images cannot run
 one; `authelia` and `docker-socket-proxy` simply don't have one configured.
 

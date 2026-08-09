@@ -178,11 +178,12 @@ def print_success_banner() -> None:
     e(f"{b}{m}📍 Core APIs{nc}")
     for name, port in _API_BANNER:
         e(f"   {name:<20} →  {c}http://localhost:{port}{nc}")
-    e(f"   {d}Plugin Config UI    →  http://localhost:8000/plugin-config{nc}")
-    e(f"   {d}(edit news feeds, weather locations, etc. -- register/log in via{nc}")
-    e(f"   {d}the page itself; reachable remotely too, see remote-access.md){nc}")
-    e(f"   {d}Model Management UI →  http://localhost:8000/model-management{nc}")
-    e(f"   {d}(list/pull/delete/test-prompt local Ollama models -- same login){nc}")
+
+    e("")
+    e(f"{b}{m}📍 Admin UI{nc}")
+    e(f"   Admin UI            →  {c}http://localhost:8009{nc}")
+    e(f"   {d}(plugin config + model management -- register/log in via the{nc}")
+    e(f"   {d}page itself; reachable remotely too, see remote-access.md){nc}")
 
     # Only advertise a bundle's URLs when it is enabled — a standard install has
     # monitoring off, so showing Grafana/Prometheus would mislead. Everything

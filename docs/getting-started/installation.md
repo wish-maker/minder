@@ -73,7 +73,7 @@ cp .env docker/.env
 docker compose --file docker/docker-compose.yml up -d
 ```
 
-Compose defines 35 services (33 in the common default); a default `setup.sh install` seeds the **standard** bundle
+Compose defines 36 services (34 in the common default); a default `setup.sh install` seeds the **standard** bundle
 profile (core + inference + rag + chat) — monitoring, graph-rag, and voice are opt-in
 (`install --profile full` starts every non-failover-gated service). The full set is grouped as:
 - Reverse Proxy (1): Traefik v3
