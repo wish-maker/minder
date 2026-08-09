@@ -347,6 +347,8 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
 | POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector) |
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
+| GET | `/pipeline` | List RAG pipelines (#426) |
+| GET | `/pipeline/{pipeline_id}` | Get a single RAG pipeline (404 if unknown, #426) |
 | DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
 | GET | `/health` | Service health |
@@ -355,10 +357,8 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 > The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
 
 > **Browser UI**: the `client` service (#421, port 8009) has `/knowledge-bases` and
-> `/rag-pipelines` pages covering all of the above (#401, #425) — no dedicated `GET /pipeline`
-> list endpoint exists yet (#426), so the client tracks pipeline IDs it created client-side
-> (localStorage) rather than being able to list them back from the server. There's also no
-> per-document list/delete on a knowledge base yet (#427) — only aggregate counts.
+> `/rag-pipelines` pages covering all of the above (#401, #425). There's still no
+> per-document list/delete on a knowledge base (#427) — only aggregate counts.
 
 ```bash
 # Create a knowledge base, then upload a document into it

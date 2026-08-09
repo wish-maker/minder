@@ -21,6 +21,7 @@ from models import (
     QueryRequest,
     QueryResponse,
     RAGPipelineCreate,
+    RAGPipelineInfo,
     RAGPipelineResponse,
 )
 from qdrant_client.models import Distance, PointStruct, VectorParams
@@ -400,6 +401,43 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
         knowledge_base_ids=request.knowledge_base_ids,
         created_at=state.rag_pipelines[pipeline_id]["created_at"],
     )
+
+
+@router.get("/v1/pipeline", response_model=List[RAGPipelineInfo], tags=["Pipeline"])
+@router.get(
+    "/pipeline",
+    response_model=List[RAGPipelineInfo],
+    tags=["Pipeline"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+async def list_rag_pipelines(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """List RAG pipelines (paginated via limit/offset, matching /knowledge-bases).
+
+    Added in #426 -- before this, a pipeline_id only ever existed in the create
+    response, with no way to recover it (clients had to track it themselves).
+    """
+    page, _total = paginate(list(state.rag_pipelines.values()), limit, offset)
+    return page
+
+
+@router.get(
+    "/v1/pipeline/{pipeline_id}", response_model=RAGPipelineInfo, tags=["Pipeline"]
+)
+@router.get(
+    "/pipeline/{pipeline_id}",
+    response_model=RAGPipelineInfo,
+    tags=["Pipeline"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+async def get_rag_pipeline(pipeline_id: str):
+    """Get a single RAG pipeline by id (#426). 404 if unknown."""
+    pipeline = state.rag_pipelines.get(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="RAG pipeline not found")
+    return pipeline
 
 
 @router.delete("/v1/pipeline/{pipeline_id}", tags=["Pipeline"])

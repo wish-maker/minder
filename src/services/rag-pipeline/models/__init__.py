@@ -61,6 +61,19 @@ class RAGPipelineResponse(BaseModel):
     message: str = "RAG pipeline created successfully"
 
 
+class RAGPipelineInfo(BaseModel):
+    """RAG pipeline list/get response (#426) -- separate from RAGPipelineResponse
+    since that one carries a creation-only `message` field and uses `pipeline_id`
+    where the internal `state.rag_pipelines` dict (and Postgres row) key is `id`;
+    reusing it for list/get would either show a stale "created successfully"
+    message on every entry or require remapping the dict key on every read."""
+
+    id: str
+    name: str
+    knowledge_base_ids: List[str]
+    created_at: str
+
+
 class QueryRequest(BaseModel):
     """Query request"""
 
