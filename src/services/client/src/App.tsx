@@ -9,6 +9,7 @@ import { MarketplacePage } from "./pages/MarketplacePage";
 import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { PluginConfigPage } from "./pages/PluginConfigPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
+import { StatusPage } from "./pages/StatusPage";
 
 export function App() {
   return (
@@ -78,11 +79,15 @@ export function App() {
             <SectionTabs
               title="Platform"
               icon="⚙️"
-              tabs={[{ to: ".", label: "Models", end: true }]}
+              tabs={[
+                { to: ".", label: "Models", end: true },
+                { to: "status", label: "Status" },
+              ]}
             />
           }
         >
           <Route index element={<ModelManagementPage />} />
+          <Route path="status" element={<StatusPage />} />
         </Route>
 
         {/* Old flat routes, kept as redirects so existing bookmarks/links

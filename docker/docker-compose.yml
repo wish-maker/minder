@@ -672,9 +672,11 @@ services:
     - -loglevel=INFO
     # LEAST PRIVILEGE — the registry needs only: container inspect (GET …/json) +
     # restart (telegraf fallback) + start/stop (bundle enable/disable, #65 item-2
-    # PR2). Anything not matched here is DENIED, including create/exec/kill/volumes/
-    # images/networks/swarm — so a compromised registry still can't host-takeover.
+    # PR2) + recent logs (Status page, GET-only, no exec/attach/create). Anything
+    # not matched here is DENIED, including create/exec/kill/volumes/images/
+    # networks/swarm — so a compromised registry still can't host-takeover.
     - -allowGET=(/v[0-9.]+)?/containers/[^/]+/json
+    - -allowGET=(/v[0-9.]+)?/containers/[^/]+/logs
     - -allowPOST=(/v[0-9.]+)?/containers/[^/]+/(restart|start|stop)
     # Traefik's Docker provider (#377) — exact allowlist from the proxy's own
     # README example for Traefik: version negotiation (HEAD /_ping, required by

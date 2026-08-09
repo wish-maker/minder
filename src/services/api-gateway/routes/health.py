@@ -1,5 +1,7 @@
-"""Observability routes: /health (phase-aware downstream checks) and /metrics."""
+"""Observability routes: /health (phase-aware downstream checks), /v1/status
+(full-fleet health fan-out for the Status page), and /metrics."""
 
+import asyncio
 import sys
 from datetime import datetime, timezone
 
@@ -80,6 +82,63 @@ async def health_check():
         body["message"] = f"Phase {phase} active - Phase 2 services not started"
 
     return JSONResponse(status_code=status_code, content=body)
+
+
+# Every service that exposes a shared.health-shaped /health, keyed by the name
+# the Status page shows. plugin_state_manager/tts_stt/graph_rag aren't in
+# SERVICE_REGISTRY (nothing proxies to them today) so their URLs are hardcoded
+# here, mirroring docker-compose.yml's own container names/ports -- tts-stt in
+# particular may have no container at all in external-TTS-STT mode, which
+# correctly reports as unreachable rather than crashing this endpoint.
+_FLEET = [
+    ("api-gateway", settings.API_GATEWAY_URL),
+    ("plugin-registry", settings.PLUGIN_REGISTRY_URL),
+    ("marketplace", settings.MARKETPLACE_URL),
+    ("plugin-state-manager", "http://minder-plugin-state-manager:8003"),
+    ("rag-pipeline", settings.RAG_PIPELINE_URL),
+    ("model-management", settings.MODEL_MANAGEMENT_URL),
+    ("tts-stt", "http://minder-tts-stt:8006"),
+    ("graph-rag", "http://minder-graph-rag:8008"),
+]
+
+
+async def _probe_fleet_service(name: str, base_url: str) -> dict:
+    """Fetch one service's own /health body verbatim, reported as `reachable:
+    false` (not a raised error) on any network failure or non-2xx response --
+    a downed service is exactly the interesting case here, not an exception to
+    propagate."""
+    try:
+        response = await http_client.get(f"{base_url}/health", timeout=5.0)
+        body = response.json()
+        return {
+            "name": name,
+            "reachable": True,
+            "status": body.get("status", "unknown"),
+            "version": body.get("version"),
+            "environment": body.get("environment"),
+            "checks": body.get("checks", {}),
+        }
+    except Exception as e:
+        return {
+            "name": name,
+            "reachable": False,
+            "status": "unreachable",
+            "error": f"{type(e).__name__}: {e}"[:200],
+        }
+
+
+@router.get("/v1/status")
+async def fleet_status():
+    """Aggregate health across every core service for the client's Status page
+    (#platform-status). No single-service /health today crosses the browser --
+    each is internal-docker-network only -- so this is the one endpoint a
+    browser can actually reach to see the whole fleet at once. `version` is
+    each service's own hardcoded string, not derived from the deployed image
+    tag -- a "reported version," not a deployment-tracking signal."""
+    results = await asyncio.gather(
+        *(_probe_fleet_service(name, url) for name, url in _FLEET)
+    )
+    return {"services": results}
 
 
 @router.get("/metrics")

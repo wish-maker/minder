@@ -55,6 +55,7 @@ from core.webhooks import (  # noqa: E402
 )
 from routes.ai_tools import build_ai_tools_router  # noqa: E402
 from routes.bundles import build_bundles_router  # noqa: E402
+from routes.containers import build_containers_router  # noqa: E402
 from routes.plugins import build_plugins_router  # noqa: E402
 from routes.proxy import ProxyRouter  # noqa: E402
 from routes.services import build_services_router  # noqa: E402
@@ -194,6 +195,7 @@ app.include_router(
 )
 
 app.include_router(build_bundles_router(settings=settings, logger=logger))
+app.include_router(build_containers_router(settings=settings))
 
 
 # ============================================================================

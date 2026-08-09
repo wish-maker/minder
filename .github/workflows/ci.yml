@@ -206,6 +206,7 @@ jobs:
           curl -sf http://127.0.0.1:8009/plugins/config | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/platform | grep -q '<div id="root">'
           curl -sf http://127.0.0.1:8009/plugins/ai-tools | grep -q '<div id="root">'
+          curl -sf http://127.0.0.1:8009/platform/status | grep -q '<div id="root">'
 
       - name: Verify model-management started without crash-looping
         # Not held to the same --wait health bar as the other 7 (see comment

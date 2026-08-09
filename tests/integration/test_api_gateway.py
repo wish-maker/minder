@@ -64,6 +64,23 @@ class TestAPIGatewayIntegration:
         response = gateway_test_client.post("/v1/bundles/news/enable")
         assert response.status_code == 401
 
+    def test_status_fan_out_never_500s(self, gateway_test_client):
+        """GET /v1/status never raises even though every downstream service is
+        unreachable here -- each fleet probe reports reachable=False instead of
+        taking the whole endpoint down."""
+        response = gateway_test_client.get("/v1/status")
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["services"]) == 8
+        assert all(s["reachable"] is False for s in body["services"])
+        assert all(s["status"] == "unreachable" for s in body["services"])
+
+    def test_container_logs_proxy(self, gateway_test_client):
+        """GET /v1/containers/{name}/logs proxies to Plugin Registry (JWT
+        enforced there, not at the gateway -- this route only carries GETs)."""
+        response = gateway_test_client.get("/v1/containers/marketplace/logs")
+        assert response.status_code in [200, 401, 404, 503]
+
     def test_cors_headers(self, gateway_test_client):
         """CORSMiddleware (shared/utils/cors.py) only treats a request as a
         real preflight when it carries Origin + Access-Control-Request-Method
