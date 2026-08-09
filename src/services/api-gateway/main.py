@@ -11,7 +11,6 @@ from core.auth import close_pg_pool, init_users_table
 from core.clients import SERVICE_REGISTRY, http_client, redis_client
 from core.middleware import register_middleware
 from fastapi import FastAPI
-from routes.admin_ui import router as admin_ui_router
 from routes.ai import router as ai_router
 from routes.auth import router as auth_router
 from routes.health import router as health_router
@@ -86,7 +85,6 @@ app.include_router(ai_router)
 app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(proxy_router)
-app.include_router(admin_ui_router)
 
 
 if __name__ == "__main__":
