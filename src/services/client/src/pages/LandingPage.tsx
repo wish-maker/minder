@@ -68,6 +68,11 @@ export function LandingPage() {
           URLs, weather locations, and similar per-plugin options. Changes
           apply immediately, with no service restart needed.
         </ToolCard>
+        <ToolCard to="/plugins/ai-tools" icon="🧰" title="AI Tools">
+          See every function-calling tool Minder's plugins expose — what's
+          live right now from running plugins, and the durable catalog
+          Marketplace keeps with tier info.
+        </ToolCard>
         <ToolCard to="/platform" icon="🤖" title="Model Management">
           Pull, delete, and test Ollama models directly against Minder's
           model-management service — the same Ollama instance the whole
