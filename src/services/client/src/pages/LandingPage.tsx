@@ -85,6 +85,11 @@ export function LandingPage() {
           HyDE, Self-RAG, auto, or corrective — with optional reranking,
           compression, and hybrid search.
         </ToolCard>
+        <ToolCard to="/rag/graph" icon="🧬" title="Knowledge Graph">
+          Extract entities and relationships from text with spaCy, build them
+          into a Neo4j knowledge graph, then explore who's connected to whom
+          — a different retrieval paradigm from vector search.
+        </ToolCard>
       </ToolSection>
 
       <ToolSection
