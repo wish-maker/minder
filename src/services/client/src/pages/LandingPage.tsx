@@ -78,6 +78,10 @@ export function LandingPage() {
           model-management service — the same Ollama instance the whole
           platform uses.
         </ToolCard>
+        <ToolCard to="/platform/status" icon="🩺" title="Status">
+          Health, reported version, and recent logs for every core service —
+          one place to check what's up, what's degraded, and why.
+        </ToolCard>
       </div>
 
       <div className="flex flex-col gap-3">

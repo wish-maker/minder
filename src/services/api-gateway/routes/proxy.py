@@ -153,6 +153,16 @@ async def proxy_to_bundles(path: str, request: Request):
     return await proxy_request(service_url, f"v1/bundles/{path}", request)
 
 
+@router.api_route("/v1/containers/{path:path}", methods=["GET"])
+async def proxy_to_containers(path: str, request: Request):
+    """Proxy /v1/containers/* (recent container logs, for the Status page) to
+    Plugin Registry -- JWT-gated there (not here), since a log read is
+    sensitive but this route only carries GETs, which _require_jwt_for_writes
+    never gates."""
+    service_url = SERVICE_REGISTRY["plugin_registry"]
+    return await proxy_request(service_url, f"v1/containers/{path}", request)
+
+
 # ============================================================================
 # RAG Pipeline
 # ============================================================================

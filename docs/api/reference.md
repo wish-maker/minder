@@ -121,7 +121,16 @@ yet (#145) — no UI for those.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Gateway health + downstream dependency status (no auth) |
+| GET | `/v1/status` | Fans out to all 8 core services' own `/health` over the internal docker network (no single service's `/health` is reachable from a browser directly). Never fails even if every downstream is unreachable — each entry reports `reachable: false` instead |
+| GET | `/v1/containers/{name}/logs` | Proxies to Plugin Registry's `GET /v1/containers/{name}/logs?tail=` (JWT-gated there, not here — see Plugin Registry's Containers section below) |
 | GET | `/metrics` | Prometheus metrics |
+
+The `client` service has a `/platform/status` page (the "Platform" nav
+section's 3rd tab, alongside Models and Bundles) — a health/version grid from
+`GET /v1/status` plus a lazy "View recent logs" panel per service. `version`
+in both the API response and the UI is each service's own hardcoded string,
+not derived from the deployed Docker image tag — labelled "reported version"
+rather than treated as a deployment-tracking signal.
 
 **Authentication:** real JWT (HS256) with bcrypt-hashed credentials. Send
 `Authorization: Bearer <token>` on protected routes.
@@ -212,6 +221,19 @@ visually distinct rather than merged into one list.
 | POST | `/v1/bundles/{name}/enable` | Enable a bundle (JWT-gated). Persists intent to `bundles.state.json` (same file the host CLI writes) and starts already-materialised claimed containers via the least-privilege docker-socket-proxy — it cannot *create* new containers, so a never-materialised service comes back as `pending_create` until the next host `setup.sh start`/`restart` converge |
 | POST | `/v1/bundles/{name}/disable` | Disable a bundle (JWT-gated); stops its claimed containers via the docker-socket-proxy, same persistence model as enable |
 | POST | `/v1/bundles/reconcile` | Re-apply the persisted enable-state to running containers (JWT-gated) — start/stop drift correction without changing intent |
+
+### Containers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/containers/{name}/logs` | Recent stdout/stderr for one of the 8 core services (`?tail=`, default 200, max 2000), JWT-gated (log output can carry stack traces or an accidentally-logged secret). `name` is checked against a fixed allowlist before building a container name — defense-in-depth beyond the docker-socket-proxy's own path-regex restriction. `404` unknown service or container not running, `503` if the socket-proxy itself is unreachable |
+
+Fetched over the same least-privilege docker-socket-proxy `/v1/bundles`
+uses — its allowlist was extended with a GET-only, no-exec/attach/create
+`.../logs` rule for this (`docker/docker-compose.yml`). Docker's logs API
+returns a multiplexed stream (a type+length header per frame) whenever the
+container isn't a tty, which every Minder container is — this endpoint demuxes
+it server-side so the response is plain `{stream, text}` lines, not raw bytes.
 
 ### Ops
 
