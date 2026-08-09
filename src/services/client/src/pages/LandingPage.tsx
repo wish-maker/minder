@@ -18,6 +18,14 @@ export function LandingPage() {
           <Link to="/plugin-config">Plugin Configuration</Link> — edit news
           feeds, weather locations, and other plugin settings.
         </li>
+        <li>
+          <Link to="/knowledge-bases">Knowledge Bases</Link> — create
+          knowledge bases and upload documents for Minder's own RAG pipeline.
+        </li>
+        <li>
+          <Link to="/rag-pipelines">RAG Pipelines</Link> — build a pipeline
+          over your knowledge bases and query it.
+        </li>
       </ul>
       <p className="hint">
         Looking to pull, delete, or manage local Ollama models? Use{" "}
@@ -25,6 +33,12 @@ export function LandingPage() {
         Connections → Ollama → Manage — same Ollama instance, more complete
         (system prompts, per-model parameters), and integrated with the chat
         you'd actually use the model in.
+      </p>
+      <p className="hint">
+        OpenWebUI's own "Knowledge" feature is a separate, disconnected system
+        — it has no access to Minder's actual RAG pipeline (knowledge bases,
+        chunking, or the HyDE/Self-RAG/corrective retrieval methods below).
+        Use Knowledge Bases and RAG Pipelines above for the real thing.
       </p>
     </>
   );
