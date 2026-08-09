@@ -37,13 +37,12 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 > FastAPI backend, so it has no `/docs`/OpenAPI schema and isn't part of the
 > API surface documented below. It's the browser UI for the plugin-config
 > endpoints, the RAG Pipeline knowledge-base/pipeline/query endpoints (#401),
-> and the marketplace catalog/install/dependency-graph endpoints below
-> (#402). It deliberately does **not** duplicate model management — OpenWebUI's own
-> Admin Panel already covers pull/delete/update against the same Ollama
-> instance, more completely and integrated with the chat you'd use the model
-> in. It also doesn't duplicate OpenWebUI's own "Knowledge" feature — that's a
-> separate, disconnected system with no access to the actual `rag-pipeline`
-> service documented below, which is exactly what these pages give a UI to.
+> the marketplace catalog/install/dependency-graph endpoints (#402), and the
+> model-management/AI-tools endpoints below (under "Platform" and "Plugins"
+> nav sections, respectively). It doesn't duplicate OpenWebUI's own
+> "Knowledge" feature — that's a separate, disconnected system with no access
+> to the actual `rag-pipeline` service documented below, which is exactly
+> what these pages give a UI to.
 
 **Conventions used below**
 - `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
@@ -178,6 +177,12 @@ Traefik once reachable — see `docs/guides/remote-access.md`) — a form-based 
 page for configurable plugins (news, weather, crypto, tefas today), instead
 of hand-crafting these requests. Nested under the "Plugins" nav section
 alongside Marketplace, not a standalone top-level page (#402).
+
+The `client` service also has a `/plugins/ai-tools` page (the "Plugins" nav
+section's 3rd tab) showing `GET /v1/plugins/ai/tools` above side-by-side with
+marketplace's `GET /v1/marketplace/ai/tools` catalog below — two genuinely
+different views (live/in-memory vs durable/DB-backed with tier info), kept
+visually distinct rather than merged into one list.
 
 ### Webhooks
 

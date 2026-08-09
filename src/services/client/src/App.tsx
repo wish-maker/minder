@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 
 import { SectionTabs } from "./components/SectionTabs";
 import { AuthProvider } from "./lib/auth";
+import { AiToolsPage } from "./pages/AiToolsPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { MarketplacePage } from "./pages/MarketplacePage";
@@ -61,12 +62,14 @@ export function App() {
               tabs={[
                 { to: ".", label: "Marketplace", end: true },
                 { to: "config", label: "Configure" },
+                { to: "ai-tools", label: "AI Tools" },
               ]}
             />
           }
         >
           <Route index element={<MarketplacePage />} />
           <Route path="config" element={<PluginConfigPage />} />
+          <Route path="ai-tools" element={<AiToolsPage />} />
         </Route>
 
         <Route
