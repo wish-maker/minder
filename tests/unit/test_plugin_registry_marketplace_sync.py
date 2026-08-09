@@ -127,3 +127,60 @@ async def test_no_ai_tools_skips_sync_entirely(tmp_path, captured_requests):
         "telegraf", tmp_path, module_ai_tools=None, description="x", author="y"
     )
     assert captured_requests == []
+
+
+@pytest.fixture
+def existing_plugin_requests(monkeypatch):
+    """Stub _mkt_request: search finds an existing plugin by name (the
+    "already synced under the old buggy code" case), so the create branch
+    should never fire and a PUT should reconcile metadata instead."""
+    calls = []
+
+    async def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if method == "GET":  # the "search for existing plugin" call
+            return _FakeResponse(
+                200, {"plugins": [{"id": "existing-plugin-id", "name": "weather"}]}
+            )
+        if method == "PUT":
+            return _FakeResponse(200, {"id": "existing-plugin-id"})
+        return _FakeResponse(200, {"tools_imported": 1})  # /ai/sync
+
+    monkeypatch.setattr(
+        marketplace_sync, "_mkt_request", AsyncMock(side_effect=fake_request)
+    )
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_existing_plugin_gets_metadata_reconciled_not_recreated(
+    tmp_path, existing_plugin_requests
+):
+    """Found live: 4 first-party plugins were created under the old sync
+    code and stayed stuck with empty description / author "Unknown" forever
+    -- the "found existing" branch returned the id without ever writing the
+    caller's current (correct) metadata back. A PUT must now reconcile the
+    existing row instead of leaving it stale, and POST /plugins (create)
+    must never fire for a plugin that already exists."""
+    await marketplace_sync.sync_plugin_ai_tools(
+        "weather",
+        tmp_path,
+        module_ai_tools=[{"name": "get_weather", "description": "Current weather"}],
+        description="Current weather and forecasts.",
+        author="Minder Team",
+    )
+
+    create_calls = [
+        c
+        for c in existing_plugin_requests
+        if c[0] == "POST" and c[1].endswith("/v1/marketplace/plugins")
+    ]
+    assert create_calls == []
+
+    put_calls = [c for c in existing_plugin_requests if c[0] == "PUT"]
+    assert len(put_calls) == 1
+    assert put_calls[0][1].endswith("/v1/marketplace/plugins/existing-plugin-id")
+    body = put_calls[0][2]["json"]
+    assert body["description"] == "Current weather and forecasts."
+    assert body["author"] == "Minder Team"
+    assert body["display_name"] == "Current weather and forecasts"
