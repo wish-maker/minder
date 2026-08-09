@@ -59,6 +59,10 @@ jobs:
           set -e
           CFG="${GITHUB_WORKSPACE}/pyproject.toml"
           for d in src/services/*/; do
+            # admin-ui is a Node/Vite frontend, no Python at all -- mypy errors
+            # out ("no .py[i] files") on an empty dir. Its own lint/typecheck
+            # runs in the frontend-lint job instead.
+            [ "$(basename "$d")" = "admin-ui" ] && continue
             echo "── mypy ${d} ──"
             ( cd "${d}" && mypy . --config-file "${CFG}" )
           done
@@ -72,6 +76,39 @@ jobs:
           mypy scripts/setup/ --config-file "${CFG}"
           echo "── mypy scripts/check_pip_updates.py + check_docker_updates.py ──"
           mypy scripts/check_pip_updates.py scripts/check_docker_updates.py --config-file "${CFG}"
+
+  frontend-lint:
+    name: Frontend Lint & Typecheck (admin-ui)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: src/services/admin-ui/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/services/admin-ui
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: src/services/admin-ui
+        run: npm run lint
+
+      - name: Run TypeScript typecheck
+        working-directory: src/services/admin-ui
+        run: npm run typecheck
+
+      - name: Build
+        # Cheap here (no Docker), catches import/env errors before the much
+        # heavier container-smoke job does a full image build.
+        working-directory: src/services/admin-ui
+        run: npm run build
 
   shell-lint:
     name: Shell Lint (setup.sh shim + setup.bash.sh + scripts/lib)

@@ -24,7 +24,14 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
   on `setup.sh` (the thin shim) + `setup.bash.sh` (the frozen bash reference) + all
   `scripts/lib/*.sh`; full-severity shellcheck is informational (`continue-on-error`).
   The file list is a glob, so new modules are covered automatically.
-- Hadolint on `src/services/*/Dockerfile`.
+- Hadolint on `src/services/*/Dockerfile` (glob, so this already covers
+  `admin-ui`'s Dockerfile alongside the Python services' — no special-casing
+  needed since hadolint just lints Dockerfile syntax).
+- Frontend lint & typecheck (`admin-ui`, the one Node/Vite service in an
+  otherwise all-Python repo): ESLint + `tsc --noEmit` + a plain `npm run
+  build` (cheap here, catches import/env errors before the much heavier
+  container-smoke job does a full image build). The Python MyPy loop above
+  explicitly skips `admin-ui` (no `.py` files there at all).
 - Light security scans: Bandit (`-r src/ src/services/ src/plugins/ tests/ -ll`),
   Safety, TruffleHog (secret scan), pip-licenses.
 
@@ -40,7 +47,7 @@ Ollama replaced by a small deterministic stub (see
 
 **Container Smoke Test** (parallel with integration-tests, both only need
 unit-tests): the only job in the whole pipeline that actually `docker run`s
-Minder's own images — `docker compose ... up -d --build --wait` on the same 8
+Minder's own images — `docker compose ... up -d --build --wait` on the same 9
 services Trivy's matrix covers, with a deterministic seeded `.env`, then fails
 if any container doesn't reach `healthy` within 5 minutes. Added after three
 separate live-deployment-only regressions (a missing pip dependency, a missing
@@ -51,15 +58,19 @@ scans the built image for CVEs but never runs it) in the same session.
 separately, just for "running, not crash-looping") since its `/health` probe
 correctly reports 503 without a live Ollama backend (`critical=True` by
 design — being an Ollama proxy is its whole job) and this job doesn't stand
-one up, unlike `tests/e2e/`'s `fake_ollama.py` stub.
+one up, unlike `tests/e2e/`'s `fake_ollama.py` stub. `admin-ui` (the React
+frontend, #421) gets its own extra check beyond `--wait` healthy: a curl
+round-trip against `/`, `/plugin-config`, and `/model-management` confirming
+nginx's SPA fallback actually resolves React Router's client-side paths
+instead of 404ing.
 
 ### 3. Security Scan — `security.yml`
 **Triggers:** push & PR to `main`/`develop`, weekly cron (Wed 09:00 UTC), manual
 dispatch.
-**Jobs:** the **deep** scans — CodeQL (Python SAST) + Trivy (builds all 8 services
-from the compose file, one matrix leg each, and scans each image for CVEs — every
-service pulls its own pip deps on top of the shared base, so each has a distinct CVE
-surface), plus a summary.
+**Jobs:** the **deep** scans — CodeQL (Python SAST) + Trivy (builds all 9 first-party
+services from the compose file, one matrix leg each, and scans each image for CVEs —
+every service pulls its own pip deps (or, for `admin-ui`, npm deps) on top of its own
+base image, so each has a distinct CVE surface), plus a summary.
 **Kept push-triggered (not scheduled-only):** on this repo CodeQL is ~1 min and each
 Trivy leg ~45 s (running in parallel), the repo is public (free CI minutes), and both
 jobs run in parallel with
