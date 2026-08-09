@@ -53,3 +53,24 @@ SUPPORTED_LANGUAGES = {
     "ja": "Japanese",
     "ko": "Korean",
 }
+
+# STT's recognize_google() call (core/stt_engine.py) needs a BCP-47
+# locale-qualified code ("tr-TR"), not TTS's bare 2-letter codes above
+# ("tr") -- a prior fix (#143) made STT validate against SUPPORTED_LANGUAGES
+# to reject arbitrary strings, but that's the wrong vocabulary for STT: it
+# rejects the very "tr-TR"-style codes the engine actually requires, and
+# DEFAULT_STT_LANG itself ("tr-TR") failed its own route's validation as a
+# result. One BCP-47 code per language in SUPPORTED_LANGUAGES above.
+SUPPORTED_STT_LANGUAGES = {
+    "tr-TR": "Turkish",
+    "en-US": "English",
+    "de-DE": "German",
+    "fr-FR": "French",
+    "es-ES": "Spanish",
+    "it-IT": "Italian",
+    "pt-PT": "Portuguese",
+    "nl-NL": "Dutch",
+    "ru-RU": "Russian",
+    "ja-JP": "Japanese",
+    "ko-KR": "Korean",
+}

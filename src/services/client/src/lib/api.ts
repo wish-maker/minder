@@ -58,3 +58,31 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+/** Like apiFetch, but for endpoints that return a binary body (e.g. tts-stt's
+ * synthesized WAV/MP3 audio) instead of JSON -- calling .json() on those
+ * would throw. Returns the blob plus any response headers the caller asked
+ * for (e.g. tts-stt's X-Language/X-Duration), since Blob itself carries no
+ * header info. */
+export async function apiFetchBlob(
+  path: string,
+  { method = "GET", body, token }: ApiOptions = {},
+): Promise<{ blob: Blob; headers: Headers }> {
+  const headers: Record<string, string> = {};
+  const isFormData = body instanceof FormData;
+  if (body !== undefined && !isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${apiBaseUrl}${path}`, {
+    method,
+    headers,
+    body:
+      body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+  });
+
+  if (!res.ok) throw new ApiError(await parseErrorDetail(res), res.status);
+
+  return { blob: await res.blob(), headers: res.headers };
+}
