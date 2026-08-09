@@ -180,8 +180,8 @@ def print_success_banner() -> None:
         e(f"   {name:<20} →  {c}http://localhost:{port}{nc}")
 
     e("")
-    e(f"{b}{m}📍 Admin UI{nc}")
-    e(f"   Admin UI            →  {c}http://localhost:8009{nc}")
+    e(f"{b}{m}📍 Minder Client{nc}")
+    e(f"   Client              →  {c}http://localhost:8009{nc}")
     e(f"   {d}(plugin config + model management -- register/log in via the{nc}")
     e(f"   {d}page itself; reachable remotely too, see remote-access.md){nc}")
 

@@ -313,7 +313,7 @@ bash setup.sh doctor
 - **DB connection issues** — `docker exec minder-postgres pg_isready -U "$POSTGRES_USER"`;
   if passwords diverged, run `bash setup.sh sync-postgres-password`.
 - **Auth not enforced on a route** — check that the route is one of the five
-  Authelia-protected routers (minio, api-gateway, grafana, openwebui, jaeger); Authelia
+  Authelia-protected routers (minio, api-gateway, grafana, openwebui, jaeger, client); Authelia
   itself is enabled and enforcing by default.
 
 ---
@@ -324,7 +324,7 @@ The items below are **not** done yet. They are the gap between this development 
 and a hardened one:
 
 - [ ] Complete DNS + real TLS for the deploy so Authelia SSO/MFA (already enabled and
-      enforcing forward-auth on 5 routers) works as full browser SSO.
+      enforcing forward-auth on 6 routers) works as full browser SSO.
 - [ ] Replace self-signed certs with real TLS (Let's Encrypt via Traefik or provided
       certs).
 - [ ] Configure real DNS for the public hostnames.

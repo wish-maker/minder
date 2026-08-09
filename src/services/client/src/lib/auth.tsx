@@ -9,7 +9,7 @@ import {
 import { apiBaseUrl } from "./api";
 
 // Same sessionStorage keys the old plugin_config.html/model_management.html
-// pages used, kept for continuity across the migration (#422 -> admin-ui).
+// pages used, kept for continuity across the migration (#422 -> this client).
 const TOKEN_KEY = "minder_jwt";
 const USERNAME_KEY = "minder_username";
 

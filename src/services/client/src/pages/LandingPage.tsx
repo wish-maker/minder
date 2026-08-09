@@ -7,7 +7,7 @@ export function LandingPage() {
 
   return (
     <>
-      <h1>Minder Admin</h1>
+      <h1>Minder</h1>
       <p className="hint">
         {isAuthenticated
           ? `Logged in as ${username}.`

@@ -105,7 +105,7 @@ consistent across services that validate tokens.
 - Configuration: `docker/services/traefik/`
 
 Traefik has an `authelia-forwardauth` middleware wired onto five routers
-(minio, api-gateway, grafana, openwebui, jaeger). The other three routers
+(minio, api-gateway, grafana, openwebui, jaeger, client). The other three routers
 (traefik-dashboard, rabbitmq, neo4j) use an IP-whitelist middleware instead.
 The Authelia container is **enabled and running**, so that forward-auth check
 **is enforced** — an unauthenticated request to those five routes gets a 302
@@ -121,7 +121,7 @@ Its configuration lives under `docker/services/authelia/`
 (`configuration.yml`, `users_database.yml`).
 
 The Traefik `authelia-forwardauth` middleware enforces it on five routers
-(minio, api-gateway, grafana, openwebui, jaeger): an unauthenticated request
+(minio, api-gateway, grafana, openwebui, jaeger, client): an unauthenticated request
 is 302-redirected to the Authelia portal. Full browser SSO still needs real
 DNS + TLS on the deploy.
 

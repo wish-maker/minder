@@ -105,7 +105,7 @@ curl -X POST http://localhost:8004/pipeline/<pipeline_id>/query \
 ```
 
 ### 🤖 **"I want to run custom AI models locally"**
-Open the [Admin UI](http://localhost:8009/model-management) — list installed models,
+Open the [Minder Client](http://localhost:8009/model-management) — list installed models,
 pull a new one, delete one, or test-prompt one directly, all from the browser.
 
 ```bash

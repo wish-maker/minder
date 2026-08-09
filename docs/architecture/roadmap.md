@@ -43,7 +43,7 @@ RabbitMQ 4.3, Apicurio schema registry.
 collector, plus six exporters.
 
 **Reverse proxy & auth:** Traefik v3, plus Authelia SSO/2FA — **enabled** by default,
-enforcing forward-auth on 5 Traefik routers (minio, api-gateway, grafana, openwebui,
+enforcing forward-auth on 6 Traefik routers (minio, api-gateway, grafana, openwebui,
 jaeger). Full browser SSO still needs real DNS + TLS on the deploy.
 
 **Not present / not implemented (do not expect these):**
@@ -78,7 +78,7 @@ the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)
 reports what's active. Only RAPTOR remains unwired.
 
 ### 3. Authelia
-Authelia is enabled and enforcing forward-auth on 5 Traefik routers (minio, api-gateway,
+Authelia is enabled and enforcing forward-auth on 6 Traefik routers (minio, api-gateway,
 grafana, openwebui, jaeger). The remaining work is completing real DNS + TLS on the deploy
 so full browser SSO works end-to-end.
 

@@ -60,7 +60,7 @@ jobs:
           - plugin-state-manager
           - rag-pipeline
           - tts-stt
-          - admin-ui
+          - client
 
     steps:
       - name: Checkout code

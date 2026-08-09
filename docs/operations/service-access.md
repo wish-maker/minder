@@ -13,7 +13,7 @@ labels). This guide describes how services are exposed and how to reach them.
 
 > **Reality check.**
 > - **Authelia SSO is ENABLED** (#15) — the Traefik forward-auth middleware enforces it on
->   5 routers (minio, api-gateway, grafana, openwebui, jaeger): an unauthenticated request
+>   6 routers (minio, api-gateway, grafana, openwebui, jaeger, client): an unauthenticated request
 >   → **302 to the Authelia portal**. Full browser SSO still needs real DNS + TLS on the
 >   deploy (see #15 "C").
 > - Non-Traefik host ports are bound to **`127.0.0.1`** (#190): reachable ON the host

@@ -1,7 +1,7 @@
 // VITE_API_BASE_URL is baked in at BUILD time (Vite convention), not read at
 // container start like every Python service's env vars -- changing it means
 // rebuilding the image, not just restarting the container. See
-// docker/docker-compose.yml's admin-ui build.args and .env.example.
+// docker/docker-compose.yml's client build.args and .env.example.
 export const apiBaseUrl: string =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 

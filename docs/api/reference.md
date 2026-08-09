@@ -14,7 +14,7 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 > **Development environment.** This is a development deployment on a Raspberry Pi 4.
 > Production hardening is not yet fully applied. Authelia SSO is **enabled by default**
 > and the Traefik forward-auth middleware is wired and **enforced** on five routers
-> (minio, api-gateway, grafana, openwebui, jaeger) — unauthenticated requests get a 302
+> (minio, api-gateway, grafana, openwebui, jaeger, client) — unauthenticated requests get a 302
 > redirect to the Authelia portal. Full browser SSO still needs real DNS + TLS on the
 > deploy. The API Gateway itself implements real JWT + bcrypt authentication and
 > Redis-backed rate limiting.
@@ -32,10 +32,12 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 | TTS / STT | `minder-tts-stt` | 8006 | Text-to-speech (Piper offline default, WAV; gTTS fallback, MP3), speech-to-text (`speech_recognition`) |
 | Graph-RAG | `minder-graph-rag` | 8008 | spaCy NER, Neo4j knowledge-graph construction and retrieval |
 
-> **Not a 9th API service**: `admin-ui` (port 8009, `src/services/admin-ui`) is a
-> separate React/Vite frontend — a static SPA, not a FastAPI backend, so it has no
-> `/docs`/OpenAPI schema and isn't part of the API surface documented below. It's the
-> browser UI for the plugin-config and model-management endpoints already listed here.
+> **Not a 9th API service**: `client` (port 8009, `src/services/client`) is
+> Minder's own web client — a separate React/Vite frontend, a static SPA not a
+> FastAPI backend, so it has no `/docs`/OpenAPI schema and isn't part of the
+> API surface documented below. It's the browser UI for the plugin-config and
+> model-management endpoints already listed here, growing to cover RAG (#401)
+> and marketplace (#402) next.
 
 **Conventions used below**
 - `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
@@ -90,9 +92,9 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
 
-A browser UI for the model-management endpoints above is served by the
-**separate `admin-ui` service** (`http://localhost:8009/model-management`,
-or `https://admin.minder.local` once DNS/TLS is set up — not an API Gateway
+A browser UI for the model-management endpoints above is served by Minder's
+**separate `client` service** (`http://localhost:8009/model-management`,
+or `https://client.minder.local` once DNS/TLS is set up — not an API Gateway
 route) — list/pull/delete/test-prompt local Ollama models instead of
 hand-crafting these requests (#421). Model constraints/metrics/fine-tuning
 are not implemented yet (#145) and have no UI for the same reason.
@@ -160,9 +162,9 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | PUT | `/v1/plugins/{plugin_name}/config` | Update config: validate → persist → apply live, no restart (JWT-gated) |
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
-A browser UI for the two config endpoints above is served by the **separate
-`admin-ui` service** (`http://localhost:8009/plugin-config`, or via Traefik
-once reachable — see `docs/guides/remote-access.md`) — a form-based settings
+A browser UI for the two config endpoints above is served by Minder's
+**separate `client` service** (`http://localhost:8009/plugin-config`, or via
+Traefik once reachable — see `docs/guides/remote-access.md`) — a form-based settings
 page for configurable plugins (news, weather, crypto, tefas today), instead
 of hand-crafting these requests.
 

@@ -579,32 +579,36 @@ services:
     - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
     - traefik.http.middlewares.api-gateway-ratelimit.ratelimit.average=${RATE_LIMIT_PER_MINUTE:-60}
     - traefik.http.services.api-gateway.loadbalancer.server.port=8000
-  # Dedicated frontend for the plugin-config/model-management admin pages
-  # (built as static HTML on api-gateway itself in #400/#422) -- extracted
-  # into its own React/Vite service so backend services stay pure APIs as
-  # more admin pages land (#401 RAG UI, #402 marketplace UI). Calls
-  # api-gateway's /v1/* directly from the browser, cross-origin (already
-  # CORS-permissive by default, auth is header-only JWT -- no proxy needed).
-  # ipwhitelist, not authelia-forwardauth: this is admin/ops-only tooling with
-  # no regular-end-user audience, same classification as rabbitmq/neo4j/the
-  # Traefik dashboard below, layered UNDER the page's own JWT login (not
-  # instead of it).
-  admin-ui:
+  # Minder's own web client -- plugin-config and model-management today
+  # (built as static HTML directly on api-gateway in #400/#422, extracted
+  # into its own React/Vite service so backend services stay pure APIs),
+  # growing to cover RAG knowledge-base management (#401) and marketplace
+  # browsing (#402) as genuine user-facing features, not just ops tooling --
+  # this is Minder's client, not an admin panel (chat itself stays OpenWebUI's
+  # job; this covers everything OpenWebUI doesn't). Calls api-gateway's
+  # /v1/* directly from the browser, cross-origin (already CORS-permissive
+  # by default, auth is header-only JWT -- no proxy needed).
+  # authelia-forwardauth, same as openwebui: this is a general client for
+  # anyone using the platform, not LAN-only ops tooling (ipwhitelist, the
+  # rabbitmq/neo4j/dashboard classification, no longer fits now that it's
+  # not admin-only) -- layered ABOVE the page's own JWT login, same
+  # double-gate openwebui itself already has.
+  client:
     labels:
     - minder.bundle=core
     - traefik.enable=true
-    - traefik.http.routers.admin-ui.rule=Host(`admin.minder.local`)
-    - traefik.http.routers.admin-ui.service=admin-ui
-    - traefik.http.routers.admin-ui.entrypoints=websecure
-    - traefik.http.routers.admin-ui.middlewares=ipwhitelist
-    - traefik.http.services.admin-ui.loadbalancer.server.port=8009
+    - traefik.http.routers.client.rule=Host(`client.minder.local`)
+    - traefik.http.routers.client.service=client
+    - traefik.http.routers.client.entrypoints=websecure
+    - traefik.http.routers.client.middlewares=authelia-forwardauth@file
+    - traefik.http.services.client.loadbalancer.server.port=8009
     build:
       context: ../
-      dockerfile: src/services/admin-ui/Dockerfile
+      dockerfile: src/services/client/Dockerfile
       args:
-        VITE_API_BASE_URL: ${ADMIN_UI_API_BASE_URL:-http://localhost:8000}
-    image: minder/admin-ui:1.0.0
-    container_name: minder-admin-ui
+        VITE_API_BASE_URL: ${CLIENT_API_BASE_URL:-http://localhost:8000}
+    image: minder/client:1.0.0
+    container_name: minder-client
     restart: on-failure
     # PILLAR 1: direct port for dev/LAN access without trusting the local
     # *.minder.local cert chain first, same convenience api-gateway's own

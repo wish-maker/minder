@@ -23,7 +23,7 @@ every non-failover-gated service). `start` then honours the recorded bundle stat
 - ⏸️ Role-based access control — NOT implemented. Only JWT authentication exists today.
 
 **Enabled:**
-- ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 5 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger).
+- ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 6 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger, client).
 
 > Five services ship without an active healthcheck: `otel-collector`, `redis-exporter`, and
 > `rabbitmq-exporter` because their images lack the tooling to run one (report "no-healthcheck",
@@ -53,7 +53,7 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │                        SECURITY / EDGE                          │
 │  ┌──────────────┐              ┌──────────────────────────────┐ │
 │  │   Traefik    │ (80/443)     │  Authelia (9091) — ENABLED   │ │
-│  │ Reverse Proxy│ v3.7.10      │  (forward-auth, 5 routers)   │ │
+│  │ Reverse Proxy│ v3.7.10      │  (forward-auth, 6 routers)   │ │
 │  └──────────────┘              └──────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                  │
@@ -200,7 +200,7 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 - **Databases**: PostgreSQL 18.4, Redis 8.10, Qdrant 1.19, Neo4j 2026.06 (community)
 - **Object store**: MinIO · **Message bus**: RabbitMQ 4.3 · **Schema registry**: Apicurio (SQL)
 - **LLM**: Ollama with local models
-- **Authentication**: JWT (bcrypt) at the gateway, plus Authelia SSO/2FA on 5 Traefik routers. No RBAC.
+- **Authentication**: JWT (bcrypt) at the gateway, plus Authelia SSO/2FA on 6 Traefik routers. No RBAC.
 
 ### Infrastructure
 - **Containers**: Docker + Docker Compose (`docker/docker-compose.yml`, hand-maintained)

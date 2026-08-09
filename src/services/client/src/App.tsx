@@ -9,7 +9,7 @@ export function App() {
   return (
     <AuthProvider>
       <nav className="top-nav">
-        <Link to="/">Minder Admin</Link>
+        <Link to="/">Minder</Link>
         <Link to="/plugin-config">Plugin Config</Link>
         <Link to="/model-management">Model Management</Link>
       </nav>

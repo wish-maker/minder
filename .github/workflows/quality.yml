@@ -59,10 +59,10 @@ jobs:
           set -e
           CFG="${GITHUB_WORKSPACE}/pyproject.toml"
           for d in src/services/*/; do
-            # admin-ui is a Node/Vite frontend, no Python at all -- mypy errors
+            # client is a Node/Vite frontend, no Python at all -- mypy errors
             # out ("no .py[i] files") on an empty dir. Its own lint/typecheck
             # runs in the frontend-lint job instead.
-            [ "$(basename "$d")" = "admin-ui" ] && continue
+            [ "$(basename "$d")" = "client" ] && continue
             echo "── mypy ${d} ──"
             ( cd "${d}" && mypy . --config-file "${CFG}" )
           done
@@ -78,7 +78,7 @@ jobs:
           mypy scripts/check_pip_updates.py scripts/check_docker_updates.py --config-file "${CFG}"
 
   frontend-lint:
-    name: Frontend Lint & Typecheck (admin-ui)
+    name: Frontend Lint & Typecheck (client)
     runs-on: ubuntu-latest
 
     steps:
@@ -90,24 +90,24 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: src/services/admin-ui/package-lock.json
+          cache-dependency-path: src/services/client/package-lock.json
 
       - name: Install dependencies
-        working-directory: src/services/admin-ui
+        working-directory: src/services/client
         run: npm ci
 
       - name: Run ESLint
-        working-directory: src/services/admin-ui
+        working-directory: src/services/client
         run: npm run lint
 
       - name: Run TypeScript typecheck
-        working-directory: src/services/admin-ui
+        working-directory: src/services/client
         run: npm run typecheck
 
       - name: Build
         # Cheap here (no Docker), catches import/env errors before the much
         # heavier container-smoke job does a full image build.
-        working-directory: src/services/admin-ui
+        working-directory: src/services/client
         run: npm run build
 
   shell-lint:

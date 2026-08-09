@@ -42,7 +42,7 @@ minder/                              # Project root
 │       └── scripts/                 # Docker helper scripts
 │
 ├── src/                             # Application source
-│   ├── services/                    # Microservices (8 core APIs + 1 admin frontend)
+│   ├── services/                    # Microservices (8 core APIs + Minder's own web client)
 │   │   ├── api-gateway/             # API Gateway (port 8000)
 │   │   ├── plugin-registry/         # Plugin Registry (port 8001)
 │   │   ├── marketplace/             # Marketplace (port 8002)
@@ -51,7 +51,7 @@ minder/                              # Project root
 │   │   ├── model-management/        # Model Management (port 8005)
 │   │   ├── tts-stt/                 # TTS / STT (port 8006)
 │   │   ├── graph-rag/               # Graph RAG / knowledge graph (port 8008)
-│   │   └── admin-ui/                # React/Vite static frontend (port 8009) -- not a FastAPI backend
+│   │   └── client/                  # React/Vite web client (port 8009) -- not a FastAPI backend
 │   ├── bootstrap/                   # Bootstrap config data (config/default_plugins.yml stub)
 │   ├── plugins/                     # First-party module plugins (telegraf, network, crypto, weather, news, tefas) + _contract.py
 │   ├── requirements/                # Shared Python dependency sets (see below)
@@ -130,7 +130,7 @@ configured, so the common default runs 34.
 
 **Edge / Security**:
 - Traefik (v3) - Reverse proxy, TLS termination, routing
-- Authelia - SSO/2FA — **ENABLED**, enforcing forward-auth on 5 routers (minio, api-gateway, grafana, openwebui, jaeger)
+- Authelia - SSO/2FA — **ENABLED**, enforcing forward-auth on 6 routers (minio, api-gateway, grafana, openwebui, jaeger, client)
 
 **Data Stores** (internal-only, not host-exposed):
 - PostgreSQL 18.4 - Primary database
@@ -198,7 +198,7 @@ Every service has:
 
 - **Authentication**: JWT-based auth (bcrypt password hashing)
 - **Authorization**: JWT validation only — **RBAC is not implemented**
-- **SSO / 2FA**: Authelia is **enabled** and enforcing forward-auth on 5 routers (minio, api-gateway, grafana, openwebui, jaeger); full browser SSO still needs real DNS + TLS on the deploy
+- **SSO / 2FA**: Authelia is **enabled** and enforcing forward-auth on 6 routers (minio, api-gateway, grafana, openwebui, jaeger, client); full browser SSO still needs real DNS + TLS on the deploy
 - **Rate limiting**: Redis-based rate limiter (fail-open)
 - **Input validation**: Pydantic validators
 - **Secrets management**: environment variables only (root `./.env`)

@@ -136,8 +136,8 @@ def run_health_checks(json_mode: bool = False) -> int:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
 
     if not json_mode:
-        log._emit("\n" + log.bold("Admin UI"))
-    for svc in ("admin-ui",):
+        log._emit("\n" + log.bold("Client"))
+    for svc in ("client",):
         if svc in config.SERVICE_PORTS:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
 

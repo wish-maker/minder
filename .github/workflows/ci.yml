@@ -170,7 +170,7 @@ jobs:
         # neo4j, qdrant) reports healthy, and fails fast if any container
         # exits/crash-loops instead. Same 9 services Trivy's matrix covers
         # (security.yml) -- every first-party image with its own pip deps
-        # (or, for admin-ui, its own npm deps).
+        # (or, for client, its own npm deps).
         #
         # model-management is built+started here but deliberately left out of
         # the --wait list (checked separately below) -- its /health probe
@@ -187,12 +187,12 @@ jobs:
           docker compose -f docker/docker-compose.yml --env-file docker/.env \
             up -d --build --wait --wait-timeout 300 \
             api-gateway graph-rag marketplace \
-            plugin-registry plugin-state-manager rag-pipeline tts-stt admin-ui
+            plugin-registry plugin-state-manager rag-pipeline tts-stt client
           docker compose -f docker/docker-compose.yml --env-file docker/.env \
             up -d --build model-management
 
-      - name: Verify admin-ui's SPA routing actually works
-        # admin-ui (#421) is a static React SPA -- nginx's `try_files`
+      - name: Verify the client's SPA routing actually works
+        # client (#421/#423) is a static React SPA -- nginx's `try_files`
         # fallback is what makes direct hits on client-side routes like
         # /plugin-config resolve instead of 404ing at the nginx layer. That's
         # the one thing most likely to be silently broken by a bad nginx.conf,

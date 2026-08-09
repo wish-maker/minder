@@ -135,7 +135,7 @@ bash setup.sh uninstall --purge     # Stop AND DELETE all data volumes (irrevers
    - All secrets live in the root `./.env` file. `setup.sh` auto-fills any `CHANGEME`
      values with generated ones on install. Authentication is JWT-based at the API
      Gateway; Authelia SSO/2FA is also enabled and enforces forward-auth on several
-     routers (minio, api-gateway, grafana, openwebui, jaeger) — full browser SSO
+     routers (minio, api-gateway, grafana, openwebui, jaeger, client) — full browser SSO
      still needs real DNS + TLS on the deploy.
 
 2. **Access services** (host-exposed ports):

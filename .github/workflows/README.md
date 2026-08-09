@@ -25,13 +25,13 @@ Raspberry Pi platform provisioned via `setup.sh`, not a published image.
   `scripts/lib/*.sh`; full-severity shellcheck is informational (`continue-on-error`).
   The file list is a glob, so new modules are covered automatically.
 - Hadolint on `src/services/*/Dockerfile` (glob, so this already covers
-  `admin-ui`'s Dockerfile alongside the Python services' — no special-casing
+  `client`'s Dockerfile alongside the Python services' — no special-casing
   needed since hadolint just lints Dockerfile syntax).
-- Frontend lint & typecheck (`admin-ui`, the one Node/Vite service in an
+- Frontend lint & typecheck (`client`, the one Node/Vite service in an
   otherwise all-Python repo): ESLint + `tsc --noEmit` + a plain `npm run
   build` (cheap here, catches import/env errors before the much heavier
   container-smoke job does a full image build). The Python MyPy loop above
-  explicitly skips `admin-ui` (no `.py` files there at all).
+  explicitly skips `client` (no `.py` files there at all).
 - Light security scans: Bandit (`-r src/ src/services/ src/plugins/ tests/ -ll`),
   Safety, TruffleHog (secret scan), pip-licenses.
 
@@ -58,7 +58,7 @@ scans the built image for CVEs but never runs it) in the same session.
 separately, just for "running, not crash-looping") since its `/health` probe
 correctly reports 503 without a live Ollama backend (`critical=True` by
 design — being an Ollama proxy is its whole job) and this job doesn't stand
-one up, unlike `tests/e2e/`'s `fake_ollama.py` stub. `admin-ui` (the React
+one up, unlike `tests/e2e/`'s `fake_ollama.py` stub. `client` (the React
 frontend, #421) gets its own extra check beyond `--wait` healthy: a curl
 round-trip against `/`, `/plugin-config`, and `/model-management` confirming
 nginx's SPA fallback actually resolves React Router's client-side paths
@@ -69,7 +69,7 @@ instead of 404ing.
 dispatch.
 **Jobs:** the **deep** scans — CodeQL (Python SAST) + Trivy (builds all 9 first-party
 services from the compose file, one matrix leg each, and scans each image for CVEs —
-every service pulls its own pip deps (or, for `admin-ui`, npm deps) on top of its own
+every service pulls its own pip deps (or, for `client`, npm deps) on top of its own
 base image, so each has a distinct CVE surface), plus a summary.
 **Kept push-triggered (not scheduled-only):** on this repo CodeQL is ~1 min and each
 Trivy leg ~45 s (running in parallel), the repo is public (free CI minutes), and both
@@ -113,7 +113,8 @@ black --check src/services/ src/shared/ scripts/ tests/
 isort --check-only src/services/ src/shared/ scripts/ tests/
 flake8 src/services/ src/shared/ scripts/ tests/ --max-line-length=120
 # mypy is per-service (config in pyproject.toml, passed explicitly because we cd in)
-for d in src/services/*/; do (cd "$d" && mypy . --config-file "$PWD/../../../pyproject.toml"); done
+# -- skip client/, the one Node/Vite service (no .py files there at all)
+for d in src/services/*/; do [ "$(basename "$d")" = "client" ] && continue; (cd "$d" && mypy . --config-file "$PWD/../../../pyproject.toml"); done
 pytest tests/ -v --cov=src
 ```
 

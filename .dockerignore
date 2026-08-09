@@ -88,13 +88,13 @@ data/
 *.jsonl
 !training-data/*.jsonl
 !requirements*.txt
-!src/services/admin-ui/package.json
-!src/services/admin-ui/package-lock.json
-!src/services/admin-ui/tsconfig*.json
+!src/services/client/package.json
+!src/services/client/package-lock.json
+!src/services/client/tsconfig*.json
 
-# Node (admin-ui -- the first Node-based service in this repo)
-src/services/admin-ui/node_modules/
-src/services/admin-ui/dist/
+# Node (client -- the first Node-based service in this repo)
+src/services/client/node_modules/
+src/services/client/dist/
 
 # Test files
 tests/
