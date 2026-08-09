@@ -355,10 +355,10 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 > The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
 
 > **Browser UI**: the `client` service (#421, port 8009) has `/knowledge-bases` and
-> `/rag-pipelines` pages covering all of the above (#401) — no dedicated `GET /pipeline`
-> list endpoint exists yet, so the client tracks pipeline IDs it created client-side
-> (localStorage) rather than being able to list them back from the server; see #401's
-> follow-up issues for a proposed `GET /pipeline` and per-document list/delete endpoints.
+> `/rag-pipelines` pages covering all of the above (#401, #425) — no dedicated `GET /pipeline`
+> list endpoint exists yet (#426), so the client tracks pipeline IDs it created client-side
+> (localStorage) rather than being able to list them back from the server. There's also no
+> per-document list/delete on a knowledge base yet (#427) — only aggregate counts.
 
 ```bash
 # Create a knowledge base, then upload a document into it
