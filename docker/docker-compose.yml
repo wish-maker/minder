@@ -579,15 +579,17 @@ services:
     - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
     - traefik.http.middlewares.api-gateway-ratelimit.ratelimit.average=${RATE_LIMIT_PER_MINUTE:-60}
     - traefik.http.services.api-gateway.loadbalancer.server.port=8000
-  # Minder's own web client -- plugin-config and model-management today
-  # (built as static HTML directly on api-gateway in #400/#422, extracted
-  # into its own React/Vite service so backend services stay pure APIs),
-  # growing to cover RAG knowledge-base management (#401) and marketplace
-  # browsing (#402) as genuine user-facing features, not just ops tooling --
-  # this is Minder's client, not an admin panel (chat itself stays OpenWebUI's
-  # job; this covers everything OpenWebUI doesn't). Calls api-gateway's
-  # /v1/* directly from the browser, cross-origin (already CORS-permissive
-  # by default, auth is header-only JWT -- no proxy needed).
+  # Minder's own web client -- plugin-config and RAG knowledge-base/pipeline
+  # management (#401) today (plugin-config was built as static HTML directly
+  # on api-gateway in #400/#422, extracted into its own React/Vite service so
+  # backend services stay pure APIs; model-management was removed once
+  # OpenWebUI's own Admin Panel was confirmed to already cover it against the
+  # same Ollama instance), growing to cover marketplace browsing (#402) next
+  # -- this is Minder's client, not an admin panel (chat itself stays
+  # OpenWebUI's job; this covers everything OpenWebUI doesn't, including its
+  # disconnected Knowledge feature vs. the real rag-pipeline here). Calls
+  # api-gateway's /v1/* directly from the browser, cross-origin (already
+  # CORS-permissive by default, auth is header-only JWT -- no proxy needed).
   # authelia-forwardauth, same as openwebui: this is a general client for
   # anyone using the platform, not LAN-only ops tooling (ipwhitelist, the
   # rabbitmq/neo4j/dashboard classification, no longer fits now that it's

@@ -36,11 +36,14 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 > Minder's own web client — a separate React/Vite frontend, a static SPA not a
 > FastAPI backend, so it has no `/docs`/OpenAPI schema and isn't part of the
 > API surface documented below. It's the browser UI for the plugin-config
-> endpoints listed here, growing to cover RAG (#401) and marketplace (#402)
-> next. It deliberately does **not** duplicate model management — OpenWebUI's
-> own Admin Panel already covers pull/delete/update against the same Ollama
+> endpoints and the RAG Pipeline knowledge-base/pipeline/query endpoints
+> listed here (#401), growing to cover marketplace (#402) next. It
+> deliberately does **not** duplicate model management — OpenWebUI's own
+> Admin Panel already covers pull/delete/update against the same Ollama
 > instance, more completely and integrated with the chat you'd use the model
-> in.
+> in. It also doesn't duplicate OpenWebUI's own "Knowledge" feature — that's a
+> separate, disconnected system with no access to the actual `rag-pipeline`
+> service documented below, which is exactly what these pages give a UI to.
 
 **Conventions used below**
 - `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
@@ -350,6 +353,12 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | GET | `/metrics` | Prometheus metrics |
 
 > The singular `/knowledge-base[...]` forms still work as deprecated, hidden aliases (#144).
+
+> **Browser UI**: the `client` service (#421, port 8009) has `/knowledge-bases` and
+> `/rag-pipelines` pages covering all of the above (#401) — no dedicated `GET /pipeline`
+> list endpoint exists yet, so the client tracks pipeline IDs it created client-side
+> (localStorage) rather than being able to list them back from the server; see #401's
+> follow-up issues for a proposed `GET /pipeline` and per-document list/delete endpoints.
 
 ```bash
 # Create a knowledge base, then upload a document into it

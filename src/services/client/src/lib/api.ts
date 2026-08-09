@@ -5,7 +5,14 @@
 export const apiBaseUrl: string =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
 
 async function parseErrorDetail(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({}) as { detail?: unknown });
@@ -30,16 +37,23 @@ export async function apiFetch<T>(
   { method = "GET", body, token }: ApiOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const isFormData = body instanceof FormData;
+  // Never set Content-Type for FormData -- the browser fills in the
+  // multipart boundary itself; a manually-set header drops it and breaks
+  // parsing server-side.
+  if (body !== undefined && !isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${apiBaseUrl}${path}`, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body:
+      body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
   });
 
-  if (!res.ok) throw new ApiError(await parseErrorDetail(res));
+  if (!res.ok) throw new ApiError(await parseErrorDetail(res), res.status);
 
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
