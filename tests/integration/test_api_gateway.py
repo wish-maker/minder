@@ -52,6 +52,18 @@ class TestAPIGatewayIntegration:
         response = gateway_test_client.get("/v1/models")
         assert response.status_code in [200, 503]
 
+    def test_bundle_list_unauthenticated(self, gateway_test_client):
+        """GET /v1/bundles is a read, so it's never auth-gated -- only real
+        outcomes here are a real proxied response or downstream-unreachable 503."""
+        response = gateway_test_client.get("/v1/bundles")
+        assert response.status_code in [200, 503]
+
+    def test_bundle_enable_requires_auth(self, gateway_test_client):
+        """POST /v1/bundles/{name}/enable is a write, so it's auth-gated (mirrors
+        /v1/plugins/{path:path}'s _require_jwt_for_writes)."""
+        response = gateway_test_client.post("/v1/bundles/news/enable")
+        assert response.status_code == 401
+
     def test_cors_headers(self, gateway_test_client):
         """CORSMiddleware (shared/utils/cors.py) only treats a request as a
         real preflight when it carries Origin + Access-Control-Request-Method
