@@ -35,9 +35,12 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 > **Not a 9th API service**: `client` (port 8009, `src/services/client`) is
 > Minder's own web client — a separate React/Vite frontend, a static SPA not a
 > FastAPI backend, so it has no `/docs`/OpenAPI schema and isn't part of the
-> API surface documented below. It's the browser UI for the plugin-config and
-> model-management endpoints already listed here, growing to cover RAG (#401)
-> and marketplace (#402) next.
+> API surface documented below. It's the browser UI for the plugin-config
+> endpoints listed here, growing to cover RAG (#401) and marketplace (#402)
+> next. It deliberately does **not** duplicate model management — OpenWebUI's
+> own Admin Panel already covers pull/delete/update against the same Ollama
+> instance, more completely and integrated with the chat you'd use the model
+> in.
 
 **Conventions used below**
 - `ANY` = the route accepts `GET, POST, PUT, DELETE, PATCH`.
@@ -92,12 +95,14 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
 
-A browser UI for the model-management endpoints above is served by Minder's
-**separate `client` service** (`http://localhost:8009/model-management`,
-or `https://client.minder.local` once DNS/TLS is set up — not an API Gateway
-route) — list/pull/delete/test-prompt local Ollama models instead of
-hand-crafting these requests (#421). Model constraints/metrics/fine-tuning
-are not implemented yet (#145) and have no UI for the same reason.
+No dedicated browser UI for the model-management endpoints above — verified
+live that OpenWebUI's own Admin Panel → Connections → Ollama → Manage already
+covers pull/delete/update against the same Ollama instance (`OLLAMA_BASE_URL`
+is shared), more completely (per-model system prompts/parameters) and
+integrated with the chat you'd actually use the model in. A `client`-hosted
+page here was built in #421/#422 and removed once this overlap was confirmed
+rather than shipping a redundant second front-end to the same backend. Model
+constraints/metrics/fine-tuning are not implemented yet (#145) either way.
 
 ### AI / OpenWebUI integration (`/v1/ai`)
 
