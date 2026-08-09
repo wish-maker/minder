@@ -182,8 +182,8 @@ def print_success_banner() -> None:
     e("")
     e(f"{b}{m}📍 Minder Client{nc}")
     e(f"   Client              →  {c}http://localhost:8009{nc}")
-    e(f"   {d}(plugin config + model management -- register/log in via the{nc}")
-    e(f"   {d}page itself; reachable remotely too, see remote-access.md){nc}")
+    e(f"   {d}(plugin config -- register/log in via the page itself;{nc}")
+    e(f"   {d}reachable remotely too, see remote-access.md){nc}")
 
     # Only advertise a bundle's URLs when it is enabled — a standard install has
     # monitoring off, so showing Grafana/Prometheus would mislead. Everything
@@ -195,6 +195,9 @@ def print_success_banner() -> None:
             e(f"   OpenWebUI           →  {c}via Traefik (chat.minder.local){nc}")
             e(
                 f"   {d}(add '127.0.0.1 chat.minder.local' to /etc/hosts first — no real DNS by default){nc}"
+            )
+            e(
+                f"   {d}(pull/delete/manage Ollama models: Admin Panel -> Connections -> Ollama -> Manage){nc}"
             )
         if bundles.is_enabled("voice"):
             e(

@@ -105,15 +105,15 @@ curl -X POST http://localhost:8004/pipeline/<pipeline_id>/query \
 ```
 
 ### 🤖 **"I want to run custom AI models locally"**
-Open the [Minder Client](http://localhost:8009/model-management) — list installed models,
-pull a new one, delete one, or test-prompt one directly, all from the browser.
+Open [OpenWebUI](http://localhost:8080) → Admin Panel → Connections → Ollama → Manage —
+pull, delete, and update models there (same Ollama instance the whole platform uses),
+then chat with any of them directly.
 
 ```bash
 # Or manage models from inside the container directly (Ollama is internal-only,
 # :11434 is NOT host-exposed):
 docker exec minder-ollama ollama list
 docker exec -it minder-ollama ollama run mistral
-# Or chat through OpenWebUI (served via Traefik).
 ```
 
 ### 📊 **"I need to monitor my AI system"**
