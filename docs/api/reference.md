@@ -173,10 +173,11 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
 A browser UI for the two config endpoints above is served by Minder's
-**separate `client` service** (`http://localhost:8009/plugin-config`, or via
+**separate `client` service** (`http://localhost:8009/plugins/config`, or via
 Traefik once reachable — see `docs/guides/remote-access.md`) — a form-based settings
 page for configurable plugins (news, weather, crypto, tefas today), instead
-of hand-crafting these requests.
+of hand-crafting these requests. Nested under the "Plugins" nav section
+alongside Marketplace, not a standalone top-level page (#402).
 
 ### Webhooks
 
@@ -250,7 +251,7 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 
 > **Install used to 500 for every real user (#402, fixed)**: three independent bugs, found live on hantal, all in the install path. (1) `marketplace_installations.user_id` had a live FK to `marketplace_users`, a table nothing ever populated except one seed row (`user_id='admin'`) — any other user's install threw an unhandled `ForeignKeyViolationError`; fixed by dropping the constraint (`schema.sql`) — `user_id` here is just an opaque JWT-derived identifier, not a real relationship to a marketplace-specific user directory that was never wired up. (2) `InstallationResponse.user_id` had a UUID-only regex pattern rejecting real non-UUID ids. (3) `install_plugin` never `str()`-cast `plugin_id` before building the response — asyncpg returns UUID columns as `uuid.UUID` objects, and pydantic v2 doesn't coerce those into a `str` field. Each bug alone was enough to 500 the whole endpoint; all three had to be fixed before install actually worked.
 
-> **Browser UI**: the `client` service (#421, port 8009) has a `/marketplace` page covering catalog browsing/search, install/uninstall/enable/disable, "My Installed Plugins," and a lazy dependency/conflict disclosure per plugin (#402).
+> **Browser UI**: the `client` service (#421, port 8009) has a `/plugins` page (the "Plugins" nav section's default tab, alongside Plugin Config) covering catalog browsing/search, install/uninstall/enable/disable, "My Installed Plugins," and a lazy dependency/conflict disclosure per plugin (#402).
 
 ### AI-tool catalog (`/v1/marketplace/ai`)
 
@@ -372,8 +373,8 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 > id (deleting one removes every chunk with that filename, the same granularity available
 > before this endpoint existed).
 
-> **Browser UI**: the `client` service (#421, port 8009) has `/knowledge-bases` and
-> `/rag-pipelines` pages covering all of the above, including per-document list/delete
+> **Browser UI**: the `client` service (#421, port 8009) has `/rag` and
+> `/rag/pipelines` pages (grouped under a "RAG" nav section) covering all of the above, including per-document list/delete
 > (#401, #425, #427).
 
 ```bash

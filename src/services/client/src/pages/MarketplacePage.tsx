@@ -493,10 +493,7 @@ export function MarketplacePage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Marketplace
-      </h1>
-      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Browse and install Minder plugins. Browsing is open for everyone; log
         in to install, enable, disable, or uninstall.
       </p>

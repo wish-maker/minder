@@ -470,10 +470,7 @@ export function KnowledgeBasesPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Knowledge Bases
-      </h1>
-      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Create knowledge bases and upload documents — this is the data your{" "}
         <em>RAG Pipelines</em> actually search over. Browsing is open for
         everyone; log in to create, upload, or delete.

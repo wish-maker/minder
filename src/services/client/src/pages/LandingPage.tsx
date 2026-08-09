@@ -46,27 +46,27 @@ export function LandingPage() {
       </p>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ToolCard to="/plugin-config" icon="🧩" title="Plugin Configuration">
-          Edit settings for plugins that expose a config schema — news feed
-          URLs, weather locations, and similar per-plugin options. Changes
-          apply immediately, with no service restart needed.
-        </ToolCard>
-        <ToolCard to="/knowledge-bases" icon="📚" title="Knowledge Bases">
+        <ToolCard to="/rag" icon="📚" title="Knowledge Bases">
           Create knowledge bases and upload documents (PDF/TXT/MD) for
-          Minder's own RAG pipeline — the data your RAG Pipelines below
-          actually search over. Manage documents individually without
-          rebuilding the whole knowledge base.
+          Minder's own RAG pipeline — the data your RAG Pipelines search
+          over. Manage documents individually without rebuilding the whole
+          knowledge base.
         </ToolCard>
-        <ToolCard to="/rag-pipelines" icon="🔎" title="RAG Pipelines">
+        <ToolCard to="/rag/pipelines" icon="🔎" title="RAG Pipelines">
           Combine one or more knowledge bases into a queryable pipeline, then
           ask it questions using Minder's real retrieval methods — standard,
           HyDE, Self-RAG, auto, or corrective — with optional reranking,
           compression, and hybrid search.
         </ToolCard>
-        <ToolCard to="/marketplace" icon="🛒" title="Marketplace">
+        <ToolCard to="/plugins" icon="🛒" title="Marketplace">
           Browse, install, and manage Minder plugins — see what's available,
           check dependencies and conflicts against what you've already
           installed, and turn plugins on or off without leaving the browser.
+        </ToolCard>
+        <ToolCard to="/plugins/config" icon="🧩" title="Plugin Configuration">
+          Edit settings for plugins that expose a config schema — news feed
+          URLs, weather locations, and similar per-plugin options. Changes
+          apply immediately, with no service restart needed.
         </ToolCard>
       </div>
 

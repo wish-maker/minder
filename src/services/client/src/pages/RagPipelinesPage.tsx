@@ -572,10 +572,7 @@ export function RagPipelinesPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        RAG Pipelines
-      </h1>
-      <p className="mb-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Combine one or more knowledge bases into a queryable pipeline, then
         ask it questions using Minder's own retrieval methods — this is
         separate from OpenWebUI's own disconnected Knowledge feature.

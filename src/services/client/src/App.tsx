@@ -1,5 +1,6 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
+import { SectionTabs } from "./components/SectionTabs";
 import { AuthProvider } from "./lib/auth";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
@@ -14,37 +15,66 @@ export function App() {
         <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/">
           Minder
         </Link>
-        <Link
-          className="hover:text-indigo-600 dark:hover:text-indigo-400"
-          to="/plugin-config"
-        >
-          Plugin Config
+        <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/rag">
+          RAG
         </Link>
         <Link
           className="hover:text-indigo-600 dark:hover:text-indigo-400"
-          to="/knowledge-bases"
+          to="/plugins"
         >
-          Knowledge Bases
-        </Link>
-        <Link
-          className="hover:text-indigo-600 dark:hover:text-indigo-400"
-          to="/rag-pipelines"
-        >
-          RAG Pipelines
-        </Link>
-        <Link
-          className="hover:text-indigo-600 dark:hover:text-indigo-400"
-          to="/marketplace"
-        >
-          Marketplace
+          Plugins
         </Link>
       </nav>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/plugin-config" element={<PluginConfigPage />} />
-        <Route path="/knowledge-bases" element={<KnowledgeBasesPage />} />
-        <Route path="/rag-pipelines" element={<RagPipelinesPage />} />
-        <Route path="/marketplace" element={<MarketplacePage />} />
+
+        <Route
+          path="/rag"
+          element={
+            <SectionTabs
+              title="RAG"
+              icon="🔎"
+              tabs={[
+                { to: ".", label: "Knowledge Bases", end: true },
+                { to: "pipelines", label: "Pipelines" },
+              ]}
+            />
+          }
+        >
+          <Route index element={<KnowledgeBasesPage />} />
+          <Route path="pipelines" element={<RagPipelinesPage />} />
+        </Route>
+
+        <Route
+          path="/plugins"
+          element={
+            <SectionTabs
+              title="Plugins"
+              icon="🧩"
+              tabs={[
+                { to: ".", label: "Marketplace", end: true },
+                { to: "config", label: "Configure" },
+              ]}
+            />
+          }
+        >
+          <Route index element={<MarketplacePage />} />
+          <Route path="config" element={<PluginConfigPage />} />
+        </Route>
+
+        {/* Old flat routes, kept as redirects so existing bookmarks/links
+            still land somewhere sensible instead of the catch-all. */}
+        <Route path="/knowledge-bases" element={<Navigate to="/rag" replace />} />
+        <Route
+          path="/rag-pipelines"
+          element={<Navigate to="/rag/pipelines" replace />}
+        />
+        <Route path="/marketplace" element={<Navigate to="/plugins" replace />} />
+        <Route
+          path="/plugin-config"
+          element={<Navigate to="/plugins/config" replace />}
+        />
+
         {/* Unmatched paths (including the removed /model-management, still
             served 200 by nginx's SPA fallback since it can't tell client-side
             routes apart) redirect home instead of rendering a blank page. */}
