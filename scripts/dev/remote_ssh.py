@@ -57,10 +57,35 @@ def main() -> int:
         )
     cfg = remote_lib.HOSTS[alias]
 
-    if argv and argv[0] == "--job":
-        if len(argv) < 2:
-            sys.exit("--job needs a name — see: remote_ssh.py --list-jobs")
-        job_name = argv[1]
+    # --job/--no-cd/--raw/--no-pty can appear in any order (e.g. `--no-pty
+    # --job update`) -- they used to be parsed as two disjoint branches
+    # (--job checked as a literal argv[0] before the no_cd/raw/no_pty loop
+    # ever ran), so `--no-pty --job update` fell through to the loop, which
+    # consumed --no-pty and then tried to execute the literal string "--job"
+    # as a shell command. One pass over all four flags fixes that.
+    no_cd = raw = no_pty = False
+    job_name = None
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--job":
+            if i + 1 >= len(argv):
+                sys.exit("--job needs a name — see: remote_ssh.py --list-jobs")
+            job_name = argv[i + 1]
+            i += 2
+        elif argv[i] == "--no-cd":
+            no_cd = True
+            i += 1
+        elif argv[i] == "--raw":
+            raw = True
+            i += 1
+        elif argv[i] == "--no-pty":
+            no_pty = True
+            i += 1
+        else:
+            break
+    remaining = argv[i:]
+
+    if job_name is not None:
         job = remote_lib.JOBS.get(job_name)
         if job is None:
             sys.exit(
@@ -71,19 +96,9 @@ def main() -> int:
             sys.exit(
                 f"job {job_name!r} has no {cfg['shell']} variant for host {alias!r}"
             )
-        return remote_lib.run(alias, cmds)
+        return remote_lib.run(alias, cmds, no_cd=no_cd, raw=raw, no_pty=no_pty)
 
-    no_cd = raw = no_pty = False
-    while argv and argv[0] in ("--no-cd", "--raw", "--no-pty"):
-        if argv[0] == "--no-cd":
-            no_cd = True
-        elif argv[0] == "--raw":
-            raw = True
-        else:
-            no_pty = True
-        argv = argv[1:]
-
-    cmds = argv if argv else ["echo no-cmd"]
+    cmds = remaining if remaining else ["echo no-cmd"]
     return remote_lib.run(alias, cmds, no_cd=no_cd, raw=raw, no_pty=no_pty)
 
 

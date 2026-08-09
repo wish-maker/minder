@@ -72,6 +72,9 @@ class MinderBaseSettings(BaseSettings):
     PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
     API_GATEWAY_URL: str = "http://minder-api-gateway:8000"
     RAG_PIPELINE_URL: str = "http://minder-rag-pipeline:8004"
+    PLUGIN_STATE_MANAGER_URL: str = "http://minder-plugin-state-manager:8003"
+    TTS_STT_URL: str = "http://minder-tts-stt:8006"
+    GRAPH_RAG_URL: str = "http://minder-graph-rag:8008"
 
     # ========================================================================
     # AI/Model Configuration

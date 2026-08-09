@@ -85,20 +85,18 @@ async def health_check():
 
 
 # Every service that exposes a shared.health-shaped /health, keyed by the name
-# the Status page shows. plugin_state_manager/tts_stt/graph_rag aren't in
-# SERVICE_REGISTRY (nothing proxies to them today) so their URLs are hardcoded
-# here, mirroring docker-compose.yml's own container names/ports -- tts-stt in
-# particular may have no container at all in external-TTS-STT mode, which
-# correctly reports as unreachable rather than crashing this endpoint.
+# the Status page shows. tts-stt in particular may have no container at all in
+# external-TTS-STT mode, which correctly reports as unreachable rather than
+# crashing this endpoint.
 _FLEET = [
     ("api-gateway", settings.API_GATEWAY_URL),
     ("plugin-registry", settings.PLUGIN_REGISTRY_URL),
     ("marketplace", settings.MARKETPLACE_URL),
-    ("plugin-state-manager", "http://minder-plugin-state-manager:8003"),
+    ("plugin-state-manager", settings.PLUGIN_STATE_MANAGER_URL),
     ("rag-pipeline", settings.RAG_PIPELINE_URL),
     ("model-management", settings.MODEL_MANAGEMENT_URL),
-    ("tts-stt", "http://minder-tts-stt:8006"),
-    ("graph-rag", "http://minder-graph-rag:8008"),
+    ("tts-stt", settings.TTS_STT_URL),
+    ("graph-rag", settings.GRAPH_RAG_URL),
 ]
 
 

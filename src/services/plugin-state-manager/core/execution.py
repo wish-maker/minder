@@ -19,6 +19,19 @@ from models.tool_execution import (
 logger = logging.getLogger(__name__)
 
 
+def _build_execution_url(
+    registry_url: str, plugin_name: str, tool_endpoint: str
+) -> str:
+    """Plugin-registry's real actions route is versioned
+    (`/v1/plugins/{name}/actions/{action}`, routes/plugins.py) but
+    `tool_endpoint` (marketplace's `endpoint_path`, e.g. "/actions/get_weather")
+    is a RELATIVE path with no version prefix baked in -- the `/v1` segment has
+    to be added here. Split out as a pure function (no lazy DB/license imports)
+    so it's testable on its own; `execute_tool` below has real imports that make
+    it deliberately excluded from this service's isolated-import test harness."""
+    return f"{registry_url}/v1/plugins/{plugin_name}{tool_endpoint}"
+
+
 async def execute_tool(
     tool_name: str, parameters: Dict[str, Any], user_id: str = "default"
 ) -> ToolExecutionResponse:
@@ -101,11 +114,10 @@ async def execute_tool(
         # Execute tool via plugin registry
         registry_url = "http://minder-plugin-registry:8001"
 
-        # Build endpoint URL
         tool_endpoint = tool_data.get("endpoint", f"/{tool_name}")
         http_method = tool_data.get("method", "POST")
 
-        execution_url = f"{registry_url}/plugins/{plugin_name}{tool_endpoint}"
+        execution_url = _build_execution_url(registry_url, plugin_name, tool_endpoint)
 
         # Execute request
         try:

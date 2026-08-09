@@ -81,6 +81,42 @@ class TestAPIGatewayIntegration:
         response = gateway_test_client.get("/v1/containers/marketplace/logs")
         assert response.status_code in [200, 401, 404, 503]
 
+    def test_tts_languages_unauthenticated(self, gateway_test_client):
+        """GET /v1/tts/languages is a read, so it's never auth-gated."""
+        response = gateway_test_client.get("/v1/tts/languages")
+        assert response.status_code in [200, 503]
+
+    def test_tts_synthesis_requires_auth(self, gateway_test_client):
+        """POST /v1/tts (no trailing path) is a write, so it's auth-gated --
+        the bare-root route mirrors /v1/models' own root-route pattern."""
+        response = gateway_test_client.post("/v1/tts", json={"text": "hi"})
+        assert response.status_code == 401
+
+    def test_stt_transcription_requires_auth(self, gateway_test_client):
+        """POST /v1/stt (no trailing path) is a write, so it's auth-gated."""
+        response = gateway_test_client.post("/v1/stt")
+        assert response.status_code == 401
+
+    def test_graph_rag_proxy_requires_auth(self, gateway_test_client):
+        """POST /v1/graph-rag/extract proxies to Graph RAG (writes require JWT).
+        The /graph-rag/ segment is deliberate -- Graph RAG's own paths are
+        unprefixed and would otherwise collide with marketplace's /v1/graph/*."""
+        response = gateway_test_client.post("/v1/graph-rag/extract", json={"text": "x"})
+        assert response.status_code == 401
+
+    def test_tools_list_unauthenticated(self, gateway_test_client):
+        """GET /v1/tools is a read, so it's never auth-gated -- mirrors
+        /v1/bundles' GET-open/write-gated split."""
+        response = gateway_test_client.get("/v1/tools")
+        assert response.status_code in [200, 503]
+
+    def test_tool_execute_requires_auth(self, gateway_test_client):
+        """POST /v1/tools/{name}/execute is a write, so it's auth-gated at the
+        gateway (Plugin State Manager also gates it independently -- defense
+        in depth, same pattern as /v1/plugins/{path:path})."""
+        response = gateway_test_client.post("/v1/tools/get_weather/execute", json={})
+        assert response.status_code == 401
+
     def test_cors_headers(self, gateway_test_client):
         """CORSMiddleware (shared/utils/cors.py) only treats a request as a
         real preflight when it carries Origin + Access-Control-Request-Method
