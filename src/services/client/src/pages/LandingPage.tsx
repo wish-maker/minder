@@ -68,20 +68,25 @@ export function LandingPage() {
           URLs, weather locations, and similar per-plugin options. Changes
           apply immediately, with no service restart needed.
         </ToolCard>
+        <ToolCard to="/platform" icon="🤖" title="Model Management">
+          Pull, delete, and test Ollama models directly against Minder's
+          model-management service — the same Ollama instance the whole
+          platform uses.
+        </ToolCard>
       </div>
 
       <div className="flex flex-col gap-3">
         <InfoCallout icon="🤖">
-          Looking to pull, delete, or manage local Ollama models? Use{" "}
           <a
             className="font-medium underline"
             href="http://localhost:8080"
           >
             OpenWebUI
           </a>
-          's own Admin Panel → Connections → Ollama → Manage — same Ollama
-          instance, more complete (system prompts, per-model parameters), and
-          integrated with the chat you'd actually use the model in.
+          's own Admin Panel → Connections → Ollama → Manage offers the same
+          pull/delete against this same Ollama instance too, with more
+          per-model settings (system prompts, parameters) if you're already
+          there for chat.
         </InfoCallout>
         <InfoCallout icon="⚠️">
           OpenWebUI's own "Knowledge" feature is a separate, disconnected

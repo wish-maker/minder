@@ -5,6 +5,7 @@ import { AuthProvider } from "./lib/auth";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { MarketplacePage } from "./pages/MarketplacePage";
+import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { PluginConfigPage } from "./pages/PluginConfigPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
 
@@ -23,6 +24,12 @@ export function App() {
           to="/plugins"
         >
           Plugins
+        </Link>
+        <Link
+          className="hover:text-indigo-600 dark:hover:text-indigo-400"
+          to="/platform"
+        >
+          Platform
         </Link>
       </nav>
       <Routes>
@@ -60,6 +67,19 @@ export function App() {
         >
           <Route index element={<MarketplacePage />} />
           <Route path="config" element={<PluginConfigPage />} />
+        </Route>
+
+        <Route
+          path="/platform"
+          element={
+            <SectionTabs
+              title="Platform"
+              icon="⚙️"
+              tabs={[{ to: ".", label: "Models", end: true }]}
+            />
+          }
+        >
+          <Route index element={<ModelManagementPage />} />
         </Route>
 
         {/* Old flat routes, kept as redirects so existing bookmarks/links

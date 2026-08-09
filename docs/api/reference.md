@@ -100,14 +100,14 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | ANY | `/v1/marketplace/{path:path}` | marketplace (prefix forwarded as-is, matching plugin-registry) — no proxy route existed here at all until #402 |
 | ANY | `/v1/graph/{path:path}` | marketplace's plugin dependency/conflict/recommendation graph — a second, disjoint route namespace the same service exposes (#402) |
 
-No dedicated browser UI for the model-management endpoints above — verified
-live that OpenWebUI's own Admin Panel → Connections → Ollama → Manage already
-covers pull/delete/update against the same Ollama instance (`OLLAMA_BASE_URL`
-is shared), more completely (per-model system prompts/parameters) and
-integrated with the chat you'd actually use the model in. A `client`-hosted
-page here was built in #421/#422 and removed once this overlap was confirmed
-rather than shipping a redundant second front-end to the same backend. Model
-constraints/metrics/fine-tuning are not implemented yet (#145) either way.
+The `client` service (port 8009) has a `/platform` page (the "Platform" nav
+section's default "Models" tab) covering list/pull/delete/test-prompt against
+the endpoints above. OpenWebUI's own Admin Panel → Connections → Ollama →
+Manage covers the same pull/delete against the same Ollama instance
+(`OLLAMA_BASE_URL` is shared) too, with more per-model settings (system
+prompts, parameters) if you're already there for chat — the two aren't
+mutually exclusive. Model constraints/metrics/fine-tuning are not implemented
+yet (#145) — no UI for those.
 
 ### AI / OpenWebUI integration (`/v1/ai`)
 
