@@ -1,11 +1,22 @@
 """Real multi-service E2E harness (#318).
 
-Starts real `uvicorn` subprocesses for api-gateway, plugin-registry, and
-rag-pipeline bound to `127.0.0.1`, wired to each other via the same env vars
-`docker-compose.yml` uses (just `localhost` instead of `minder-<service>`
-hostnames), against real Postgres/Redis/Qdrant and a deterministic fake-Ollama
-stub (`fake_ollama.py`). No Docker, no image builds — just real sockets, real
-FastAPI apps, real routing code.
+Starts real `uvicorn` subprocesses for api-gateway, plugin-registry,
+rag-pipeline, and marketplace bound to `127.0.0.1`, wired to each other via
+the same env vars `docker-compose.yml` uses (just `localhost` instead of
+`minder-<service>` hostnames), against real Postgres/Redis/Qdrant and a
+deterministic fake-Ollama stub (`fake_ollama.py`). No Docker, no image builds
+— just real sockets, real FastAPI apps, real routing code.
+
+marketplace normally uses its own `minder_marketplace` Postgres database and
+a real Neo4j graph store (#437) -- neither exists in this harness. `DB_NAME`
+is overridden to the shared `minder_test` database (its tables are all
+`marketplace_*`-prefixed, no collision with the other services' tables); its
+own `/health` only checks Postgres (confirmed in `main.py`), so the service
+starts and reports healthy without Neo4j. The `/v1/graph/*` routes that
+actually need Neo4j (`routes/graph_dependencies.py`) catch connection
+failures and return a real error response rather than crashing the process,
+so they're simply not exercised here -- only the install/uninstall/enable/
+disable/installations-listing paths (Postgres-only) get real e2e coverage.
 
 Every service's `main.py`/`config.py` does `sys.path.insert(0, "/app/src")`
 (plugin-registry additionally `/app/plugins`, `/app/services/plugin-registry`)
@@ -45,6 +56,7 @@ JWT_SECRET = "e2e-test-jwt-secret"
 OLLAMA_PORT = 11434
 GATEWAY_PORT = 8000
 REGISTRY_PORT = 8001
+MARKETPLACE_PORT = 8002
 RAG_PORT = 8004
 
 STARTUP_TIMEOUT_S = 60
@@ -158,10 +170,11 @@ def _common_env(extra: dict) -> dict:
 
 
 class LiveStack:
-    def __init__(self, gateway_url, registry_url, rag_url, ollama_url):
+    def __init__(self, gateway_url, registry_url, rag_url, marketplace_url, ollama_url):
         self.gateway_url = gateway_url
         self.registry_url = registry_url
         self.rag_url = rag_url
+        self.marketplace_url = marketplace_url
         self.ollama_url = ollama_url
 
     def reset_ollama(self):
@@ -240,11 +253,29 @@ def live_stack():
         rag_url = f"http://127.0.0.1:{RAG_PORT}"
         _wait_for_health(rag_url, STARTUP_TIMEOUT_S, rag_proc)
 
+        marketplace_env = _common_env(
+            {
+                # Overrides MarketplaceSettings' own "minder_marketplace" default --
+                # no such database exists in this harness, and marketplace's tables
+                # are all marketplace_*-prefixed, so sharing minder_test is safe.
+                "DB_NAME": DB_NAME,
+                "REDIS_DB": "1",
+            }
+        )
+        marketplace_proc = _spawn_uvicorn(
+            _SERVICES / "marketplace", MARKETPLACE_PORT, marketplace_env
+        )
+        procs.append(("marketplace", marketplace_proc))
+
+        marketplace_url = f"http://127.0.0.1:{MARKETPLACE_PORT}"
+        _wait_for_health(marketplace_url, STARTUP_TIMEOUT_S, marketplace_proc)
+
         gateway_env = _common_env(
             {
                 "OLLAMA_BASE_URL": ollama_url,
                 "PLUGIN_REGISTRY_URL": registry_url,
                 "RAG_PIPELINE_URL": rag_url,
+                "MARKETPLACE_URL": marketplace_url,
                 "MODEL_MANAGEMENT_URL": "http://127.0.0.1:1/unused",
             }
         )
@@ -256,7 +287,7 @@ def live_stack():
         gateway_url = f"http://127.0.0.1:{GATEWAY_PORT}"
         _wait_for_health(gateway_url, STARTUP_TIMEOUT_S, gateway_proc)
 
-        yield LiveStack(gateway_url, registry_url, rag_url, ollama_url)
+        yield LiveStack(gateway_url, registry_url, rag_url, marketplace_url, ollama_url)
     finally:
         for name, proc in reversed(procs):
             proc.terminate()
