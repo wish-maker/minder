@@ -174,3 +174,33 @@ async def proxy_to_model_management(path: str, request: Request):
     _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY["model_management"]
     return await proxy_request(service_url, f"models/{path}", request)
+
+
+# ============================================================================
+# Marketplace
+# ============================================================================
+
+
+@router.api_route(
+    "/v1/marketplace/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
+async def proxy_to_marketplace(path: str, request: Request):
+    """Proxy all /v1/marketplace/* requests to the Marketplace service (writes
+    require JWT). Marketplace's own routes already carry the full
+    `/v1/marketplace/...` prefix (like plugin_registry, unlike rag_pipeline's
+    unversioned aliases) — forward the full path back, not just `path`."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["marketplace"]
+    return await proxy_request(service_url, f"v1/marketplace/{path}", request)
+
+
+@router.api_route(
+    "/v1/graph/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
+async def proxy_to_marketplace_graph(path: str, request: Request):
+    """Proxy /v1/graph/* (the plugin dependency/conflict/recommendation graph) to
+    the Marketplace service -- a second, disjoint route namespace it exposes
+    alongside /v1/marketplace/* (writes require JWT)."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["marketplace"]
+    return await proxy_request(service_url, f"v1/graph/{path}", request)

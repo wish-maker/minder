@@ -97,6 +97,8 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | ANY | `/v1/rag/{path:path}` | rag-pipeline (prefix maps to the service root) |
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
+| ANY | `/v1/marketplace/{path:path}` | marketplace (prefix forwarded as-is, matching plugin-registry) — no proxy route existed here at all until #402 |
+| ANY | `/v1/graph/{path:path}` | marketplace's plugin dependency/conflict/recommendation graph — a second, disjoint route namespace the same service exposes (#402) |
 
 No dedicated browser UI for the model-management endpoints above — verified
 live that OpenWebUI's own Admin Panel → Connections → Ollama → Manage already
@@ -243,7 +245,10 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | DELETE | `/v1/marketplace/plugins/{plugin_id}/uninstall` | Uninstall |
 | POST | `/v1/marketplace/plugins/{plugin_id}/enable` | Enable |
 | POST | `/v1/marketplace/plugins/{plugin_id}/disable` | Disable |
-| GET | `/v1/marketplace/plugins/{plugin_id}/installations` | List installations |
+| GET | `/v1/marketplace/plugins/{plugin_id}/installations` | List installations for a plugin, all users (admin/debug-shaped — no auth) |
+| GET | `/v1/marketplace/installations/me` | List the *authenticated user's* installed plugins, across the whole catalog, with plugin metadata inlined (#402) — deliberately a disjoint prefix, not nested under `/plugins/`, since `GET /plugins/{plugin_id}` is registered first and would swallow a literal segment like `installed` as `{plugin_id}` |
+
+> **Install used to 500 for every real user (#402, fixed)**: `marketplace_installations.user_id` had a live FK to `marketplace_users`, a table nothing ever populated except one seed row (`user_id='admin'`) — any other user's install threw an unhandled `ForeignKeyViolationError`. Fixed by dropping the constraint (`schema.sql`) — `user_id` here is just an opaque JWT-derived identifier, not a real relationship to a marketplace-specific user directory that was never wired up. A second bug in the same path (`InstallationResponse.user_id`'s UUID-only regex pattern rejecting real non-UUID ids) was fixed alongside it.
 
 ### AI-tool catalog (`/v1/marketplace/ai`)
 

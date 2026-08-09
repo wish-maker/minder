@@ -129,6 +129,7 @@ async def global_exception_handler(request, exc):
 
 from routes.ai_tools import router as ai_tools_router  # noqa: E402
 from routes.graph_dependencies import router as graph_dependencies_router  # noqa: E402
+from routes.installations import router as installations_router  # noqa: E402
 from routes.licensing import router as licensing_router  # noqa: E402
 from routes.management import router as management_router  # noqa: E402
 
@@ -137,6 +138,7 @@ from routes.marketplace import router as marketplace_router  # noqa: E402
 
 app.include_router(marketplace_router)
 app.include_router(management_router)
+app.include_router(installations_router)
 app.include_router(ai_tools_router)
 app.include_router(licensing_router)
 app.include_router(graph_dependencies_router)

@@ -523,6 +523,7 @@ services:
     - PLUGIN_REGISTRY_URL=http://minder-plugin-registry:8001
     - RAG_PIPELINE_URL=http://minder-rag-pipeline:8004
     - MODEL_MANAGEMENT_URL=http://minder-model-management:8005
+    - MARKETPLACE_URL=http://minder-marketplace:8002
     - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://minder-ollama:11434}
     - REDIS_HOST=redis
     - REDIS_PORT=6379
