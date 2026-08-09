@@ -114,9 +114,14 @@ async def test_database_schema_created(marketplace_schema_ready):
     assert columns_dict.get("author") == "YES"
     assert columns_dict.get("author_email") == "YES"
 
-    # Check CASCADE delete on user_id foreign keys (marketplace_licenses and
-    # marketplace_installations both reference marketplace_users(user_id)
-    # ON DELETE CASCADE)
+    # Check CASCADE delete on user_id foreign keys. marketplace_licenses still
+    # references marketplace_users(user_id) ON DELETE CASCADE.
+    # marketplace_installations USED to as well, but that FK was live-breaking
+    # (#402): marketplace_users is never populated except one seed "admin" row,
+    # so any real user's install hit an unhandled ForeignKeyViolationError.
+    # Dropped in schema.sql -- user_id there is just an opaque JWT-derived
+    # identifier now, not a real relationship to a user directory that was
+    # never wired up. This assertion locked in the bug; updated to match.
     cascade_fks = await conn.fetch(
         """
         SELECT
@@ -137,6 +142,6 @@ async def test_database_schema_created(marketplace_schema_ready):
     cascade_tables = [row["table_name"] for row in cascade_fks]
 
     assert "marketplace_licenses" in cascade_tables
-    assert "marketplace_installations" in cascade_tables
+    assert "marketplace_installations" not in cascade_tables
 
     await conn.close()
