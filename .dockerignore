@@ -88,6 +88,13 @@ data/
 *.jsonl
 !training-data/*.jsonl
 !requirements*.txt
+!src/services/admin-ui/package.json
+!src/services/admin-ui/package-lock.json
+!src/services/admin-ui/tsconfig*.json
+
+# Node (admin-ui -- the first Node-based service in this repo)
+src/services/admin-ui/node_modules/
+src/services/admin-ui/dist/
 
 # Test files
 tests/

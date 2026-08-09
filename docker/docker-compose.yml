@@ -579,6 +579,53 @@ services:
     - traefik.http.middlewares.strip-api-prefix.stripprefix.prefixes=/api
     - traefik.http.middlewares.api-gateway-ratelimit.ratelimit.average=${RATE_LIMIT_PER_MINUTE:-60}
     - traefik.http.services.api-gateway.loadbalancer.server.port=8000
+  # Dedicated frontend for the plugin-config/model-management admin pages
+  # (built as static HTML on api-gateway itself in #400/#422) -- extracted
+  # into its own React/Vite service so backend services stay pure APIs as
+  # more admin pages land (#401 RAG UI, #402 marketplace UI). Calls
+  # api-gateway's /v1/* directly from the browser, cross-origin (already
+  # CORS-permissive by default, auth is header-only JWT -- no proxy needed).
+  # ipwhitelist, not authelia-forwardauth: this is admin/ops-only tooling with
+  # no regular-end-user audience, same classification as rabbitmq/neo4j/the
+  # Traefik dashboard below, layered UNDER the page's own JWT login (not
+  # instead of it).
+  admin-ui:
+    labels:
+    - minder.bundle=core
+    - traefik.enable=true
+    - traefik.http.routers.admin-ui.rule=Host(`admin.minder.local`)
+    - traefik.http.routers.admin-ui.service=admin-ui
+    - traefik.http.routers.admin-ui.entrypoints=websecure
+    - traefik.http.routers.admin-ui.middlewares=ipwhitelist
+    - traefik.http.services.admin-ui.loadbalancer.server.port=8009
+    build:
+      context: ../
+      dockerfile: src/services/admin-ui/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${ADMIN_UI_API_BASE_URL:-https://api.minder.local}
+    image: minder/admin-ui:1.0.0
+    container_name: minder-admin-ui
+    restart: on-failure
+    # PILLAR 1: direct port for dev/LAN access without trusting the local
+    # *.minder.local cert chain first, same convenience api-gateway's own
+    # loopback port already gives -- Traefik-only would be a DX regression
+    # for a page devs open as often as this one.
+    ports:
+    - "127.0.0.1:8009:8009"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - wget -qO- http://127.0.0.1:8009/health || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+    - minder-network
   # Least-privilege Docker Engine API gateway (#65 item-2 security; ADR open-item b).
   # Replaces the registry's former raw `/var/run/docker.sock:rw` mount: the socket is
   # mounted here READ-ONLY and only the EXACT paths the registry needs are allowed —
