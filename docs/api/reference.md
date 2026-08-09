@@ -469,8 +469,8 @@ should use the `/v1/` path.
 |--------|------|-------------|
 | POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers |
 | GET | `/v1/tts/languages` | Supported TTS languages |
-| POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field |
-| GET | `/v1/stt/languages` | Supported STT languages |
+| POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field. **Locale-qualified codes** (`tr-TR`, `en-US`, …) — Google's `recognize_google()` requires them; a bare `tr` is rejected |
+| GET | `/v1/stt/languages` | Supported STT languages — a **different code set than TTS above** (`tr-TR` not `tr`); don't reuse a TTS language code here or vice versa |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
 

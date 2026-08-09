@@ -128,6 +128,10 @@ export function LandingPage() {
           Health, reported version, and recent logs for every core service —
           one place to check what's up, what's degraded, and why.
         </ToolCard>
+        <ToolCard to="/platform/voice" icon="🎙️" title="Voice">
+          Text-to-speech (Piper offline, gTTS fallback) and speech-to-text —
+          type or record, hear or read the result, ~12 languages supported.
+        </ToolCard>
       </ToolSection>
 
       <div className="flex flex-col gap-3">

@@ -11,6 +11,7 @@ import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { PluginConfigPage } from "./pages/PluginConfigPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
 import { StatusPage } from "./pages/StatusPage";
+import { VoicePage } from "./pages/VoicePage";
 
 export function App() {
   return (
@@ -84,6 +85,7 @@ export function App() {
                 { to: ".", label: "Models", end: true },
                 { to: "bundles", label: "Bundles" },
                 { to: "status", label: "Status" },
+                { to: "voice", label: "Voice" },
               ]}
             />
           }
@@ -91,6 +93,7 @@ export function App() {
           <Route index element={<ModelManagementPage />} />
           <Route path="bundles" element={<BundleManagementPage />} />
           <Route path="status" element={<StatusPage />} />
+          <Route path="voice" element={<VoicePage />} />
         </Route>
 
         {/* Old flat routes, kept as redirects so existing bookmarks/links

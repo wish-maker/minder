@@ -8,7 +8,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from models import STTResponse
 from prometheus_client import Counter
 
-from config import SUPPORTED_LANGUAGES, settings
+from config import SUPPORTED_STT_LANGUAGES, settings
 from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.tts-stt")
@@ -39,12 +39,16 @@ async def speech_to_text(
         raise HTTPException(status_code=503, detail="STT not available")
 
     # Mirror TTS's language validation — STT previously accepted any string (#143).
-    if language not in SUPPORTED_LANGUAGES:
+    # Validated against SUPPORTED_STT_LANGUAGES (BCP-47, e.g. "tr-TR"), NOT
+    # TTS's bare-code SUPPORTED_LANGUAGES ("tr") -- recognize_google() needs
+    # the locale-qualified form; validating against the wrong set used to
+    # reject DEFAULT_STT_LANG itself.
+    if language not in SUPPORTED_STT_LANGUAGES:
         raise HTTPException(
             status_code=422,
             detail=(
                 f"unsupported language '{language}'; valid values: "
-                f"{sorted(SUPPORTED_LANGUAGES)}"
+                f"{sorted(SUPPORTED_STT_LANGUAGES)}"
             ),
         )
 
@@ -76,7 +80,7 @@ async def get_stt_languages():
     /stt/languages used a 301 redirect, which drops the method/body on non-GET clients (#147).
     """
     return {
-        "languages": SUPPORTED_LANGUAGES,
+        "languages": SUPPORTED_STT_LANGUAGES,
         "auto_detect": True,
         "default": settings.DEFAULT_STT_LANG,
         "available": STT_AVAILABLE,
