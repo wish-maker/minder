@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { openWebUiUrl } from "../lib/links";
+import {
+  badgeClass,
+  destructiveButtonClass,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  statusClass,
+} from "../lib/ui";
 
 type ModelType = "local" | "remote";
 type ModelStatusValue = "ready" | "loading" | "error";
@@ -36,19 +46,6 @@ interface TestResponse {
   response: string;
   status: string;
 }
-
-const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
-const primaryButtonClass =
-  "rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50";
-const secondaryButtonClass =
-  "rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800";
-const dangerButtonClass =
-  "rounded-md border border-red-200 px-3 py-1 text-sm text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900 dark:hover:bg-red-950";
-const statusClass = (isError: boolean) =>
-  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
-const badgeClass =
-  "inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 
 function statusBadgeColor(status: ModelStatusValue): string {
   if (status === "ready") return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
@@ -151,16 +148,23 @@ function ModelCard({
   model,
   token,
   onDeleted,
+  confirm,
 }: {
   model: ModelInfo;
   token: string;
   onDeleted: (id: string) => void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Delete model "${model.name}"? This removes it from Ollama.`)) return;
+    const ok = await confirm({
+      title: "Delete model?",
+      message: `This removes "${model.name}" (${model.size}) from Ollama. You'll need to pull it again to use it.`,
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     setStatus("Deleting…");
     try {
@@ -194,7 +198,7 @@ function ModelCard({
         <button
           onClick={handleDelete}
           disabled={!token || busy}
-          className={dangerButtonClass}
+          className={destructiveButtonClass}
         >
           🗑 Delete
         </button>
@@ -202,6 +206,37 @@ function ModelCard({
       {status && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{status}</p>}
     </section>
   );
+}
+
+/** Ticks up every second while `active` -- the backend has no pull-progress
+ * streaming (a single blocking request), so this is deliberately just an
+ * elapsed-time counter, not a real progress bar. Still meaningfully better
+ * than a static "please wait" sentence for a multi-minute operation: it
+ * proves the page hasn't frozen, and "2m14s elapsed" reads as "still
+ * working" in a way a motionless message doesn't. */
+function useElapsedSeconds(active: boolean): number {
+  const [seconds, setSeconds] = useState(0);
+  const startRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!active) {
+      setSeconds(0);
+      return;
+    }
+    startRef.current = Date.now();
+    const interval = setInterval(() => {
+      setSeconds(Math.floor((Date.now() - startRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [active]);
+
+  return seconds;
+}
+
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m${s.toString().padStart(2, "0")}s` : `${s}s`;
 }
 
 function PullModelForm({
@@ -214,6 +249,7 @@ function PullModelForm({
   const [modelId, setModelId] = useState("");
   const [status, setStatus] = useState("");
   const [pulling, setPulling] = useState(false);
+  const elapsed = useElapsedSeconds(pulling);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -222,7 +258,7 @@ function PullModelForm({
       return;
     }
     setPulling(true);
-    setStatus("Pulling… this blocks until the download finishes — can take several minutes for large models. Don't navigate away.");
+    setStatus("");
     try {
       const res = await apiFetch<PullResponse>("/v1/models", {
         method: "POST",
@@ -247,34 +283,41 @@ function PullModelForm({
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
         ⬇️ Pull a model
       </h2>
-      <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
-        <input
-          className={inputClass}
-          placeholder="e.g. llama3.2:latest"
-          value={modelId}
-          onChange={(e) => setModelId(e.target.value)}
-          disabled={pulling}
-        />
-        <button
-          type="submit"
-          disabled={!token || pulling}
-          className={primaryButtonClass}
-        >
-          {pulling ? "Pulling…" : "Pull"}
-        </button>
-      </form>
+      <fieldset disabled={!token}>
+        <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
+          <input
+            className={inputClass}
+            placeholder="e.g. llama3.2:latest"
+            value={modelId}
+            onChange={(e) => setModelId(e.target.value)}
+            disabled={pulling}
+          />
+          <button type="submit" disabled={pulling} className={primaryButtonClass}>
+            {pulling ? "Pulling…" : "Pull"}
+          </button>
+        </form>
+      </fieldset>
       {!token && (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           Log in to pull a model.
         </p>
       )}
-      <p className={statusClass(false)}>{status}</p>
+      {pulling && (
+        <p className={statusClass(false)}>
+          <span className="inline-block animate-spin">⏳</span> Pulling —{" "}
+          {formatElapsed(elapsed)} elapsed. This blocks until the download
+          finishes (can take several minutes for large models) — don't
+          navigate away.
+        </p>
+      )}
+      {!pulling && <p className={statusClass(false)}>{status}</p>}
     </section>
   );
 }
 
 export function ModelManagementPage() {
   const { token } = useAuth();
+  const { confirm, dialog } = useConfirm();
   const [models, setModels] = useState<ModelInfo[] | null>(null);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
@@ -301,13 +344,14 @@ export function ModelManagementPage() {
 
   return (
     <>
+      {dialog}
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Pull, delete, and test Ollama models on Minder's own model-management
         service. Browsing is open for everyone; log in to pull, delete, or
         test a prompt.
       </p>
       <InfoCallout icon="🤖">
-        <a className="font-medium underline" href="http://localhost:8080">
+        <a className="font-medium underline" href={openWebUiUrl}>
           OpenWebUI
         </a>
         's own Admin Panel → Connections → Ollama → Manage offers the same
@@ -331,6 +375,7 @@ export function ModelManagementPage() {
           model={m}
           token={token}
           onDeleted={(id) => setModels((prev) => (prev ?? []).filter((mm) => mm.id !== id))}
+          confirm={confirm}
         />
       ))}
     </>

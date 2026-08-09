@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { useAuth } from "../lib/auth";
+import { openWebUiUrl } from "../lib/links";
 
 interface ToolCardProps {
   to: string;
@@ -20,14 +21,36 @@ function ToolCard({ to, icon, title, children }: ToolCardProps) {
         <span className="text-2xl" aria-hidden="true">
           {icon}
         </span>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
           {title}
-        </h2>
+        </h3>
       </div>
       <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
         {children}
       </p>
     </Link>
+  );
+}
+
+function ToolSection({
+  icon,
+  title,
+  subtitle,
+  children,
+}: {
+  icon: string;
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-6">
+      <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+        {icon} {title}
+      </h2>
+      <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{subtitle}</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div>
+    </section>
   );
 }
 
@@ -45,7 +68,11 @@ export function LandingPage() {
           : "Browsing is open for everyone; log in on any page below to make changes."}
       </p>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <ToolSection
+        icon="🔎"
+        title="RAG"
+        subtitle="Store documents, then ask questions over them — vector search or knowledge-graph, your choice."
+      >
         <ToolCard to="/rag" icon="📚" title="Knowledge Bases">
           Create knowledge bases and upload documents (PDF/TXT/MD) for
           Minder's own RAG pipeline — the data your RAG Pipelines search
@@ -58,6 +85,13 @@ export function LandingPage() {
           HyDE, Self-RAG, auto, or corrective — with optional reranking,
           compression, and hybrid search.
         </ToolCard>
+      </ToolSection>
+
+      <ToolSection
+        icon="🧩"
+        title="Plugins"
+        subtitle="Six first-party plugins ship with Minder — discover, configure, and see what they let your AI do."
+      >
         <ToolCard to="/plugins" icon="🛒" title="Marketplace">
           Browse, install, and manage Minder plugins — see what's available,
           check dependencies and conflicts against what you've already
@@ -73,6 +107,13 @@ export function LandingPage() {
           live right now from running plugins, and the durable catalog
           Marketplace keeps with tier info.
         </ToolCard>
+      </ToolSection>
+
+      <ToolSection
+        icon="⚙️"
+        title="Platform"
+        subtitle="The operator surface — models, feature bundles, and whether everything is actually healthy."
+      >
         <ToolCard to="/platform" icon="🤖" title="Model Management">
           Pull, delete, and test Ollama models directly against Minder's
           model-management service — the same Ollama instance the whole
@@ -87,14 +128,11 @@ export function LandingPage() {
           Health, reported version, and recent logs for every core service —
           one place to check what's up, what's degraded, and why.
         </ToolCard>
-      </div>
+      </ToolSection>
 
       <div className="flex flex-col gap-3">
         <InfoCallout icon="🤖">
-          <a
-            className="font-medium underline"
-            href="http://localhost:8080"
-          >
+          <a className="font-medium underline" href={openWebUiUrl}>
             OpenWebUI
           </a>
           's own Admin Panel → Connections → Ollama → Manage offers the same

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { ApiError, apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { inputClass, primaryButtonClass, statusClass } from "../lib/ui";
 
 interface ConfigField {
   key: string;
@@ -33,9 +34,6 @@ function fieldToInputType(field: ConfigField): "checkbox" | "password" | "number
   if (field.type === "int" || field.type === "float") return "number";
   return "text";
 }
-
-const inputClass =
-  "w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-400 focus:outline-none dark:border-gray-600 dark:bg-gray-800";
 
 function FieldInput({
   field,
@@ -148,10 +146,7 @@ function PluginCard({
           </div>
         ))}
         <div className="flex items-center gap-3">
-          <button
-            type="submit"
-            className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-          >
+          <button type="submit" className={primaryButtonClass}>
             Save
           </button>
           <span className="text-sm text-gray-500 dark:text-gray-400">
@@ -191,8 +186,18 @@ export function PluginConfigPage() {
           );
           if (!cfg.configurable) continue;
           found.push({ name, schema: cfg.schema, values: cfg.values });
-        } catch {
-          // not running, or 401 -- skip quietly, same as the old page
+        } catch (e) {
+          // A 401 mid-loop means the token expired -- stop and say so
+          // instead of silently returning an empty list (every OTHER error,
+          // e.g. the plugin isn't running, just means "skip this one").
+          if (e instanceof ApiError && e.status === 401) {
+            setPlugins(found);
+            setStatusMsg(
+              "Your session expired while loading — log in again to see the rest.",
+              true,
+            );
+            return;
+          }
         }
       }
       setPlugins(found);
@@ -211,14 +216,13 @@ export function PluginConfigPage() {
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Edit settings for plugins that expose a config schema — for example a
         news feed's RSS URLs, or a weather plugin's tracked locations.
-        Changes apply immediately, live, with no service restart needed.
+        Changes apply immediately, live, with no service restart needed. This
+        page requires login even to browse — plugin config can include
+        secrets, so the server itself doesn't allow reading it
+        unauthenticated (unlike most other pages here).
       </p>
       <LoginPanel onStatus={setStatusMsg} />
-      <div
-        className={`mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`}
-      >
-        {status}
-      </div>
+      <div className={statusClass(isError)}>{status}</div>
       <div>
         {!isAuthenticated && (
           <p className="text-sm text-gray-500 dark:text-gray-400">

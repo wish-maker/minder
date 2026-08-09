@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { apiFetch } from "../lib/api";
+import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
 interface LiveTool {
   type: "function";
@@ -42,13 +43,6 @@ interface CatalogToolsResponse {
   limit: number;
   offset: number;
 }
-
-const secondaryButtonClass =
-  "rounded-md border border-gray-300 px-3 py-1 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:hover:bg-gray-800";
-const statusClass = (isError: boolean) =>
-  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
-const badgeClass =
-  "inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 
 function LiveToolCard({ tool }: { tool: LiveTool }) {
   return (
