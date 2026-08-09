@@ -78,6 +78,11 @@ export function LandingPage() {
           model-management service — the same Ollama instance the whole
           platform uses.
         </ToolCard>
+        <ToolCard to="/platform/bundles" icon="📦" title="Bundle Management">
+          Turn optional feature bundles (inference, RAG, chat, monitoring,
+          voice, graph-rag) on or off, see which services each one claims,
+          and reconcile the running stack to match.
+        </ToolCard>
         <ToolCard to="/platform/status" icon="🩺" title="Status">
           Health, reported version, and recent logs for every core service —
           one place to check what's up, what's degraded, and why.

@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { SectionTabs } from "./components/SectionTabs";
 import { AuthProvider } from "./lib/auth";
 import { AiToolsPage } from "./pages/AiToolsPage";
+import { BundleManagementPage } from "./pages/BundleManagementPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { MarketplacePage } from "./pages/MarketplacePage";
@@ -81,12 +82,14 @@ export function App() {
               icon="⚙️"
               tabs={[
                 { to: ".", label: "Models", end: true },
+                { to: "bundles", label: "Bundles" },
                 { to: "status", label: "Status" },
               ]}
             />
           }
         >
           <Route index element={<ModelManagementPage />} />
+          <Route path="bundles" element={<BundleManagementPage />} />
           <Route path="status" element={<StatusPage />} />
         </Route>
 
