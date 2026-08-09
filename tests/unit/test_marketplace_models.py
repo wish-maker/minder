@@ -94,6 +94,29 @@ def test_installation_response_model():
     assert installation.enabled is True
 
 
+def test_installation_response_accepts_real_jwt_derived_user_id():
+    """Regression guard (#402): user_id used to require a UUID-shaped pattern,
+    but real values are str(user["id"]) from the JWT `sub` (e.g. "4") or the
+    literal "admin" -- neither is a UUID. This used to raise ValidationError,
+    which meant install_plugin's response_model=InstallationResponse 500'd on
+    serialization for every real user even after the FK bug was fixed."""
+    data = {
+        "id": "550e8400-e29b-41d4-a716-446655440004",
+        "user_id": "4",
+        "plugin_id": "550e8400-e29b-41d4-a716-446655440006",
+        "version": "1.0.0",
+        "status": "installed",
+        "enabled": True,
+        "config_json": None,
+        "installed_at": datetime.now(),
+        "last_updated_at": datetime.now(),
+    }
+
+    installation = InstallationResponse(**data)
+
+    assert installation.user_id == "4"
+
+
 def test_invalid_email_rejected():
     """Test that invalid email addresses are rejected"""
     data = {

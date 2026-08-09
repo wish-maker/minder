@@ -178,3 +178,13 @@ ON CONFLICT (name) DO NOTHING;
 INSERT INTO marketplace_users (user_id, username, email, tier) VALUES
     ('admin', 'Administrator', 'admin@minder.local', 'enterprise')
 ON CONFLICT (user_id) DO NOTHING;
+
+-- marketplace_users is a dead table: nothing in this service ever inserts into it
+-- besides the one seed row above, so the FK below rejected every real install --
+-- POST /plugins/{id}/install threw an unhandled ForeignKeyViolationError for any
+-- user_id other than the literal "admin" (found live, verified against a real DB
+-- with zero existing rows to migrate). Drop it; user_id here is just an opaque
+-- identifier from the JWT, not a real relationship to a marketplace-specific user
+-- directory that was never wired up.
+ALTER TABLE marketplace_installations
+    DROP CONSTRAINT IF EXISTS marketplace_installations_user_id_fkey;

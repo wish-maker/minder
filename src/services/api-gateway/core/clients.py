@@ -35,4 +35,5 @@ SERVICE_REGISTRY = {
     "plugin_registry": settings.PLUGIN_REGISTRY_URL,
     "rag_pipeline": settings.RAG_PIPELINE_URL,
     "model_management": settings.MODEL_MANAGEMENT_URL,
+    "marketplace": settings.MARKETPLACE_URL,
 }
