@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 BASE = os.environ.get("MINDER_RAG_URL", "http://localhost:8004")
+GATEWAY = os.environ.get("MINDER_GATEWAY_URL", "http://localhost:8000")
 
 
 def _up() -> bool:
@@ -61,6 +62,46 @@ def pipeline_id():
     )
     assert pl.status_code == 200, pl.text
     return pl.json()["pipeline_id"]
+
+
+@pytest.fixture(scope="module")
+def auth_token():
+    """A JWT for calling rag-pipeline's auth-gated DELETE routes directly against
+    its own port (matching how this file calls every other route, #427's
+    delete_document included) -- registers a throwaway user via the gateway once
+    per module, same pattern as test_auth_regression.py."""
+    username = f"ragtest-{os.getpid()}"
+    password = "TestPass123!"
+    httpx.post(
+        f"{GATEWAY}/v1/auth/register",
+        json={
+            "username": username,
+            "email": f"{username}@example.com",
+            "password": password,
+        },
+        timeout=20.0,
+    )
+    r = httpx.post(
+        f"{GATEWAY}/v1/auth/login",
+        json={"username": username, "password": password},
+        timeout=20.0,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["access_token"]
+
+
+@pytest.fixture
+def doc_kb_id():
+    """A fresh, empty KB dedicated to document list/delete tests (#427) -- kept
+    separate from `pipeline_id`'s KB so deleting a document here can't affect
+    the other tests that query against that KB's one known document."""
+    kb = httpx.post(
+        f"{BASE}/knowledge-bases",
+        json={"name": f"test-docs-{os.getpid()}", "description": "document tests"},
+        timeout=20.0,
+    )
+    assert kb.status_code == 200, kb.text
+    return kb.json()["id"]
 
 
 def test_health_reports_ollama_available():
@@ -131,3 +172,79 @@ def test_retrieval_strategy_reported(pipeline_id):
     )
     assert r.status_code == 200, r.text
     assert r.json()["method_details"]["retrieval"] == "dense"
+
+
+def test_upload_response_includes_document_id(doc_kb_id):
+    doc = io.BytesIO(b"Doc A content for #427 document-list tests.")
+    r = httpx.post(
+        f"{BASE}/knowledge-bases/{doc_kb_id}/upload",
+        files={"file": ("doc-a.txt", doc, "text/plain")},
+        timeout=60.0,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["document_id"]
+
+
+def test_list_documents_groups_by_upload_not_by_chunk(doc_kb_id):
+    # Two separate uploads of the SAME filename must show as two distinct
+    # documents (source alone can't disambiguate them -- document_id can, #427).
+    for _ in range(2):
+        doc = io.BytesIO(b"Repeated-filename upload content for #427.")
+        up = httpx.post(
+            f"{BASE}/knowledge-bases/{doc_kb_id}/upload",
+            files={"file": ("same-name.txt", doc, "text/plain")},
+            timeout=60.0,
+        )
+        assert up.status_code == 200, up.text
+
+    r = httpx.get(f"{BASE}/knowledge-bases/{doc_kb_id}/documents", timeout=10.0)
+    assert r.status_code == 200, r.text
+    docs = [d for d in r.json() if d["filename"] == "same-name.txt"]
+    assert len(docs) == 2
+    assert docs[0]["document_id"] != docs[1]["document_id"]
+    assert all(d["chunk_count"] >= 1 for d in docs)
+
+
+def test_delete_document_removes_it_and_updates_kb_counts(doc_kb_id, auth_token):
+    doc = io.BytesIO(b"Doc to be deleted for #427 delete-document test.")
+    up = httpx.post(
+        f"{BASE}/knowledge-bases/{doc_kb_id}/upload",
+        files={"file": ("delete-me.txt", doc, "text/plain")},
+        timeout=60.0,
+    )
+    assert up.status_code == 200, up.text
+    document_id = up.json()["document_id"]
+
+    kb_before = httpx.get(f"{BASE}/knowledge-bases/{doc_kb_id}", timeout=10.0).json()
+
+    d = httpx.delete(
+        f"{BASE}/knowledge-bases/{doc_kb_id}/documents/{document_id}",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        timeout=20.0,
+    )
+    assert d.status_code == 200, d.text
+
+    kb_after = httpx.get(f"{BASE}/knowledge-bases/{doc_kb_id}", timeout=10.0).json()
+    assert kb_after["document_count"] == kb_before["document_count"] - 1
+    assert kb_after["vector_count"] < kb_before["vector_count"]
+
+    listing = httpx.get(f"{BASE}/knowledge-bases/{doc_kb_id}/documents", timeout=10.0)
+    assert document_id not in [dd["document_id"] for dd in listing.json()]
+
+
+def test_delete_unknown_document_404s(doc_kb_id, auth_token):
+    r = httpx.delete(
+        f"{BASE}/knowledge-bases/{doc_kb_id}/documents/does-not-exist",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        timeout=10.0,
+    )
+    assert r.status_code == 404
+
+
+def test_delete_document_unknown_kb_404s(auth_token):
+    r = httpx.delete(
+        f"{BASE}/knowledge-bases/does-not-exist/documents/does-not-exist",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        timeout=10.0,
+    )
+    assert r.status_code == 404
