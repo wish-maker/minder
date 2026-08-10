@@ -149,6 +149,31 @@ def test_rolling_restart_includes_client(monkeypatch):
     assert "client" in restarted
 
 
+def test_rolling_restart_includes_docker_socket_proxy(monkeypatch):
+    """docker-socket-proxy was absent from every service list in scripts/setup/
+    -- update.py's rolling restart never recreated it, so a `command:` change
+    in docker-compose.yml (e.g. #445's new -allowGET=.../logs allowlist entry)
+    silently never reached the running container. Confirmed live on hantal:
+    `docker inspect`'s Args on the running container were still the pre-#445
+    allowlist days after `update` reported success, so a container-logs call
+    through the proxy 403'd."""
+    monkeypatch.setattr(update.versions, "pull_all_images", lambda: None)
+    monkeypatch.setattr(update, "_rebuild", lambda: True)
+    monkeypatch.setattr(update.time, "sleep", lambda *a: None)
+    monkeypatch.setattr(update.docker, "container_running", lambda svc: True)
+    restarted = []
+    monkeypatch.setattr(
+        update.docker,
+        "compose",
+        lambda *args: restarted.append(args[-1]) if args and args[-1] else None,
+    )
+
+    rc = update.run()
+
+    assert rc == 0
+    assert "docker-socket-proxy" in restarted
+
+
 def test_run_aborts_before_rolling_restart_on_rebuild_failure(monkeypatch):
     """#346: run() must not reach 'Performing rolling restart' (and print
     'Update complete') when the rebuild failed."""
