@@ -26,6 +26,12 @@ export const secondaryButtonClass =
 export const destructiveButtonClass =
   "rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1";
 
+/** Base card surface -- margin/layout classes (mb-4, flex, gap-*, hover
+ * variants) are call-site concerns and stay inline; only the surface itself
+ * (border/bg/radius/shadow) was actually identical across every use site. */
+export const cardClass =
+  "rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900";
+
 export const badgeClass =
   "inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 

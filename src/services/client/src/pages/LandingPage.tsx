@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { InfoCallout } from "../components/InfoCallout";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
+import { cardClass } from "../lib/ui";
 
 interface ToolCardProps {
   to: string;
@@ -15,7 +16,7 @@ function ToolCard({ to, icon, title, children }: ToolCardProps) {
   return (
     <Link
       to={to}
-      className="flex flex-col gap-2 rounded-xl border border-gray-200 bg-white p-5 shadow-sm transition hover:border-indigo-300 hover:shadow-md dark:border-gray-700 dark:bg-gray-900"
+      className={`flex flex-col gap-2 ${cardClass} transition hover:border-indigo-300 hover:shadow-md`}
     >
       <div className="flex items-center gap-2">
         <span className="text-2xl" aria-hidden="true">

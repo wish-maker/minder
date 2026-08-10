@@ -8,6 +8,7 @@ import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
 import {
   badgeClass,
+  cardClass,
   destructiveButtonClass,
   inputClass,
   primaryButtonClass,
@@ -180,11 +181,11 @@ function ModelCard({
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-4 ${cardClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-            🤖 {model.name}
+            <span aria-hidden="true">🤖</span> {model.name}
             <span className={`${badgeClass} ${statusBadgeColor(model.status)}`}>
               {model.status}
             </span>
@@ -279,9 +280,9 @@ function PullModelForm({
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        ⬇️ Pull a model
+        <span aria-hidden="true">⬇️</span> Pull a model
       </h2>
       <fieldset disabled={!token}>
         <form onSubmit={handleSubmit} className="mt-2 flex gap-2">

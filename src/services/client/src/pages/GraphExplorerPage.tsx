@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
+import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
+  cardClass,
   destructiveButtonClass,
   inputClass,
   primaryButtonClass,
@@ -73,6 +75,8 @@ function EntityBadge({ entity }: { entity: Entity | RelatedEntity }) {
 }
 
 function ExtractAndBuildCard({ token }: { token: string }) {
+  const titleId = useId();
+  const textId = useId();
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
   const [status, setStatus] = useState("");
@@ -133,9 +137,9 @@ function ExtractAndBuildCard({ token }: { token: string }) {
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        🧬 Extract &amp; Build
+        <span aria-hidden="true">🧬</span> Extract &amp; Build
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Paste text to see what entities and relationships spaCy finds in it —
@@ -144,10 +148,14 @@ function ExtractAndBuildCard({ token }: { token: string }) {
       </p>
       <fieldset disabled={!token} className="flex flex-col gap-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label
+            htmlFor={titleId}
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
             Title (optional, only used when building)
           </label>
           <input
+            id={titleId}
             className={inputClass}
             type="text"
             value={title}
@@ -156,10 +164,14 @@ function ExtractAndBuildCard({ token }: { token: string }) {
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label
+            htmlFor={textId}
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
             Text
           </label>
           <textarea
+            id={textId}
             className={inputClass}
             rows={5}
             value={text}
@@ -271,9 +283,9 @@ function ExploreCard({ token }: { token: string }) {
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        🔍 Explore
+        <span aria-hidden="true">🔍</span> Explore
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Search the graph by meaning, or look up a specific entity's neighbors
@@ -384,7 +396,13 @@ function ExploreCard({ token }: { token: string }) {
   );
 }
 
-function DeleteDocumentCard({ token }: { token: string }) {
+function DeleteDocumentCard({
+  token,
+  confirm,
+}: {
+  token: string;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
+}) {
   const [documentId, setDocumentId] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -394,6 +412,12 @@ function DeleteDocumentCard({ token }: { token: string }) {
       setStatus("Document id is required.");
       return;
     }
+    const ok = await confirm({
+      title: "Remove document from graph?",
+      message: `This permanently removes document "${documentId}"'s relationships and any entities that only it referenced from Neo4j. Entities shared with other documents are kept.`,
+      danger: true,
+    });
+    if (!ok) return;
     setBusy(true);
     setStatus("Deleting…");
     try {
@@ -410,9 +434,9 @@ function DeleteDocumentCard({ token }: { token: string }) {
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        🗑 Remove a document's graph
+        <span aria-hidden="true">🗑</span> Remove a document's graph
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Removes one document's relationships and orphaned entities from
@@ -422,6 +446,7 @@ function DeleteDocumentCard({ token }: { token: string }) {
       <fieldset disabled={!token} className="flex items-center gap-2">
         <input
           className={inputClass}
+          aria-label="Document id"
           value={documentId}
           onChange={(e) => setDocumentId(e.target.value)}
           placeholder="document id"
@@ -437,6 +462,7 @@ function DeleteDocumentCard({ token }: { token: string }) {
 
 export function GraphExplorerPage() {
   const { token } = useAuth();
+  const { confirm, dialog } = useConfirm();
   const [statusMsg, setStatusMsg] = useState("");
 
   return (
@@ -451,13 +477,14 @@ export function GraphExplorerPage() {
         This graph is separate from the plugin dependency graph shown on the
         Marketplace page — same underlying Neo4j instance, unrelated data.
       </InfoCallout>
+      {dialog}
       <div className="mt-4">
         <LoginPanel onStatus={setStatusMsg} />
       </div>
       {statusMsg && <div className={statusClass(false)}>{statusMsg}</div>}
       <ExtractAndBuildCard token={token} />
       <ExploreCard token={token} />
-      <DeleteDocumentCard token={token} />
+      <DeleteDocumentCard token={token} confirm={confirm} />
     </>
   );
 }

@@ -85,7 +85,7 @@ function ServiceCard({ service, token }: { service: ServiceStatus; token: string
   return (
     <section className="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-        {service.reachable ? "🟢" : "🔴"} {service.name}
+        <span aria-hidden="true">{service.reachable ? "🟢" : "🔴"}</span> {service.name}
         <span className={`${badgeClass} ${statusBadgeColor(service.status)}`}>
           {service.status}
         </span>
@@ -153,6 +153,11 @@ export function StatusPage() {
       <button onClick={loadStatus} className={`${secondaryButtonClass} mb-4`}>
         🔄 Refresh
       </button>
+      {services?.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No services reported by the server.
+        </p>
+      )}
       {services?.map((s) => (
         <ServiceCard key={s.name} service={s} token={token} />
       ))}

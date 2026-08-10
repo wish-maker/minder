@@ -7,6 +7,7 @@ import { useAuth } from "../lib/auth";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
   badgeClass,
+  cardClass,
   destructiveButtonClass,
   inputClass,
   primaryButtonClass,
@@ -230,11 +231,11 @@ function PluginCard({
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-4 ${cardClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-            🧩 {plugin.display_name}
+            <span aria-hidden="true">🧩</span> {plugin.display_name}
             {plugin.featured && <span className={badgeClass}>⭐ featured</span>}
           </h2>
           {plugin.description && (
@@ -492,9 +493,9 @@ export function MarketplacePage() {
       <div className={statusClass(isError)}>{status}</div>
 
       {isAuthenticated && myInstallations.length > 0 && (
-        <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+        <section className={`mb-6 ${cardClass}`}>
           <h2 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-            ✅ My Installed Plugins
+            <span aria-hidden="true">✅</span> My Installed Plugins
           </h2>
           <ul className="flex flex-col gap-1.5">
             {myInstallations.map((i) => (
