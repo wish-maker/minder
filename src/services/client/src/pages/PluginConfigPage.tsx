@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { LoginPanel } from "../components/LoginPanel";
-import { ApiError, apiFetch } from "../lib/api";
+import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cardClass, inputClass, primaryButtonClass, statusClass } from "../lib/ui";
 
@@ -125,7 +125,7 @@ function PluginCard({
       setSaveStatus("Saved.");
       setTimeout(() => setSaveStatus(""), 2000);
     } catch (e) {
-      setSaveStatus(e instanceof Error ? e.message : String(e));
+      setSaveStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -214,7 +214,7 @@ export function PluginConfigPage() {
       setPlugins(found);
       setStatusMsg("");
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
   }, [token, setStatusMsg]);
 

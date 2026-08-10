@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
-import { ApiError, apiFetch } from "../lib/api";
+import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
   cardClass,
@@ -129,7 +129,7 @@ function CreatePipelineForm({
       setStatus("Created.");
       setTimeout(() => setStatus(""), 2000);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -268,7 +268,7 @@ function QueryPanel({
         onGone();
         return;
       }
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -526,7 +526,7 @@ function PipelineCard({
         onDeleted(pipeline.id);
         return;
       }
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -608,7 +608,7 @@ export function RagPipelinesPage() {
       setPipelines(pipelineList);
       setStatusMsg("");
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
   }, [setStatusMsg]);
 

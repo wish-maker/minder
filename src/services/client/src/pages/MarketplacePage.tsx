@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import {
@@ -149,7 +149,7 @@ function DependencyPanel({ pluginId }: { pluginId: string }) {
       setLoaded(true);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -217,7 +217,7 @@ function PluginCard({
       onInstalled();
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -239,7 +239,7 @@ function PluginCard({
       onUninstalled(plugin.id);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -257,7 +257,7 @@ function PluginCard({
       onToggleEnabled(plugin.id, nextEnabled);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -384,7 +384,7 @@ function InstalledPluginRow({
       });
       onUninstalled(installation.plugin_id);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -399,7 +399,7 @@ function InstalledPluginRow({
       onToggleEnabled(installation.plugin_id, nextEnabled);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -470,7 +470,7 @@ export function MarketplacePage() {
         setOffset(nextOffset);
         setStatusMsg("");
       } catch (e) {
-        setStatusMsg(e instanceof Error ? e.message : String(e), true);
+        setStatusMsg(friendlyErrorMessage(e), true);
       }
     },
     [query, setStatusMsg],

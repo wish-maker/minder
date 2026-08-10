@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
 import {
@@ -68,7 +68,7 @@ function ModelDetailPanel({ modelId }: { modelId: string }) {
       setLoaded(true);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -114,7 +114,7 @@ function TestPromptWidget({ modelId, token }: { modelId: string; token: string }
       setResult(res);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -175,7 +175,7 @@ function ModelCard({
       });
       onDeleted(model.id);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -274,7 +274,7 @@ function PullModelForm({
       setModelId("");
       onPulled();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setPulling(false);
   }
@@ -335,7 +335,7 @@ export function ModelManagementPage() {
       setModels(res);
       setStatusMsg("");
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
   }, [setStatusMsg]);
 

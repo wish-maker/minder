@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
 
+import { friendlyErrorMessage } from "./api";
+
 interface Page<T> {
   items: T[];
   total: number;
@@ -29,7 +31,7 @@ export function usePaginatedList<T>(
         setOffset(nextOffset);
         setStatus("");
       } catch (e) {
-        setStatus(e instanceof Error ? e.message : String(e));
+        setStatus(friendlyErrorMessage(e));
       }
     },
     [fetchPage],

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
 import { usePaginatedList } from "../lib/usePaginatedList";
 
@@ -110,7 +110,7 @@ export function AiToolsPage() {
       setLiveTools(res.tools);
       setLiveStatus("");
     } catch (e) {
-      setLiveStatus(e instanceof Error ? e.message : String(e));
+      setLiveStatus(friendlyErrorMessage(e));
     }
   }, []);
 

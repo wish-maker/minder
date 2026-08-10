@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
@@ -117,7 +117,7 @@ function BundleCard({
       setStatus(outcomeSummary(res));
       onChanged();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -180,7 +180,7 @@ export function BundleManagementPage() {
       setOrphaned(res.orphaned);
       setStatusMsg("");
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
   }, [setStatusMsg]);
 
@@ -199,7 +199,7 @@ export function BundleManagementPage() {
       setStatusMsg(`Reconciled: ${outcomeSummary(res)}`);
       loadBundles();
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
     setReconciling(false);
   }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
@@ -53,7 +53,7 @@ function LogViewer({ name, token }: { name: string; token: string }) {
       setLoaded(true);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -126,7 +126,7 @@ export function StatusPage() {
       setServices(res.services);
       setStatusMsg("");
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
   }, [setStatusMsg]);
 
