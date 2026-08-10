@@ -4,7 +4,7 @@ import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { badgeClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
 interface BundleService {
   name: string;
@@ -123,11 +123,11 @@ function BundleCard({
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-4 ${cardClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-            📦 {bundle.name}
+            <span aria-hidden="true">📦</span> {bundle.name}
             {bundle.core && <span className={badgeClass}>core</span>}
             <span
               className={
@@ -241,6 +241,11 @@ export function BundleManagementPage() {
         {reconciling ? "Reconciling…" : "🔄 Reconcile"}
       </button>
 
+      {bundles?.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No bundles reported by the server.
+        </p>
+      )}
       {bundles?.map((b) => (
         <BundleCard key={b.name} bundle={b} token={token} onChanged={loadBundles} />
       ))}

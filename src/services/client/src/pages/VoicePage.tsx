@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, apiFetchBlob } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { inputClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { cardClass, inputClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
 interface LanguagesResponse {
   languages: Record<string, string>;
@@ -19,6 +19,8 @@ interface SttResponse {
 }
 
 function TextToSpeechCard({ token }: { token: string }) {
+  const textId = useId();
+  const languageId = useId();
   const [languages, setLanguages] = useState<Record<string, string>>({});
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("tr");
@@ -76,9 +78,9 @@ function TextToSpeechCard({ token }: { token: string }) {
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        🔊 Text to Speech
+        <span aria-hidden="true">🔊</span> Text to Speech
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Piper (offline) synthesizes bundled languages as WAV; anything else
@@ -86,10 +88,14 @@ function TextToSpeechCard({ token }: { token: string }) {
       </p>
       <fieldset disabled={!token} className="flex flex-col gap-3">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label
+            htmlFor={textId}
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
             Text
           </label>
           <textarea
+            id={textId}
             className={inputClass}
             rows={3}
             value={text}
@@ -99,10 +105,14 @@ function TextToSpeechCard({ token }: { token: string }) {
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={languageId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Language
             </label>
             <select
+              id={languageId}
               className={inputClass}
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
@@ -157,6 +167,7 @@ function TextToSpeechCard({ token }: { token: string }) {
 }
 
 function SpeechToTextCard({ token }: { token: string }) {
+  const languageId = useId();
   const [languages, setLanguages] = useState<Record<string, string>>({});
   const [language, setLanguage] = useState("tr-TR");
   const [status, setStatus] = useState("");
@@ -232,9 +243,9 @@ function SpeechToTextCard({ token }: { token: string }) {
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        🎙️ Speech to Text
+        <span aria-hidden="true">🎙️</span> Speech to Text
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Record from your microphone or upload an audio file — transcribed via
@@ -242,10 +253,14 @@ function SpeechToTextCard({ token }: { token: string }) {
       </p>
       <fieldset disabled={!token} className="flex flex-col gap-3">
         <div className="max-w-xs">
-          <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          <label
+            htmlFor={languageId}
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
             Language
           </label>
           <select
+            id={languageId}
             className={inputClass}
             value={language}
             onChange={(e) => setLanguage(e.target.value)}

@@ -22,16 +22,16 @@ export function SectionTabs({
   return (
     <>
       <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-        {icon} {title}
+        <span aria-hidden="true">{icon}</span> {title}
       </h1>
-      <div className="mb-6 flex gap-5 border-b border-gray-200 dark:border-gray-700">
+      <div className="mb-6 flex gap-5 overflow-x-auto border-b border-gray-200 dark:border-gray-700">
         {tabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}
             end={tab.end}
             className={({ isActive }) =>
-              `border-b-2 pb-2 text-sm font-medium ${
+              `flex-shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm font-medium ${
                 isActive
                   ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
                   : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"

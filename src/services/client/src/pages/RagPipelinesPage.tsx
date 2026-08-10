@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
 import { ApiError, apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
+  cardClass,
   destructiveButtonClass,
   inputClass,
   primaryButtonClass,
@@ -81,6 +82,7 @@ function CreatePipelineForm({
   kbs: KnowledgeBase[];
   onCreated: (p: RagPipeline) => void;
 }) {
+  const nameId = useId();
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState("");
@@ -132,9 +134,9 @@ function CreatePipelineForm({
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        ➕ Create a pipeline
+        <span aria-hidden="true">➕</span> Create a pipeline
       </h2>
       {kbs.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -145,20 +147,24 @@ function CreatePipelineForm({
         <form onSubmit={handleSubmit}>
           <fieldset disabled={!token} className="mt-2 flex flex-col gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label
+                htmlFor={nameId}
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
                 Name
               </label>
               <input
+                id={nameId}
                 className={inputClass}
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <fieldset>
+              <legend className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
                 Knowledge bases
-              </label>
+              </legend>
               <div className="flex flex-col gap-1">
                 {kbs.map((kb) => (
                   <label key={kb.id} className="flex items-center gap-2 text-sm">
@@ -172,7 +178,7 @@ function CreatePipelineForm({
                   </label>
                 ))}
               </div>
-            </div>
+            </fieldset>
             <div className="flex items-center gap-3">
               <button type="submit" disabled={!token} className={primaryButtonClass}>
                 Create
@@ -202,6 +208,9 @@ function QueryPanel({
   capabilities: Capabilities | null;
   onGone: () => void;
 }) {
+  const questionId = useId();
+  const topKId = useId();
+  const methodId = useId();
   const [question, setQuestion] = useState("");
   const [topK, setTopK] = useState("5");
   const [method, setMethod] = useState<Method>("standard");
@@ -266,15 +275,19 @@ function QueryPanel({
   return (
     <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
       <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-        🔎 Query
+        <span aria-hidden="true">🔎</span> Query
       </h3>
       <form onSubmit={handleSubmit}>
         <fieldset disabled={!token} className="flex flex-col gap-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={questionId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Question
             </label>
             <textarea
+              id={questionId}
               className={inputClass}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
@@ -283,10 +296,14 @@ function QueryPanel({
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label
+                htmlFor={topKId}
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
                 Top K
               </label>
               <input
+                id={topKId}
                 className={inputClass}
                 type="number"
                 value={topK}
@@ -295,10 +312,14 @@ function QueryPanel({
               <p className={fieldHintClass}>How many chunks to retrieve and hand to the model.</p>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+              <label
+                htmlFor={methodId}
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
                 Method
               </label>
               <select
+                id={methodId}
                 className={inputClass}
                 value={method}
                 onChange={(e) => setMethod(e.target.value as Method)}
@@ -516,11 +537,11 @@ function PipelineCard({
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-4 ${cardClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            🧠 {pipeline.name}
+            <span aria-hidden="true">🧠</span> {pipeline.name}
           </h2>
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
             id: <code>{pipeline.id}</code>{" "}

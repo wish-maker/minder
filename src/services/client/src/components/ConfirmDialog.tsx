@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { destructiveButtonClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
 
@@ -28,6 +28,7 @@ interface PendingConfirm extends ConfirmOptions {
  */
 export function useConfirm() {
   const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const confirm = useCallback((options: ConfirmOptions) => {
     return new Promise<boolean>((resolve) => {
@@ -40,6 +41,24 @@ export function useConfirm() {
     setPending(null);
   }
 
+  /** Keep Tab/Shift+Tab cycling within the dialog's two buttons instead of
+   * escaping to the page behind it -- autoFocus alone only sets the INITIAL
+   * focus, it doesn't constrain where Tab can go afterwards. */
+  function handleTabTrap(e: React.KeyboardEvent) {
+    if (e.key !== "Tab" || !panelRef.current) return;
+    const focusable = panelRef.current.querySelectorAll<HTMLElement>("button");
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
   const dialog = pending && (
     <div
       role="presentation"
@@ -47,9 +66,11 @@ export function useConfirm() {
       onClick={() => settle(false)}
       onKeyDown={(e) => {
         if (e.key === "Escape") settle(false);
+        else handleTabTrap(e);
       }}
     >
       <div
+        ref={panelRef}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"

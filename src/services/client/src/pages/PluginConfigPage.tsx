@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { LoginPanel } from "../components/LoginPanel";
 import { ApiError, apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { inputClass, primaryButtonClass, statusClass } from "../lib/ui";
+import { cardClass, inputClass, primaryButtonClass, statusClass } from "../lib/ui";
 
 interface ConfigField {
   key: string;
@@ -36,10 +36,12 @@ function fieldToInputType(field: ConfigField): "checkbox" | "password" | "number
 }
 
 function FieldInput({
+  id,
   field,
   value,
   onChange,
 }: {
+  id: string;
   field: ConfigField;
   value: unknown;
   onChange: (v: unknown) => void;
@@ -49,6 +51,7 @@ function FieldInput({
   if (inputType === "checkbox") {
     return (
       <input
+        id={id}
         className="h-4 w-4 rounded border-gray-300"
         type="checkbox"
         checked={!!value}
@@ -59,6 +62,7 @@ function FieldInput({
   if (inputType === "password") {
     return (
       <input
+        id={id}
         className={inputClass}
         type="password"
         placeholder="unchanged (leave blank to keep current value)"
@@ -69,6 +73,7 @@ function FieldInput({
   if (inputType === "number") {
     return (
       <input
+        id={id}
         className={inputClass}
         type="number"
         step={field.type === "float" ? "any" : undefined}
@@ -79,6 +84,7 @@ function FieldInput({
   }
   return (
     <input
+      id={id}
       className={inputClass}
       type="text"
       defaultValue={value as string}
@@ -94,6 +100,7 @@ function PluginCard({
   plugin: PluginEntry;
   token: string;
 }) {
+  const baseId = useId();
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [saveStatus, setSaveStatus] = useState("");
 
@@ -123,17 +130,21 @@ function PluginCard({
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-4 ${cardClass}`}>
       <h2 className="mb-3 text-base font-semibold capitalize text-gray-900 dark:text-gray-100">
         {plugin.name}
       </h2>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         {plugin.schema.map((field) => (
           <div key={field.key}>
-            <label className="mb-1 block text-sm font-medium capitalize text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={`${baseId}-${field.key}`}
+              className="mb-1 block text-sm font-medium capitalize text-gray-700 dark:text-gray-300"
+            >
               {field.key}
             </label>
             <FieldInput
+              id={`${baseId}-${field.key}`}
               field={field}
               value={plugin.values[field.key]}
               onChange={(v) => setDraft((d) => ({ ...d, [field.key]: v }))}

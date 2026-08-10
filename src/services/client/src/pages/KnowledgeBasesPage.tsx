@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
+  cardClass,
   destructiveButtonClass,
   inputClass,
   primaryButtonClass,
@@ -53,6 +54,7 @@ function UploadWidget({
   token: string;
   onUploaded: () => void;
 }) {
+  const fileInputId = useId();
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
 
@@ -102,10 +104,14 @@ function UploadWidget({
 
   return (
     <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-800">
-      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label
+        htmlFor={fileInputId}
+        className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+      >
         Upload documents (.pdf, .txt, .md)
       </label>
       <input
+        id={fileInputId}
         className="block text-sm text-gray-600 disabled:cursor-not-allowed disabled:opacity-60 dark:text-gray-400"
         type="file"
         multiple
@@ -156,11 +162,20 @@ function DocumentsList({
 }) {
   const [docs, setDocs] = useState<KbDocument[] | null>(null);
   const [status, setStatus] = useState("");
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
+    setLoadError(false);
     apiFetch<KbDocument[]>(`/v1/rag/knowledge-bases/${kbId}/documents`)
       .then(setDocs)
-      .catch(() => setDocs([]));
+      .catch((e) => {
+        // A real fetch failure must not render as "no documents" -- that's
+        // indistinguishable from a genuinely empty KB and hides the actual
+        // error (e.g. an expired session) from the user entirely.
+        setDocs([]);
+        setLoadError(true);
+        setStatus(e instanceof Error ? e.message : String(e));
+      });
   }, [kbId, refreshToken]);
 
   async function handleDelete(doc: KbDocument) {
@@ -188,12 +203,14 @@ function DocumentsList({
 
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <h3 className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
         Documents
-      </label>
+      </h3>
       {docs.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          No documents uploaded yet — use the upload field below.
+          {loadError
+            ? "Couldn't load documents — see error below."
+            : "No documents uploaded yet — use the upload field below."}
         </p>
       ) : (
         <ul className="flex flex-col gap-1.5">
@@ -219,7 +236,7 @@ function DocumentsList({
           ))}
         </ul>
       )}
-      <div className={statusClass(false)}>{status}</div>
+      <div className={statusClass(loadError)}>{status}</div>
     </div>
   );
 }
@@ -267,11 +284,11 @@ function KnowledgeBaseCard({
   }
 
   return (
-    <section className="mb-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-4 ${cardClass}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            📚 {kb.name}
+            <span aria-hidden="true">📚</span> {kb.name}
           </h2>
           {kb.description && (
             <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
@@ -319,6 +336,12 @@ function CreateKbForm({
   token: string;
   onCreated: (kb: KnowledgeBase) => void;
 }) {
+  const nameId = useId();
+  const descriptionId = useId();
+  const embeddingModelId = useId();
+  const llmModelId = useId();
+  const chunkSizeId = useId();
+  const chunkOverlapId = useId();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [embeddingModel, setEmbeddingModel] = useState("");
@@ -362,9 +385,9 @@ function CreateKbForm({
   }
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
+    <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-3 text-base font-semibold text-gray-900 dark:text-gray-100">
-        ➕ Create a knowledge base
+        <span aria-hidden="true">➕</span> Create a knowledge base
       </h2>
       <form onSubmit={handleSubmit}>
         <fieldset
@@ -372,10 +395,14 @@ function CreateKbForm({
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={nameId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Name
             </label>
             <input
+              id={nameId}
               className={inputClass}
               type="text"
               value={name}
@@ -383,10 +410,14 @@ function CreateKbForm({
             />
           </div>
           <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={descriptionId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Description
             </label>
             <input
+              id={descriptionId}
               className={inputClass}
               type="text"
               value={description}
@@ -394,10 +425,14 @@ function CreateKbForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={embeddingModelId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Embedding model
             </label>
             <input
+              id={embeddingModelId}
               className={inputClass}
               type="text"
               placeholder="nomic-embed-text"
@@ -406,10 +441,14 @@ function CreateKbForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={llmModelId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               LLM model
             </label>
             <input
+              id={llmModelId}
               className={inputClass}
               type="text"
               placeholder="llama3.2"
@@ -418,10 +457,14 @@ function CreateKbForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={chunkSizeId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Chunk size
             </label>
             <input
+              id={chunkSizeId}
               className={inputClass}
               type="number"
               placeholder="512"
@@ -430,10 +473,14 @@ function CreateKbForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            <label
+              htmlFor={chunkOverlapId}
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
               Chunk overlap
             </label>
             <input
+              id={chunkOverlapId}
               className={inputClass}
               type="number"
               placeholder="50"

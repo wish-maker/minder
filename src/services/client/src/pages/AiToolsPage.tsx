@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { InfoCallout } from "../components/InfoCallout";
 import { apiFetch } from "../lib/api";
 import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { usePaginatedList } from "../lib/usePaginatedList";
 
 interface LiveTool {
   type: "function";
@@ -48,7 +49,7 @@ function LiveToolCard({ tool }: { tool: LiveTool }) {
   return (
     <section className="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-        ⚡ {tool.function.name}
+        <span aria-hidden="true">⚡</span> {tool.function.name}
         <span className={badgeClass}>{tool.metadata.plugin}</span>
       </h3>
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
@@ -65,7 +66,7 @@ function CatalogToolCard({ tool }: { tool: CatalogTool }) {
   return (
     <section className="mb-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-        🧰 {tool.tool_name}
+        <span aria-hidden="true">🧰</span> {tool.tool_name}
         <span className={badgeClass}>{tool.plugin_display_name}</span>
         <span className={badgeClass}>{tool.required_tier}</span>
         {!tool.active && (
@@ -88,10 +89,19 @@ export function AiToolsPage() {
   const [liveTools, setLiveTools] = useState<LiveTool[] | null>(null);
   const [liveStatus, setLiveStatus] = useState("");
 
-  const [catalogTools, setCatalogTools] = useState<CatalogTool[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
-  const [catalogStatus, setCatalogStatus] = useState("");
+  const fetchCatalogPage = useCallback(async (offset: number) => {
+    const res = await apiFetch<CatalogToolsResponse>(
+      `/v1/marketplace/ai/tools?active_only=false&limit=20&offset=${offset}`,
+    );
+    return { items: res.tools, total: res.total };
+  }, []);
+  const {
+    items: catalogTools,
+    status: catalogStatus,
+    reload: reloadCatalogTools,
+    loadMore: loadMoreCatalogTools,
+    hasMore: hasMoreCatalogTools,
+  } = usePaginatedList(fetchCatalogPage);
 
   const loadLiveTools = useCallback(async () => {
     setLiveStatus("Loading…");
@@ -104,24 +114,9 @@ export function AiToolsPage() {
     }
   }, []);
 
-  const loadCatalogTools = useCallback(async (nextOffset: number, replace: boolean) => {
-    setCatalogStatus("Loading…");
-    try {
-      const res = await apiFetch<CatalogToolsResponse>(
-        `/v1/marketplace/ai/tools?active_only=false&limit=20&offset=${nextOffset}`,
-      );
-      setCatalogTools((prev) => (replace ? res.tools : [...prev, ...res.tools]));
-      setTotal(res.total);
-      setOffset(nextOffset);
-      setCatalogStatus("");
-    } catch (e) {
-      setCatalogStatus(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
-
   useEffect(() => {
     loadLiveTools();
-    loadCatalogTools(0, true);
+    reloadCatalogTools();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -133,7 +128,7 @@ export function AiToolsPage() {
       </p>
 
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        ⚡ Live Tools
+        <span aria-hidden="true">⚡</span> Live Tools
       </h2>
       <InfoCallout icon="ℹ️">
         Computed fresh on every request from the plugins actually running
@@ -154,7 +149,7 @@ export function AiToolsPage() {
       </div>
 
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
-        🧰 Catalog
+        <span aria-hidden="true">🧰</span> Catalog
       </h2>
       <InfoCallout icon="ℹ️">
         The durable tool catalog Marketplace keeps, with tier info — includes
@@ -170,11 +165,8 @@ export function AiToolsPage() {
       {catalogTools.map((t) => (
         <CatalogToolCard key={t.id} tool={t} />
       ))}
-      {catalogTools.length < total && (
-        <button
-          onClick={() => loadCatalogTools(offset + 20, false)}
-          className={secondaryButtonClass}
-        >
+      {hasMoreCatalogTools && (
+        <button onClick={loadMoreCatalogTools} className={secondaryButtonClass}>
           Load more
         </button>
       )}
