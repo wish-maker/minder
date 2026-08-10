@@ -28,6 +28,35 @@ def _completed(stdout, stderr="", returncode=0):
     return types.SimpleNamespace(stdout=stdout, stderr=stderr, returncode=returncode)
 
 
+def test_rebuild_activates_profile_gated_services(monkeypatch):
+    """Without an explicit service argument, `docker compose build` only
+    considers services in the ACTIVE profile set -- tts-stt is
+    profiles: ["internal-tts-stt"] (the one profile-gated service with its
+    own build: context), so a bare `build` silently skipped it on every
+    `update`, leaving it stuck on a stale image. Confirmed live: 4 days
+    stale despite several successful-looking `update` runs. Must activate
+    the same profile set compose_services()/compose_all() already use."""
+    seen_argv = []
+
+    def fake_run(argv, **kwargs):
+        seen_argv.extend(argv)
+        return _completed("Successfully built abc123\n")
+
+    monkeypatch.setattr(update.subprocess, "run", fake_run)
+    monkeypatch.setattr(update.log, "_emit", lambda m: None)
+
+    assert update._rebuild() is True
+    for profile in (
+        "monitoring",
+        "internal-ollama",
+        "ollama-router",
+        "internal-tts-stt",
+        "tts-stt-router",
+    ):
+        assert profile in seen_argv, f"missing --profile {profile}"
+    assert "build" in seen_argv
+
+
 def test_decodes_utf8_with_replace(monkeypatch):
     """subprocess.run must be invoked with utf-8 + errors='replace' so undecodable
     build output can never raise (cross-platform: the shim targets Windows too)."""

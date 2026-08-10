@@ -25,6 +25,26 @@ def _rebuild() -> bool:
                 "compose",
                 "-f",
                 str(config.COMPOSE_FILE),
+                # Without an explicit service argument, `build` only considers
+                # services in the ACTIVE profile set -- tts-stt is
+                # profiles: ["internal-tts-stt"] (the one profile-gated
+                # service with its own build: context), so a bare `build`
+                # here silently skipped it on every `update` run, leaving it
+                # stuck on whatever image first created the container.
+                # Confirmed live: image 4 days stale despite several
+                # successful-looking `update`s. Same profile set
+                # compose_services()/compose_all() already use for this
+                # reason (#65 item 4).
+                "--profile",
+                "monitoring",
+                "--profile",
+                "internal-ollama",
+                "--profile",
+                "ollama-router",
+                "--profile",
+                "internal-tts-stt",
+                "--profile",
+                "tts-stt-router",
                 "build",
                 "--pull",
                 "--no-cache",
