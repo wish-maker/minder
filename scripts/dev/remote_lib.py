@@ -240,8 +240,15 @@ def run(
     get_pty = False if no_pty else cfg.get("get_pty", False)
     try:
         _, stdout, stderr = client.exec_command(cmd, timeout=1800, get_pty=get_pty)
-        for line in iter(stdout.readline, ""):
-            sys.stdout.write(line)
+        # ChannelFile.readline() in text mode decodes with strict utf-8 (paramiko's
+        # `u()` helper, no errors= knob) -- a remote PowerShell command whose output
+        # contains a Windows-1252 byte (e.g. a curly quote, 0x94/0x93/0x92 from
+        # PowerShell's own formatting or an error message) crashes this loop with
+        # UnicodeDecodeError and kills the whole SSH call. Read the same channel via
+        # a binary makefile instead and decode ourselves with errors="replace".
+        raw_stdout = stdout.channel.makefile("rb")
+        for line in iter(raw_stdout.readline, b""):
+            sys.stdout.write(line.decode("utf-8", "replace"))
             sys.stdout.flush()
         rc = stdout.channel.recv_exit_status()
         tail = stderr.read().decode("utf-8", "replace")
