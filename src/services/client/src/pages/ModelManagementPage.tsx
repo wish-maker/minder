@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
@@ -6,6 +6,7 @@ import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
+import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
 import {
   badgeClass,
   cardClass,
@@ -209,36 +210,6 @@ function ModelCard({
   );
 }
 
-/** Ticks up every second while `active` -- the backend has no pull-progress
- * streaming (a single blocking request), so this is deliberately just an
- * elapsed-time counter, not a real progress bar. Still meaningfully better
- * than a static "please wait" sentence for a multi-minute operation: it
- * proves the page hasn't frozen, and "2m14s elapsed" reads as "still
- * working" in a way a motionless message doesn't. */
-function useElapsedSeconds(active: boolean): number {
-  const [seconds, setSeconds] = useState(0);
-  const startRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!active) {
-      setSeconds(0);
-      return;
-    }
-    startRef.current = Date.now();
-    const interval = setInterval(() => {
-      setSeconds(Math.floor((Date.now() - startRef.current) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [active]);
-
-  return seconds;
-}
-
-function formatElapsed(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return m > 0 ? `${m}m${s.toString().padStart(2, "0")}s` : `${s}s`;
-}
 
 function PullModelForm({
   token,
