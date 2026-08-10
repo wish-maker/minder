@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch, apiFetchBlob } from "../lib/api";
+import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { cardClass, inputClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
 
@@ -72,7 +72,7 @@ function TextToSpeechCard({ token }: { token: string }) {
       });
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -202,7 +202,7 @@ function SpeechToTextCard({ token }: { token: string }) {
       setResult(res);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }

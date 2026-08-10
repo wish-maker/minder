@@ -14,6 +14,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Every page's catch block used `e instanceof Error ? e.message : String(e)`
+ * verbatim -- which, for a 401, shows whatever raw string the backend's
+ * HTTPException carries (e.g. "Not authenticated") instead of an actionable
+ * message telling the user what to actually do about it. Only 1 of 10 pages
+ * special-cased this. Centralized here so every page gets the same
+ * treatment without each one re-deriving it. */
+export function friendlyErrorMessage(e: unknown): string {
+  if (e instanceof ApiError && e.status === 401) {
+    return "Your session expired — log in again.";
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
 async function parseErrorDetail(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({}) as { detail?: unknown });
   const detail = (data as { detail?: unknown }).detail;

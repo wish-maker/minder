@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
   cardClass,
@@ -102,7 +102,7 @@ function ExtractAndBuildCard({ token }: { token: string }) {
       setPreview(res);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -131,7 +131,7 @@ function ExtractAndBuildCard({ token }: { token: string }) {
       setBuilt(res);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -255,7 +255,7 @@ function ExploreCard({ token }: { token: string }) {
       setRetrieveResult(res);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -277,7 +277,7 @@ function ExploreCard({ token }: { token: string }) {
       setContextResult(res);
       setStatus("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }
@@ -428,7 +428,7 @@ function DeleteDocumentCard({
       setStatus("Deleted (idempotent — reports success even if the id was already gone).");
       setDocumentId("");
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
     setBusy(false);
   }

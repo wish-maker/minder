@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
-import { apiFetch } from "../lib/api";
+import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
   cardClass,
@@ -92,7 +92,7 @@ function UploadWidget({
         setQueue((q) =>
           q.map((item, idx) =>
             idx === i
-              ? { ...item, status: "error", detail: e instanceof Error ? e.message : String(e) }
+              ? { ...item, status: "error", detail: friendlyErrorMessage(e) }
               : item,
           ),
         );
@@ -174,7 +174,7 @@ function DocumentsList({
         // error (e.g. an expired session) from the user entirely.
         setDocs([]);
         setLoadError(true);
-        setStatus(e instanceof Error ? e.message : String(e));
+        setStatus(friendlyErrorMessage(e));
       });
   }, [kbId, refreshToken]);
 
@@ -195,7 +195,7 @@ function DocumentsList({
       setStatus("");
       onDeleted();
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -269,7 +269,7 @@ function KnowledgeBaseCard({
       await apiFetch(`/v1/rag/knowledge-bases/${kb.id}`, { method: "DELETE", token });
       onDeleted(kb.id);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -380,7 +380,7 @@ function CreateKbForm({
       setStatus("Created.");
       setTimeout(() => setStatus(""), 2000);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      setStatus(friendlyErrorMessage(e));
     }
   }
 
@@ -524,7 +524,7 @@ export function KnowledgeBasesPage() {
       setKbs(list);
       setStatusMsg("");
     } catch (e) {
-      setStatusMsg(e instanceof Error ? e.message : String(e), true);
+      setStatusMsg(friendlyErrorMessage(e), true);
     }
   }, [setStatusMsg]);
 
