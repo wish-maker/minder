@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
@@ -447,6 +447,16 @@ export function AvailablePluginsPage() {
     loadMyInstallations();
   }, [loadMyInstallations]);
 
+  const featuredIds = useMemo(() => new Set(featured.map((p) => p.id)), [featured]);
+  // Featured is curated separately from the paginated catalog below, so the
+  // same plugin can appear in both -- drop it from the catalog list once
+  // it's already shown above. Search results skip this: a query is asking
+  // "does this plugin match," not "browse the catalog," so hiding a
+  // matching plugin because it happens to be Featured would look broken.
+  const visiblePlugins = query.trim()
+    ? plugins
+    : plugins.filter((plugin) => !featuredIds.has(plugin.id));
+
   function installationFor(pluginId: string) {
     return myInstallations.find((i) => i.plugin_id === pluginId);
   }
@@ -471,7 +481,7 @@ export function AvailablePluginsPage() {
       <LoginPanel onStatus={setStatusMsg} />
       <div className={statusClass(isError)}>{status}</div>
 
-      {featured.length > 0 && (
+      {featured.length > 0 && !query.trim() && (
         <section className="mb-6">
           <h2 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">
             <span aria-hidden="true">⭐</span> Featured
@@ -518,7 +528,12 @@ export function AvailablePluginsPage() {
             : "No plugins in the catalog yet."}
         </p>
       )}
-      {plugins.map((plugin) => (
+      {plugins.length > 0 && visiblePlugins.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Every plugin on this page is already shown above in Featured.
+        </p>
+      )}
+      {visiblePlugins.map((plugin) => (
         <PluginCard
           key={plugin.id}
           plugin={plugin}

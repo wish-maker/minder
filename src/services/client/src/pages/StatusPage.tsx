@@ -41,8 +41,7 @@ function LogViewer({ name, token }: { name: string; token: string }) {
   const [lines, setLines] = useState<LogLine[]>([]);
   const [status, setStatus] = useState("");
 
-  async function handleToggle(e: React.SyntheticEvent<HTMLDetailsElement>) {
-    if (!e.currentTarget.open || loaded) return;
+  const loadLogs = useCallback(async () => {
     setStatus("Loading…");
     try {
       const res = await apiFetch<LogsResponse>(
@@ -55,6 +54,15 @@ function LogViewer({ name, token }: { name: string; token: string }) {
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
     }
+  }, [name, token]);
+
+  function handleToggle(e: React.SyntheticEvent<HTMLDetailsElement>) {
+    // Only fires the fetch on first expand -- once `loaded`, logs sat frozen
+    // at whatever "tail=200" caught at that moment, with re-opening the
+    // details element a no-op. The explicit Refresh button below is the only
+    // way to see anything newer.
+    if (!e.currentTarget.open || loaded) return;
+    loadLogs();
   }
 
   return (
@@ -63,7 +71,17 @@ function LogViewer({ name, token }: { name: string; token: string }) {
         {token ? "View recent logs" : "View recent logs (log in required)"}
       </summary>
       <div className="mt-2 text-xs">
-        {status && <p className="text-gray-500 dark:text-gray-400">{status}</p>}
+        <div className="mb-1 flex items-center gap-2">
+          {status && <p className="text-gray-500 dark:text-gray-400">{status}</p>}
+          {loaded && (
+            <button
+              onClick={loadLogs}
+              className="text-indigo-600 hover:underline dark:text-indigo-400"
+            >
+              ↻ Refresh
+            </button>
+          )}
+        </div>
         {lines.length > 0 && (
           <pre className="max-h-64 overflow-auto rounded bg-gray-900 p-2 font-mono text-[11px] leading-relaxed text-gray-100">
             {lines.map((l, i) => (

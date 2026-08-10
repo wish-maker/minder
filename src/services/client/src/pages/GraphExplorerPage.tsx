@@ -74,7 +74,20 @@ function EntityBadge({ entity }: { entity: Entity | RelatedEntity }) {
   );
 }
 
-function ExtractAndBuildCard({ token }: { token: string }) {
+interface BuiltDoc {
+  documentId: string;
+  title: string;
+  entityCount: number;
+  relationshipCount: number;
+}
+
+function ExtractAndBuildCard({
+  token,
+  onBuilt,
+}: {
+  token: string;
+  onBuilt: (doc: BuiltDoc) => void;
+}) {
   const titleId = useId();
   const textId = useId();
   const [title, setTitle] = useState("");
@@ -129,6 +142,12 @@ function ExtractAndBuildCard({ token }: { token: string }) {
         token,
       });
       setBuilt(res);
+      onBuilt({
+        documentId: res.document_id,
+        title: title || "Untitled",
+        entityCount: res.entity_count,
+        relationshipCount: res.relationship_count,
+      });
       setStatus("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
@@ -399,9 +418,13 @@ function ExploreCard({ token }: { token: string }) {
 function DeleteDocumentCard({
   token,
   confirm,
+  builtDocs,
+  onDeleted,
 }: {
   token: string;
   confirm: ReturnType<typeof useConfirm>["confirm"];
+  builtDocs: BuiltDoc[];
+  onDeleted: (documentId: string) => void;
 }) {
   const [documentId, setDocumentId] = useState("");
   const [status, setStatus] = useState("");
@@ -426,6 +449,7 @@ function DeleteDocumentCard({
         token,
       });
       setStatus("Deleted (idempotent — reports success even if the id was already gone).");
+      onDeleted(documentId);
       setDocumentId("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
@@ -441,8 +465,30 @@ function DeleteDocumentCard({
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Removes one document's relationships and orphaned entities from
         Neo4j (entities shared with other documents are kept). There's no
-        document browser here yet — paste the id you built above.
+        full document browser here yet — pick one you built this session
+        below, or paste any other document id.
       </p>
+      {builtDocs.length > 0 && (
+        <div className="mb-3 flex flex-col gap-1">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Built this session:
+          </p>
+          <ul className="flex flex-col gap-1">
+            {builtDocs.map((doc) => (
+              <li key={doc.documentId}>
+                <button
+                  type="button"
+                  onClick={() => setDocumentId(doc.documentId)}
+                  className="text-left text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  {doc.title} — {doc.entityCount} entities, {doc.relationshipCount} relationships{" "}
+                  <code className="text-gray-500 dark:text-gray-400">({doc.documentId})</code>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <fieldset disabled={!token} className="flex items-center gap-2">
         <input
           className={inputClass}
@@ -464,6 +510,15 @@ export function GraphExplorerPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [statusMsg, setStatusMsg] = useState("");
+  const [builtDocs, setBuiltDocs] = useState<BuiltDoc[]>([]);
+
+  function handleBuilt(doc: BuiltDoc) {
+    setBuiltDocs((prev) => [doc, ...prev.filter((d) => d.documentId !== doc.documentId)]);
+  }
+
+  function handleDeleted(documentId: string) {
+    setBuiltDocs((prev) => prev.filter((d) => d.documentId !== documentId));
+  }
 
   return (
     <>
@@ -482,9 +537,14 @@ export function GraphExplorerPage() {
         <LoginPanel onStatus={setStatusMsg} />
       </div>
       {statusMsg && <div className={statusClass(false)}>{statusMsg}</div>}
-      <ExtractAndBuildCard token={token} />
+      <ExtractAndBuildCard token={token} onBuilt={handleBuilt} />
       <ExploreCard token={token} />
-      <DeleteDocumentCard token={token} confirm={confirm} />
+      <DeleteDocumentCard
+        token={token}
+        confirm={confirm}
+        builtDocs={builtDocs}
+        onDeleted={handleDeleted}
+      />
     </>
   );
 }

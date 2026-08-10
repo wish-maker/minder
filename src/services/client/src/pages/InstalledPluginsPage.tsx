@@ -156,13 +156,25 @@ function ConfigurePanel({ name, token }: { name: string; token: string }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const body: Record<string, unknown> = {};
+    const skipped: string[] = [];
     for (const field of schema) {
       if (!(field.key in draft)) continue;
       const raw = draft[field.key];
       if (field.secret && raw === "") continue; // unchanged
-      if (field.type === "int") body[field.key] = parseInt(String(raw), 10);
-      else if (field.type === "float") body[field.key] = parseFloat(String(raw));
-      else body[field.key] = raw;
+      if (field.type === "int" || field.type === "float") {
+        const parsed = field.type === "int" ? parseInt(String(raw), 10) : parseFloat(String(raw));
+        // An emptied/invalid number field used to serialize as `null` here
+        // (JSON.stringify(NaN) === "null") and save silently -- clearing a
+        // field by accident wiped the stored value with no warning. Treat
+        // it as "no change" instead, same as an untouched secret field.
+        if (Number.isNaN(parsed)) {
+          skipped.push(field.key);
+          continue;
+        }
+        body[field.key] = parsed;
+      } else {
+        body[field.key] = raw;
+      }
     }
     setStatus("Saving…");
     try {
@@ -171,8 +183,12 @@ function ConfigurePanel({ name, token }: { name: string; token: string }) {
         body,
         token,
       });
-      setStatus("Saved.");
-      setTimeout(() => setStatus(""), 2000);
+      setStatus(
+        skipped.length > 0
+          ? `Saved (left ${skipped.join(", ")} unchanged — not a valid number).`
+          : "Saved.",
+      );
+      setTimeout(() => setStatus(""), skipped.length > 0 ? 4000 : 2000);
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
     }
