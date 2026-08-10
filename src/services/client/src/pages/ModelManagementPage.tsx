@@ -291,6 +291,7 @@ export function ModelManagementPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [models, setModels] = useState<ModelInfo[] | null>(null);
+  const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
 
@@ -313,6 +314,16 @@ export function ModelManagementPage() {
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  const needle = filter.trim().toLowerCase();
+  const visibleModels = needle
+    ? (models ?? []).filter(
+        (m) =>
+          m.name.toLowerCase().includes(needle) ||
+          m.provider.toLowerCase().includes(needle) ||
+          m.type.toLowerCase().includes(needle),
+      )
+    : models;
 
   return (
     <>
@@ -341,7 +352,28 @@ export function ModelManagementPage() {
           No models pulled yet — use the form above.
         </p>
       )}
-      {models?.map((m) => (
+      {models !== null && models.length > 0 && (
+        <div className="mb-3 flex items-center gap-3">
+          <input
+            className={`${inputClass} max-w-xs`}
+            type="text"
+            placeholder="Filter by name, provider, or type…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          {needle && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {visibleModels?.length ?? 0} of {models.length}
+            </span>
+          )}
+        </div>
+      )}
+      {needle && visibleModels?.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No pulled models match "{filter}".
+        </p>
+      )}
+      {visibleModels?.map((m) => (
         <ModelCard
           key={m.id}
           model={m}

@@ -206,6 +206,7 @@ function PluginCard({
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [justInstalled, setJustInstalled] = useState(false);
 
   async function handleInstall() {
     setBusy(true);
@@ -217,6 +218,8 @@ function PluginCard({
       });
       onInstalled();
       setStatus("");
+      setJustInstalled(true);
+      setTimeout(() => setJustInstalled(false), 10000);
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
     }
@@ -331,6 +334,18 @@ function PluginCard({
         </div>
       </div>
       {status && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{status}</p>}
+      {justInstalled && (
+        <p className="mt-2 rounded-lg bg-green-50 p-2 text-xs text-green-900 dark:bg-green-950 dark:text-green-100">
+          ✅ Installed. If this plugin exposes an AI tool,{" "}
+          <Link
+            to="/marketplace/plugins/ai-tools"
+            className="underline hover:text-green-700 dark:hover:text-green-300"
+          >
+            check AI Tools
+          </Link>{" "}
+          to confirm it's live.
+        </p>
+      )}
     </section>
   );
 }

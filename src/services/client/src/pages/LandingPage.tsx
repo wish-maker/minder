@@ -10,9 +10,14 @@ interface ToolCardProps {
   icon: string;
   title: string;
   children: string;
+  /** Shows a "Step N" badge -- used on the RAG section to signal the
+   * intended first-time order (knowledge base before pipeline before
+   * querying), since the three cards otherwise carry identical visual
+   * weight and give a first-time user no sense of where to start. */
+  step?: number;
 }
 
-function ToolCard({ to, icon, title, children }: ToolCardProps) {
+function ToolCard({ to, icon, title, children, step }: ToolCardProps) {
   return (
     <Link
       to={to}
@@ -25,6 +30,11 @@ function ToolCard({ to, icon, title, children }: ToolCardProps) {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
           {title}
         </h3>
+        {step && (
+          <span className="ml-auto flex-shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+            Step {step}
+          </span>
+        )}
       </div>
       <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
         {children}
@@ -63,10 +73,19 @@ export function LandingPage() {
       <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
         Minder
       </h1>
-      <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+      <p className="mb-2 text-sm text-gray-600 dark:text-gray-400">
         {isAuthenticated
           ? `Logged in as ${username}.`
           : "Browsing is open for everyone; log in on any page below to make changes."}
+      </p>
+      <p className="mb-6 text-sm text-gray-600 dark:text-gray-400">
+        New here? Start with{" "}
+        <Link to="/rag" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
+          Knowledge Bases
+        </Link>{" "}
+        — steps 1–2 below take you from uploading a document to asking a
+        question over it. Knowledge Graph is a separate, optional path over
+        the same documents, not a required step 3.
       </p>
 
       <ToolSection
@@ -74,22 +93,24 @@ export function LandingPage() {
         title="RAG"
         subtitle="Store documents, then ask questions over them — vector search or knowledge-graph, your choice."
       >
-        <ToolCard to="/rag" icon="📚" title="Knowledge Bases">
+        <ToolCard to="/rag" icon="📚" title="Knowledge Bases" step={1}>
           Create knowledge bases and upload documents (PDF/TXT/MD) for
           Minder's own RAG pipeline — the data your RAG Pipelines search
           over. Manage documents individually without rebuilding the whole
           knowledge base.
         </ToolCard>
-        <ToolCard to="/rag/pipelines" icon="🔎" title="RAG Pipelines">
-          Combine one or more knowledge bases into a queryable pipeline, then
-          ask it questions using Minder's real retrieval methods — standard,
-          HyDE, Self-RAG, auto, or corrective — with optional reranking,
-          compression, and hybrid search.
+        <ToolCard to="/rag/pipelines" icon="🔎" title="RAG Pipelines" step={2}>
+          Combine your knowledge bases into a pipeline, then ask it
+          questions — the default settings work fine to start. Advanced
+          options (HyDE/Self-RAG/corrective retrieval, reranking,
+          compression, hybrid search) are there to tune result quality once
+          you know what you're optimizing for.
         </ToolCard>
         <ToolCard to="/rag/graph" icon="🧬" title="Knowledge Graph">
           Extract entities and relationships from text with spaCy, build them
           into a Neo4j knowledge graph, then explore who's connected to whom
-          — a different retrieval paradigm from vector search.
+          — a different, optional retrieval paradigm from vector search, not
+          a required next step after Pipelines.
         </ToolCard>
       </ToolSection>
 
@@ -123,7 +144,7 @@ export function LandingPage() {
       <ToolSection
         icon="⚙️"
         title="Platform"
-        subtitle="The operator surface — models, live testing tools, and whether everything is actually healthy."
+        subtitle="Models, health, and voice — the operator surface plus a couple of capabilities you can also just use directly."
       >
         <ToolCard to="/platform" icon="🤖" title="Model Management">
           Pull, delete, and test Ollama models directly against Minder's
