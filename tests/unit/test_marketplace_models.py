@@ -160,8 +160,17 @@ def test_invalid_uuid_rejected():
     assert any("category_id" in str(error.get("loc", "")) for error in errors)
 
 
-def test_html_sanitization():
-    """Test that HTML tags are properly escaped"""
+def test_display_name_and_description_are_stored_verbatim():
+    """display_name/description used to run through html.escape() at write
+    time -- meant as XSS defense, but these fields are plain text: the only
+    consumer (the client) renders them as a React text node, which escapes on
+    DOM insertion regardless of what's stored. Escaping at write time instead
+    corrupted every real value containing '&', "'", '<', or '"' -- e.g. a
+    real plugin's "inventories & monitors" round-tripped through the API as
+    "inventories &amp; monitors" (found live on hantal, see
+    test_marketplace_plugin_model_no_html_escape.py). If a future consumer
+    ever needs to render these fields as raw HTML, it must escape at that
+    render site -- not here, where it corrupts every other consumer."""
     data = {
         "name": "test-plugin",
         "display_name": "<script>alert('xss')</script>Test Plugin",
@@ -174,8 +183,5 @@ def test_html_sanitization():
 
     plugin = PluginCreate(**data)
 
-    # Verify HTML tags are escaped
-    assert "&lt;script&gt;" in plugin.display_name
-    assert "<script>" not in plugin.display_name
-    assert "&lt;b&gt;" in plugin.description
-    assert "<b>" not in plugin.description
+    assert plugin.display_name == "<script>alert('xss')</script>Test Plugin"
+    assert plugin.description == "Description with <b>HTML</b> tags"

@@ -1,10 +1,9 @@
 # services/marketplace/models/plugin.py
-import html
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, HttpUrl
 
 
 class PricingModel(str, Enum):
@@ -53,14 +52,16 @@ class PluginCreate(BaseModel):
         None,
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
-
-    @field_validator("display_name", "description", mode="after")
-    @classmethod
-    def sanitize_html(cls, v: Optional[str]) -> Optional[str]:
-        """Sanitize HTML in text fields"""
-        if v is None:
-            return None
-        return html.escape(v)
+    # display_name/description are plain-text fields, stored and returned as
+    # JSON string values and rendered by the client as React text nodes
+    # (`{plugin.description}`), which HTML-escapes on insertion into the DOM
+    # -- there is no raw-HTML consumer anywhere in this codebase. An
+    # html.escape() here used to run at WRITE time regardless, so "&" and "'"
+    # were stored as literal "&amp;"/"&#x27;" and then rendered verbatim
+    # (correctly, but of the already-corrupted text) -- e.g. a real plugin's
+    # "inventories & monitors" became "inventories &amp; monitors" in the API
+    # response and on the page. Removed; if a future consumer ever renders
+    # these fields as raw HTML, it must escape at that render site instead.
 
 
 class PluginUpdate(BaseModel):
@@ -73,14 +74,6 @@ class PluginUpdate(BaseModel):
     base_tier: Optional[str] = None
     status: Optional[PluginStatus] = None
     featured: Optional[bool] = None
-
-    @field_validator("display_name", "description", mode="after")
-    @classmethod
-    def sanitize_html(cls, v: Optional[str]) -> Optional[str]:
-        """Sanitize HTML in text fields"""
-        if v is None:
-            return None
-        return html.escape(v)
 
 
 class PluginResponse(BaseModel):
