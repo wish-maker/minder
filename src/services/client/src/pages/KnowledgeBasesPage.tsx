@@ -13,6 +13,13 @@ import {
   statusClass,
 } from "../lib/ui";
 
+interface ModelInfo {
+  id: string;
+  name: string;
+}
+
+const fieldHintClass = "mt-0.5 text-xs text-gray-500 dark:text-gray-400";
+
 interface KnowledgeBase {
   id: string;
   name: string;
@@ -349,6 +356,22 @@ function CreateKbForm({
   const [chunkSize, setChunkSize] = useState("");
   const [chunkOverlap, setChunkOverlap] = useState("");
   const [status, setStatus] = useState("");
+  const [models, setModels] = useState<ModelInfo[]>([]);
+
+  useEffect(() => {
+    // Free-text model-name inputs made a user guess/copy-paste an exact
+    // Ollama model string with zero validation, when the platform already
+    // knows exactly which models are pulled (ModelManagementPage's own data
+    // source) -- offer that list instead. Best-effort: an empty list just
+    // means every dropdown falls back to its single "(server default)"
+    // option, same as before this existed.
+    apiFetch<ModelInfo[]>("/v1/models")
+      .then(setModels)
+      .catch(() => {});
+  }, []);
+
+  const embeddingModels = models.filter((m) => /embed/i.test(m.name));
+  const llmModels = models.filter((m) => !/embed/i.test(m.name));
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -431,14 +454,23 @@ function CreateKbForm({
             >
               Embedding model
             </label>
-            <input
+            <select
               id={embeddingModelId}
               className={inputClass}
-              type="text"
-              placeholder="nomic-embed-text"
               value={embeddingModel}
               onChange={(e) => setEmbeddingModel(e.target.value)}
-            />
+            >
+              <option value="">(server default)</option>
+              {embeddingModels.map((m) => (
+                <option key={m.id} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <p className={fieldHintClass}>
+              Turns each chunk of text into a vector for similarity search —
+              pick a model whose name contains "embed".
+            </p>
           </div>
           <div>
             <label
@@ -447,14 +479,23 @@ function CreateKbForm({
             >
               LLM model
             </label>
-            <input
+            <select
               id={llmModelId}
               className={inputClass}
-              type="text"
-              placeholder="llama3.2"
               value={llmModel}
               onChange={(e) => setLlmModel(e.target.value)}
-            />
+            >
+              <option value="">(server default)</option>
+              {llmModels.map((m) => (
+                <option key={m.id} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            <p className={fieldHintClass}>
+              Generates the actual answer from retrieved chunks when this KB
+              is queried through a RAG Pipeline.
+            </p>
           </div>
           <div>
             <label
@@ -471,6 +512,11 @@ function CreateKbForm({
               value={chunkSize}
               onChange={(e) => setChunkSize(e.target.value)}
             />
+            <p className={fieldHintClass}>
+              How much text (in characters) goes into each retrievable piece
+              — smaller finds more precise matches, larger keeps more
+              surrounding context per match.
+            </p>
           </div>
           <div>
             <label
@@ -487,6 +533,10 @@ function CreateKbForm({
               value={chunkOverlap}
               onChange={(e) => setChunkOverlap(e.target.value)}
             />
+            <p className={fieldHintClass}>
+              How many characters consecutive chunks share, so a fact split
+              across a chunk boundary still appears whole in at least one.
+            </p>
           </div>
           <div className="flex items-center gap-3 sm:col-span-2">
             <button type="submit" disabled={!token} className={primaryButtonClass}>
