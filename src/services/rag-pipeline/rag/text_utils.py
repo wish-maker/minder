@@ -5,11 +5,11 @@ from typing import List
 
 async def extract_text_from_file(content: bytes, filename: str) -> str:
     """Extract text from file based on type"""
-    import io
-
-    from pypdf import PdfReader
-
     if filename.endswith(".pdf"):
+        import io
+
+        from pypdf import PdfReader
+
         pdf_file = io.BytesIO(content)
         reader = PdfReader(pdf_file)
         text = ""
