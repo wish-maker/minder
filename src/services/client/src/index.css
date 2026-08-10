@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* Self-hosted, no runtime CDN fetch: Minder ships offline-capable, and the
+ * client should not gain a network dependency Piper/gTTS et al. do not have.
+ * Only the weights headings actually use (400 fallback, 600 semibold, 700
+ * bold) to keep the bundle small. */
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+
+/* Recolors every existing bg-indigo, text-indigo, and border-indigo utility
+ * app-wide from this one place. indigo-600 was the unmodified Tailwind
+ * default accent, the single most common generic-SaaS giveaway color.
+ * Minder is actually a mesh of independently-running services the user owns
+ * and operates: RAG pipelines, a knowledge graph, plugins, models. The
+ * accent moves to a teal/emerald that reads as a network of connected
+ * nodes rather than generic startup-blue, at the same lightness steps so
+ * every existing dark-mode and hover pairing still works unchanged. Ramp
+ * generated at hue 168, saturation 62 percent, contrast-checked: white
+ * text on the 600 shade (primaryButtonClass background) is 5.07:1, passing
+ * WCAG AA for normal text. */
+@theme {
+  --color-indigo-100: #d6f5ef;
+  --color-indigo-300: #83e2cf;
+  --color-indigo-400: #49d4b9;
+  --color-indigo-500: #2bb69a;
+  --color-indigo-600: #1d7c69;
+  --color-indigo-700: #165f50;
+  --color-indigo-800: #10463b;
+  --color-indigo-950: #09251f;
+}
+
 :root {
   color-scheme: light dark;
 }
@@ -10,6 +40,20 @@ body {
   margin: 2rem auto;
   padding: 0 1rem;
   line-height: 1.5;
+}
+
+/* Every page title and section heading gets the same technical, monospaced
+ * voice: a control panel for infra you run yourself, not a marketing page,
+ * while body copy stays in the system sans stack above for reading comfort.
+ * Tailwind utility classes on individual headings (text-lg, font-semibold,
+ * etc.) still apply on top; only the typeface itself is set here, once,
+ * for every h1 through h4 in the app. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: -0.01em;
 }
 
 h1 {
