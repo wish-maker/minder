@@ -96,6 +96,38 @@ function PricingBadge({ plugin }: { plugin: Plugin }) {
   );
 }
 
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** Source/distribution metadata the list already carries but the card never
+ * rendered -- repository link, what actually ships (git/docker/hybrid), and
+ * when it was published. */
+function PluginMetaRow({ plugin }: { plugin: Plugin }) {
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-gray-500 dark:text-gray-400">
+      <span title={plugin.docker_image ?? undefined}>
+        ships as {plugin.distribution_type}
+      </span>
+      {plugin.repository_url && (
+        <a
+          href={plugin.repository_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-indigo-600 dark:hover:text-indigo-400"
+        >
+          Repository ↗
+        </a>
+      )}
+      {plugin.published_at && <span>Published {formatShortDate(plugin.published_at)}</span>}
+    </p>
+  );
+}
+
 function DependencyPanel({ pluginId }: { pluginId: string }) {
   const [loaded, setLoaded] = useState(false);
   const [deps, setDeps] = useState<DependencyEntry[]>([]);
@@ -257,6 +289,7 @@ function PluginCard({
               <span className={badgeClass}>{plugin.category_id}</span>
             )}
           </div>
+          <PluginMetaRow plugin={plugin} />
           <DependencyPanel pluginId={plugin.id} />
         </div>
         <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
@@ -401,6 +434,7 @@ export function MarketplacePage() {
   const query = useDebouncedValue(queryInput, 300);
   const [myInstallations, setMyInstallations] = useState<Installation[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [featured, setFeatured] = useState<Plugin[]>([]);
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
 
@@ -408,6 +442,20 @@ export function MarketplacePage() {
     setStatus(msg);
     setIsError(err);
   }, []);
+
+  const loadFeatured = useCallback(async () => {
+    try {
+      const res = await apiFetch<PluginListResponse>("/v1/marketplace/plugins/featured?limit=6");
+      setFeatured(res.plugins);
+    } catch {
+      // best-effort -- the full catalog below still shows featured plugins
+      // (with a badge), just not curated to the top
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFeatured();
+  }, [loadFeatured]);
 
   const loadPlugins = useCallback(
     async (nextOffset: number, replace: boolean) => {
@@ -491,6 +539,27 @@ export function MarketplacePage() {
       </p>
       <LoginPanel onStatus={setStatusMsg} />
       <div className={statusClass(isError)}>{status}</div>
+
+      {featured.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">
+            <span aria-hidden="true">⭐</span> Featured
+          </h2>
+          {featured.map((plugin) => (
+            <PluginCard
+              key={plugin.id}
+              plugin={plugin}
+              installation={installationFor(plugin.id)}
+              token={token}
+              isAuthenticated={isAuthenticated}
+              onInstalled={loadMyInstallations}
+              onUninstalled={handleUninstalled}
+              onToggleEnabled={handleToggleEnabled}
+              confirm={confirm}
+            />
+          ))}
+        </section>
+      )}
 
       {isAuthenticated && myInstallations.length > 0 && (
         <section className={`mb-6 ${cardClass}`}>
