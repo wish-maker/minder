@@ -383,6 +383,15 @@ export function InstalledPluginsPage() {
           .
         </p>
       )}
+      {isAuthenticated && installations !== null && installations.length > 0 && (
+        <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+          Some of these expose AI tools the assistant can call —{" "}
+          <Link to="/marketplace/plugins/ai-tools" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
+            check AI Tools
+          </Link>{" "}
+          to see which are live right now.
+        </p>
+      )}
       {installations?.map((i) => (
         <InstalledPluginCard
           key={i.plugin_id}

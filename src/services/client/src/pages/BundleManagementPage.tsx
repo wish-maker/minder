@@ -145,14 +145,25 @@ function BundleCard({
             ))}
           </ul>
         </div>
-        <button
-          onClick={handleToggle}
-          disabled={!token || busy || bundle.core}
-          title={bundle.core ? "core is the always-on kernel — it can't be disabled" : undefined}
-          className={bundle.enabled ? secondaryButtonClass : primaryButtonClass}
-        >
-          {bundle.enabled ? "Disable" : "Enable"}
-        </button>
+        {bundle.core ? (
+          // A disabled "Disable" button only explained the always-on kernel via
+          // a hover title -- invisible on touch and easy to miss even with a
+          // mouse. Say it in visible text instead of hiding the reason.
+          <span
+            className="whitespace-nowrap text-xs text-gray-500 dark:text-gray-400"
+            title="core is the always-on kernel — it can't be disabled"
+          >
+            🔒 Always on
+          </span>
+        ) : (
+          <button
+            onClick={handleToggle}
+            disabled={!token || busy}
+            className={bundle.enabled ? secondaryButtonClass : primaryButtonClass}
+          >
+            {bundle.enabled ? "Disable" : "Enable"}
+          </button>
+        )}
       </div>
       {status && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{status}</p>}
     </section>
