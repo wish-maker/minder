@@ -82,6 +82,15 @@ CORE_SERVICES = (
     "rabbitmq",
     "minio",
     "schema-registry",
+    # Absent from every list in scripts/setup/ until now -> update.py's rolling
+    # restart never recreated it, so a `command:` change in docker-compose.yml
+    # (e.g. #445's new -allowGET=.../logs entry) silently never reached the
+    # running container. Confirmed live on hantal: `docker inspect`'s Args
+    # were still the pre-#445 allowlist days after `update` reported success,
+    # so plugin-registry's container-logs call 403'd. It has no HEALTHCHECK
+    # (see its own docker-compose.yml comment), which wait_healthy() already
+    # treats as "not waiting" -- safe to add here.
+    "docker-socket-proxy",
 )
 API_SERVICES = (
     "api-gateway",
