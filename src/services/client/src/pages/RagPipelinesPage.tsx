@@ -5,6 +5,7 @@ import { LoginPanel } from "../components/LoginPanel";
 import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
+  badgeClass,
   cardClass,
   destructiveButtonClass,
   inputClass,
@@ -69,6 +70,67 @@ interface QueryResponse {
   tokens_used?: number | null;
   method: string;
   method_details?: { retrieval: string; degraded?: string[] } | null;
+}
+
+interface Turn {
+  question: string;
+  response: QueryResponse;
+}
+
+function confidenceBadgeColor(confidence: number): string {
+  if (confidence >= 0.8) return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
+  if (confidence >= 0.5) return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+  return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+}
+
+/** Shared by the single-shot result panel and each turn in a conversation
+ * thread -- `compact` drops the source list for non-latest turns so an
+ * ongoing conversation doesn't grow a wall of repeated citations. */
+function QueryResultCard({
+  response,
+  compact = false,
+}: {
+  response: QueryResponse;
+  compact?: boolean;
+}) {
+  return (
+    <>
+      <p className="mb-2 whitespace-pre-wrap">{response.answer}</p>
+      <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+        <span className={`${badgeClass} ${confidenceBadgeColor(response.confidence)}`}>
+          {Math.round(response.confidence * 100)}% confidence
+        </span>
+        <span>
+          Model: {response.model_used}
+          {response.tokens_used != null && ` (${response.tokens_used} tokens)`}
+        </span>
+        <span>
+          Method: {response.method}
+          {response.method_details?.retrieval && ` (${response.method_details.retrieval} retrieval)`}
+        </span>
+      </p>
+      {response.method_details?.degraded && response.method_details.degraded.length > 0 && (
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+          ⚠ Degraded: {response.method_details.degraded.join(", ")}
+        </p>
+      )}
+      {!compact && response.sources.length > 0 && (
+        <div className="mt-3 border-t border-gray-200 pt-2 dark:border-gray-700">
+          <p className="mb-1 text-xs font-semibold text-gray-600 dark:text-gray-400">
+            Sources
+          </p>
+          <ul className="flex flex-col gap-1">
+            {response.sources.map((s, i) => (
+              <li key={i} className="text-xs text-gray-600 dark:text-gray-400">
+                [{s.source}] score {s.score.toFixed(3)} — {s.text.slice(0, 200)}
+                {s.text.length > 200 && "…"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </>
+  );
 }
 
 const fieldHintClass = "mt-0.5 text-xs text-gray-500 dark:text-gray-400";
@@ -222,6 +284,12 @@ function QueryPanel({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [result, setResult] = useState<QueryResponse | null>(null);
+  // Only populated in continue-conversation mode -- server-side context
+  // carries across turns via conversation_id regardless, but the UI
+  // previously only ever showed the single latest answer, so a user turning
+  // this on had no way to see or trust that a conversation thread was
+  // actually happening.
+  const [turns, setTurns] = useState<Turn[]>([]);
 
   const methodAvailable = (m: Method) => capabilities?.methods[m] !== false;
   const rerankAvailable = capabilities?.enhancers.rerank.available ?? false;
@@ -260,7 +328,12 @@ function QueryPanel({
         `/v1/rag/pipeline/${pipelineId}/query`,
         { method: "POST", body, token },
       );
-      setResult(res);
+      if (continueConversation) {
+        setTurns((prev) => [...prev, { question, response: res }]);
+        setQuestion(""); // ready for the next follow-up, chat-style
+      } else {
+        setResult(res);
+      }
       setStatus("");
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
@@ -429,7 +502,10 @@ function QueryPanel({
                     disabled={!conversationalAvailable}
                     onChange={(e) => {
                       setContinueConversation(e.target.checked);
-                      if (!e.target.checked) setConversationId(null);
+                      if (!e.target.checked) {
+                        setConversationId(null);
+                        setTurns([]);
+                      }
                     }}
                   />
                   Continue conversation
@@ -438,6 +514,7 @@ function QueryPanel({
                 <p className={fieldHintClass}>
                   Keeps follow-up questions in the same session, so the model can
                   resolve references like "it" or "that" back to earlier turns.
+                  Shows the whole thread below instead of just the latest answer.
                 </p>
               </div>
             </div>
@@ -456,37 +533,36 @@ function QueryPanel({
           </div>
         </fieldset>
       </form>
-      {result && (
-        <div className="mt-3 rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
-          <p className="mb-2 whitespace-pre-wrap">{result.answer}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Confidence: {Math.round(result.confidence * 100)}% · Model:{" "}
-            {result.model_used}
-            {result.tokens_used != null && ` (${result.tokens_used} tokens)`} ·
-            Method: {result.method}
-            {result.method_details?.retrieval &&
-              ` (${result.method_details.retrieval} retrieval)`}
-          </p>
-          {result.method_details?.degraded && result.method_details.degraded.length > 0 && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-              ⚠ Degraded: {result.method_details.degraded.join(", ")}
+      {continueConversation && turns.length > 0 && (
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">
+              Conversation ({turns.length} turn{turns.length === 1 ? "" : "s"})
             </p>
-          )}
-          {result.sources.length > 0 && (
-            <div className="mt-3 border-t border-gray-200 pt-2 dark:border-gray-700">
-              <p className="mb-1 text-xs font-semibold text-gray-600 dark:text-gray-400">
-                Sources
+            <button
+              type="button"
+              onClick={() => {
+                setTurns([]);
+                setConversationId(null);
+              }}
+              className="text-xs text-indigo-600 underline hover:text-indigo-700 dark:text-indigo-400"
+            >
+              Reset conversation
+            </button>
+          </div>
+          {turns.map((turn, i) => (
+            <div key={i} className="rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
+              <p className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                Q: {turn.question}
               </p>
-              <ul className="flex flex-col gap-1">
-                {result.sources.map((s, i) => (
-                  <li key={i} className="text-xs text-gray-600 dark:text-gray-400">
-                    [{s.source}] score {s.score.toFixed(3)} — {s.text.slice(0, 200)}
-                    {s.text.length > 200 && "…"}
-                  </li>
-                ))}
-              </ul>
+              <QueryResultCard response={turn.response} compact={i < turns.length - 1} />
             </div>
-          )}
+          ))}
+        </div>
+      )}
+      {!continueConversation && result && (
+        <div className="mt-3 rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800">
+          <QueryResultCard response={result} />
         </div>
       )}
     </div>
