@@ -17,11 +17,17 @@ async def extract_text_from_file(content: bytes, filename: str) -> str:
             text += page.extract_text()
         return text
     elif filename.endswith(".txt") or filename.endswith(".md"):
-        return content.decode("utf-8")
+        # "utf-8-sig" strips a leading BOM if present (e.g. files saved by
+        # Windows Notepad or PowerShell's `Out-File -Encoding utf8`) and
+        # decodes identically to "utf-8" otherwise. Plain "utf-8" turned the
+        # BOM into a literal U+FEFF character that survived chunking,
+        # embedding, and retrieval -- polluting the first chunk of every
+        # such document all the way to the API response.
+        return content.decode("utf-8-sig")
     else:
         # Default: try UTF-8 decode
         try:
-            return content.decode("utf-8")
+            return content.decode("utf-8-sig")
         except UnicodeDecodeError:
             return content.decode("latin-1")
 
