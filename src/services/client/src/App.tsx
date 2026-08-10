@@ -1,15 +1,16 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 
 import { SectionTabs } from "./components/SectionTabs";
+import { SubTabs } from "./components/SubTabs";
 import { AuthProvider } from "./lib/auth";
 import { AiToolsPage } from "./pages/AiToolsPage";
+import { AvailablePluginsPage } from "./pages/AvailablePluginsPage";
 import { BundleManagementPage } from "./pages/BundleManagementPage";
 import { GraphExplorerPage } from "./pages/GraphExplorerPage";
+import { InstalledPluginsPage } from "./pages/InstalledPluginsPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
-import { MarketplacePage } from "./pages/MarketplacePage";
 import { ModelManagementPage } from "./pages/ModelManagementPage";
-import { PluginConfigPage } from "./pages/PluginConfigPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
 import { StatusPage } from "./pages/StatusPage";
 import { VoicePage } from "./pages/VoicePage";
@@ -26,9 +27,9 @@ export function App() {
         </Link>
         <Link
           className="hover:text-indigo-600 dark:hover:text-indigo-400"
-          to="/plugins"
+          to="/marketplace"
         >
-          Plugins
+          Marketplace
         </Link>
         <Link
           className="hover:text-indigo-600 dark:hover:text-indigo-400"
@@ -59,23 +60,42 @@ export function App() {
           <Route path="graph" element={<GraphExplorerPage />} />
         </Route>
 
+        {/* Plugins and Bundles are both "things you turn on for this
+            installation" -- grouping them under one Marketplace section
+            instead of splitting Bundles off into Platform (its old home)
+            makes that relationship visible instead of accidental. */}
         <Route
-          path="/plugins"
+          path="/marketplace"
           element={
             <SectionTabs
-              title="Plugins"
-              icon="🧩"
+              title="Marketplace"
+              icon="🛒"
               tabs={[
-                { to: ".", label: "Marketplace", end: true },
-                { to: "config", label: "Configure" },
-                { to: "ai-tools", label: "AI Tools" },
+                { to: "plugins", label: "Plugins" },
+                { to: "bundles", label: "Bundles" },
               ]}
             />
           }
         >
-          <Route index element={<MarketplacePage />} />
-          <Route path="config" element={<PluginConfigPage />} />
-          <Route path="ai-tools" element={<AiToolsPage />} />
+          <Route index element={<Navigate to="plugins/available" replace />} />
+          <Route
+            path="plugins"
+            element={
+              <SubTabs
+                tabs={[
+                  { to: "available", label: "Available Plugins" },
+                  { to: "installed", label: "Installed Plugins" },
+                  { to: "ai-tools", label: "AI Tools" },
+                ]}
+              />
+            }
+          >
+            <Route index element={<Navigate to="available" replace />} />
+            <Route path="available" element={<AvailablePluginsPage />} />
+            <Route path="installed" element={<InstalledPluginsPage />} />
+            <Route path="ai-tools" element={<AiToolsPage />} />
+          </Route>
+          <Route path="bundles" element={<BundleManagementPage />} />
         </Route>
 
         <Route
@@ -86,7 +106,6 @@ export function App() {
               icon="⚙️"
               tabs={[
                 { to: ".", label: "Models", end: true },
-                { to: "bundles", label: "Bundles" },
                 { to: "status", label: "Status" },
                 { to: "voice", label: "Voice" },
               ]}
@@ -94,22 +113,37 @@ export function App() {
           }
         >
           <Route index element={<ModelManagementPage />} />
-          <Route path="bundles" element={<BundleManagementPage />} />
           <Route path="status" element={<StatusPage />} />
           <Route path="voice" element={<VoicePage />} />
         </Route>
 
-        {/* Old flat routes, kept as redirects so existing bookmarks/links
-            still land somewhere sensible instead of the catch-all. */}
+        {/* Old flat/pre-restructure routes, kept as redirects so existing
+            bookmarks/links still land somewhere sensible instead of the
+            catch-all. */}
         <Route path="/knowledge-bases" element={<Navigate to="/rag" replace />} />
         <Route
           path="/rag-pipelines"
           element={<Navigate to="/rag/pipelines" replace />}
         />
-        <Route path="/marketplace" element={<Navigate to="/plugins" replace />} />
+        <Route
+          path="/plugins"
+          element={<Navigate to="/marketplace/plugins/available" replace />}
+        />
+        <Route
+          path="/plugins/config"
+          element={<Navigate to="/marketplace/plugins/installed" replace />}
+        />
+        <Route
+          path="/plugins/ai-tools"
+          element={<Navigate to="/marketplace/plugins/ai-tools" replace />}
+        />
         <Route
           path="/plugin-config"
-          element={<Navigate to="/plugins/config" replace />}
+          element={<Navigate to="/marketplace/plugins/installed" replace />}
+        />
+        <Route
+          path="/platform/bundles"
+          element={<Navigate to="/marketplace/bundles" replace />}
         />
 
         {/* Unmatched paths (including the removed /model-management, still

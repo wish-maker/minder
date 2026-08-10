@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { LoginPanel } from "../components/LoginPanel";
@@ -354,77 +355,7 @@ function SearchAndFilters({
   );
 }
 
-function InstalledPluginRow({
-  installation,
-  token,
-  onUninstalled,
-  onToggleEnabled,
-  confirm,
-}: {
-  installation: Installation;
-  token: string;
-  onUninstalled: (pluginId: string) => void;
-  onToggleEnabled: (pluginId: string, enabled: boolean) => void;
-  confirm: ReturnType<typeof useConfirm>["confirm"];
-}) {
-  const [status, setStatus] = useState("");
-
-  async function handleUninstall() {
-    const ok = await confirm({
-      title: "Uninstall plugin?",
-      message: `This removes "${installation.display_name}" and disables anything it was doing (data already collected is kept).`,
-      danger: true,
-    });
-    if (!ok) return;
-    setStatus("Uninstalling…");
-    try {
-      await apiFetch(`/v1/marketplace/plugins/${installation.plugin_id}/uninstall`, {
-        method: "DELETE",
-        token,
-      });
-      onUninstalled(installation.plugin_id);
-    } catch (e) {
-      setStatus(friendlyErrorMessage(e));
-    }
-  }
-
-  async function handleToggle() {
-    const nextEnabled = !installation.enabled;
-    setStatus(nextEnabled ? "Enabling…" : "Disabling…");
-    try {
-      await apiFetch(
-        `/v1/marketplace/plugins/${installation.plugin_id}/${nextEnabled ? "enable" : "disable"}`,
-        { method: "POST", token },
-      );
-      onToggleEnabled(installation.plugin_id, nextEnabled);
-      setStatus("");
-    } catch (e) {
-      setStatus(friendlyErrorMessage(e));
-    }
-  }
-
-  return (
-    <li className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-2 text-sm dark:bg-gray-800">
-      <span>
-        🧩 {installation.display_name}{" "}
-        <span className={badgeClass}>
-          {installation.enabled ? "✓ enabled" : "disabled"}
-        </span>
-      </span>
-      <span className="flex items-center gap-2">
-        <span className="text-xs text-gray-500 dark:text-gray-400">{status}</span>
-        <button onClick={handleToggle} className={secondaryButtonClass}>
-          {installation.enabled ? "Disable" : "Enable"}
-        </button>
-        <button onClick={handleUninstall} className={destructiveButtonClass}>
-          🗑 Uninstall
-        </button>
-      </span>
-    </li>
-  );
-}
-
-export function MarketplacePage() {
+export function AvailablePluginsPage() {
   const { token, isAuthenticated } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
@@ -561,30 +492,21 @@ export function MarketplacePage() {
         </section>
       )}
 
+      {isAuthenticated && myInstallations.length > 0 && recommendations.length > 0 && (
+        <p className="mb-6 text-xs text-gray-500 dark:text-gray-400">
+          Recommended based on what you've installed:{" "}
+          {recommendations.map((r) => r.name).join(", ")}
+        </p>
+      )}
       {isAuthenticated && myInstallations.length > 0 && (
-        <section className={`mb-6 ${cardClass}`}>
-          <h2 className="mb-2 text-base font-semibold text-gray-900 dark:text-gray-100">
-            <span aria-hidden="true">✅</span> My Installed Plugins
-          </h2>
-          <ul className="flex flex-col gap-1.5">
-            {myInstallations.map((i) => (
-              <InstalledPluginRow
-                key={i.plugin_id}
-                installation={i}
-                token={token}
-                onUninstalled={handleUninstalled}
-                onToggleEnabled={handleToggleEnabled}
-                confirm={confirm}
-              />
-            ))}
-          </ul>
-          {recommendations.length > 0 && (
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-              Recommended based on what you've installed:{" "}
-              {recommendations.map((r) => r.name).join(", ")}
-            </p>
-          )}
-        </section>
+        <p className="mb-6 text-xs text-gray-500 dark:text-gray-400">
+          You have {myInstallations.length} plugin{myInstallations.length === 1 ? "" : "s"}{" "}
+          installed —{" "}
+          <Link to="/marketplace/plugins/installed" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
+            manage or configure them
+          </Link>
+          .
+        </p>
       )}
 
       <SearchAndFilters query={queryInput} onQueryChange={setQueryInput} />
