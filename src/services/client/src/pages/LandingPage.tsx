@@ -94,41 +94,41 @@ export function LandingPage() {
       </ToolSection>
 
       <ToolSection
-        icon="🧩"
-        title="Plugins"
-        subtitle="Six first-party plugins ship with Minder — discover, configure, and see what they let your AI do."
+        icon="🛒"
+        title="Marketplace"
+        subtitle="Everything you can turn on for this installation — six first-party plugins and the feature bundles they belong to."
       >
-        <ToolCard to="/plugins" icon="🛒" title="Marketplace">
-          Browse, install, and manage Minder plugins — see what's available,
-          check dependencies and conflicts against what you've already
-          installed, and turn plugins on or off without leaving the browser.
+        <ToolCard to="/marketplace/plugins/available" icon="🔍" title="Available Plugins">
+          Browse and install Minder plugins — see what's available, check
+          dependencies and conflicts against what you've already installed,
+          and turn plugins on without leaving the browser.
         </ToolCard>
-        <ToolCard to="/plugins/config" icon="🧩" title="Plugin Configuration">
-          Edit settings for plugins that expose a config schema — news feed
-          URLs, weather locations, and similar per-plugin options. Changes
-          apply immediately, with no service restart needed.
+        <ToolCard to="/marketplace/plugins/installed" icon="🧩" title="Installed Plugins">
+          Manage what you've installed — enable, disable, uninstall, or edit
+          a plugin's settings (news feed URLs, weather locations, and similar
+          per-plugin options), all from the same place.
         </ToolCard>
-        <ToolCard to="/plugins/ai-tools" icon="🧰" title="AI Tools">
+        <ToolCard to="/marketplace/plugins/ai-tools" icon="🧰" title="AI Tools">
           See every function-calling tool Minder's plugins expose — what's
           live right now from running plugins, and the durable catalog
           Marketplace keeps with tier info.
+        </ToolCard>
+        <ToolCard to="/marketplace/bundles" icon="📦" title="Bundle Management">
+          Turn optional feature bundles (inference, RAG, chat, monitoring,
+          voice, graph-rag) on or off, see which services each one claims,
+          and reconcile the running stack to match.
         </ToolCard>
       </ToolSection>
 
       <ToolSection
         icon="⚙️"
         title="Platform"
-        subtitle="The operator surface — models, feature bundles, and whether everything is actually healthy."
+        subtitle="The operator surface — models, live testing tools, and whether everything is actually healthy."
       >
         <ToolCard to="/platform" icon="🤖" title="Model Management">
           Pull, delete, and test Ollama models directly against Minder's
           model-management service — the same Ollama instance the whole
           platform uses.
-        </ToolCard>
-        <ToolCard to="/platform/bundles" icon="📦" title="Bundle Management">
-          Turn optional feature bundles (inference, RAG, chat, monitoring,
-          voice, graph-rag) on or off, see which services each one claims,
-          and reconcile the running stack to match.
         </ToolCard>
         <ToolCard to="/platform/status" icon="🩺" title="Status">
           Health, reported version, and recent logs for every core service —
