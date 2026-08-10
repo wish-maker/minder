@@ -11,11 +11,20 @@ hantal: `ConvertTo-Json`'d PowerShell output containing a curly quote raised
 
 No real SSH connection: `client.exec_command` and its returned channel are
 stubbed.
+
+`remote_lib` imports `paramiko` at module level -- a personal dev-workflow
+dependency, deliberately not in src/requirements/*.txt, so CI's Unit Tests
+job doesn't have it installed (see test_remote_ssh_arg_parsing.py). Skip
+cleanly there instead of erroring.
 """
 
 import types
 
-from scripts.dev import remote_lib
+import pytest
+
+pytest.importorskip("paramiko")
+
+from scripts.dev import remote_lib  # noqa: E402
 
 
 class _FakeChannel:
