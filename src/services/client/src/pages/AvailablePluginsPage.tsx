@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -493,7 +492,6 @@ export function AvailablePluginsPage() {
         Browse and install Minder plugins. Browsing is open for everyone; log
         in to install, enable, disable, or uninstall.
       </p>
-      <LoginPanel onStatus={setStatusMsg} />
       <div className={statusClass(isError)}>{status}</div>
 
       {featured.length > 0 && !query.trim() && (

@@ -37,6 +37,24 @@ class Settings(MinderBaseSettings):
     # Phase Configuration (for health check)
     MINDER_PHASE: int = 1  # Current deployment phase
 
+    # OIDC login against Authelia (#<issue>) -- api-gateway is a confidential
+    # OIDC client; a successful Authelia login still mints Minder's own
+    # existing JWT shape (see routes/auth.py's oidc_callback), so nothing
+    # downstream that already trusts a Minder JWT needs to change.
+    AUTHELIA_ISSUER_URL: str = "https://authelia.minder.local"
+    # api-gateway's own server-to-server calls (discovery/token/JWKS) go
+    # straight to the container on the docker network -- authelia.minder.local
+    # only resolves via Traefik, which isn't reachable from inside the network
+    # api-gateway itself is on. The Host header is still overridden to the
+    # public issuer name on every such call (see core/oidc.py) so Authelia's
+    # own responses (issuer, token/jwks URLs) stay self-consistent with what
+    # the browser and the ID token's iss claim both use.
+    AUTHELIA_INTERNAL_URL: str = "http://minder-authelia:9091"
+    MINDER_OIDC_CLIENT_ID: str = "minder-client"
+    MINDER_OIDC_CLIENT_SECRET: str = ""
+    MINDER_OIDC_REDIRECT_URI: str = "https://api.minder.local/v1/auth/oidc/callback"
+    MINDER_CLIENT_BASE_URL: str = "https://client.minder.local"
+
 
 # Global settings instance
 settings = Settings()

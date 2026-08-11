@@ -35,6 +35,12 @@ declare -A SECRET_SPEC=(
     # registry→marketplace AI-tool sync auth (X-Service-Token); one value → both
     # containers. Was skipped → stayed empty → sync silently 401'd (#227).
     [SERVICE_SYNC_TOKEN]=32
+    # Authelia OIDC provider (#<issue>): hmac_secret signs Authelia's own internal
+    # OIDC session/consent tokens; MINDER_OIDC_CLIENT_SECRET is the plaintext
+    # confidential-client secret shared between Authelia's configuration.yml
+    # ($plaintext$ prefix) and api-gateway's token-exchange call.
+    [AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET]=32
+    [MINDER_OIDC_CLIENT_SECRET]=32
 )
 
 # prepare_env — self-healing environment provisioning. Runs on install/start/restart.
@@ -62,6 +68,100 @@ prepare_env() {
     _ensure_docker_gid              # record the docker group gid as DOCKER_GID (#11, silent)
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     _sync_compose_env               # mirror root .env → docker/.env (silent)
+    _ensure_oidc_issuer_key         # generate Authelia's OIDC signing key once (#<issue>, silent)
+    _render_authelia_config         # substitute it into configuration.rendered.yml (#<issue>, silent)
+}
+
+_ensure_oidc_issuer_key() {
+    # Generate Authelia's OIDC token-signing RSA key on first run (#<issue>).
+    # Unlike the SECRET_SPEC values above, Authelia's jwks.key config wants
+    # real PEM, not a bare token, so this gets its own file rather than an
+    # .env entry — under docker/services/authelia/secrets/, matching the
+    # repo's existing bare `secrets/` .gitignore rule, never committed, same
+    # as .env itself. Left alone on every subsequent run: regenerating it
+    # after Authelia has issued tokens against the old key silently
+    # invalidates every active session with no user-facing recovery story.
+    local key_path="${SCRIPT_DIR}/docker/services/authelia/secrets/oidc_issuer.pem"
+    [[ -f "$key_path" ]] && return 0
+    mkdir -p "$(dirname "$key_path")"
+    if command -v openssl &>/dev/null; then
+        if openssl genrsa -out "$key_path" 2048 &>/dev/null; then
+            chmod 600 "$key_path" 2>/dev/null || true
+            log_success "Generated Authelia OIDC issuer key"
+        else
+            log_warn "Could not generate OIDC issuer key"
+        fi
+    else
+        # No host openssl (preflight only warns, doesn't hard-fail on this) —
+        # fall back to a throwaway container the same way the Python setup
+        # path always does, since docker itself is guaranteed present.
+        local pem
+        pem="$(docker run --rm alpine:3.20 sh -c \
+            "apk add --no-cache openssl >/dev/null 2>&1 && openssl genrsa 2048" \
+            2>/dev/null)"
+        if [[ "$pem" == "-----BEGIN"* ]]; then
+            printf '%s\n' "$pem" > "$key_path"
+            chmod 600 "$key_path" 2>/dev/null || true
+            log_success "Generated Authelia OIDC issuer key (via docker)"
+        else
+            log_warn "openssl not found and docker fallback failed — cannot generate OIDC issuer key"
+        fi
+    fi
+}
+
+_hash_oidc_client_secret() {
+    # Argon2id-hash MINDER_OIDC_CLIENT_SECRET via Authelia's own CLI in a
+    # throwaway container (the exact image already pinned in
+    # docker-compose.yml, so this never pulls anything the stack would not
+    # already need). A $plaintext$ secret was tried first: confirmed against
+    # a real Authelia instance to fail token exchange regardless of client
+    # auth method, even with byte-identical values on both sides — a real
+    # hash is what actually works. Re-hashed fresh on every render (argon2's
+    # random salt makes each output different even for the same input)
+    # rather than cached, since the secret's plaintext value only changes
+    # via SECRET_SPEC's own regen guard, and hashing is cheap.
+    local secret; secret="$(_env_get MINDER_OIDC_CLIENT_SECRET)"
+    [[ -z "$secret" ]] && return 0
+    local out
+    out="$(docker run --rm authelia/authelia:4.39.20 authelia crypto hash generate argon2 \
+        --password "$secret" --variant argon2id --memory 32768 --iterations 3 --parallelism 2 \
+        2>/dev/null)"
+    [[ "$out" == *": "* ]] && out="${out##*: }"
+    printf '%s' "$out"
+}
+
+_render_authelia_config() {
+    # Substitute the real OIDC issuer key + client secret hash into
+    # Authelia's config (#<issue>). configuration.yml (git-tracked) holds
+    # stable placeholders instead of key material; this writes
+    # configuration.rendered.yml (gitignored) with them replaced by the
+    # actual PEM (reindented as a YAML literal block scalar at the key's
+    # nesting depth — 8 spaces + 2, matching that line's own indentation in
+    # the source) and the client secret's argon2id hash.
+    #
+    # Plain text substitution, deliberately NOT Authelia's own Go-template
+    # config-file filter: that route was tried first and abandoned after
+    # proving too fragile to debug reliably (raw double-curly-brace regions
+    # get parsed everywhere in the file, including inside YAML comments, and
+    # the engine's own error line numbers didn't correspond to anything
+    # inspectable). Runs on every prepare_env() call, unlike key generation
+    # above — cheap, and needs to stay in sync if the source template
+    # changes, whereas the key itself must NOT be regenerated once issued.
+    local src="${SCRIPT_DIR}/docker/services/authelia/configuration.yml"
+    local dst="${SCRIPT_DIR}/docker/services/authelia/configuration.rendered.yml"
+    local key_path="${SCRIPT_DIR}/docker/services/authelia/secrets/oidc_issuer.pem"
+    [[ -f "$src" ]] || return 0
+    [[ -f "$key_path" ]] || return 0
+    local indented secret_hash
+    indented="$(sed 's/^/          /' "$key_path")"
+    secret_hash="$(_hash_oidc_client_secret)"
+    awk -v pem="$indented" -v secret_hash="$secret_hash" '
+        {
+            gsub(/__MINDER_OIDC_ISSUER_KEY_PEM__/, "|\n" pem)
+            if (secret_hash != "") gsub(/__MINDER_OIDC_CLIENT_SECRET_HASH__/, "\"" secret_hash "\"")
+            print
+        }
+    ' "$src" > "$dst"
 }
 
 _ensure_docker_gid() {
@@ -127,6 +227,8 @@ INFLUXDB_BUCKET=metrics
 AUTHELIA_STORAGE_ENCRYPTION_KEY=$(gen_secret 32)
 AUTHELIA_SESSION_SECRET=$(gen_secret 32)
 AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=$(gen_secret 32)
+AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=$(gen_secret 32)
+MINDER_OIDC_CLIENT_SECRET=$(gen_secret 32)
 
 # ── Grafana ──────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin

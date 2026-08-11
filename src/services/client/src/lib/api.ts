@@ -5,6 +5,13 @@
 export const apiBaseUrl: string =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
+// Unlike apiBaseUrl (fetch() calls, fine over the direct-port bypass), this
+// is a full-page navigation into Authelia's forward-auth + OIDC authorize
+// flow -- it only exists at a real Traefik-routed hostname.
+export const oidcLoginUrl: string =
+  import.meta.env.VITE_OIDC_LOGIN_URL ||
+  "https://api.minder.local/v1/auth/oidc/login";
+
 export class ApiError extends Error {
   status: number;
 

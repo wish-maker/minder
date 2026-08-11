@@ -11,3 +11,11 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- OIDC login against Authelia (#<issue>). Authelia's file-backed users have no
+-- numeric id, only a stable "sub" claim (its username) -- this column maps that
+-- identity to Minder's existing integer user id, which several other tables
+-- (e.g. marketplace_installations.user_id) already treat as a real foreign
+-- key, so first-time OIDC login provisions or links a row here rather than
+-- inventing a second, parallel identity system.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS authelia_subject VARCHAR(255) UNIQUE;

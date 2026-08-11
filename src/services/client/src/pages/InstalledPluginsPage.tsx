@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -367,11 +366,10 @@ export function InstalledPluginsPage() {
         Manage the plugins you've installed — enable, disable, uninstall, or
         edit their settings. Requires login: installs are per-user.
       </p>
-      <LoginPanel onStatus={setStatusMsg} />
       <div className={statusClass(isError)}>{status}</div>
       {!isAuthenticated && (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Log in above to see your installed plugins.
+          Log in (top right) to see your installed plugins.
         </p>
       )}
       {isAuthenticated && installations !== null && installations.length === 0 && (

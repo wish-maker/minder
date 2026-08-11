@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
@@ -164,9 +163,6 @@ export function StatusPage() {
         carries — it isn't derived from the deployed Docker image tag, so
         don't treat it as a deployment-tracking signal.
       </InfoCallout>
-      <div className="mt-4">
-        <LoginPanel onStatus={setStatusMsg} />
-      </div>
       <div className={statusClass(isError)}>{status}</div>
       <button onClick={loadStatus} className={`${secondaryButtonClass} mb-4`}>
         🔄 Refresh

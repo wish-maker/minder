@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -590,7 +589,6 @@ export function KnowledgeBasesPage() {
         <em>RAG Pipelines</em> actually search over. Browsing is open for
         everyone; log in to create, upload, or delete.
       </p>
-      <LoginPanel onStatus={setStatusMsg} />
       <div className={statusClass(isError)}>{status}</div>
       <CreateKbForm
         token={token}

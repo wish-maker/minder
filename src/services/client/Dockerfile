@@ -25,6 +25,13 @@ COPY src/services/client/ .
 ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
+# The one login trigger (#<issue>) -- a full-page navigation into Authelia's
+# forward-auth + OIDC flow, which only exists at a real Traefik-routed
+# hostname (unlike VITE_API_BASE_URL's fetch() calls, which work fine over
+# the direct-port bypass above).
+ARG VITE_OIDC_LOGIN_URL=https://api.minder.local/v1/auth/oidc/login
+ENV VITE_OIDC_LOGIN_URL=$VITE_OIDC_LOGIN_URL
+
 RUN npm run build
 
 # Same pinned nginx:alpine already used for ollama-router elsewhere in this

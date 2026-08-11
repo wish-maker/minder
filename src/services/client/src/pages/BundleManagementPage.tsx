@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
@@ -231,9 +230,6 @@ export function BundleManagementPage() {
         create containers by design (the docker-socket-proxy it talks to is
         start/stop/inspect only, never create).
       </InfoCallout>
-      <div className="mt-4">
-        <LoginPanel onStatus={setStatusMsg} />
-      </div>
       <div className={statusClass(isError)}>{status}</div>
 
       {orphaned.length > 0 && (
