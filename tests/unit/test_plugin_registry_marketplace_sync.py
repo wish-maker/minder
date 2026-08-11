@@ -145,13 +145,101 @@ async def test_module_plugin_sync_carries_databases_as_requires_services(
 
 
 @pytest.mark.asyncio
-async def test_no_ai_tools_skips_sync_entirely(tmp_path, captured_requests):
-    """A plugin with no AI_TOOLS (e.g. telegraf) and no manifest must not hit
-    the marketplace at all -- confirms the early-return path is untouched."""
+async def test_no_ai_tools_still_gets_a_marketplace_row_but_skips_ai_sync(
+    tmp_path, captured_requests
+):
+    """A plugin with no AI_TOOLS (e.g. telegraf) and no manifest must still
+    get a marketplace catalog row -- found live: telegraf never appeared on
+    Available/Installed Plugins at all, because the OLD code bailed out
+    before ever calling get_or_create_marketplace_plugin for any plugin with
+    nothing to import. Only the /ai/sync POST (nothing to import) is skipped."""
     await marketplace_sync.sync_plugin_ai_tools(
         "telegraf", tmp_path, module_ai_tools=None, description="x", author="y"
     )
-    assert captured_requests == []
+
+    create_calls = [
+        c for c in captured_requests if c[1].endswith("/v1/marketplace/plugins")
+    ]
+    assert len(create_calls) == 1
+
+    ai_sync_calls = [c for c in captured_requests if c[1].endswith("/ai/sync")]
+    assert ai_sync_calls == []
+
+
+@pytest.mark.asyncio
+async def test_plugin_dependencies_are_recorded_in_the_graph(
+    tmp_path, captured_requests
+):
+    """ "network" declares plugin_dependencies=["telegraf"] (a real runtime
+    dependency: network reads plugin_instances["telegraf"] directly) -- must
+    resolve telegraf's marketplace id and POST a "requires" edge, in
+    addition to network's own marketplace sync (#37)."""
+    await marketplace_sync.sync_plugin_ai_tools(
+        "network",
+        tmp_path,
+        module_ai_tools=[{"name": "scan", "description": "Scan the network"}],
+        description="Autonomous nmap+SNMP discovery.",
+        author="Minder Team",
+        plugin_dependencies=["telegraf"],
+    )
+
+    dependency_calls = [
+        c for c in captured_requests if c[1].endswith("/v1/graph/dependencies")
+    ]
+    assert len(dependency_calls) == 1
+    params = dependency_calls[0][2]["params"]
+    assert params["dependency_type"] == "requires"
+    assert params["plugin_id"]
+    assert params["depends_on"]
+
+    # network's own row, plus telegraf's bare-resolve row.
+    create_calls = [
+        c for c in captured_requests if c[1].endswith("/v1/marketplace/plugins")
+    ]
+    assert len(create_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_dependency_resolution_never_overwrites_an_already_synced_target(
+    tmp_path, monkeypatch
+):
+    """If telegraf already has a real marketplace row (its own sync ran
+    first, or a prior boot), resolving it as a dependency target must be a
+    pure lookup -- no PUT/reconcile call that could clobber its real
+    description/requires_services with the bare placeholder this code path
+    has no real metadata for."""
+    calls = []
+
+    async def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if method == "GET":
+            return _FakeResponse(
+                200, {"plugins": [{"id": "real-telegraf-id", "name": "telegraf"}]}
+            )
+        if method == "PUT":
+            raise AssertionError(
+                "must not PUT/reconcile an already-synced dependency target"
+            )
+        if url.endswith("/v1/marketplace/plugins"):  # network's own create
+            return _FakeResponse(201, {"id": "network-id"})
+        return _FakeResponse(200, {"tools_imported": 1})
+
+    monkeypatch.setattr(
+        marketplace_sync, "_mkt_request", AsyncMock(side_effect=fake_request)
+    )
+
+    await marketplace_sync.sync_plugin_ai_tools(
+        "network",
+        tmp_path,
+        module_ai_tools=[{"name": "scan", "description": "Scan the network"}],
+        description="Autonomous nmap+SNMP discovery.",
+        author="Minder Team",
+        plugin_dependencies=["telegraf"],
+    )
+
+    dependency_calls = [c for c in calls if c[1].endswith("/v1/graph/dependencies")]
+    assert len(dependency_calls) == 1
+    assert dependency_calls[0][2]["params"]["depends_on"] == "real-telegraf-id"
 
 
 @pytest.fixture

@@ -99,12 +99,18 @@ async def sync_plugin_ai_tools(
     description: Optional[str] = None,
     author: Optional[str] = None,
     databases: Optional[List[str]] = None,
+    plugin_dependencies: Optional[List[str]] = None,
 ):
     """
-    Automatically sync AI tools from plugin manifest to marketplace
+    Sync a plugin's marketplace catalog entry (and, if it has any, its AI tools).
 
-    This function is called when a plugin is loaded to automatically
-    register its AI tools in the marketplace database.
+    This function is called when a plugin is loaded. It used to bail out
+    entirely -- never even creating a marketplace row -- for any plugin with
+    no AI tools. Found live: "telegraf" (config-management only, no AI_TOOLS)
+    never appeared on Available/Installed Plugins at all because of this,
+    even though it's a real, running, first-party plugin. Marketplace-row
+    sync and AI-tool sync are now two separate concerns below -- only the
+    latter is skipped when there's nothing to import.
 
     Args:
         plugin_name: Name of the plugin
@@ -120,6 +126,13 @@ async def sync_plugin_ai_tools(
             ["influxdb"], from PluginMetadata.databases) -- synced onward as
             the marketplace's requires_services so Available/Installed
             Plugins can show what a plugin actually needs enabled (#37).
+        plugin_dependencies: OTHER PLUGINS this one calls into directly at
+            runtime (e.g. "network" reads `plugin_instances["telegraf"]` to
+            push discovered hosts into telegraf's managed config region --
+            a real dependency `PluginMetadata.databases` can't express, since
+            that field is for backend services, not sibling plugins). Synced
+            as "requires" edges in the marketplace's plugin-dependency graph
+            (#37) -- see _sync_plugin_dependencies.
     """
     try:
         # Load a plugin manifest if one exists (manifest plugins).
@@ -139,11 +152,10 @@ async def sync_plugin_ai_tools(
                     manifest = json.load(f)
 
         # Tools come from the manifest (manifest plugins) or the passed-in module
-        # AI_TOOLS (module plugins, which have no manifest).
+        # AI_TOOLS (module plugins, which have no manifest). A plugin with none
+        # (e.g. telegraf) still gets a marketplace row below -- only the /ai/sync
+        # call at the end is skipped for it.
         raw_tools = (manifest or {}).get("ai_tools") or module_ai_tools or []
-        if not raw_tools:
-            logger.debug(f"No AI tools to sync for {plugin_name}")
-            return
 
         # Normalise to the marketplace importer's shape, and ensure we have a manifest
         # dict to describe the plugin (synthesised for module plugins, using the
@@ -172,6 +184,13 @@ async def sync_plugin_ai_tools(
             )
             return
 
+        if plugin_dependencies:
+            await _sync_plugin_dependencies(plugin_id, plugin_name, plugin_dependencies)
+
+        if not raw_tools:
+            logger.debug(f"No AI tools to sync for {plugin_name}")
+            return
+
         # Call marketplace sync API
         response = await _mkt_request(
             "POST",
@@ -196,6 +215,89 @@ async def sync_plugin_ai_tools(
 
     except Exception as e:
         logger.error(f"Error syncing AI tools for {plugin_name}: {e}")
+
+
+async def _resolve_or_create_bare_marketplace_plugin_id(
+    plugin_name: str,
+) -> Optional[str]:
+    """Look up a plugin's marketplace UUID by name for a dependency-graph edge.
+
+    Deliberately LOOKUP-first, not get_or_create_marketplace_plugin: that
+    function's "found existing" branch reconciles (overwrites) display_name/
+    description/requires_services on every call, which is correct when the
+    caller has that plugin's OWN real metadata in hand, but NOT here -- this
+    is called from a DIFFERENT plugin's sync (e.g. resolving "telegraf" while
+    syncing "network"), with no real metadata for the target at all. Plugin
+    load order isn't guaranteed, so the target may not have synced yet this
+    boot; a bare placeholder row is created in that case (name only), which
+    the target's own sync then reconciles with real data whenever it loads
+    -- same self-heal "PUT on found-existing" behavior every other plugin
+    already gets, just deferred instead of clobbered."""
+    search_response = await _mkt_request(
+        "GET",
+        f"{MARKETPLACE_URL}/v1/marketplace/plugins/search",
+        params={"q": plugin_name},
+    )
+    if search_response.status_code == 200:
+        for plugin in search_response.json().get("plugins", []):
+            if plugin.get("name") == plugin_name:
+                return plugin.get("id")
+
+    create_response = await _mkt_request(
+        "POST",
+        f"{MARKETPLACE_URL}/v1/marketplace/plugins",
+        json={
+            "name": plugin_name,
+            "display_name": plugin_name.replace("_", " ").replace("-", " ").title(),
+            "pricing_model": "free",
+            "base_tier": "community",
+            "status": "approved",
+        },
+        headers=_service_headers(),
+    )
+    if create_response.status_code == 201:
+        return create_response.json().get("id")
+    logger.warning(
+        f"Could not resolve or create a bare marketplace row for {plugin_name!r} "
+        f"(dependency target): {create_response.status_code}"
+    )
+    return None
+
+
+async def _sync_plugin_dependencies(
+    plugin_id: str, plugin_name: str, depends_on: List[str]
+) -> None:
+    """Push "plugin_name requires depends_on[i]" edges into the marketplace's
+    plugin-dependency graph (#37) -- e.g. network REQUIRES telegraf, since
+    network pushes discovered hosts into telegraf's managed config region at
+    runtime. Best-effort per edge: one failed edge shouldn't block the rest,
+    or the AI-tool sync that follows in the caller."""
+    for dep_name in depends_on:
+        try:
+            dep_id = await _resolve_or_create_bare_marketplace_plugin_id(dep_name)
+            if not dep_id:
+                continue
+            response = await _mkt_request(
+                "POST",
+                f"{MARKETPLACE_URL}/v1/graph/dependencies",
+                params={
+                    "plugin_id": plugin_id,
+                    "depends_on": dep_id,
+                    "dependency_type": "requires",
+                    "plugin_name": plugin_name,
+                    "depends_on_name": dep_name,
+                },
+                headers=_service_headers(),
+            )
+            if response.status_code != 200:
+                logger.warning(
+                    f"Failed to record dependency {plugin_name} -> {dep_name}: "
+                    f"{response.status_code}"
+                )
+        except Exception as e:
+            logger.warning(
+                f"Error recording dependency {plugin_name} -> {dep_name}: {e}"
+            )
 
 
 async def _reconcile_marketplace_plugin(

@@ -197,6 +197,13 @@ class NetworkPlugin:
             capabilities=["collect", "analyze", "discovery", "snmp", "inventory"],
             data_sources=["nmap", "snmp"],
             databases=["postgres", "neo4j", "influxdb", "rabbitmq"],
+            # Real runtime dependency, not a backend service: _sink_telegraf
+            # reads plugin_instances["telegraf"] directly to push discovered
+            # hosts into telegraf's managed config region. `databases` above
+            # can't express this (it's for infra services, not sibling
+            # plugins) -- surfaced via the marketplace's plugin-dependency
+            # graph instead (#37).
+            dependencies=["telegraf"],
         )
 
     async def initialize(self) -> None:

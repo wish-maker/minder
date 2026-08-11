@@ -10,12 +10,12 @@ Neo4j graph database integration for managing:
 
 import logging
 from enum import Enum
-from typing import List
+from typing import List, Optional
 
 from core.neo4j_client import Neo4jClient, get_neo4j_client
 from fastapi import APIRouter, Depends, HTTPException
 
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import get_current_user, get_current_user_or_service
 from shared.errors import backend_http_error
 
 logger = logging.getLogger("minder.graph_dependencies")
@@ -66,8 +66,10 @@ async def add_plugin_dependency(
     plugin_id: str,
     depends_on: str,
     dependency_type: DependencyType = DependencyType.REQUIRES,
+    plugin_name: Optional[str] = None,
+    depends_on_name: Optional[str] = None,
     neo4j: Neo4jClient = Depends(get_neo4j_client),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_user_or_service),
 ):
     """
     Add a dependency relationship between two plugins
@@ -76,13 +78,26 @@ async def add_plugin_dependency(
         plugin_id: Plugin that has the dependency
         depends_on: Plugin that is required
         dependency_type: Type of relationship (requires, suggests, conflicts_with)
+        plugin_name / depends_on_name: best-effort display names, used ONLY
+            if the graph doesn't already have a node for that plugin (see
+            Neo4jClient.add_dependency's ON CREATE SET) -- neither node is
+            guaranteed to exist yet when this is called (#37).
 
     Returns:
         Success status
+
+    Accepts the trusted internal service token (in addition to a real user
+    JWT) -- plugin-registry's own automated sync populates real edges here
+    (e.g. "network requires telegraf") at plugin-load time, with no user
+    session in hand (#37).
     """
     try:
         success = await neo4j.add_dependency(
-            plugin_id, depends_on, dependency_type.value
+            plugin_id,
+            depends_on,
+            dependency_type.value,
+            plugin_name=plugin_name,
+            depends_on_name=depends_on_name,
         )
         if not success:
             raise HTTPException(status_code=400, detail="Failed to add dependency")
