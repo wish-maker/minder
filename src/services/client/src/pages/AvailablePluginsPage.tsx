@@ -38,6 +38,7 @@ interface Plugin {
   published_at: string | null;
   developer_id: string | null;
   category_id: string | null;
+  requires_services: string[];
 }
 
 interface PluginListResponse {
@@ -125,6 +126,9 @@ function PluginMetaRow({ plugin }: { plugin: Plugin }) {
         </a>
       )}
       {plugin.published_at && <span>Published {formatShortDate(plugin.published_at)}</span>}
+      {plugin.requires_services.length > 0 && (
+        <span>Needs: {plugin.requires_services.join(", ")}</span>
+      )}
     </p>
   );
 }

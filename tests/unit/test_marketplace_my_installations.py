@@ -103,6 +103,7 @@ def _row(**overrides):
         "base_tier": "community",
         "category_id": None,
         "author": "Minder Team",
+        "requires_services": "[]",
     }
     base.update(overrides)
     return base

@@ -52,6 +52,11 @@ class PluginCreate(BaseModel):
         None,
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
+    # Backend services this plugin needs at runtime (e.g. ["influxdb"]) -- synced
+    # from plugin-registry's own PluginMetadata.databases (#37), surfaced on
+    # Available/Installed Plugins so a user can tell it needs a bundle they
+    # haven't enabled instead of it just silently writing nowhere.
+    requires_services: List[str] = Field(default_factory=list)
     # display_name/description are plain-text fields, stored and returned as
     # JSON string values and rendered by the client as React text nodes
     # (`{plugin.description}`), which HTML-escapes on insertion into the DOM
@@ -74,6 +79,7 @@ class PluginUpdate(BaseModel):
     base_tier: Optional[str] = None
     status: Optional[PluginStatus] = None
     featured: Optional[bool] = None
+    requires_services: Optional[List[str]] = None
 
 
 class PluginResponse(BaseModel):
@@ -110,6 +116,7 @@ class PluginResponse(BaseModel):
         None,
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
+    requires_services: List[str] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 

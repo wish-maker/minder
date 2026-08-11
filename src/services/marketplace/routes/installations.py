@@ -1,4 +1,6 @@
 # services/marketplace/routes/installations.py
+import json
+
 from core.database import get_pool
 from fastapi import APIRouter, Depends
 from models.installation import InstalledPluginSummary, MyInstallationsResponse
@@ -27,7 +29,8 @@ async def get_my_installations(current_user: dict = Depends(get_current_user)):
             SELECT mi.id AS installation_id, mi.plugin_id, mi.version, mi.status,
                    mi.enabled, mi.installed_at, mi.last_updated_at,
                    p.name, p.display_name, p.description, p.current_version,
-                   p.pricing_model, p.base_tier, p.category_id, p.author
+                   p.pricing_model, p.base_tier, p.category_id, p.author,
+                   p.requires_services
             FROM marketplace_installations mi
             JOIN marketplace_plugins p ON p.id = mi.plugin_id
             WHERE mi.user_id = $1 AND mi.status = 'installed'
@@ -44,6 +47,7 @@ async def get_my_installations(current_user: dict = Depends(get_current_user)):
                 **dict(row),
                 "installation_id": str(row["installation_id"]),
                 "plugin_id": str(row["plugin_id"]),
+                "requires_services": json.loads(row["requires_services"] or "[]"),
             }
         )
         for row in rows

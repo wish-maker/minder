@@ -1,4 +1,5 @@
 # services/marketplace/routes/marketplace.py
+import json
 import uuid
 from typing import Any, List, Optional
 
@@ -14,7 +15,7 @@ _PLUGIN_COLUMNS = """id, name, display_name, description, author,
                  repository_url, distribution_type, docker_image,
                  current_version, pricing_model, base_tier, status,
                  featured, download_count, rating_average, rating_count,
-                 created_at, updated_at, published_at, developer_id, category_id"""
+                 created_at, updated_at, published_at, developer_id, category_id, requires_services"""
 
 # Fields a PUT /plugins/{id} may change (whitelist → safe to interpolate as column
 # names; values always go through bound parameters).
@@ -26,7 +27,15 @@ _PLUGIN_UPDATABLE = {
     "base_tier",
     "status",
     "featured",
+    "requires_services",
 }
+
+# requires_services is JSONB but asyncpg has no codec registered for it here (no
+# create_pool(..., init=...) sets one up), so it round-trips as a raw JSON string --
+# json.dumps() going in, json.loads() coming out -- same convention already used for
+# manifest/config JSONB columns elsewhere in this codebase (plugin-registry's
+# core/database.py).
+_JSONB_UPDATABLE = {"requires_services"}
 
 
 def _row_to_plugin_response(row) -> PluginResponse:
@@ -56,6 +65,7 @@ def _row_to_plugin_response(row) -> PluginResponse:
         published_at=row["published_at"],
         developer_id=str(row["developer_id"]) if row["developer_id"] else None,
         category_id=str(row["category_id"]) if row["category_id"] else None,
+        requires_services=json.loads(row["requires_services"] or "[]"),
     )
 
 
@@ -162,7 +172,7 @@ async def list_plugins(
                    repository_url, distribution_type, docker_image,
                    current_version, pricing_model, base_tier, status,
                    featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id
+                   created_at, updated_at, published_at, developer_id, category_id, requires_services
             FROM marketplace_plugins
             WHERE {where_clause}
             ORDER BY created_at DESC
@@ -213,7 +223,7 @@ async def search_plugins(
                    repository_url, distribution_type, docker_image,
                    current_version, pricing_model, base_tier, status,
                    featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id
+                   created_at, updated_at, published_at, developer_id, category_id, requires_services
             FROM marketplace_plugins
             WHERE (name ILIKE $1 OR display_name ILIKE $1 OR description ILIKE $1)
               AND status = 'approved'
@@ -257,15 +267,16 @@ async def create_plugin(
                     id, name, display_name, description, author, author_email,
                     repository_url, distribution_type, docker_image,
                     pricing_model, base_tier, status, developer_id, category_id,
+                    requires_services,
                     download_count, rating_count, featured, created_at, updated_at
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, 0, 0, FALSE, NOW(), NOW()
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, 0, 0, FALSE, NOW(), NOW()
                 )
                 RETURNING id, name, display_name, description, author,
                          repository_url, distribution_type, docker_image,
                          current_version, pricing_model, base_tier, status,
                          featured, download_count, rating_average, rating_count,
-                         created_at, updated_at, published_at, developer_id, category_id
+                         created_at, updated_at, published_at, developer_id, category_id, requires_services
                 """,
                 plugin_id,
                 plugin_data.name,
@@ -281,6 +292,7 @@ async def create_plugin(
                 "approved",  # Auto-approve internally created plugins
                 plugin_data.developer_id,
                 plugin_data.category_id,
+                json.dumps(plugin_data.requires_services),
             )
 
             return _row_to_plugin_response(row)
@@ -301,7 +313,7 @@ async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
                    repository_url, distribution_type, docker_image,
                    current_version, pricing_model, base_tier, status,
                    featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id
+                   created_at, updated_at, published_at, developer_id, category_id, requires_services
             FROM marketplace_plugins
             WHERE featured = TRUE AND status = 'approved'
             ORDER BY download_count DESC
@@ -329,7 +341,7 @@ async def get_plugin(plugin_id: str):
                    repository_url, distribution_type, docker_image,
                    current_version, pricing_model, base_tier, status,
                    featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id
+                   created_at, updated_at, published_at, developer_id, category_id, requires_services
             FROM marketplace_plugins
             WHERE id = $1
             """,
@@ -363,9 +375,16 @@ async def update_plugin(
     if not updates:
         raise HTTPException(status_code=422, detail="No updatable fields provided")
 
+    for col in _JSONB_UPDATABLE:
+        if col in updates:
+            updates[col] = json.dumps(updates[col])
+
     # Column names come from the _PLUGIN_UPDATABLE whitelist (never user input);
     # values are always bound parameters.
-    set_clause = ", ".join(f"{col} = ${i}" for i, col in enumerate(updates, start=1))
+    set_clause = ", ".join(
+        f"{col} = ${i}" + ("::jsonb" if col in _JSONB_UPDATABLE else "")
+        for i, col in enumerate(updates, start=1)
+    )
     params = list(updates.values())
     query = (
         f"UPDATE marketplace_plugins SET {set_clause}, updated_at = NOW() "

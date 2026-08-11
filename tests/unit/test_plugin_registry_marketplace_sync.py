@@ -120,6 +120,31 @@ async def test_module_plugin_sync_without_author_falls_back_to_unknown(
 
 
 @pytest.mark.asyncio
+async def test_module_plugin_sync_carries_databases_as_requires_services(
+    tmp_path, captured_requests
+):
+    """The plugin's declared PluginMetadata.databases (backend services it
+    needs at runtime, e.g. ["influxdb"]) must land in the marketplace create
+    payload as requires_services -- surfaced on Available/Installed Plugins
+    so a user can tell a plugin needs a bundle they haven't enabled (#37)."""
+    await marketplace_sync.sync_plugin_ai_tools(
+        "weather",
+        tmp_path,
+        module_ai_tools=[{"name": "get_weather", "description": "Current weather"}],
+        description="Polls a keyless weather API.",
+        author="Minder Team",
+        databases=["influxdb"],
+    )
+
+    create_calls = [
+        c for c in captured_requests if c[1].endswith("/v1/marketplace/plugins")
+    ]
+    assert len(create_calls) == 1
+    body = create_calls[0][2]["json"]
+    assert body["requires_services"] == ["influxdb"]
+
+
+@pytest.mark.asyncio
 async def test_no_ai_tools_skips_sync_entirely(tmp_path, captured_requests):
     """A plugin with no AI_TOOLS (e.g. telegraf) and no manifest must not hit
     the marketplace at all -- confirms the early-return path is untouched."""
@@ -168,6 +193,7 @@ async def test_existing_plugin_gets_metadata_reconciled_not_recreated(
         module_ai_tools=[{"name": "get_weather", "description": "Current weather"}],
         description="Current weather and forecasts.",
         author="Minder Team",
+        databases=["influxdb"],
     )
 
     create_calls = [
@@ -183,6 +209,7 @@ async def test_existing_plugin_gets_metadata_reconciled_not_recreated(
     body = put_calls[0][2]["json"]
     assert body["description"] == "Current weather and forecasts."
     assert body["author"] == "Minder Team"
+    assert body["requires_services"] == ["influxdb"]
     # A single-sentence description must NOT become the display_name too --
     # found live: Available Plugins cards showed the exact same sentence
     # twice (once as the card title, once as the body) for every first-party

@@ -38,6 +38,13 @@ CREATE TABLE IF NOT EXISTS marketplace_plugins (
     category_id VARCHAR(255)
 );
 
+-- Backend services a plugin actually needs at runtime (e.g. ["influxdb"]) --
+-- synced from plugin-registry's own PluginMetadata.databases (#37). Surfaced
+-- on Available/Installed Plugins so a user can tell a plugin needs a bundle
+-- they haven't enabled, instead of it just silently writing nowhere.
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS requires_services JSONB DEFAULT '[]'::jsonb;
+
 -- Plugin versions table
 CREATE TABLE IF NOT EXISTS marketplace_plugin_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
