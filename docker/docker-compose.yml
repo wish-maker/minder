@@ -116,6 +116,11 @@ services:
     # against Authelia directly instead of stacking their own login behind the
     # forward-auth gate. See configuration.yml's identity_providers.oidc block.
     - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
+    # Enables Authelia's "template" config-file filter (Go templates in
+    # configuration.yml) -- off by default; needed for the {{ secret ... }}
+    # call that loads the OIDC issuer key from its mounted file, see
+    # configuration.yml's identity_providers.oidc.jwks comment.
+    - X_AUTHELIA_CONFIG_FILTERS=template
     - MINDER_OIDC_CLIENT_SECRET=${MINDER_OIDC_CLIENT_SECRET}
     volumes:
     # authelia_config eliminates the anonymous volume the base image's /config

@@ -73,9 +73,16 @@ identity_validation:
 # The issuer key is a real RSA private key, generated once by
 # scripts/setup/env.py's ensure_oidc_issuer_key() (never committed -- see
 # docker/services/authelia/secrets/, gitignored) and read via Authelia's
-# `secret` template function rather than inlined here. Regenerating it after
-# clients exist invalidates every previously-issued token, so the setup script
-# only generates it once and leaves it alone afterward.
+# `secret` template function -- requires the "template" config file filter
+# (X_AUTHELIA_CONFIG_FILTERS=template, set on the authelia service below) to
+# be enabled; without it Authelia treats "{{ secret ... }}" as a literal
+# string and fails to parse it as PEM. mindent reindents the multi-line file
+# content to this key's actual nesting depth (8 spaces + 2) as a YAML literal
+# block scalar; msquote only quotes the result if it turns out to be a
+# single line (never true here, but matches Authelia's own documented
+# pattern for this exact use case). Regenerating the key file after clients
+# exist invalidates every previously-issued token, so the setup script only
+# generates it once and leaves it alone afterward.
 identity_providers:
   oidc:
     hmac_secret: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
@@ -83,7 +90,7 @@ identity_providers:
       - key_id: "minder"
         algorithm: "RS256"
         use: "sig"
-        key: "{{ secret \"/config/secrets/oidc_issuer.pem\" }}"
+        key: {{ secret "/config/secrets/oidc_issuer.pem" | mindent 10 "|" | msquote }}
     clients:
       - client_id: "minder-client"
         client_name: "Minder"
