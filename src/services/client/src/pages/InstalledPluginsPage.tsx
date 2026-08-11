@@ -31,6 +31,7 @@ interface Installation {
   base_tier: string;
   category_id: string | null;
   author: string | null;
+  requires_services: string[];
 }
 
 interface MyInstallationsResponse {
@@ -313,6 +314,11 @@ function InstalledPluginCard({
           </button>
         </div>
       </div>
+      {installation.requires_services.length > 0 && (
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          Needs: {installation.requires_services.join(", ")}
+        </p>
+      )}
       {status && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{status}</p>}
       <ConfigurePanel name={installation.name} token={token} />
     </section>

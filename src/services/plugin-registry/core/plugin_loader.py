@@ -173,6 +173,7 @@ async def load_plugin_from_module(plugin_dir: Path):
                 module_ai_tools=getattr(plugin_instance, "AI_TOOLS", None),
                 description=metadata.description,
                 author=metadata.author,
+                databases=metadata.databases,
             )
 
     except Exception as e:

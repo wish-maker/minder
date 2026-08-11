@@ -98,6 +98,7 @@ async def sync_plugin_ai_tools(
     module_ai_tools: Optional[List[Dict]] = None,
     description: Optional[str] = None,
     author: Optional[str] = None,
+    databases: Optional[List[str]] = None,
 ):
     """
     Automatically sync AI tools from plugin manifest to marketplace
@@ -115,6 +116,10 @@ async def sync_plugin_ai_tools(
             description because this was never threaded through, even though
             the caller (plugin_loader.py) already has it from PluginMetadata.
         author: same gap, for the plugin's real author.
+        databases: backend services this plugin needs at runtime (e.g.
+            ["influxdb"], from PluginMetadata.databases) -- synced onward as
+            the marketplace's requires_services so Available/Installed
+            Plugins can show what a plugin actually needs enabled (#37).
     """
     try:
         # Load a plugin manifest if one exists (manifest plugins).
@@ -151,6 +156,8 @@ async def sync_plugin_ai_tools(
             }
             if author:
                 manifest["author"] = author
+        if databases and "databases" not in manifest:
+            manifest["databases"] = databases
         manifest = {
             **manifest,
             "ai_tools": [_to_marketplace_tool(t) for t in raw_tools],
@@ -192,10 +199,15 @@ async def sync_plugin_ai_tools(
 
 
 async def _reconcile_marketplace_plugin(
-    plugin_id: str, plugin_name: str, display_name: str, description: str, author: str
+    plugin_id: str,
+    plugin_name: str,
+    display_name: str,
+    description: str,
+    author: str,
+    requires_services: List[str],
 ) -> None:
-    """Push the plugin's current display_name/description/author onto an
-    already-existing marketplace row.
+    """Push the plugin's current display_name/description/author/requires_services
+    onto an already-existing marketplace row.
 
     Found live: 4 first-party plugins were created under the old sync code
     (before description/author were threaded through at all) and stayed
@@ -213,6 +225,7 @@ async def _reconcile_marketplace_plugin(
                 "display_name": display_name,
                 "description": description,
                 "author": author,
+                "requires_services": requires_services,
             },
             headers=_service_headers(),
         )
@@ -255,6 +268,7 @@ async def get_or_create_marketplace_plugin(
         else:
             display_name = plugin_name.replace("_", " ").replace("-", " ").title()
         author = manifest.get("author", "Unknown")
+        requires_services = manifest.get("databases") or []
 
         # Search for an existing plugin by name
         search_response = await _mkt_request(
@@ -273,7 +287,12 @@ async def get_or_create_marketplace_plugin(
                     logger.debug(f"Found existing marketplace plugin: {plugin_name}")
                     plugin_id = plugin.get("id")
                     await _reconcile_marketplace_plugin(
-                        plugin_id, plugin_name, display_name, description, author
+                        plugin_id,
+                        plugin_name,
+                        display_name,
+                        description,
+                        author,
+                        requires_services,
                     )
                     return plugin_id
 
@@ -289,6 +308,7 @@ async def get_or_create_marketplace_plugin(
             "pricing_model": "free",
             "base_tier": "community",
             "status": "approved",
+            "requires_services": requires_services,
         }
 
         # Only include repository_url if it exists and is not empty

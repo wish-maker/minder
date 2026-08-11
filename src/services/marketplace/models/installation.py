@@ -62,6 +62,7 @@ class InstalledPluginSummary(BaseModel):
     base_tier: str
     category_id: Optional[str]
     author: Optional[str]
+    requires_services: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
