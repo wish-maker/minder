@@ -66,3 +66,48 @@ access_control:
 identity_validation:
   reset_password:
     jwt_secret: ${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
+
+# Real SSO (#<issue>): Minder's client + api-gateway authenticate against this
+# provider instead of stacking their own login behind the forward-auth gate
+# above -- Authelia's own hosted page becomes the platform's one login screen.
+# The issuer key is a real RSA private key, generated once by
+# scripts/setup/env.py's ensure_oidc_issuer_key() (never committed -- see
+# docker/services/authelia/secrets/, gitignored) and read via Authelia's
+# `secret` template function rather than inlined here. Regenerating it after
+# clients exist invalidates every previously-issued token, so the setup script
+# only generates it once and leaves it alone afterward.
+identity_providers:
+  oidc:
+    hmac_secret: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
+    jwks:
+      - key_id: "minder"
+        algorithm: "RS256"
+        use: "sig"
+        key: "{{ secret \"/config/secrets/oidc_issuer.pem\" }}"
+    clients:
+      - client_id: "minder-client"
+        client_name: "Minder"
+        # $plaintext$ tells Authelia this is a raw secret rather than a
+        # pre-hashed one (Authelia normally wants an argon2id hash here) --
+        # deliberate, documented tradeoff so scripts/setup/env.py can generate
+        # and rotate this the same way as every other SECRET_SPEC value,
+        # without shelling out to `authelia crypto hash generate` at install
+        # time. Confidential client (public: false): api-gateway holds the
+        # secret server-side and performs the code exchange itself, so it is
+        # never exposed to the browser.
+        client_secret: "$plaintext$${MINDER_OIDC_CLIENT_SECRET}"
+        public: false
+        authorization_policy: one_factor
+        require_pkce: false
+        redirect_uris:
+          - "https://api.minder.local/v1/auth/oidc/callback"
+        scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        grant_types:
+          - authorization_code
+        response_types:
+          - code
+        userinfo_signing_algorithm: none

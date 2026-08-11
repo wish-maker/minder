@@ -6,16 +6,21 @@ teardown stay in main's lifespan.
 """
 
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlencode
 
 from core.auth import (
     create_jwt_token,
     create_user,
+    get_or_create_oidc_user,
     verify_jwt_token,
     verify_user_credentials,
 )
+from core.oidc import exchange_code_for_id_token, verify_id_token
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from config import settings
@@ -120,6 +125,85 @@ async def login(body: LoginRequest, request: Request):
     except Exception as e:
         logger.error(f"Login error: {e}")
         raise HTTPException(status_code=500, detail="Login failed")
+
+
+@router.get("/oidc/login")
+async def oidc_login():
+    """Start the Authelia SSO redirect -- the platform's single login entry
+    point (#<issue>). state/nonce are round-tripped through short-lived
+    httponly cookies rather than server-side session storage: this is pure
+    CSRF/replay defense for one redirect, not a session (the actual session
+    is the Minder JWT oidc_callback mints below, same as local login)."""
+    state = secrets.token_urlsafe(24)
+    nonce = secrets.token_urlsafe(24)
+    params = {
+        "client_id": settings.MINDER_OIDC_CLIENT_ID,
+        "redirect_uri": settings.MINDER_OIDC_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid profile email groups",
+        "state": state,
+        "nonce": nonce,
+    }
+    url = f"{settings.AUTHELIA_ISSUER_URL}/api/oidc/authorization?{urlencode(params)}"
+    response = RedirectResponse(url)
+    response.set_cookie(
+        "oidc_state", state, max_age=300, httponly=True, secure=True, samesite="lax"
+    )
+    response.set_cookie(
+        "oidc_nonce", nonce, max_age=300, httponly=True, secure=True, samesite="lax"
+    )
+    return response
+
+
+@router.get("/oidc/callback")
+async def oidc_callback(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+):
+    """Finish the Authelia SSO redirect: verify the round-tripped state,
+    exchange the code for an ID token, verify it, provision/link the Minder
+    user, then hand the browser off to the client with a Minder JWT -- same
+    shape /v1/auth/login issues, so no downstream service needs to change."""
+    if error:
+        raise HTTPException(status_code=400, detail=f"OIDC error: {error}")
+    cookie_state = request.cookies.get("oidc_state")
+    cookie_nonce = request.cookies.get("oidc_nonce")
+    if not code or not state or not cookie_state or state != cookie_state:
+        raise HTTPException(status_code=400, detail="Invalid or expired OIDC state")
+
+    id_token = await exchange_code_for_id_token(code)
+    claims = await verify_id_token(id_token, expected_nonce=cookie_nonce or "")
+
+    subject = claims["sub"]
+    username = claims.get("preferred_username") or subject
+    email = claims.get("email") or f"{subject}@authelia.minder.local"
+    groups = claims.get("groups") or []
+
+    user = await get_or_create_oidc_user(subject, username, email, groups)
+    access_token = create_jwt_token(
+        {
+            "sub": str(user["id"]),
+            "username": user["username"],
+            "email": user["email"],
+            "role": user["role"],
+            "iat": datetime.now(timezone.utc),
+        }
+    )
+    logger.info(f"User logged in via Authelia SSO: {user['username']}")
+
+    # Fragment, not a query param: browsers never send the URL fragment back
+    # to any server (it's client-side-only), so the token never lands in
+    # Traefik/api-gateway access logs or Authelia's own redirect history --
+    # the client's /auth/callback route reads it from window.location.hash.
+    redirect_url = (
+        f"{settings.MINDER_CLIENT_BASE_URL}/auth/callback#token={access_token}"
+    )
+    response = RedirectResponse(redirect_url)
+    response.delete_cookie("oidc_state")
+    response.delete_cookie("oidc_nonce")
+    return response
 
 
 @router.post("/refresh", response_model=TokenResponse, response_model_exclude_none=True)

@@ -10,6 +10,7 @@ it refuses to auto-(re)generate secrets while a provisioned stack is running
 import os
 import re
 import secrets
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,6 +40,13 @@ SECRET_SPEC = {
     # One .env value passed to both containers, so a generated value matches on both
     # sides. Was skipped here → stayed empty → sync silently 401'd (#227).
     "SERVICE_SYNC_TOKEN": "32",
+    # Authelia OIDC provider (#<issue>) -- hmac_secret signs Authelia's own
+    # internal OIDC session/consent tokens; MINDER_OIDC_CLIENT_SECRET is the
+    # plaintext confidential-client secret shared between Authelia's
+    # configuration.yml ($plaintext$ prefix) and api-gateway's token-exchange
+    # call, so both sides need the identical generated value.
+    "AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET": "32",
+    "MINDER_OIDC_CLIENT_SECRET": "32",
 }
 
 # Values matching this (case-sensitive substring) are treated as unset placeholders.
@@ -141,6 +149,44 @@ def ensure_bundles_state_file() -> None:
         state.chmod(0o666)
     except OSError:
         pass
+
+
+_OIDC_ISSUER_KEY = (
+    config.REPO_ROOT
+    / "docker"
+    / "services"
+    / "authelia"
+    / "secrets"
+    / "oidc_issuer.pem"
+)
+
+
+def ensure_oidc_issuer_key() -> None:
+    """Generate Authelia's OIDC token-signing RSA key on first run (#<issue>).
+    Authelia signs every OIDC ID/access token it issues with this key, so
+    unlike the SECRET_SPEC values above it can't be a bare env-var token --
+    Authelia's jwks.key config wants real PEM. Generated once via openssl
+    (already a required prerequisite, see preflight.py) directly under
+    docker/services/authelia/secrets/, which matches the repo's existing
+    bare `secrets/` .gitignore rule -- never committed, same as .env itself.
+    Left alone on every subsequent run: regenerating it after Authelia has
+    issued tokens against the old key would invalidate all of them, and
+    unlike a password rotation there is no user-facing "re-enter credentials"
+    story for that -- every active session breaks silently instead."""
+    if _OIDC_ISSUER_KEY.exists():
+        return
+    _OIDC_ISSUER_KEY.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        subprocess.run(
+            ["openssl", "genrsa", "-out", str(_OIDC_ISSUER_KEY), "2048"],
+            check=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as e:
+        log.warn(f"Could not generate OIDC issuer key: {e}")
+        return
+    _chmod_600(_OIDC_ISSUER_KEY)
+    log.success("Generated Authelia OIDC issuer key")
 
 
 def _chmod_600(path: Path) -> None:
@@ -303,6 +349,8 @@ INFLUXDB_BUCKET=metrics
 AUTHELIA_STORAGE_ENCRYPTION_KEY=<GEN:32>
 AUTHELIA_SESSION_SECRET=<GEN:32>
 AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=<GEN:32>
+AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=<GEN:32>
+MINDER_OIDC_CLIENT_SECRET=<GEN:32>
 
 # ── Grafana ──────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin
@@ -404,3 +452,4 @@ def prepare_env() -> None:
     sync_compose_env()
     sync_telegraf_config()
     ensure_bundles_state_file()
+    ensure_oidc_issuer_key()

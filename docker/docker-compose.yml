@@ -112,6 +112,11 @@ services:
     - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
     - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
     - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET}
+    # OIDC provider (#<issue>) -- lets Minder's client + api-gateway authenticate
+    # against Authelia directly instead of stacking their own login behind the
+    # forward-auth gate. See configuration.yml's identity_providers.oidc block.
+    - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
+    - MINDER_OIDC_CLIENT_SECRET=${MINDER_OIDC_CLIENT_SECRET}
     volumes:
     # authelia_config eliminates the anonymous volume the base image's /config
     # VOLUME declaration would otherwise create for whatever isn't covered by the
@@ -121,6 +126,10 @@ services:
     - authelia_config:/config
     - ./services/authelia/configuration.yml:/config/configuration.yml:ro
     - ./services/authelia/users_database.yml:/config/users_database.yml:ro
+    # OIDC token-signing key, generated once by scripts/setup/env.py's
+    # ensure_oidc_issuer_key() -- gitignored, never committed (docker/services/
+    # authelia/secrets/ matches the repo's existing bare `secrets/` .gitignore rule).
+    - ./services/authelia/secrets:/config/secrets:ro
     # NO exposed ports — reached only via Traefik (Host: authelia.minder.local).
     depends_on:
       postgres:
@@ -536,6 +545,15 @@ services:
     - JWT_SECRET=${JWT_SECRET}
     - JWT_ALGORITHM=HS256
     - JWT_EXPIRATION_MINUTES=${JWT_EXPIRATION_MINUTES:-60}
+    # OIDC login (#<issue>) -- api-gateway is a confidential OIDC client of
+    # Authelia; these mint Minder's own existing JWT shape after a successful
+    # Authelia login, so every downstream service that already trusts a
+    # Minder JWT needs no changes at all.
+    - AUTHELIA_ISSUER_URL=${AUTHELIA_ISSUER_URL:-https://authelia.minder.local}
+    - MINDER_OIDC_CLIENT_ID=${MINDER_OIDC_CLIENT_ID:-minder-client}
+    - MINDER_OIDC_CLIENT_SECRET=${MINDER_OIDC_CLIENT_SECRET}
+    - MINDER_OIDC_REDIRECT_URI=${MINDER_OIDC_REDIRECT_URI:-https://api.minder.local/v1/auth/oidc/callback}
+    - MINDER_CLIENT_BASE_URL=${MINDER_CLIENT_BASE_URL:-https://client.minder.local}
     - RATE_LIMIT_ENABLED=true
     - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
     - RATE_LIMIT_BURST=${RATE_LIMIT_BURST:-100}

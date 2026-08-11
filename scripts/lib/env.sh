@@ -35,6 +35,12 @@ declare -A SECRET_SPEC=(
     # registry→marketplace AI-tool sync auth (X-Service-Token); one value → both
     # containers. Was skipped → stayed empty → sync silently 401'd (#227).
     [SERVICE_SYNC_TOKEN]=32
+    # Authelia OIDC provider (#<issue>): hmac_secret signs Authelia's own internal
+    # OIDC session/consent tokens; MINDER_OIDC_CLIENT_SECRET is the plaintext
+    # confidential-client secret shared between Authelia's configuration.yml
+    # ($plaintext$ prefix) and api-gateway's token-exchange call.
+    [AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET]=32
+    [MINDER_OIDC_CLIENT_SECRET]=32
 )
 
 # prepare_env — self-healing environment provisioning. Runs on install/start/restart.
@@ -62,6 +68,31 @@ prepare_env() {
     _ensure_docker_gid              # record the docker group gid as DOCKER_GID (#11, silent)
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     _sync_compose_env               # mirror root .env → docker/.env (silent)
+    _ensure_oidc_issuer_key         # generate Authelia's OIDC signing key once (#<issue>, silent)
+}
+
+_ensure_oidc_issuer_key() {
+    # Generate Authelia's OIDC token-signing RSA key on first run (#<issue>).
+    # Unlike the SECRET_SPEC values above, Authelia's jwks.key config wants
+    # real PEM, not a bare token, so this gets its own file rather than an
+    # .env entry — under docker/services/authelia/secrets/, matching the
+    # repo's existing bare `secrets/` .gitignore rule, never committed, same
+    # as .env itself. Left alone on every subsequent run: regenerating it
+    # after Authelia has issued tokens against the old key silently
+    # invalidates every active session with no user-facing recovery story.
+    local key_path="${SCRIPT_DIR}/docker/services/authelia/secrets/oidc_issuer.pem"
+    [[ -f "$key_path" ]] && return 0
+    mkdir -p "$(dirname "$key_path")"
+    if command -v openssl &>/dev/null; then
+        if openssl genrsa -out "$key_path" 2048 &>/dev/null; then
+            chmod 600 "$key_path" 2>/dev/null || true
+            log_success "Generated Authelia OIDC issuer key"
+        else
+            log_warn "Could not generate OIDC issuer key"
+        fi
+    else
+        log_warn "openssl not found — cannot generate OIDC issuer key"
+    fi
 }
 
 _ensure_docker_gid() {
@@ -127,6 +158,8 @@ INFLUXDB_BUCKET=metrics
 AUTHELIA_STORAGE_ENCRYPTION_KEY=$(gen_secret 32)
 AUTHELIA_SESSION_SECRET=$(gen_secret 32)
 AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=$(gen_secret 32)
+AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=$(gen_secret 32)
+MINDER_OIDC_CLIENT_SECRET=$(gen_secret 32)
 
 # ── Grafana ──────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin

@@ -37,6 +37,16 @@ class Settings(MinderBaseSettings):
     # Phase Configuration (for health check)
     MINDER_PHASE: int = 1  # Current deployment phase
 
+    # OIDC login against Authelia (#<issue>) -- api-gateway is a confidential
+    # OIDC client; a successful Authelia login still mints Minder's own
+    # existing JWT shape (see routes/auth.py's oidc_callback), so nothing
+    # downstream that already trusts a Minder JWT needs to change.
+    AUTHELIA_ISSUER_URL: str = "https://authelia.minder.local"
+    MINDER_OIDC_CLIENT_ID: str = "minder-client"
+    MINDER_OIDC_CLIENT_SECRET: str = ""
+    MINDER_OIDC_REDIRECT_URI: str = "https://api.minder.local/v1/auth/oidc/callback"
+    MINDER_CLIENT_BASE_URL: str = "https://client.minder.local"
+
 
 # Global settings instance
 settings = Settings()

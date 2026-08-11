@@ -7,6 +7,7 @@ Real PostgreSQL + bcrypt implementation.
 
 import logging
 import pathlib
+import secrets
 import sys
 from typing import Any, Dict, Optional
 
@@ -176,6 +177,96 @@ async def verify_user_credentials(
             return user
 
         return None
+
+
+async def get_or_create_oidc_user(
+    authelia_subject: str,
+    username: str,
+    email: str,
+    groups: list,
+) -> Dict[str, Any]:
+    """Look up (or first-time provision) the Minder user for an Authelia OIDC
+    login (#<issue>). Three cases, checked in order:
+
+    1. A user already linked to this authelia_subject -- the common case for
+       every login after the first.
+    2. A pre-existing local account (created via /v1/auth/register, never
+       logged in via SSO before) whose username matches Authelia's
+       preferred_username -- link it rather than creating a second,
+       disconnected account that would split that person's data (installs,
+       etc.) across two ids.
+    3. Neither exists -- provision a new row. password_hash still gets a real
+       bcrypt hash (the column is NOT NULL) of random bytes nobody knows, so
+       /v1/auth/login's own password check simply fails for this account as
+       it should -- OIDC users authenticate through Authelia, not locally.
+
+    role is derived from Authelia's groups claim (admins -> "admin", else
+    "user") since role predates any code that actually reads it for
+    authorization -- see the docs note about RBAC being a tracked follow-up.
+    """
+    pool = await get_pg_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, username, email, role FROM users WHERE authelia_subject = $1",
+            authelia_subject,
+        )
+        if row:
+            return dict(row)
+
+        existing = await conn.fetchrow(
+            """
+            SELECT id, username, email, role FROM users
+            WHERE username = $1 AND authelia_subject IS NULL
+            """,
+            username,
+        )
+        if existing:
+            row = await conn.fetchrow(
+                """
+                UPDATE users SET authelia_subject = $1, updated_at = NOW()
+                WHERE id = $2
+                RETURNING id, username, email, role
+                """,
+                authelia_subject,
+                existing["id"],
+            )
+            logger.info(f"Linked existing local account to Authelia SSO: {username}")
+            return dict(row)
+
+        role = "admin" if "admins" in groups else "user"
+        placeholder_hash = hashpw(secrets.token_bytes(32), gensalt()).decode("utf-8")
+        try:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO users (username, email, password_hash, role, authelia_subject)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, username, email, role
+                """,
+                username,
+                email,
+                placeholder_hash,
+                role,
+                authelia_subject,
+            )
+        except asyncpg.UniqueViolationError:
+            # username or email collided with an unrelated local account
+            # (authelia_subject already ruled out above) -- disambiguate by
+            # suffixing rather than failing the whole login.
+            suffixed = f"{username}-{authelia_subject[:8]}"
+            row = await conn.fetchrow(
+                """
+                INSERT INTO users (username, email, password_hash, role, authelia_subject)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, username, email, role
+                """,
+                suffixed,
+                f"{authelia_subject}@authelia.minder.local",
+                placeholder_hash,
+                role,
+                authelia_subject,
+            )
+        logger.info(f"Provisioned new user from Authelia SSO: {row['username']}")
+        return dict(row)
 
 
 def create_jwt_token(data: Dict[str, Any]) -> str:
