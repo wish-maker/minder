@@ -133,4 +133,4 @@ identity_providers:
           - authorization_code
         response_types:
           - code
-        userinfo_signing_algorithm: none
+        userinfo_signed_response_alg: none
