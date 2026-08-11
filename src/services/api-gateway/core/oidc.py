@@ -70,18 +70,27 @@ def _internalize(url: str) -> str:
 async def exchange_code_for_id_token(code: str) -> str:
     """POST the authorization code to Authelia's token endpoint using this
     client's confidential client_secret (never exposed to the browser) and
-    return the raw (still-unverified) id_token string."""
+    return the raw (still-unverified) id_token string.
+
+    Authenticates via HTTP Basic (client_secret_basic) -- the OIDC-spec
+    default a confidential client falls back to when no auth method is
+    declared -- rather than putting the secret in the POST body
+    (client_secret_post). Declaring client_secret_post explicitly on the
+    Authelia side did not work in practice (confirmed against a real
+    instance: still rejected as "does not allow this method" after
+    restarting with the change in place), so this uses the method Authelia
+    already accepts without any extra client config.
+    """
     discovery = await _discover()
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
             _internalize(discovery["token_endpoint"]),
             headers=_AUTHELIA_FORWARDED_HEADERS,
+            auth=(settings.MINDER_OIDC_CLIENT_ID, settings.MINDER_OIDC_CLIENT_SECRET),
             data={
                 "grant_type": "authorization_code",
                 "code": code,
                 "redirect_uri": settings.MINDER_OIDC_REDIRECT_URI,
-                "client_id": settings.MINDER_OIDC_CLIENT_ID,
-                "client_secret": settings.MINDER_OIDC_CLIENT_SECRET,
             },
         )
     if resp.status_code != 200:

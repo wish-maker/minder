@@ -109,11 +109,13 @@ identity_providers:
         public: false
         authorization_policy: one_factor
         require_pkce: false
-        # Authelia defaults new clients to client_secret_basic; api-gateway's
-        # token exchange (core/oidc.py) sends the secret as a POST body field
-        # instead, confirmed failing with "invalid_client" against a real
-        # Authelia instance until this was declared explicitly.
-        token_endpoint_auth_method: client_secret_post
+        # No token_endpoint_auth_method override -- Authelia defaults a
+        # confidential client to client_secret_basic (HTTP Basic auth on the
+        # token request), which is what core/oidc.py's exchange_code_for_id_token
+        # actually sends. Declaring client_secret_post here instead (to match
+        # sending the secret as a POST body field) did not work in practice
+        # against a real Authelia instance -- easier to match the code to
+        # Authelia's default than fight this further.
         redirect_uris:
           - "https://api.minder.local/v1/auth/oidc/callback"
         scopes:
