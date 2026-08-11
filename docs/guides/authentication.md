@@ -2,43 +2,79 @@
 
 ## Overview
 
-Authentication on the Minder platform is handled by the **API Gateway**
-(`minder-api-gateway`, port 8000) using **JWT** tokens with **bcrypt** password
-hashing. This is the mechanism that is actually in effect today.
+Minder has a **single login entry point**: the "Log in" button in the top-right of the
+client UI. Clicking it takes you to Authelia's own login page (the platform's identity
+provider), and coming back mints a Minder session automatically — there is no separate
+Minder-specific username/password form to fill in, and no scattered per-page login boxes.
 
-A single sign-on / 2FA layer (Authelia) is also **enabled** in front of five
-Traefik routers — see [Authelia (SSO / 2FA)](#authelia-sso--2fa) below.
-There is **no role-based access control (RBAC)** implemented; access is
-gated by holding a valid JWT.
+Under the hood: Authelia issues a verified identity via **OIDC**, the **API Gateway**
+(`minder-api-gateway`, port 8000) exchanges that for its own **JWT**, and every other
+service trusts that JWT. Authelia also still gates several other web UIs (Grafana,
+OpenWebUI, MinIO, Jaeger) directly at the reverse-proxy layer, independent of Minder's own
+login — see [Authelia](#authelia-sso--2fa--oidc-identity-provider) below.
 
-> This is a development environment on a Raspberry Pi 4. Production hardening
-> (enforced SSO/2FA, RBAC, TLS everywhere) has not yet been applied.
+There is **no role-based access control (RBAC)** enforced yet; access is gated by
+holding a valid JWT, not by what role that JWT carries. See [Roles](#roles-not-yet-enforced)
+below. ([tracked as #474](https://github.com/wish-maker/minder/issues/474))
 
-## How authentication works
+> This is a development environment on a Raspberry Pi 4 / self-hosted deployment.
+> Production hardening (RBAC, TLS everywhere, rotating the shared default Authelia
+> credential) has not yet been fully applied.
+
+## How authentication works (browser login)
 
 ```
-┌─────────────┐
-│   Client    │
-└──────┬──────┘
-       │ HTTPS
-┌──────▼──────────────────┐
-│      Traefik (v3)       │  reverse proxy, TLS, routing
-└──────┬──────────────────┘
-       │
-┌──────▼──────────────────┐
-│     API Gateway         │  issues + validates JWT (bcrypt password hashing)
-│  /v1/auth/register      │
-│  /v1/auth/login         │
-│  /v1/auth/refresh       │
-└──────┬──────────────────┘
-       │ proxies (with bearer token)
-┌──────▼──────────────────┐
-│   Backend services      │
-│  registry / rag / models│
-└─────────────────────────┘
+┌─────────────┐   1. click "Log in"    ┌──────────────────────┐
+│   Client    ├───────────────────────▶│  GET /v1/auth/oidc/  │
+│  (browser)  │                        │  login (api-gateway) │
+└──────▲──────┘                        └──────────┬───────────┘
+       │                                           │ redirect
+       │ 4. #token=<minder-jwt>                    ▼
+       │                                ┌──────────────────────┐
+       │                                │  Authelia login page │
+       │                                │  (SSO session reused │
+       │                                │  if you're already   │
+       │                                │  logged in elsewhere)│
+       │                                └──────────┬───────────┘
+       │                                           │ authorization code
+       │           3. verify + mint Minder JWT     ▼
+       └────────────────────────────────GET /v1/auth/oidc/callback
+                                        (api-gateway ↔ Authelia,
+                                         server-to-server)
 ```
 
-### 1. Register / obtain a token
+1. The client's "Log in" button links straight to `GET /v1/auth/oidc/login`.
+2. That redirects your browser to Authelia. If you already have an Authelia session
+   (e.g. you're logged into Grafana/OpenWebUI, or the client's own forward-auth gate
+   already established one), this step can complete silently with no extra prompt.
+3. Authelia redirects back with an authorization code. api-gateway exchanges it for a
+   verified identity (`core/oidc.py`), then looks up or provisions a matching Minder user
+   (`core/auth.py`'s `get_or_create_oidc_user` — first login creates the account, or links
+   it to a pre-existing local account with the same username; later logins keep
+   username/email/role in sync with Authelia automatically).
+4. api-gateway mints a normal Minder JWT and redirects your browser to
+   `/auth/callback#token=...`. The client reads the token from the URL fragment (never sent
+   to any server, so it never lands in an access log) and you're logged in.
+
+From here, every API call the client makes carries that JWT the same way it always has:
+
+```http
+GET /v1/plugins
+Authorization: Bearer <access_token>
+```
+
+### Your account
+
+Click your username (top-right, once logged in) to open **Settings** — it shows your
+username, email, and role as Minder sees them, and a "Log out" button. Because your real
+account lives in Authelia, actual profile/password changes happen there, not in Minder;
+Settings links straight to Authelia's own portal for that.
+
+### Local register/login (still available, mainly for scripting/dev)
+
+The original username/password endpoints still exist and mint the exact same JWT shape —
+useful for scripts, CI, or local dev without going through a browser — but the UI no longer
+exposes a form for them:
 
 ```http
 POST /v1/auth/register
@@ -54,7 +90,7 @@ Content-Type: application/json
 { "username": "alice", "password": "your-password" }
 ```
 
-**Response:**
+**Response (same shape from either login path):**
 ```json
 {
   "access_token": "eyJhbGciOiJIUzI1NiIs...",
@@ -64,28 +100,26 @@ Content-Type: application/json
 }
 ```
 
-### 2. Use the token
-
-```http
-GET /v1/plugins
-Authorization: Bearer <access_token>
-```
-
-### 3. Refresh
-
 ```http
 POST /v1/auth/refresh
 Authorization: Bearer <access_token>
 ```
 
-### Changing your account password
+There is still no account-level password-change/reset endpoint for locally-registered
+accounts — `src/services/api-gateway/routes/auth.py` only implements
+`register`/`login`/`refresh`/`oidc/login`/`oidc/callback`. (`./setup.sh
+sync-postgres-password` is an unrelated *operator* command for rotating the infra-level
+Postgres credential in `.env`, not an end-user account action.) If you need this, log in via
+Authelia instead — its own portal has real password management.
 
-There is currently no account-level password-change/reset endpoint —
-`src/services/api-gateway/routes/auth.py` only implements `register`/`login`/
-`refresh`. (`./setup.sh sync-postgres-password` is an unrelated *operator*
-command for rotating the infra-level Postgres credential in `.env`, not an
-end-user account action.) This is a real gap, not an oversight to route
-around — file an issue if you need it.
+### Roles (not yet enforced)
+
+Logging in via Authelia sets your Minder `role` from Authelia's `groups` claim: membership
+in the `admins` group becomes `role: admin`, everyone else gets `role: user`. You can see
+your own role on the Settings page. **Nothing currently checks this role before permitting
+an action** — every endpoint that requires auth today only checks "is there a valid JWT," not
+"does this JWT's role allow it." Don't build workflows that assume per-role restrictions are
+enforced. Tracked as [#474](https://github.com/wish-maker/minder/issues/474).
 
 ### JWT secret
 
@@ -104,28 +138,39 @@ consistent across services that validate tokens.
 - Routing is driven by Docker labels (`exposedByDefault: false`)
 - Configuration: `docker/services/traefik/`
 
-Traefik has an `authelia-forwardauth` middleware wired onto five routers
+Traefik has an `authelia-forwardauth` middleware wired onto six routers
 (minio, api-gateway, grafana, openwebui, jaeger, client). The other three routers
 (traefik-dashboard, rabbitmq, neo4j) use an IP-whitelist middleware instead.
 The Authelia container is **enabled and running**, so that forward-auth check
-**is enforced** — an unauthenticated request to those five routes gets a 302
+**is enforced** — an unauthenticated request to those six routes gets a 302
 redirect to the Authelia portal.
+
+This forward-auth gate is separate from (and composes with) the OIDC login flow described
+above: the client router being forward-auth-gated is *why* step 2 of that flow can complete
+silently — visiting the client at all already required an Authelia session, so clicking
+Minder's own "Log in" button rarely prompts again.
 
 ---
 
-## Authelia (SSO / 2FA)
+## Authelia (SSO / 2FA / OIDC identity provider)
 
-Authelia provides centralised SSO and 2FA in front of the stack and is
-**enabled and running** (`docker/docker-compose.yml`, service `authelia`).
-Its configuration lives under `docker/services/authelia/`
-(`configuration.yml`, `users_database.yml`).
+Authelia is Minder's identity provider and is **enabled and running**
+(`docker/docker-compose.yml`, service `authelia`). Its configuration lives under
+`docker/services/authelia/` (`configuration.yml`, `users_database.yml`).
 
-The Traefik `authelia-forwardauth` middleware enforces it on five routers
-(minio, api-gateway, grafana, openwebui, jaeger, client): an unauthenticated request
-is 302-redirected to the Authelia portal. Full browser SSO still needs real
-DNS + TLS on the deploy.
+Two independent things both come from Authelia:
+
+1. **Forward-auth gate** — the Traefik `authelia-forwardauth` middleware enforces a login
+   on six routers (minio, api-gateway, grafana, openwebui, jaeger, client): an
+   unauthenticated request is 302-redirected to the Authelia portal.
+2. **OIDC identity provider** — api-gateway is a registered OIDC client
+   (`identity_providers.oidc` in `configuration.yml`); this is what mints your actual Minder
+   JWT when you click "Log in" (see the flow diagram above).
+
+Full browser SSO still needs real DNS + TLS on the deploy.
 
 - Single Sign-On across services — **active**
+- OIDC-based Minder login (this doc's main flow) — **active**
 - Two-Factor Authentication (TOTP / WebAuthn) — available per Authelia's config
 - Brute-force protection and session regulation — Authelia defaults
 - Access-control rules per domain — see `configuration.yml`'s `access_control` section
@@ -138,7 +183,9 @@ password hash. That password is not written down anywhere (the file only
 holds a one-way argon2id hash), but it is still a single **shared secret
 identical across every Minder install** until you change it — treat it the
 same as any other default credential and rotate it before exposing this
-instance to any network beyond your own machine:
+instance to any network beyond your own machine. This is not yet automated
+by `setup.sh` — tracked as
+[#473](https://github.com/wish-maker/minder/issues/473) — so for now, do it by hand:
 
 ```bash
 docker exec minder-authelia authelia crypto hash generate argon2 \
@@ -147,8 +194,7 @@ docker exec minder-authelia authelia crypto hash generate argon2 \
 
 Paste the resulting `$argon2id$…` string over the `password:` value in
 `users_database.yml`, then `docker compose restart authelia` (or
-`bash setup.sh restart`) to apply it. There is currently no `setup.sh`
-verb that automates this — it's a manual step you need to remember to do.
+`bash setup.sh restart`) to apply it.
 
 ---
 
@@ -187,4 +233,4 @@ docker logs minder-traefik --tail 100
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-11
