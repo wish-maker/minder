@@ -1,6 +1,6 @@
 # Security Architecture
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-11
 **Platform Version:** 1.0.0
 **Environment:** Development (Raspberry Pi 4)
 
@@ -18,12 +18,20 @@
   `exposedByDefault: false`). There is **no Nginx** in this stack.
 - **Authentication:** The **API Gateway** implements real JWT (HS256) authentication with
   bcrypt-hashed credentials, plus Redis-backed rate limiting (60s window, fail-open).
-- **SSO / Authelia:** **ENABLED.** The Authelia service is live in compose. Traefik's
-  `authelia-forwardauth` middleware is referenced on five routers (minio, api-gateway,
-  grafana, openwebui, jaeger) and **does** enforce SSO — unauthenticated requests get a
-  302 redirect to the Authelia portal.
-- **RBAC:** **Not implemented.** Only JWT authentication exists on the gateway; there is no
-  role-based access control.
+  Authelia is now a real **OIDC identity provider** for this JWT, not just a forward-auth
+  gate — see below.
+- **SSO / Authelia:** **ENABLED**, and now a genuine identity source, not only forward-auth.
+  Traefik's `authelia-forwardauth` middleware is referenced on **six** routers (minio,
+  api-gateway, grafana, openwebui, jaeger, client) and enforces SSO — unauthenticated
+  requests get a 302 redirect to the Authelia portal. Separately, the client's single
+  "Log in" button drives a real OIDC authorization-code flow (`/v1/auth/oidc/login` →
+  Authelia → `/v1/auth/oidc/callback`), so a Minder JWT is now minted from a verified
+  Authelia identity, not a locally-registered account, for anyone who logs in through the UI.
+- **RBAC:** **Not enforced.** `role` is now populated from Authelia's `groups` claim
+  (`admins` group → `admin` role) instead of only ever defaulting to `"user"`, but nothing
+  in the codebase checks it before permitting an action — every write-protected endpoint
+  still only checks "is there a valid JWT," not "does this JWT's role permit this." Tracked
+  as [#474](https://github.com/wish-maker/minder/issues/474).
 - **Network:** Services communicate over Docker networks by container name. Some application
   and observability services publish host ports directly (see
   [Service Access Guide](./service-access.md)); storage backends are internal-only.
@@ -53,9 +61,12 @@ Capabilities in use:
 - Router-level middleware, including IP whitelisting on admin routes (Traefik dashboard,
   RabbitMQ management, Neo4j browser).
 
-> **Note:** Some services also publish their own host ports directly and are therefore
-> reachable without going through Traefik. This is acceptable for a development environment
-> but is not a locked-down production posture.
+> **Note:** Some services also publish their own host ports directly, bound to
+> `127.0.0.1` — reachable without going through Traefik (and therefore without Authelia's
+> forward-auth gate) by anything with a shell on the host, or an SSH port-forward to it, but
+> **not** from the wider network. This is acceptable for a development environment but is
+> not a locked-down production posture. Tracked as
+> [#472](https://github.com/wish-maker/minder/issues/472).
 
 ---
 
@@ -78,17 +89,35 @@ curl -X POST http://localhost:8000/v1/auth/login \
 curl -H "Authorization: Bearer <token>" http://localhost:8000/health
 ```
 
-### Authelia SSO (enabled)
+### Authelia SSO (enabled — now a real identity provider)
 
 Authelia is **enabled and running**, providing SSO/2FA in front of web services via a
-Traefik `forwardAuth` middleware wired onto five routers (minio, api-gateway, grafana,
-openwebui, jaeger). Requests to those routers are 302-redirected to the Authelia portal
-when unauthenticated.
+Traefik `forwardAuth` middleware wired onto six routers (minio, api-gateway, grafana,
+openwebui, jaeger, client). Requests to those routers are 302-redirected to the Authelia
+portal when unauthenticated.
 
-### RBAC (not implemented)
+Separately from that gate, api-gateway is now a confidential OIDC client of Authelia's own
+identity provider (`identity_providers.oidc` in `docker/services/authelia/configuration.yml`):
 
-There is no role-based access control. Do not assume per-role or per-group authorization is
-enforced — only the gateway's JWT check exists today.
+- `GET /v1/auth/oidc/login` redirects the browser to Authelia's authorization endpoint.
+- `GET /v1/auth/oidc/callback` exchanges the returned code for a verified ID token, resolves
+  it to a Minder user (creating or linking one on first login — see
+  `core/auth.py`'s `get_or_create_oidc_user`), and mints the same JWT shape
+  `/v1/auth/login` always has.
+
+This is what the client's single "Log in" button in the topbar drives — end users
+authenticate against Authelia directly and never see a Minder-specific login form. The
+local `/v1/auth/register` + `/v1/auth/login` endpoints below still exist (useful for
+scripting/dev), but are no longer the primary path a real user takes.
+
+### RBAC (not enforced)
+
+`role` is derived from Authelia's `groups` claim on every OIDC login (`admins` group →
+`admin` role, else `"user"`) and stored on the user row / JWT, but **nothing checks it**
+before permitting an action — do not assume per-role or per-group authorization is
+enforced. Every write-protected endpoint still only checks "is there a valid JWT," not "does
+this JWT's role permit this." Tracked as
+[#474](https://github.com/wish-maker/minder/issues/474).
 
 ---
 
@@ -130,13 +159,17 @@ Never commit `.env` files containing real secrets.
 
 This is a development deployment. Before treating it as production-ready:
 
-1. Complete Authelia's rollout (real DNS + TLS for `authelia.minder.local`) so browser SSO
-   works end-to-end, not just the forward-auth 302.
-2. Lock down host-published ports; front everything through the proxy.
+1. ~~Complete Authelia's rollout so browser SSO works end-to-end~~ — **done**: real OIDC
+   SSO now mints Minder's own JWT from a verified Authelia identity (see above).
+2. Lock down host-published ports; front everything through the proxy
+   ([#472](https://github.com/wish-maker/minder/issues/472)).
 3. Replace self-signed `.local` certificates with a real CA / Let's Encrypt.
-4. Implement authorization (RBAC) beyond the gateway's JWT check if multi-tenant/role
-   separation is required.
-5. Rotate credentials via `./.env` (and `sync-postgres-password` for stateful ones).
+4. Implement authorization (RBAC) beyond "is there a valid JWT" — `role` already exists and
+   is populated from Authelia's groups, it just isn't checked anywhere yet
+   ([#474](https://github.com/wish-maker/minder/issues/474)).
+5. Rotate credentials via `./.env` (and `sync-postgres-password` for stateful ones). Also
+   rotate Authelia's own admin credential, which currently ships identical across every
+   clone of this repo ([#473](https://github.com/wish-maker/minder/issues/473)).
 6. Keep Traefik and images updated.
 
 ---
@@ -149,4 +182,4 @@ This is a development deployment. Before treating it as production-ready:
 
 ---
 
-*Last Updated: 2026-07-10 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled (Authelia) · RBAC: not implemented*
+*Last Updated: 2026-08-11 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled, real OIDC (Authelia) · RBAC: not enforced*
