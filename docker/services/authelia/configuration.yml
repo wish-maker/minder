@@ -70,19 +70,25 @@ identity_validation:
 # Real SSO (#<issue>): Minder's client + api-gateway authenticate against this
 # provider instead of stacking their own login behind the forward-auth gate
 # above -- Authelia's own hosted page becomes the platform's one login screen.
-# The issuer key is a real RSA private key, generated once by
-# scripts/setup/env.py's ensure_oidc_issuer_key() (never committed -- see
-# docker/services/authelia/secrets/, gitignored) and read via Authelia's
-# `secret` template function -- requires the "template" config file filter
-# (X_AUTHELIA_CONFIG_FILTERS=template, set on the authelia service below) to
-# be enabled; without it Authelia treats "{{ secret ... }}" as a literal
-# string and fails to parse it as PEM. mindent reindents the multi-line file
-# content to this key's actual nesting depth (8 spaces + 2) as a YAML literal
-# block scalar; msquote only quotes the result if it turns out to be a
-# single line (never true here, but matches Authelia's own documented
-# pattern for this exact use case). Regenerating the key file after clients
-# exist invalidates every previously-issued token, so the setup script only
-# generates it once and leaves it alone afterward.
+#
+# The whole file is now run through Authelia's Go-template engine BEFORE the
+# YAML parser ever sees it (X_AUTHELIA_CONFIG_FILTERS=template, set on the
+# authelia service below; off by default). That is why this comment avoids
+# writing the literal double-curly-brace secret-loading call as an example --
+# the template engine parses every double-curly-brace region in the raw file
+# text, including inside YAML comments, so an example containing one here
+# would fail the same way the real call below does if it were malformed.
+#
+# The jwks entry's key below loads the issuer's real RSA private key,
+# generated once by scripts/setup/env.py's ensure_oidc_issuer_key() (never
+# committed -- see docker/services/authelia/secrets/, gitignored), via that
+# secret-loading call, reindented to this key's actual nesting depth (8
+# spaces + 2) as a YAML literal block scalar, only quoted if the result
+# somehow turned out to be a single line (never true here, but this matches
+# Authelia's own documented pattern for loading a JWKS key from a file).
+# Regenerating the key file after clients exist invalidates every
+# previously-issued token, so the setup script only generates it once and
+# leaves it alone afterward.
 identity_providers:
   oidc:
     hmac_secret: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
