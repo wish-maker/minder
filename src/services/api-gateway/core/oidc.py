@@ -10,6 +10,7 @@ Minder's own user table.
 
 import logging
 from typing import Any, Dict
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import HTTPException
@@ -21,6 +22,15 @@ logger = logging.getLogger("minder.api-gateway")
 
 _DISCOVERY_PATH = "/.well-known/openid-configuration"
 
+# authelia.minder.local only resolves via Traefik, which api-gateway's own
+# container can't reach (it's on the same internal docker network as
+# Authelia, not the host's network Traefik sits on). Every call below
+# connects to the internal container address instead, but sends this Host
+# header so Authelia's own responses -- issuer, token_endpoint, jwks_uri,
+# and the iss claim on issued ID tokens -- stay the public hostname the
+# browser and this module's own issuer/audience checks both expect.
+_AUTHELIA_HOST_HEADER = urlparse(settings.AUTHELIA_ISSUER_URL).netloc
+
 
 async def _discover() -> Dict[str, Any]:
     """Fetch Authelia's OIDC discovery document. Not cached: this is only
@@ -29,9 +39,23 @@ async def _discover() -> Dict[str, Any]:
     if it ever changes -- not worth the staleness risk for the request rate
     involved."""
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(f"{settings.AUTHELIA_ISSUER_URL}{_DISCOVERY_PATH}")
+        resp = await client.get(
+            f"{settings.AUTHELIA_INTERNAL_URL}{_DISCOVERY_PATH}",
+            headers={"Host": _AUTHELIA_HOST_HEADER},
+        )
     resp.raise_for_status()
     return resp.json()
+
+
+def _internalize(url: str) -> str:
+    """Discovery returns public https://authelia.minder.local/... URLs (by
+    design -- those are what a browser would use); rewrite them back to the
+    internal address for api-gateway's own follow-up calls, same as
+    _discover's own request above."""
+    parsed = urlparse(url)
+    return url.replace(
+        f"{parsed.scheme}://{parsed.netloc}", settings.AUTHELIA_INTERNAL_URL
+    )
 
 
 async def exchange_code_for_id_token(code: str) -> str:
@@ -41,7 +65,8 @@ async def exchange_code_for_id_token(code: str) -> str:
     discovery = await _discover()
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
-            discovery["token_endpoint"],
+            _internalize(discovery["token_endpoint"]),
+            headers={"Host": _AUTHELIA_HOST_HEADER},
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -67,7 +92,10 @@ async def verify_id_token(id_token: str, expected_nonce: str) -> Dict[str, Any]:
     Returns the verified claim set."""
     discovery = await _discover()
     async with httpx.AsyncClient(timeout=10.0) as client:
-        jwks_resp = await client.get(discovery["jwks_uri"])
+        jwks_resp = await client.get(
+            _internalize(discovery["jwks_uri"]),
+            headers={"Host": _AUTHELIA_HOST_HEADER},
+        )
     jwks_resp.raise_for_status()
     jwks = jwks_resp.json()
 

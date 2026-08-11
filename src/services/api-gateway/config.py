@@ -42,6 +42,14 @@ class Settings(MinderBaseSettings):
     # existing JWT shape (see routes/auth.py's oidc_callback), so nothing
     # downstream that already trusts a Minder JWT needs to change.
     AUTHELIA_ISSUER_URL: str = "https://authelia.minder.local"
+    # api-gateway's own server-to-server calls (discovery/token/JWKS) go
+    # straight to the container on the docker network -- authelia.minder.local
+    # only resolves via Traefik, which isn't reachable from inside the network
+    # api-gateway itself is on. The Host header is still overridden to the
+    # public issuer name on every such call (see core/oidc.py) so Authelia's
+    # own responses (issuer, token/jwks URLs) stay self-consistent with what
+    # the browser and the ID token's iss claim both use.
+    AUTHELIA_INTERNAL_URL: str = "http://minder-authelia:9091"
     MINDER_OIDC_CLIENT_ID: str = "minder-client"
     MINDER_OIDC_CLIENT_SECRET: str = ""
     MINDER_OIDC_REDIRECT_URI: str = "https://api.minder.local/v1/auth/oidc/callback"
