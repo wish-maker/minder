@@ -39,13 +39,22 @@ jobs:
           pip install -r src/requirements/requirements-typecheck.txt
 
       - name: Run Black
-        run: black --check src/services/ src/shared/ scripts/ tests/
+        # src/plugins/ was missing here despite being covered by mypy (below) and
+        # bandit (quality.yml's own bandit job) — the only lint dimension it skipped
+        # was formatting/import-order/style. Added for parity (#37).
+        run: black --check src/services/ src/shared/ src/plugins/ scripts/ tests/
 
       - name: Run isort
-        run: isort --check-only src/services/ src/shared/ scripts/ tests/
+        run: isort --check-only src/services/ src/shared/ src/plugins/ scripts/ tests/
 
       - name: Run Flake8
-        run: flake8 src/services/ src/shared/ scripts/ tests/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
+        # max-line-length=120 is intentionally looser than black/isort's 88
+        # (pyproject.toml): black only ever wraps *code* to 88, but flake8 also
+        # scans comments/docstrings/URLs that black never touches — 120 gives
+        # those room without flake8 redundantly re-enforcing black's own wrap
+        # width. Confirmed non-dead: dropping to 88 here trips ~190 pre-existing
+        # E501s across the codebase that black's 88 limit never applied to.
+        run: flake8 src/services/ src/shared/ src/plugins/ scripts/ tests/ --max-line-length=120 --exclude=*.pyc,__pycache__ --extend-ignore=E203,W503
 
       - name: Run MyPy
         # A REAL gate now (#33) — no `|| true`. Each service runs with its OWN dir as

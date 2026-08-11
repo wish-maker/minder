@@ -19,6 +19,7 @@ from routes.proxy import router as proxy_router
 from config import settings
 
 # Shared logger setup (core imports above already put /app/src on sys.path).
+from shared.errors import install_global_exception_handler  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 
 logger = setup_logging("api-gateway", level=settings.LOG_LEVEL)
@@ -79,6 +80,10 @@ app = FastAPI(
 
 # Middleware: CORS, request-id/metrics, rate limiting
 register_middleware(app)
+
+install_global_exception_handler(
+    app, logger, is_development=settings.ENVIRONMENT == "development"
+)
 
 # Routers: AI integration, auth, health/metrics, downstream proxy, admin UI
 app.include_router(ai_router)

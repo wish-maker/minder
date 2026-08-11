@@ -1,13 +1,23 @@
-"""Unit tests for the shared backend-error sanitizer (#234 item 1).
+"""Unit tests for the shared backend-error sanitizer (#234 item 1) and the
+global unhandled-exception handler (#37).
 
 Guards the contract every service's handlers now delegate to: a backend being
 unreachable → 503 (retryable), any other failure → generic 500, and in NEITHER
 case does the raw exception string leak into the response detail.
 """
 
-import pytest
+import logging
+from unittest.mock import MagicMock
 
-from shared.errors import backend_http_error, is_connectivity_error
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from shared.errors import (
+    backend_http_error,
+    install_global_exception_handler,
+    is_connectivity_error,
+)
 
 
 # Names mirror the real driver exceptions we classify by module+class name+message
@@ -60,3 +70,54 @@ def test_operation_label_is_in_detail_but_raw_exception_is_not():
 def test_is_connectivity_error_predicate():
     assert is_connectivity_error(ServiceUnavailable("cannot connect"))
     assert not is_connectivity_error(ValueError("bad input"))
+
+
+def _app_with_handler(is_development: bool) -> tuple[FastAPI, MagicMock]:
+    app = FastAPI()
+    logger = MagicMock(spec=logging.Logger)
+    install_global_exception_handler(app, logger, is_development=is_development)
+
+    @app.get("/boom")
+    async def boom():
+        raise RuntimeError("db password is sup3rsecret")
+
+    return app, logger
+
+
+def test_unhandled_exception_returns_json_500_not_starlette_default():
+    app, _logger = _app_with_handler(is_development=False)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.get("/boom")
+
+    assert resp.status_code == 500
+    assert resp.headers["content-type"].startswith("application/json")
+    assert resp.json() == {"detail": "Internal server error"}
+
+
+def test_development_mode_includes_real_exception_string():
+    app, _logger = _app_with_handler(is_development=True)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.get("/boom")
+
+    assert resp.json() == {"detail": "db password is sup3rsecret"}
+
+
+def test_production_mode_does_not_leak_exception_string():
+    app, _logger = _app_with_handler(is_development=False)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    resp = client.get("/boom")
+
+    assert "sup3rsecret" not in resp.text
+
+
+def test_unhandled_exception_is_logged():
+    app, logger = _app_with_handler(is_development=False)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    client.get("/boom")
+
+    logger.error.assert_called_once()
+    assert "sup3rsecret" in logger.error.call_args[0][0]

@@ -15,6 +15,7 @@ from config import settings
 
 # Shared library (needs src/ on the path)
 sys.path.insert(0, "/app/src")
+from shared.errors import install_global_exception_handler  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
 
@@ -112,6 +113,10 @@ app = FastAPI(
 
 # Prometheus metrics: request-tracking middleware + /metrics endpoint
 setup_metrics(app)
+
+install_global_exception_handler(
+    app, logger, is_development=settings.ENVIRONMENT == "development"
+)
 
 app.include_router(system_router)
 app.include_router(rag_router)
