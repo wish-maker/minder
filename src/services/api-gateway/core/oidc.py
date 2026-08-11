@@ -25,11 +25,20 @@ _DISCOVERY_PATH = "/.well-known/openid-configuration"
 # authelia.minder.local only resolves via Traefik, which api-gateway's own
 # container can't reach (it's on the same internal docker network as
 # Authelia, not the host's network Traefik sits on). Every call below
-# connects to the internal container address instead, but sends this Host
-# header so Authelia's own responses -- issuer, token_endpoint, jwks_uri,
+# connects to the internal container address instead, but sends these
+# headers so Authelia's own responses -- issuer, token_endpoint, jwks_uri,
 # and the iss claim on issued ID tokens -- stay the public hostname the
-# browser and this module's own issuer/audience checks both expect.
-_AUTHELIA_HOST_HEADER = urlparse(settings.AUTHELIA_ISSUER_URL).netloc
+# browser and this module's own issuer/audience checks both expect. Host
+# alone isn't enough: confirmed empirically against a real Authelia
+# instance (plain Host -> 400, adding X-Forwarded-Proto/-Host -> 200) --
+# Authelia's OIDC endpoints specifically require the forwarded-proto/host
+# pair Traefik would normally add, not just a bare Host header.
+_parsed_issuer = urlparse(settings.AUTHELIA_ISSUER_URL)
+_AUTHELIA_FORWARDED_HEADERS = {
+    "Host": _parsed_issuer.netloc,
+    "X-Forwarded-Proto": _parsed_issuer.scheme,
+    "X-Forwarded-Host": _parsed_issuer.netloc,
+}
 
 
 async def _discover() -> Dict[str, Any]:
@@ -41,7 +50,7 @@ async def _discover() -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.get(
             f"{settings.AUTHELIA_INTERNAL_URL}{_DISCOVERY_PATH}",
-            headers={"Host": _AUTHELIA_HOST_HEADER},
+            headers=_AUTHELIA_FORWARDED_HEADERS,
         )
     resp.raise_for_status()
     return resp.json()
@@ -66,7 +75,7 @@ async def exchange_code_for_id_token(code: str) -> str:
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
             _internalize(discovery["token_endpoint"]),
-            headers={"Host": _AUTHELIA_HOST_HEADER},
+            headers=_AUTHELIA_FORWARDED_HEADERS,
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -94,7 +103,7 @@ async def verify_id_token(id_token: str, expected_nonce: str) -> Dict[str, Any]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         jwks_resp = await client.get(
             _internalize(discovery["jwks_uri"]),
-            headers={"Host": _AUTHELIA_HOST_HEADER},
+            headers=_AUTHELIA_FORWARDED_HEADERS,
         )
     jwks_resp.raise_for_status()
     jwks = jwks_resp.json()
