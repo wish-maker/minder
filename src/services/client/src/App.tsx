@@ -2,8 +2,10 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 
 import { SectionTabs } from "./components/SectionTabs";
 import { SubTabs } from "./components/SubTabs";
+import { UserMenu } from "./components/UserMenu";
 import { AuthProvider } from "./lib/auth";
 import { AiToolsPage } from "./pages/AiToolsPage";
+import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { AvailablePluginsPage } from "./pages/AvailablePluginsPage";
 import { BundleManagementPage } from "./pages/BundleManagementPage";
 import { GraphExplorerPage } from "./pages/GraphExplorerPage";
@@ -12,13 +14,14 @@ import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { StatusPage } from "./pages/StatusPage";
 import { VoicePage } from "./pages/VoicePage";
 
 export function App() {
   return (
     <AuthProvider>
-      <nav className="mb-6 flex flex-wrap gap-x-5 gap-y-1 border-b border-gray-200 pb-3 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300">
+      <nav className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-gray-200 pb-3 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-300">
         <Link className="hover:text-indigo-600 dark:hover:text-indigo-400" to="/">
           Minder
         </Link>
@@ -37,8 +40,16 @@ export function App() {
         >
           Platform
         </Link>
+        {/* The platform's one login control (#<issue>) -- every page that
+            used to render its own LoginPanel form now just gates on
+            useAuth().isAuthenticated and points here. */}
+        <div className="ml-auto">
+          <UserMenu />
+        </div>
       </nav>
       <Routes>
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/" element={<LandingPage />} />
 
         <Route

@@ -633,6 +633,12 @@ services:
       dockerfile: src/services/client/Dockerfile
       args:
         VITE_API_BASE_URL: ${CLIENT_API_BASE_URL:-http://localhost:8000}
+        # The one login trigger (#<issue>) -- unlike VITE_API_BASE_URL
+        # (fetch() calls, fine over the direct-port bypass), this MUST be a
+        # real Traefik-routed hostname: it's a full-page navigation into
+        # Authelia's forward-auth + OIDC authorize flow, which only exists
+        # at that hostname.
+        VITE_OIDC_LOGIN_URL: ${CLIENT_OIDC_LOGIN_URL:-https://api.minder.local/v1/auth/oidc/login}
     image: minder/client:1.0.0
     container_name: minder-client
     restart: on-failure

@@ -2,7 +2,6 @@ import { useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -509,7 +508,6 @@ function DeleteDocumentCard({
 export function GraphExplorerPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
-  const [statusMsg, setStatusMsg] = useState("");
   const [builtDocs, setBuiltDocs] = useState<BuiltDoc[]>([]);
 
   function handleBuilt(doc: BuiltDoc) {
@@ -533,10 +531,6 @@ export function GraphExplorerPage() {
         Marketplace page — same underlying Neo4j instance, unrelated data.
       </InfoCallout>
       {dialog}
-      <div className="mt-4">
-        <LoginPanel onStatus={setStatusMsg} />
-      </div>
-      {statusMsg && <div className={statusClass(false)}>{statusMsg}</div>}
       <ExtractAndBuildCard token={token} onBuilt={handleBuilt} />
       <ExploreCard token={token} />
       <DeleteDocumentCard

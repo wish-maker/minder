@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, inputClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
@@ -483,7 +482,6 @@ function SpeechToTextCard({
 
 export function VoicePage() {
   const { token } = useAuth();
-  const [statusMsg, setStatusMsg] = useState("");
   const [seed, setSeed] = useState<Seed | null>(null);
 
   return (
@@ -493,8 +491,6 @@ export function VoicePage() {
         ~12 languages supported, Turkish by default. Browsing is open for
         everyone; log in to synthesize or transcribe.
       </p>
-      <LoginPanel onStatus={setStatusMsg} />
-      {statusMsg && <div className={statusClass(false)}>{statusMsg}</div>}
       <TextToSpeechCard token={token} seed={seed} />
       <SpeechToTextCard
         token={token}

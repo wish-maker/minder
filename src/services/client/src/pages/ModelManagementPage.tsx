@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
-import { LoginPanel } from "../components/LoginPanel";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
@@ -342,9 +341,6 @@ export function ModelManagementPage() {
         per-model settings (system prompts, parameters) if you're already
         there for chat.
       </InfoCallout>
-      <div className="mt-4">
-        <LoginPanel onStatus={setStatusMsg} />
-      </div>
       <div className={statusClass(isError)}>{status}</div>
       <PullModelForm token={token} onPulled={loadModels} />
       {models !== null && models.length === 0 && (
