@@ -67,10 +67,12 @@ def _internalize(url: str) -> str:
     )
 
 
-async def exchange_code_for_id_token(code: str) -> str:
+async def exchange_code_for_tokens(code: str) -> Dict[str, str]:
     """POST the authorization code to Authelia's token endpoint using this
     client's confidential client_secret (never exposed to the browser) and
-    return the raw (still-unverified) id_token string.
+    return the raw (still-unverified) {id_token, access_token} pair -- both
+    are needed by verify_id_token below, since the ID token carries an
+    at_hash claim binding it to this specific access token.
 
     Authenticates via HTTP Basic (client_secret_basic) -- the OIDC-spec
     default a confidential client falls back to when no auth method is
@@ -98,15 +100,20 @@ async def exchange_code_for_id_token(code: str) -> str:
         raise HTTPException(status_code=502, detail="OIDC token exchange failed")
     body = resp.json()
     id_token = body.get("id_token")
-    if not id_token:
-        raise HTTPException(status_code=502, detail="OIDC response had no id_token")
-    return id_token
+    access_token = body.get("access_token")
+    if not id_token or not access_token:
+        raise HTTPException(status_code=502, detail="OIDC response missing tokens")
+    return {"id_token": id_token, "access_token": access_token}
 
 
-async def verify_id_token(id_token: str, expected_nonce: str) -> Dict[str, Any]:
+async def verify_id_token(
+    id_token: str, access_token: str, expected_nonce: str
+) -> Dict[str, Any]:
     """Verify the ID token's RS256 signature against Authelia's published
-    JWKS, then its exp/aud/iss (via jose's own checks) and nonce (manually --
-    jose does not treat nonce as a standard claim to validate itself).
+    JWKS, then its exp/aud/iss/at_hash (via jose's own checks -- at_hash
+    needs access_token to compare against, hence the parameter) and nonce
+    (manually -- jose does not treat nonce as a standard claim to validate
+    itself).
     Returns the verified claim set."""
     discovery = await _discover()
     async with httpx.AsyncClient(timeout=10.0) as client:
@@ -133,6 +140,7 @@ async def verify_id_token(id_token: str, expected_nonce: str) -> Dict[str, Any]:
             algorithms=["RS256"],
             audience=settings.MINDER_OIDC_CLIENT_ID,
             issuer=settings.AUTHELIA_ISSUER_URL,
+            access_token=access_token,
         )
     except Exception as e:
         logger.warning(f"OIDC id_token verification failed: {e}")

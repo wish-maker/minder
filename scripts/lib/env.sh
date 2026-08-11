@@ -109,13 +109,35 @@ _ensure_oidc_issuer_key() {
     fi
 }
 
+_hash_oidc_client_secret() {
+    # Argon2id-hash MINDER_OIDC_CLIENT_SECRET via Authelia's own CLI in a
+    # throwaway container (the exact image already pinned in
+    # docker-compose.yml, so this never pulls anything the stack would not
+    # already need). A $plaintext$ secret was tried first: confirmed against
+    # a real Authelia instance to fail token exchange regardless of client
+    # auth method, even with byte-identical values on both sides — a real
+    # hash is what actually works. Re-hashed fresh on every render (argon2's
+    # random salt makes each output different even for the same input)
+    # rather than cached, since the secret's plaintext value only changes
+    # via SECRET_SPEC's own regen guard, and hashing is cheap.
+    local secret; secret="$(_env_get MINDER_OIDC_CLIENT_SECRET)"
+    [[ -z "$secret" ]] && return 0
+    local out
+    out="$(docker run --rm authelia/authelia:4.39.20 authelia crypto hash generate argon2 \
+        --password "$secret" --variant argon2id --memory 32768 --iterations 3 --parallelism 2 \
+        2>/dev/null)"
+    [[ "$out" == *": "* ]] && out="${out##*: }"
+    printf '%s' "$out"
+}
+
 _render_authelia_config() {
-    # Substitute the real OIDC issuer key into Authelia's config (#<issue>).
-    # configuration.yml (git-tracked) holds a stable placeholder instead of
-    # key material; this writes configuration.rendered.yml (gitignored) with
-    # the placeholder replaced by the actual PEM, reindented as a YAML
-    # literal block scalar at the key's nesting depth (8 spaces + 2,
-    # matching that line's own indentation in the source).
+    # Substitute the real OIDC issuer key + client secret hash into
+    # Authelia's config (#<issue>). configuration.yml (git-tracked) holds
+    # stable placeholders instead of key material; this writes
+    # configuration.rendered.yml (gitignored) with them replaced by the
+    # actual PEM (reindented as a YAML literal block scalar at the key's
+    # nesting depth — 8 spaces + 2, matching that line's own indentation in
+    # the source) and the client secret's argon2id hash.
     #
     # Plain text substitution, deliberately NOT Authelia's own Go-template
     # config-file filter: that route was tried first and abandoned after
@@ -130,10 +152,15 @@ _render_authelia_config() {
     local key_path="${SCRIPT_DIR}/docker/services/authelia/secrets/oidc_issuer.pem"
     [[ -f "$src" ]] || return 0
     [[ -f "$key_path" ]] || return 0
-    local indented
+    local indented secret_hash
     indented="$(sed 's/^/          /' "$key_path")"
-    awk -v pem="$indented" '
-        { gsub(/__MINDER_OIDC_ISSUER_KEY_PEM__/, "|\n" pem); print }
+    secret_hash="$(_hash_oidc_client_secret)"
+    awk -v pem="$indented" -v secret_hash="$secret_hash" '
+        {
+            gsub(/__MINDER_OIDC_ISSUER_KEY_PEM__/, "|\n" pem)
+            if (secret_hash != "") gsub(/__MINDER_OIDC_CLIENT_SECRET_HASH__/, "\"" secret_hash "\"")
+            print
+        }
     ' "$src" > "$dst"
 }
 

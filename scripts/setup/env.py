@@ -41,10 +41,12 @@ SECRET_SPEC = {
     # sides. Was skipped here → stayed empty → sync silently 401'd (#227).
     "SERVICE_SYNC_TOKEN": "32",
     # Authelia OIDC provider (#<issue>) -- hmac_secret signs Authelia's own
-    # internal OIDC session/consent tokens; MINDER_OIDC_CLIENT_SECRET is the
-    # plaintext confidential-client secret shared between Authelia's
-    # configuration.yml ($plaintext$ prefix) and api-gateway's token-exchange
-    # call, so both sides need the identical generated value.
+    # internal OIDC session/consent tokens. MINDER_OIDC_CLIENT_SECRET is the
+    # plaintext confidential-client secret api-gateway sends on every token
+    # exchange; render_authelia_config() separately argon2id-hashes this
+    # same value for Authelia's own client_secret config, so both sides stay
+    # in sync from one generated value without either side storing the
+    # other's exact representation.
     "AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET": "32",
     "MINDER_OIDC_CLIENT_SECRET": "32",
 }
@@ -215,16 +217,70 @@ def ensure_oidc_issuer_key() -> None:
 _AUTHELIA_CONFIG_SRC = _OIDC_ISSUER_KEY.parents[1] / "configuration.yml"
 _AUTHELIA_CONFIG_RENDERED = _OIDC_ISSUER_KEY.parents[1] / "configuration.rendered.yml"
 _OIDC_PLACEHOLDER = "__MINDER_OIDC_ISSUER_KEY_PEM__"
+_OIDC_CLIENT_SECRET_PLACEHOLDER = "__MINDER_OIDC_CLIENT_SECRET_HASH__"
+_AUTHELIA_IMAGE = "authelia/authelia:4.39.20"  # matches docker-compose.yml's pin
+
+
+def _hash_oidc_client_secret() -> str:
+    """Argon2id-hash MINDER_OIDC_CLIENT_SECRET via Authelia's own CLI in a
+    throwaway container (the exact image already pinned in
+    docker-compose.yml, so this never pulls anything the stack would not
+    already need). A $plaintext$ secret was tried first: confirmed against
+    a real Authelia instance to fail token exchange regardless of client
+    auth method, even with byte-identical values on both sides -- a real
+    hash is what actually works. Re-hashed fresh on every render (argon2's
+    random salt makes each output different even for the same input) rather
+    than cached, since the secret's plaintext value itself only changes via
+    SECRET_SPEC's own regen guard, and hashing is cheap."""
+    secret = get("MINDER_OIDC_CLIENT_SECRET")
+    if not secret:
+        return ""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                _AUTHELIA_IMAGE,
+                "authelia",
+                "crypto",
+                "hash",
+                "generate",
+                "argon2",
+                "--password",
+                secret,
+                "--variant",
+                "argon2id",
+                "--memory",
+                "32768",
+                "--iterations",
+                "3",
+                "--parallelism",
+                "2",
+            ],
+            check=True,
+            capture_output=True,
+            timeout=60,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        log.warn(f"Could not hash OIDC client secret: {e}")
+        return ""
+    # authelia's CLI prints "Digest: $argon2id$...\n" -- take the part after
+    # the first ": ", stripped, whatever the exact prefix wording.
+    line = result.stdout.strip()
+    return line.split(": ", 1)[-1].strip() if ": " in line else line
 
 
 def render_authelia_config() -> None:
-    """Substitute the real OIDC issuer key into Authelia's config (#<issue>).
+    """Substitute the real OIDC issuer key + client secret hash into
+    Authelia's config (#<issue>).
 
-    configuration.yml (git-tracked) holds a stable placeholder instead of key
-    material; this writes configuration.rendered.yml (gitignored) with the
-    placeholder replaced by the actual PEM, reindented as a YAML literal
-    block scalar at the key's nesting depth (8 spaces + 2, matching this
-    line's own "        key:" indentation in the source).
+    configuration.yml (git-tracked) holds stable placeholders instead of key
+    material; this writes configuration.rendered.yml (gitignored) with them
+    replaced by the actual PEM (reindented as a YAML literal block scalar at
+    the key's nesting depth -- 8 spaces + 2, matching that line's own
+    indentation in the source) and the client secret's argon2id hash.
 
     Plain Python string substitution, deliberately NOT Authelia's own
     Go-template config-file filter: that route was tried first and abandoned
@@ -243,6 +299,9 @@ def render_authelia_config() -> None:
         return
     indented = "\n".join(f"          {line}" for line in pem.strip().splitlines())
     rendered = template.replace(_OIDC_PLACEHOLDER, f"|\n{indented}")
+    secret_hash = _hash_oidc_client_secret()
+    if secret_hash:
+        rendered = rendered.replace(_OIDC_CLIENT_SECRET_PLACEHOLDER, f'"{secret_hash}"')
     _AUTHELIA_CONFIG_RENDERED.write_text(rendered, encoding="utf-8")
 
 

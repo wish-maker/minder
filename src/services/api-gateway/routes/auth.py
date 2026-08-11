@@ -18,7 +18,7 @@ from core.auth import (
     verify_jwt_token,
     verify_user_credentials,
 )
-from core.oidc import exchange_code_for_id_token, verify_id_token
+from core.oidc import exchange_code_for_tokens, verify_id_token
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -173,8 +173,10 @@ async def oidc_callback(
     if not code or not state or not cookie_state or state != cookie_state:
         raise HTTPException(status_code=400, detail="Invalid or expired OIDC state")
 
-    id_token = await exchange_code_for_id_token(code)
-    claims = await verify_id_token(id_token, expected_nonce=cookie_nonce or "")
+    tokens = await exchange_code_for_tokens(code)
+    claims = await verify_id_token(
+        tokens["id_token"], tokens["access_token"], expected_nonce=cookie_nonce or ""
+    )
 
     subject = claims["sub"]
     username = claims.get("preferred_username") or subject

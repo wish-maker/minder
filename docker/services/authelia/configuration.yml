@@ -97,15 +97,21 @@ identity_providers:
     clients:
       - client_id: "minder-client"
         client_name: "Minder"
-        # $plaintext$ tells Authelia this is a raw secret rather than a
-        # pre-hashed one (Authelia normally wants an argon2id hash here) --
-        # deliberate, documented tradeoff so scripts/setup/env.py can generate
-        # and rotate this the same way as every other SECRET_SPEC value,
-        # without shelling out to `authelia crypto hash generate` at install
-        # time. Confidential client (public: false): api-gateway holds the
-        # secret server-side and performs the code exchange itself, so it is
-        # never exposed to the browser.
-        client_secret: "$plaintext$${MINDER_OIDC_CLIENT_SECRET}"
+        # An argon2id hash of MINDER_OIDC_CLIENT_SECRET, substituted at
+        # render time by the same step that fills in the issuer key above
+        # (render_authelia_config() / _render_authelia_config()) -- computed
+        # fresh from the current plaintext secret on every run via a
+        # throwaway `authelia crypto hash generate` container call, same
+        # mechanism as the RSA key. A $plaintext$ prefix (raw secret, no
+        # hash) was tried first: confirmed against a real Authelia instance
+        # to fail token exchange regardless of auth method ("no client
+        # authentication included") even though the plaintext value matched
+        # byte-for-byte on both sides -- a real hash is what actually works,
+        # not just what avoids the deprecation warning. Confidential client
+        # (public: false): api-gateway holds the secret server-side and
+        # performs the code exchange itself, so it is never exposed to the
+        # browser.
+        client_secret: __MINDER_OIDC_CLIENT_SECRET_HASH__
         public: false
         authorization_policy: one_factor
         require_pkce: false
