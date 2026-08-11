@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -698,6 +699,7 @@ export function RagPipelinesPage() {
   return (
     <>
       {dialog}
+      <PageHeader icon="🔎" title="RAG Pipelines" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Combine one or more knowledge bases into a queryable pipeline, then
         ask it questions using Minder's own retrieval methods — this is

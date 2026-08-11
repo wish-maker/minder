@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -584,6 +585,7 @@ export function KnowledgeBasesPage() {
   return (
     <>
       {dialog}
+      <PageHeader icon="📚" title="Knowledge Bases" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Create knowledge bases and upload documents — this is the data your{" "}
         <em>RAG Pipelines</em> actually search over. Browsing is open for

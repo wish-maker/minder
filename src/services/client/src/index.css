@@ -34,11 +34,13 @@
   color-scheme: light dark;
 }
 
+/* No max-width/centering here anymore -- the sidebar app shell (#<issue>)
+ * needs the body at full viewport width so the sidebar can sit flush left;
+ * AppShell's own content column applies the equivalent reading-width cap
+ * (max-w-4xl) to just the main area instead, once, in one place, rather
+ * than duplicating it into every page. */
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  max-width: 960px;
-  margin: 2rem auto;
-  padding: 0 1rem;
   line-height: 1.5;
 }
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
@@ -327,6 +328,7 @@ export function ModelManagementPage() {
   return (
     <>
       {dialog}
+      <PageHeader icon="🤖" title="Model Management" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Pull, delete, and test Ollama models on Minder's own model-management
         service. Browsing is open for everyone; log in to pull, delete, or
