@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
@@ -75,7 +76,26 @@ function outcomeSummary(
   return parts.length > 0 ? parts.join("; ") : "no change needed.";
 }
 
-function ServiceRow({ service }: { service: BundleService }) {
+/** The API's `claimants` list is every ENABLED bundle claiming this service --
+ * including the bundle whose card we're already looking at. Found live: every
+ * service under the "core" bundle rendered "(also claimed by: core)" -- itself,
+ * not another bundle -- and "inference"'s own ollama row said "(also claimed
+ * by: chat, inference, rag)", listing "inference" alongside its own siblings.
+ * Filtering out the current bundle's own name is what makes this label
+ * actually mean "shared with ANOTHER bundle" instead of always including a
+ * self-reference. */
+function otherClaimants(service: BundleService, bundleName: string): string[] {
+  return service.claimants.filter((c) => c && c !== bundleName);
+}
+
+function ServiceRow({
+  service,
+  bundleName,
+}: {
+  service: BundleService;
+  bundleName: string;
+}) {
+  const others = otherClaimants(service, bundleName);
   return (
     <li className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
       <span
@@ -85,9 +105,9 @@ function ServiceRow({ service }: { service: BundleService }) {
         aria-hidden="true"
       />
       {service.name}
-      {service.claimants.length > 0 && (
+      {others.length > 0 && (
         <span className="text-gray-400 dark:text-gray-500">
-          (also claimed by: {service.claimants.filter((c) => c).join(", ") || "—"})
+          (also claimed by: {others.join(", ")} — disabling this bundle won't stop it)
         </span>
       )}
     </li>
@@ -98,15 +118,46 @@ function BundleCard({
   bundle,
   token,
   onChanged,
+  confirm,
 }: {
   bundle: Bundle;
   token: string;
   onChanged: () => void;
+  confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function handleToggle() {
+    if (bundle.enabled) {
+      // Disabling is the one direction that can silently do less than it
+      // looks like -- a service kept alive by another enabled bundle stays
+      // running even though THIS bundle now shows "disabled". Say that up
+      // front instead of only in the small print next to each service.
+      const willStop = bundle.services.filter(
+        (s) => otherClaimants(s, bundle.name).length === 0,
+      );
+      const willStay = bundle.services.filter(
+        (s) => otherClaimants(s, bundle.name).length > 0,
+      );
+      const lines = [
+        willStop.length > 0
+          ? `Will stop: ${willStop.map((s) => s.name).join(", ")}.`
+          : "No services will actually stop -- every one is still claimed by another enabled bundle.",
+        willStay.length > 0
+          ? `Will keep running (claimed by another enabled bundle too): ${willStay
+              .map((s) => `${s.name} (${otherClaimants(s, bundle.name).join(", ")})`)
+              .join(", ")}.`
+          : "",
+      ].filter(Boolean);
+      const ok = await confirm({
+        title: `Disable "${bundle.name}"?`,
+        message: lines.join(" "),
+        confirmLabel: "Disable",
+        danger: willStop.length > 0,
+      });
+      if (!ok) return;
+    }
     setBusy(true);
     setStatus(bundle.enabled ? "Disabling…" : "Enabling…");
     try {
@@ -141,7 +192,7 @@ function BundleCard({
           </h2>
           <ul className="mt-2 flex flex-col gap-1">
             {bundle.services.map((s) => (
-              <ServiceRow key={s.name} service={s} />
+              <ServiceRow key={s.name} service={s} bundleName={bundle.name} />
             ))}
           </ul>
         </div>
@@ -172,6 +223,7 @@ function BundleCard({
 
 export function BundleManagementPage() {
   const { token } = useAuth();
+  const { confirm, dialog } = useConfirm();
   const [bundles, setBundles] = useState<Bundle[] | null>(null);
   const [orphaned, setOrphaned] = useState<string[]>([]);
   const [status, setStatus] = useState("");
@@ -217,6 +269,7 @@ export function BundleManagementPage() {
 
   return (
     <>
+      {dialog}
       <PageHeader icon="📦" title="Bundle Management" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Turn optional feature bundles on or off — each claims a set of
@@ -256,7 +309,13 @@ export function BundleManagementPage() {
         </p>
       )}
       {bundles?.map((b) => (
-        <BundleCard key={b.name} bundle={b} token={token} onChanged={loadBundles} />
+        <BundleCard
+          key={b.name}
+          bundle={b}
+          token={token}
+          onChanged={loadBundles}
+          confirm={confirm}
+        />
       ))}
     </>
   );
