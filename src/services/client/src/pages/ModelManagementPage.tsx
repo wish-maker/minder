@@ -56,44 +56,50 @@ function statusBadgeColor(status: ModelStatusValue): string {
 }
 
 function ModelDetailPanel({ modelId }: { modelId: string }) {
-  const [loaded, setLoaded] = useState(false);
+  // Capabilities load eagerly (on mount) and render directly in the card --
+  // found live: they were hidden behind the same "Details & capabilities"
+  // toggle as the raw Ollama JSON dump, so seeing what a model can even DO
+  // required opening a wall of JSON first. Only the JSON itself stays
+  // collapsed (it's genuinely long and rarely needed).
   const [detail, setDetail] = useState<ModelDetail | null>(null);
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("Loading…");
 
-  async function handleToggle(e: React.SyntheticEvent<HTMLDetailsElement>) {
-    if (!e.currentTarget.open || loaded) return;
-    setStatus("Loading…");
-    try {
-      const res = await apiFetch<ModelDetail>(`/v1/models/${encodeURIComponent(modelId)}`);
-      setDetail(res);
-      setLoaded(true);
-      setStatus("");
-    } catch (e) {
-      setStatus(friendlyErrorMessage(e));
-    }
-  }
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<ModelDetail>(`/v1/models/${encodeURIComponent(modelId)}`)
+      .then((res) => {
+        if (!cancelled) {
+          setDetail(res);
+          setStatus("");
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setStatus(friendlyErrorMessage(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [modelId]);
 
   return (
-    <details className="mt-2" onToggle={handleToggle}>
-      <summary className="cursor-pointer text-xs font-medium text-indigo-600 dark:text-indigo-400">
-        Details &amp; capabilities
-      </summary>
-      <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-        {status && <p>{status}</p>}
-        {detail && (
-          <>
-            {detail.capabilities.length > 0 && (
-              <p className="mb-1">
-                <strong>Capabilities:</strong> {detail.capabilities.join(", ")}
-              </p>
-            )}
-            <pre className="max-h-48 overflow-auto rounded bg-gray-50 p-2 dark:bg-gray-800">
-              {JSON.stringify(detail.details, null, 2)}
-            </pre>
-          </>
-        )}
-      </div>
-    </details>
+    <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+      {status && <p>{status}</p>}
+      {detail && detail.capabilities.length > 0 && (
+        <p>
+          <strong>Capabilities:</strong> {detail.capabilities.join(", ")}
+        </p>
+      )}
+      {detail && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-xs font-medium text-indigo-600 dark:text-indigo-400">
+            Full details (JSON)
+          </summary>
+          <pre className="mt-2 max-h-48 overflow-auto rounded bg-gray-50 p-2 dark:bg-gray-800">
+            {JSON.stringify(detail.details, null, 2)}
+          </pre>
+        </details>
+      )}
+    </div>
   );
 }
 
