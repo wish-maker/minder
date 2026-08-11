@@ -174,6 +174,7 @@ async def load_plugin_from_module(plugin_dir: Path):
                 description=metadata.description,
                 author=metadata.author,
                 databases=metadata.databases,
+                plugin_dependencies=metadata.dependencies,
             )
 
     except Exception as e:

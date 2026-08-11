@@ -93,6 +93,8 @@ class Neo4jClient:
         plugin_id: str,
         depends_on_plugin_id: str,
         dependency_type: str = "requires",
+        plugin_name: Optional[str] = None,
+        depends_on_name: Optional[str] = None,
     ) -> bool:
         """
         Add a dependency relationship between two plugins
@@ -101,18 +103,43 @@ class Neo4jClient:
             plugin_id: Plugin that has the dependency
             depends_on_plugin_id: Plugin that is required
             dependency_type: Type of dependency (requires, suggests, conflicts_with)
+            plugin_name: best-effort display name for `plugin_id`, set on the
+                node ONLY if it doesn't already have one (see coalesce below)
+            depends_on_name: same, for `depends_on_plugin_id`
 
         Returns:
             True if successful
+
+        Found live: this used MATCH for both plugin nodes, which requires
+        them to already exist -- but nothing anywhere ever calls
+        create_plugin_node, so BOTH nodes were always missing and this
+        silently returned False for every real call (the route above turns
+        that into a 400, so at least visibly -- but the underlying edge
+        never gets created). MERGE makes this self-sufficient: a dependency
+        can be recorded for a plugin before or after its own full node ever
+        gets created some other way, same self-healing spirit as
+        marketplace_sync.py's own "bare placeholder, reconciled later" path
+        for a plugin that hasn't synced yet.
         """
         # Cypher cannot parameterize a relationship type, so the type is
         # interpolated into the query string. Guard against Cypher injection with a
         # strict allowlist of literal, safe relationship types — the caller-supplied
         # dependency_type is NEVER interpolated directly. The original value is also
         # stored as a property so reads (r.dependency_type) still see it.
+        #
+        # Found live: this used to map "requires"/"suggests" to their own
+        # literal relationship names (REQUIRES/SUGGESTS), but every reader
+        # (get_plugin_dependencies, get_dependency_chain, recommend_plugins)
+        # queries :DEPENDS_ON / :RECOMMENDS specifically -- a real plugin
+        # dependency (e.g. "network requires telegraf") could be written
+        # here and would NEVER show up anywhere, silently. dependency_type
+        # is already stored as a property on the edge (see SET below), so
+        # the relationship label itself only needs to match what's read;
+        # "conflicts_with" -> CONFLICTS_WITH already matched find_conflicting_
+        # plugins and is unchanged.
         allowed_rel_types = {
-            "requires": "REQUIRES",
-            "suggests": "SUGGESTS",
+            "requires": "DEPENDS_ON",
+            "suggests": "RECOMMENDS",
             "conflicts_with": "CONFLICTS_WITH",
         }
         rel_type = allowed_rel_types.get(dependency_type)
@@ -123,8 +150,10 @@ class Neo4jClient:
             )
 
         query = f"""
-        MATCH (p1:Plugin {{id: $plugin_id}})
-        MATCH (p2:Plugin {{id: $depends_on_id}})
+        MERGE (p1:Plugin {{id: $plugin_id}})
+        ON CREATE SET p1.display_name = $plugin_name
+        MERGE (p2:Plugin {{id: $depends_on_id}})
+        ON CREATE SET p2.display_name = $depends_on_name
         MERGE (p1)-[r:{rel_type}]->(p2)
         SET r.dependency_type = $dependency_type
         RETURN true
@@ -136,6 +165,8 @@ class Neo4jClient:
                 plugin_id=plugin_id,
                 depends_on_id=depends_on_plugin_id,
                 dependency_type=dependency_type,
+                plugin_name=plugin_name or plugin_id,
+                depends_on_name=depends_on_name or depends_on_plugin_id,
             )
             record = await result.single()
             return record["true"] if record else False
