@@ -150,3 +150,27 @@ async def verify_id_token(
         raise HTTPException(status_code=401, detail="OIDC nonce mismatch")
 
     return claims
+
+
+async def fetch_userinfo(access_token: str) -> Dict[str, Any]:
+    """Fetch the /userinfo claims for the token holder. Authelia's ID token
+    only carries a handful of claims by default (confirmed against a real
+    instance: the `sub` claim came back as an opaque per-client UUID, with
+    no preferred_username/groups at all even though the profile/groups
+    scopes were requested and granted) -- preferred_username, email, and
+    groups all live here instead, the standard OIDC place for anything
+    beyond the bare identity claims. Best-effort: a failure here shouldn't
+    block login, since verify_id_token already established who the caller
+    is via the id_token's own (verified) sub claim."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(
+            f"{settings.AUTHELIA_INTERNAL_URL}/api/oidc/userinfo",
+            headers={
+                **_AUTHELIA_FORWARDED_HEADERS,
+                "Authorization": f"Bearer {access_token}",
+            },
+        )
+    if resp.status_code != 200:
+        logger.warning(f"OIDC userinfo fetch failed: {resp.status_code} {resp.text}")
+        return {}
+    return resp.json()

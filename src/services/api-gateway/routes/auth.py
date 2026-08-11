@@ -18,7 +18,7 @@ from core.auth import (
     verify_jwt_token,
     verify_user_credentials,
 )
-from core.oidc import exchange_code_for_tokens, verify_id_token
+from core.oidc import exchange_code_for_tokens, fetch_userinfo, verify_id_token
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
@@ -177,11 +177,20 @@ async def oidc_callback(
     claims = await verify_id_token(
         tokens["id_token"], tokens["access_token"], expected_nonce=cookie_nonce or ""
     )
+    userinfo = await fetch_userinfo(tokens["access_token"])
 
     subject = claims["sub"]
-    username = claims.get("preferred_username") or subject
-    email = claims.get("email") or f"{subject}@authelia.minder.local"
-    groups = claims.get("groups") or []
+    username = (
+        userinfo.get("preferred_username")
+        or claims.get("preferred_username")
+        or subject
+    )
+    email = (
+        userinfo.get("email")
+        or claims.get("email")
+        or f"{subject}@authelia.minder.local"
+    )
+    groups = userinfo.get("groups") or claims.get("groups") or []
 
     user = await get_or_create_oidc_user(subject, username, email, groups)
     access_token = create_jwt_token(

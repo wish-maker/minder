@@ -211,7 +211,39 @@ async def get_or_create_oidc_user(
             authelia_subject,
         )
         if row:
-            return dict(row)
+            role = "admin" if "admins" in groups else "user"
+            if (
+                row["username"] == username
+                and row["email"] == email
+                and row["role"] == role
+            ):
+                return dict(row)
+            # Keep the local record in sync with Authelia's profile (e.g. a
+            # /userinfo call starting to return preferred_username where it
+            # didn't before -- exactly what happened during development:
+            # the id_token alone gave an opaque UUID subject with no
+            # preferred_username at all). Username collisions with an
+            # unrelated account are rare enough here to just keep the old
+            # value rather than fail the login over a cosmetic sync.
+            try:
+                updated = await conn.fetchrow(
+                    """
+                    UPDATE users SET username = $1, email = $2, role = $3, updated_at = NOW()
+                    WHERE id = $4
+                    RETURNING id, username, email, role
+                    """,
+                    username,
+                    email,
+                    role,
+                    row["id"],
+                )
+                return dict(updated)
+            except asyncpg.UniqueViolationError:
+                logger.warning(
+                    f"Could not sync OIDC profile for user {row['id']}: "
+                    f"username/email collision with another account"
+                )
+                return dict(row)
 
         existing = await conn.fetchrow(
             """
