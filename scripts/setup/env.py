@@ -165,26 +165,49 @@ def ensure_oidc_issuer_key() -> None:
     """Generate Authelia's OIDC token-signing RSA key on first run (#<issue>).
     Authelia signs every OIDC ID/access token it issues with this key, so
     unlike the SECRET_SPEC values above it can't be a bare env-var token --
-    Authelia's jwks.key config wants real PEM. Generated once via openssl
-    (already a required prerequisite, see preflight.py) directly under
-    docker/services/authelia/secrets/, which matches the repo's existing
-    bare `secrets/` .gitignore rule -- never committed, same as .env itself.
-    Left alone on every subsequent run: regenerating it after Authelia has
-    issued tokens against the old key would invalidate all of them, and
-    unlike a password rotation there is no user-facing "re-enter credentials"
-    story for that -- every active session breaks silently instead."""
+    Authelia's jwks.key config wants real PEM.
+
+    Generated via a throwaway `docker run` (alpine + openssl) rather than a
+    host-installed openssl binary: openssl is a required *nix prerequisite
+    (preflight.py) but is NOT reliably on PATH on Windows hosts (hantal),
+    where docker itself is guaranteed present since the whole platform runs
+    through it. The key is captured straight off stdout as raw bytes (no
+    volume mount, no host/container path translation to get wrong) and
+    written with Python's own file I/O.
+
+    Directly under docker/services/authelia/secrets/, matching the repo's
+    existing bare `secrets/` .gitignore rule -- never committed, same as
+    .env itself. Left alone on every subsequent run: regenerating it after
+    Authelia has issued tokens against the old key would invalidate all of
+    them, and unlike a password rotation there is no user-facing
+    "re-enter credentials" story for that -- every active session breaks
+    silently instead."""
     if _OIDC_ISSUER_KEY.exists():
         return
     _OIDC_ISSUER_KEY.parent.mkdir(parents=True, exist_ok=True)
     try:
-        subprocess.run(
-            ["openssl", "genrsa", "-out", str(_OIDC_ISSUER_KEY), "2048"],
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "alpine:3.20",
+                "sh",
+                "-c",
+                "apk add --no-cache openssl >/dev/null 2>&1 && openssl genrsa 2048",
+            ],
             check=True,
             capture_output=True,
+            timeout=120,
         )
-    except (OSError, subprocess.CalledProcessError) as e:
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         log.warn(f"Could not generate OIDC issuer key: {e}")
         return
+    pem = result.stdout
+    if not pem.strip().startswith(b"-----BEGIN"):
+        log.warn("OIDC issuer key generation produced unexpected output")
+        return
+    _OIDC_ISSUER_KEY.write_bytes(pem)
     _chmod_600(_OIDC_ISSUER_KEY)
     log.success("Generated Authelia OIDC issuer key")
 

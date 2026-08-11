@@ -91,7 +91,20 @@ _ensure_oidc_issuer_key() {
             log_warn "Could not generate OIDC issuer key"
         fi
     else
-        log_warn "openssl not found — cannot generate OIDC issuer key"
+        # No host openssl (preflight only warns, doesn't hard-fail on this) —
+        # fall back to a throwaway container the same way the Python setup
+        # path always does, since docker itself is guaranteed present.
+        local pem
+        pem="$(docker run --rm alpine:3.20 sh -c \
+            "apk add --no-cache openssl >/dev/null 2>&1 && openssl genrsa 2048" \
+            2>/dev/null)"
+        if [[ "$pem" == "-----BEGIN"* ]]; then
+            printf '%s\n' "$pem" > "$key_path"
+            chmod 600 "$key_path" 2>/dev/null || true
+            log_success "Generated Authelia OIDC issuer key (via docker)"
+        else
+            log_warn "openssl not found and docker fallback failed — cannot generate OIDC issuer key"
+        fi
     fi
 }
 
