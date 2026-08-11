@@ -183,4 +183,28 @@ async def test_existing_plugin_gets_metadata_reconciled_not_recreated(
     body = put_calls[0][2]["json"]
     assert body["description"] == "Current weather and forecasts."
     assert body["author"] == "Minder Team"
+    # A single-sentence description must NOT become the display_name too --
+    # found live: Available Plugins cards showed the exact same sentence
+    # twice (once as the card title, once as the body) for every first-party
+    # plugin, since every one of them has a one-sentence description. Falls
+    # back to the plugin's own name instead of duplicating the description.
+    assert body["display_name"] == "Weather"
+
+
+@pytest.mark.asyncio
+async def test_multi_sentence_description_gets_a_real_short_headline(
+    tmp_path, existing_plugin_requests
+):
+    """A genuinely multi-sentence description is the one case the original
+    "first sentence" derivation was meant for -- still honored."""
+    await marketplace_sync.sync_plugin_ai_tools(
+        "weather",
+        tmp_path,
+        module_ai_tools=[{"name": "get_weather", "description": "Current weather"}],
+        description="Current weather and forecasts. Sourced from Open-Meteo, no API key needed.",
+        author="Minder Team",
+    )
+
+    put_calls = [c for c in existing_plugin_requests if c[0] == "PUT"]
+    body = put_calls[0][2]["json"]
     assert body["display_name"] == "Current weather and forecasts"

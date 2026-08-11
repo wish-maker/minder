@@ -239,11 +239,21 @@ async def get_or_create_marketplace_plugin(
         Plugin UUID or None if failed
     """
     try:
-        # Create display_name from description (first sentence, max 200 chars).
+        # Create display_name from description (first sentence, max 200 chars) --
+        # but ONLY when that's genuinely shorter than the full description. Every
+        # first-party plugin's description today is exactly one sentence (found
+        # live: Available Plugins cards showed the same sentence twice, once as
+        # the card title and once as the body, because splitting a one-sentence
+        # description on "." just returns that whole sentence back). Falling back
+        # to the plugin's own name keeps a real, distinct title in that case.
         # Computed once so both the found-existing and create branches use the
         # same current metadata instead of only the create path ever seeing it.
         description = manifest.get("description", plugin_name)
-        display_name = description.split(".")[0][:200] if description else plugin_name
+        _sentences = [s.strip() for s in description.split(".") if s.strip()]
+        if len(_sentences) > 1:
+            display_name = _sentences[0][:200]
+        else:
+            display_name = plugin_name.replace("_", " ").replace("-", " ").title()
         author = manifest.get("author", "Unknown")
 
         # Search for an existing plugin by name
