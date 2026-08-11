@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse  # noqa: E402
 from routes.stt import router as stt_router  # noqa: E402
 from routes.tts import router as tts_router  # noqa: E402
 
+from shared.errors import install_global_exception_handler  # noqa: E402
 from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
@@ -50,6 +51,10 @@ app = FastAPI(
 
 # Prometheus metrics: request-tracking middleware + /metrics endpoint
 setup_metrics(app)
+
+install_global_exception_handler(
+    app, logger, is_development=settings.ENVIRONMENT == "development"
+)
 
 app.include_router(tts_router)
 app.include_router(stt_router)

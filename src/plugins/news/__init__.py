@@ -71,6 +71,7 @@ async def _is_safe_feed_url(url: str) -> bool:
             return False
     return True
 
+
 # A broad default mix of GLOBAL + LOCAL (Turkish) keyless RSS feeds — all verified
 # reachable + parseable from the registry container. Fully overridable per deployment
 # via the NEWS_FEEDS config (GET/PUT /v1/plugins/news/config): pick your own region's

@@ -11,6 +11,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.responses import JSONResponse  # noqa: E402
 
 from config import settings  # noqa: E402
+from shared.errors import install_global_exception_handler  # noqa: E402
 from shared.health import DependencyCheck, evaluate_dependencies  # noqa: E402
 from shared.log import setup_logging  # noqa: E402
 from shared.metrics import setup_metrics  # noqa: E402
@@ -69,6 +70,10 @@ add_cors_from_string(
 # Prometheus metrics: request-tracking middleware + /metrics endpoint
 setup_metrics(app)
 
+install_global_exception_handler(
+    app, logger, is_development=settings.ENVIRONMENT == "development"
+)
+
 
 # Health check endpoint
 @app.get("/health")
@@ -106,25 +111,6 @@ async def root():
         "docs": "/docs",
         "health": "/health",
     }
-
-
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    """Global exception handler"""
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
-    # Match the platform's default {"detail": ...} envelope — was the only service
-    # emitting a custom {"error", "detail"} shape (#147/C3).
-    return JSONResponse(
-        status_code=500,
-        content={
-            "detail": (
-                str(exc)
-                if settings.ENVIRONMENT == "development"
-                else "Internal server error"
-            ),
-        },
-    )
 
 
 from routes.ai_tools import router as ai_tools_router  # noqa: E402

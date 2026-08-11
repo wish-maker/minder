@@ -14,7 +14,10 @@ Usage — keep the caller's own context log, then hand the exception here:
         raise backend_http_error(e, "Knowledge graph construction")
 """
 
-from fastapi import HTTPException
+import logging
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 
 # Substrings that mark a connectivity / backend-unreachable failure. We match on the
 # exception's module+class name plus its message rather than importing every driver's
@@ -68,3 +71,27 @@ def backend_http_error(exc: BaseException, operation: str) -> HTTPException:
         status_code=500,
         detail=f"{operation} failed. See the service logs for details.",
     )
+
+
+def install_global_exception_handler(
+    app: FastAPI, logger: logging.Logger, is_development: bool
+) -> None:
+    """Register a catch-all handler so a truly unhandled exception returns the
+    platform's standard ``{"detail": ...}`` JSON envelope instead of whichever
+    default Starlette/FastAPI would otherwise fall back to for that one service.
+
+    Extracted from marketplace's own handler (the only service that had one —
+    #147/C3 fixed marketplace's own custom shape to match this envelope, but
+    every other service still had no handler at all, so an unhandled bug there
+    returned plain text instead of JSON). ``is_development`` controls whether the
+    real exception string is included (dev) or replaced with a generic message
+    (prod) — pass ``settings.ENVIRONMENT == "development"``.
+    """
+
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request, exc):  # noqa: ANN001
+        logger.error(f"Unhandled exception: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc) if is_development else "Internal server error"},
+        )
