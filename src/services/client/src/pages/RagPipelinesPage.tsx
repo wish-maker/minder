@@ -56,6 +56,71 @@ const METHOD_DESCRIPTIONS: Record<Method, string> = {
   corrective: "Grades retrieved chunks for relevance before generating, discarding anything off-topic — reduces answers that ramble off irrelevant context.",
 };
 
+// Same "single source of truth" pattern as METHOD_DESCRIPTIONS above -- these
+// used to be inline JSX text duplicated only next to each checkbox, so they
+// were invisible unless you already had a pipeline open and expanded
+// "Advanced retrieval options". Reused below by the always-visible reference
+// section, and by the checkboxes themselves (#37).
+const ENHANCER_LABELS: Record<string, string> = {
+  rerank: "Rerank",
+  compress: "Compress",
+  hybrid: "Hybrid retrieval",
+  parent_context: "Parent context retrieval",
+  continue_conversation: "Continue conversation",
+};
+
+const ENHANCER_DESCRIPTIONS: Record<string, string> = {
+  rerank: "Re-scores retrieved chunks with a dedicated model for higher precision, before generation — costs a bit of latency.",
+  compress: "Trims retrieved chunks down to the sentences actually relevant to your question before they reach the model.",
+  hybrid: "Combines vector similarity with keyword search — catches exact terms, codes, or names that pure embeddings sometimes miss.",
+  parent_context: "Returns the full surrounding section around a match, not just the matched chunk — more context per hit, at the cost of some precision.",
+  continue_conversation: 'Keeps follow-up questions in the same session, so the model can resolve references like "it" or "that" back to earlier turns.',
+};
+
+/** Always-visible reference, positioned above the pipeline list/form so a
+ * user can learn what these methods and add-ons actually do WITHOUT first
+ * creating a knowledge base and a pipeline just to reach the query form
+ * that used to be the only place any of this was explained (#37). */
+function RetrievalMethodsReference() {
+  return (
+    <section className={`mb-4 ${cardClass}`}>
+      <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        🔎 Retrieval methods — what they actually do
+      </h2>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {(Object.keys(METHOD_DESCRIPTIONS) as Method[]).map((m) => (
+          <div key={m}>
+            <dt className="font-mono text-sm font-medium text-gray-800 dark:text-gray-200">
+              {m}
+            </dt>
+            <dd className="text-xs text-gray-600 dark:text-gray-400">
+              {METHOD_DESCRIPTIONS[m]}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <h3 className="mb-2 mt-4 text-sm font-semibold text-gray-900 dark:text-gray-100">
+        Add-ons — combine with any method above, per question
+      </h3>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {Object.entries(ENHANCER_LABELS).map(([key, label]) => (
+          <div key={key}>
+            <dt className="text-sm font-medium text-gray-800 dark:text-gray-200">{label}</dt>
+            <dd className="text-xs text-gray-600 dark:text-gray-400">
+              {ENHANCER_DESCRIPTIONS[key]}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+        Nothing here needs deciding up front — pick a method and toggle
+        add-ons per question when you ask one below, in "Advanced retrieval
+        options".
+      </p>
+    </section>
+  );
+}
+
 interface Source {
   text: string;
   source: string;
@@ -439,10 +504,7 @@ function QueryPanel({
                     ? ` (${capabilities.enhancers.rerank.backend})`
                     : !rerankAvailable && " (unavailable on this host)"}
                 </label>
-                <p className={fieldHintClass}>
-                  Re-scores retrieved chunks with a dedicated model for higher
-                  precision, before generation — costs a bit of latency.
-                </p>
+                <p className={fieldHintClass}>{ENHANCER_DESCRIPTIONS.rerank}</p>
               </div>
               <div>
                 <label className="flex items-center gap-2 text-sm">
@@ -455,10 +517,7 @@ function QueryPanel({
                   />
                   Compress{!compressAvailable && " (unavailable on this host)"}
                 </label>
-                <p className={fieldHintClass}>
-                  Trims retrieved chunks down to the sentences actually relevant
-                  to your question before they reach the model.
-                </p>
+                <p className={fieldHintClass}>{ENHANCER_DESCRIPTIONS.compress}</p>
               </div>
               <div>
                 <label className="flex items-center gap-2 text-sm">
@@ -473,10 +532,7 @@ function QueryPanel({
                   {!hybridAvailable && " (unavailable on this host)"}
                   {hybridAvailable && parentContext && " (ignored while parent context is on)"}
                 </label>
-                <p className={fieldHintClass}>
-                  Combines vector similarity with keyword search — catches exact
-                  terms, codes, or names that pure embeddings sometimes miss.
-                </p>
+                <p className={fieldHintClass}>{ENHANCER_DESCRIPTIONS.hybrid}</p>
               </div>
               <div>
                 <label className="flex items-center gap-2 text-sm">
@@ -490,7 +546,7 @@ function QueryPanel({
                 </label>
                 <p className={fieldHintClass}>
                   {capabilities?.retrievers.parent_child.note ||
-                    "Returns the full surrounding section around a match, not just the matched chunk — more context per hit, at the cost of some precision."}
+                    ENHANCER_DESCRIPTIONS.parent_context}
                 </p>
               </div>
               <div>
@@ -512,9 +568,8 @@ function QueryPanel({
                   {!conversationalAvailable && " (unavailable on this host)"}
                 </label>
                 <p className={fieldHintClass}>
-                  Keeps follow-up questions in the same session, so the model can
-                  resolve references like "it" or "that" back to earlier turns.
-                  Shows the whole thread below instead of just the latest answer.
+                  {ENHANCER_DESCRIPTIONS.continue_conversation} Shows the whole
+                  thread below instead of just the latest answer.
                 </p>
               </div>
             </div>
@@ -705,6 +760,7 @@ export function RagPipelinesPage() {
         ask it questions using Minder's own retrieval methods — this is
         separate from OpenWebUI's own disconnected Knowledge feature.
       </p>
+      <RetrievalMethodsReference />
       <div className={statusClass(isError)}>{status}</div>
       <CreatePipelineForm
         token={token}
