@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -488,6 +489,7 @@ export function AvailablePluginsPage() {
   return (
     <>
       {dialog}
+      <PageHeader icon="🔍" title="Available Plugins" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Browse and install Minder plugins. Browsing is open for everyone; log
         in to install, enable, disable, or uninstall.

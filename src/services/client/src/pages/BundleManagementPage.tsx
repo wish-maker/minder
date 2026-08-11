@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
@@ -216,6 +217,7 @@ export function BundleManagementPage() {
 
   return (
     <>
+      <PageHeader icon="📦" title="Bundle Management" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Turn optional feature bundles on or off — each claims a set of
         services shared with other bundles where needed. Browsing is open

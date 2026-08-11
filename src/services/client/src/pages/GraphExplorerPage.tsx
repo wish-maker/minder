@@ -2,6 +2,7 @@ import { useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -520,6 +521,7 @@ export function GraphExplorerPage() {
 
   return (
     <>
+      <PageHeader icon="🧬" title="Knowledge Graph" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Build and explore a knowledge graph from your text — spaCy extracts
         entities and relationships, Neo4j stores them. A different retrieval

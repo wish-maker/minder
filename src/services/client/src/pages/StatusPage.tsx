@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
@@ -153,6 +154,7 @@ export function StatusPage() {
 
   return (
     <>
+      <PageHeader icon="🩺" title="Status" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Health, reported version, and recent logs for every core service.
         Browsing the health grid is open for everyone; log in to view logs

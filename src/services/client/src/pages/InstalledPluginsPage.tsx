@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -362,6 +363,7 @@ export function InstalledPluginsPage() {
   return (
     <>
       {dialog}
+      <PageHeader icon="🧩" title="Installed Plugins" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Manage the plugins you've installed — enable, disable, uninstall, or
         edit their settings. Requires login: installs are per-user.

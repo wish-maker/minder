@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
 import { usePaginatedList } from "../lib/usePaginatedList";
@@ -122,6 +123,7 @@ export function AiToolsPage() {
 
   return (
     <>
+      <PageHeader icon="🧰" title="AI Tools" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Every function-calling tool Minder's plugins expose, from two angles.
         This page has nothing to log in for — it's read-only either way.

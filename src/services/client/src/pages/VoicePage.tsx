@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 
+import { PageHeader } from "../components/PageHeader";
 import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, inputClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
@@ -486,6 +487,7 @@ export function VoicePage() {
 
   return (
     <>
+      <PageHeader icon="🎙️" title="Voice" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Try Minder's text-to-speech and speech-to-text engines directly —
         ~12 languages supported, Turkish by default. Browsing is open for
