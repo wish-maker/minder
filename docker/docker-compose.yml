@@ -116,11 +116,6 @@ services:
     # against Authelia directly instead of stacking their own login behind the
     # forward-auth gate. See configuration.yml's identity_providers.oidc block.
     - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
-    # Enables Authelia's "template" config-file filter (Go templates in
-    # configuration.yml) -- off by default; needed for the {{ secret ... }}
-    # call that loads the OIDC issuer key from its mounted file, see
-    # configuration.yml's identity_providers.oidc.jwks comment.
-    - X_AUTHELIA_CONFIG_FILTERS=template
     - MINDER_OIDC_CLIENT_SECRET=${MINDER_OIDC_CLIENT_SECRET}
     volumes:
     # authelia_config eliminates the anonymous volume the base image's /config
@@ -129,7 +124,12 @@ services:
     # (AUTHELIA_STORAGE_POSTGRES_PASSWORD above), so this holds nothing meaningful
     # and simply starts empty (#274).
     - authelia_config:/config
-    - ./services/authelia/configuration.yml:/config/configuration.yml:ro
+    # configuration.rendered.yml, NOT configuration.yml: the tracked source
+    # holds a placeholder for the OIDC issuer key; scripts/setup/env.py's
+    # render_authelia_config() substitutes the real key content into this
+    # gitignored, generated file on every run (see configuration.yml's
+    # identity_providers.oidc.jwks comment for why).
+    - ./services/authelia/configuration.rendered.yml:/config/configuration.yml:ro
     - ./services/authelia/users_database.yml:/config/users_database.yml:ro
     # OIDC token-signing key, generated once by scripts/setup/env.py's
     # ensure_oidc_issuer_key() -- gitignored, never committed (docker/services/

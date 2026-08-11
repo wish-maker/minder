@@ -71,24 +71,21 @@ identity_validation:
 # provider instead of stacking their own login behind the forward-auth gate
 # above -- Authelia's own hosted page becomes the platform's one login screen.
 #
-# The whole file is now run through Authelia's Go-template engine BEFORE the
-# YAML parser ever sees it (X_AUTHELIA_CONFIG_FILTERS=template, set on the
-# authelia service below; off by default). That is why this comment avoids
-# writing the literal double-curly-brace secret-loading call as an example --
-# the template engine parses every double-curly-brace region in the raw file
-# text, including inside YAML comments, so an example containing one here
-# would fail the same way the real call below does if it were malformed.
-#
-# The jwks entry's key below loads the issuer's real RSA private key,
-# generated once by scripts/setup/env.py's ensure_oidc_issuer_key() (never
-# committed -- see docker/services/authelia/secrets/, gitignored), via that
-# secret-loading call, reindented to this key's actual nesting depth (8
-# spaces + 2) as a YAML literal block scalar, only quoted if the result
-# somehow turned out to be a single line (never true here, but this matches
-# Authelia's own documented pattern for loading a JWKS key from a file).
+# This file is a TEMPLATE, not what Authelia actually reads: the jwks key
+# placeholder below is substituted with the real RSA private key's content
+# by scripts/setup/env.py's render_authelia_config() / scripts/lib/env.sh's
+# _render_authelia_config() (Python string substitution, not Authelia's own
+# Go-template engine -- that route was tried first and abandoned after it
+# proved too fragile to debug reliably: raw double-curly-brace regions get
+# parsed everywhere in the file INCLUDING inside comments, and error line
+# numbers didn't correspond to anything inspectable). The RENDERED file
+# (docker/services/authelia/configuration.rendered.yml, gitignored, never
+# committed) is what's actually bind-mounted into the container; this source
+# stays git-tracked with a stable placeholder token instead of key material.
 # Regenerating the key file after clients exist invalidates every
 # previously-issued token, so the setup script only generates it once and
-# leaves it alone afterward.
+# leaves it alone afterward; the render step itself is cheap and safe to
+# repeat every run.
 identity_providers:
   oidc:
     hmac_secret: ${AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET}
@@ -96,7 +93,7 @@ identity_providers:
       - key_id: "minder"
         algorithm: "RS256"
         use: "sig"
-        key: {{ secret "/config/secrets/oidc_issuer.pem" | mindent 10 "|" | msquote }}
+        key: __MINDER_OIDC_ISSUER_KEY_PEM__
     clients:
       - client_id: "minder-client"
         client_name: "Minder"

@@ -69,6 +69,7 @@ prepare_env() {
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     _sync_compose_env               # mirror root .env → docker/.env (silent)
     _ensure_oidc_issuer_key         # generate Authelia's OIDC signing key once (#<issue>, silent)
+    _render_authelia_config         # substitute it into configuration.rendered.yml (#<issue>, silent)
 }
 
 _ensure_oidc_issuer_key() {
@@ -106,6 +107,34 @@ _ensure_oidc_issuer_key() {
             log_warn "openssl not found and docker fallback failed — cannot generate OIDC issuer key"
         fi
     fi
+}
+
+_render_authelia_config() {
+    # Substitute the real OIDC issuer key into Authelia's config (#<issue>).
+    # configuration.yml (git-tracked) holds a stable placeholder instead of
+    # key material; this writes configuration.rendered.yml (gitignored) with
+    # the placeholder replaced by the actual PEM, reindented as a YAML
+    # literal block scalar at the key's nesting depth (8 spaces + 2,
+    # matching that line's own indentation in the source).
+    #
+    # Plain text substitution, deliberately NOT Authelia's own Go-template
+    # config-file filter: that route was tried first and abandoned after
+    # proving too fragile to debug reliably (raw double-curly-brace regions
+    # get parsed everywhere in the file, including inside YAML comments, and
+    # the engine's own error line numbers didn't correspond to anything
+    # inspectable). Runs on every prepare_env() call, unlike key generation
+    # above — cheap, and needs to stay in sync if the source template
+    # changes, whereas the key itself must NOT be regenerated once issued.
+    local src="${SCRIPT_DIR}/docker/services/authelia/configuration.yml"
+    local dst="${SCRIPT_DIR}/docker/services/authelia/configuration.rendered.yml"
+    local key_path="${SCRIPT_DIR}/docker/services/authelia/secrets/oidc_issuer.pem"
+    [[ -f "$src" ]] || return 0
+    [[ -f "$key_path" ]] || return 0
+    local indented
+    indented="$(sed 's/^/          /' "$key_path")"
+    awk -v pem="$indented" '
+        { gsub(/__MINDER_OIDC_ISSUER_KEY_PEM__/, "|\n" pem); print }
+    ' "$src" > "$dst"
 }
 
 _ensure_docker_gid() {

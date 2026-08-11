@@ -28,6 +28,10 @@ secrets/
 credentials/
 *.credentials
 
+# Generated from docker/services/authelia/configuration.yml (the tracked
+# template) with the real OIDC issuer key substituted in -- never committed.
+docker/services/authelia/configuration.rendered.yml
+
 # Database Files
 *.db
 *.sqlite

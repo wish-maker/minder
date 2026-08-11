@@ -212,6 +212,40 @@ def ensure_oidc_issuer_key() -> None:
     log.success("Generated Authelia OIDC issuer key")
 
 
+_AUTHELIA_CONFIG_SRC = _OIDC_ISSUER_KEY.parents[1] / "configuration.yml"
+_AUTHELIA_CONFIG_RENDERED = _OIDC_ISSUER_KEY.parents[1] / "configuration.rendered.yml"
+_OIDC_PLACEHOLDER = "__MINDER_OIDC_ISSUER_KEY_PEM__"
+
+
+def render_authelia_config() -> None:
+    """Substitute the real OIDC issuer key into Authelia's config (#<issue>).
+
+    configuration.yml (git-tracked) holds a stable placeholder instead of key
+    material; this writes configuration.rendered.yml (gitignored) with the
+    placeholder replaced by the actual PEM, reindented as a YAML literal
+    block scalar at the key's nesting depth (8 spaces + 2, matching this
+    line's own "        key:" indentation in the source).
+
+    Plain Python string substitution, deliberately NOT Authelia's own
+    Go-template config-file filter: that route was tried first and abandoned
+    after proving too fragile to debug reliably (raw double-curly-brace
+    regions get parsed everywhere in the file, including inside YAML
+    comments, and the engine's own error line numbers didn't correspond to
+    anything inspectable). Runs on every prepare_env() call, unlike the
+    key-generation above -- cheap, and needs to stay in sync if the source
+    template changes, whereas the key itself must NOT be regenerated once
+    issued."""
+    try:
+        template = _AUTHELIA_CONFIG_SRC.read_text(encoding="utf-8")
+        pem = _OIDC_ISSUER_KEY.read_text(encoding="utf-8")
+    except OSError as e:
+        log.warn(f"Could not render Authelia config: {e}")
+        return
+    indented = "\n".join(f"          {line}" for line in pem.strip().splitlines())
+    rendered = template.replace(_OIDC_PLACEHOLDER, f"|\n{indented}")
+    _AUTHELIA_CONFIG_RENDERED.write_text(rendered, encoding="utf-8")
+
+
 def _chmod_600(path: Path) -> None:
     try:
         path.chmod(0o600)
@@ -476,3 +510,4 @@ def prepare_env() -> None:
     sync_telegraf_config()
     ensure_bundles_state_file()
     ensure_oidc_issuer_key()
+    render_authelia_config()
