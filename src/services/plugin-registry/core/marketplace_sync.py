@@ -249,6 +249,7 @@ async def _resolve_or_create_bare_marketplace_plugin_id(
         json={
             "name": plugin_name,
             "display_name": plugin_name.replace("_", " ").replace("-", " ").title(),
+            "author": "Unknown",
             "pricing_model": "free",
             "base_tier": "community",
             "status": "approved",
