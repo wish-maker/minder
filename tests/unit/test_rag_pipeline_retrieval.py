@@ -1,12 +1,11 @@
-"""Unit tests for rag-pipeline's core/retrieval.py (#357).
-
-#357: retrieve_hybrid/retrieve_parent_child/_ensure_bm25_index/
-invalidate_hybrid_index used to live directly in routes/rag.py (a 688-line
-god-module) -- untestable without spinning up full route dependencies.
-Extracted into core/retrieval.py, matching graph-rag's routes/api.py (thin) +
-core/graph_retriever.py (orchestration) split. These tests prove the
-extraction actually achieved its goal: real coverage with fakes, no FastAPI
-app needed.
+"""Unit tests for rag-pipeline's core/retrieval.py (#357) and core/ingestion.py
+(#491) -- both extracted from routes/rag.py for the same reason and merged
+into this one file for the same reason (see _isolated_import's docstring
+below): a 688-line (then, after #488's metadata_filter, 789-line) god-module,
+untestable without spinning up full route dependencies. Extracted matching
+graph-rag's routes/api.py (thin) + core/graph_retriever.py (orchestration)
+split. These tests prove the extractions actually achieved their goal: real
+coverage with fakes, no FastAPI app needed.
 
 Loaded via sys.path + a stale-cache clear (conftest.py loads every service's
 main.py into ONE shared pytest process, so "core"/"models"/"routes" are
@@ -14,6 +13,7 @@ already cached as some OTHER service's package) -- matching this session's
 established precedent (test_graph_rag_knowledge_graph_handler.py).
 """
 
+import contextlib
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -66,8 +66,8 @@ def _isolated_import(*module_paths: str):
         sys.modules.update(saved_modules)
 
 
-retrieval, rag_routes, system_routes, models = _isolated_import(
-    "core.retrieval", "routes.rag", "routes.system", "models"
+retrieval, ingestion, rag_routes, system_routes, models = _isolated_import(
+    "core.retrieval", "core.ingestion", "routes.rag", "routes.system", "models"
 )
 
 
@@ -615,3 +615,176 @@ async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
     sources_text = " ".join(s["text"] for s in result["sources"])
     assert "Acme makes widgets." in sources_text
     assert "Globex makes gadgets." not in sources_text
+
+
+# ── Document ingestion (core/ingestion.py, #491) ────────────────────────────
+# upload_document/_group_documents had ZERO unit coverage before this
+# extraction -- only integration tests (needing the full stack running)
+# exercised them. These fakes prove the same thing #357's tests proved for
+# retrieval: real coverage, no FastAPI app or live Qdrant/Ollama needed.
+
+
+class _FakeMetric:
+    """Stand-in for a Prometheus Counter/Histogram: .labels(...) returns self,
+    .inc() is a no-op, .time() is a no-op context manager."""
+
+    def labels(self, **kwargs):
+        return self
+
+    def inc(self):
+        pass
+
+    def time(self):
+        return contextlib.nullcontext()
+
+
+def _fake_kb(**overrides):
+    kb = {
+        "chunk_size": 512,
+        "chunk_overlap": 50,
+        "embedding_model": "nomic-embed-text",
+        "document_count": 0,
+        "vector_count": 0,
+    }
+    kb.update(overrides)
+    return kb
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_raises_400_when_no_text_extracted():
+    with pytest.raises(Exception) as exc_info:
+        await ingestion.ingest_document("kb-1", _fake_kb(), "empty.txt", b"")
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_raises_503_when_embedding_backend_unavailable(
+    monkeypatch,
+):
+    async def boom(texts, model):
+        raise ConnectionError("ollama unreachable")
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: object(),
+        ollama_manager=SimpleNamespace(generate_embeddings=boom),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    with pytest.raises(Exception) as exc_info:
+        await ingestion.ingest_document(
+            "kb-1", _fake_kb(), "doc.txt", b"Some real document text."
+        )
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_stores_chunks_and_updates_kb_stats(monkeypatch):
+    captured = {}
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            captured.update(kwargs)
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    kb = _fake_kb()
+    result = await ingestion.ingest_document(
+        "kb-1", kb, "doc.txt", b"Acme makes widgets."
+    )
+
+    assert result.filename == "doc.txt"
+    assert result.chunks_processed >= 1
+    assert result.vectors_created == result.chunks_processed
+    assert result.document_id
+
+    assert captured["collection_name"] == "kb-1"
+    assert len(captured["points"]) == result.chunks_processed
+    assert captured["points"][0].payload["source"] == "doc.txt"
+    assert captured["points"][0].payload["document_id"] == result.document_id
+
+    # KB stats updated in place (the same dict callers hold onto).
+    assert kb["document_count"] == 1
+    assert kb["vector_count"] == result.chunks_processed
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_invalidates_hybrid_cache(monkeypatch):
+    """Proves invalidate_hybrid_index is actually called, not just imported --
+    a stale cache would let a hybrid query miss the newly-uploaded chunks."""
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            pass
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    retrieval._hybrid.sparse_index["kb-1"] = object()
+    retrieval._hybrid.documents["kb-1"] = [{"text": "stale"}]
+
+    await ingestion.ingest_document("kb-1", _fake_kb(), "doc.txt", b"New content.")
+
+    assert "kb-1" not in retrieval._hybrid.sparse_index
+    assert "kb-1" not in retrieval._hybrid.documents
+
+
+def test_group_documents_groups_by_document_id():
+    class _Record:
+        def __init__(self, payload):
+            self.payload = payload
+
+    records = [
+        _Record({"source": "a.txt", "document_id": "doc-1", "uploaded_at": "t1"}),
+        _Record({"source": "a.txt", "document_id": "doc-1", "uploaded_at": "t1"}),
+        _Record({"source": "b.txt", "document_id": "doc-2", "uploaded_at": "t2"}),
+    ]
+
+    result = {d.document_id: d for d in ingestion.group_documents(records)}
+
+    assert result["doc-1"].filename == "a.txt"
+    assert result["doc-1"].chunk_count == 2
+    assert result["doc-2"].filename == "b.txt"
+    assert result["doc-2"].chunk_count == 1
+
+
+def test_group_documents_falls_back_to_legacy_source_grouping():
+    """Points from before document_id existed have no document_id in their
+    payload at all -- grouped by filename instead, with a synthetic
+    legacy:<filename> id (the finest granularity available for that data)."""
+
+    class _Record:
+        def __init__(self, payload):
+            self.payload = payload
+
+    records = [
+        _Record({"source": "old.txt"}),
+        _Record({"source": "old.txt"}),
+    ]
+
+    result = ingestion.group_documents(records)
+
+    assert len(result) == 1
+    assert result[0].document_id == "legacy:old.txt"
+    assert result[0].chunk_count == 2
