@@ -11,6 +11,7 @@ import asyncpg
 import httpx
 from models.plugin_state import LicenseTier
 
+from config import settings
 from shared.models.tiers import TIER_RANK, normalize_tier, tier_rank
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,9 @@ async def validate_tool_access(
         Validation result with allowed flag and reason
     """
     # Get tool details from marketplace
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=settings.CATALOG_HTTP_TIMEOUT) as client:
         response = await client.get(
-            "http://minder-marketplace:8002/v1/marketplace/ai/tools",
+            f"{settings.MARKETPLACE_URL}/v1/marketplace/ai/tools",
             params={"tool_name": tool_name},
         )
 
