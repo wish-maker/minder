@@ -326,7 +326,9 @@ separated from tracked config.
   the "no service still holds the raw socket" framing above is only true for the
   registry.
 - **Conflict/version resolution** (two bundles want a shared service at different
-  versions/config) → owned by the marketplace dependency+conflict graph.
+  versions/config) → owned by the marketplace dependency+conflict graph (see
+  [Plugin Dependencies & Required Services](plugins.md#plugin-dependencies--required-services-484)
+  in `plugins.md` for the shipped `requires`/`suggests`/`conflicts_with` graph this refers to).
 - **External-binding health** in `bundle status` (reachability probe) — Phase 4.
 - **Manager relevance with a fully-external service** (does `model-management` run if
   ollama is external-only?) — refinement, Phase 2+.

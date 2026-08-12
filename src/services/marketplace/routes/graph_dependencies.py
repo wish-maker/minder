@@ -81,7 +81,7 @@ async def add_plugin_dependency(
         plugin_name / depends_on_name: best-effort display names, used ONLY
             if the graph doesn't already have a node for that plugin (see
             Neo4jClient.add_dependency's ON CREATE SET) -- neither node is
-            guaranteed to exist yet when this is called (#37).
+            guaranteed to exist yet when this is called (#484).
 
     Returns:
         Success status
@@ -89,7 +89,7 @@ async def add_plugin_dependency(
     Accepts the trusted internal service token (in addition to a real user
     JWT) -- plugin-registry's own automated sync populates real edges here
     (e.g. "network requires telegraf") at plugin-load time, with no user
-    session in hand (#37).
+    session in hand (#484).
     """
     try:
         success = await neo4j.add_dependency(

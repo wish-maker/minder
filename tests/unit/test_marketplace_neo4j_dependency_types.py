@@ -1,6 +1,6 @@
 """Unit test for a relationship-type mismatch between Neo4jClient.add_dependency
 (the only writer of plugin-dependency edges) and every reader
-(get_plugin_dependencies, get_dependency_chain, recommend_plugins) (#37).
+(get_plugin_dependencies, get_dependency_chain, recommend_plugins) (#484).
 
 Found live: add_dependency mapped "requires"/"suggests" to their own literal
 relationship names (REQUIRES/SUGGESTS), but every reader queries

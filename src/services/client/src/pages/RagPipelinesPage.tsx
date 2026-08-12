@@ -60,7 +60,7 @@ const METHOD_DESCRIPTIONS: Record<Method, string> = {
 // used to be inline JSX text duplicated only next to each checkbox, so they
 // were invisible unless you already had a pipeline open and expanded
 // "Advanced retrieval options". Reused below by the always-visible reference
-// section, and by the checkboxes themselves (#37).
+// section, and by the checkboxes themselves (#485).
 const ENHANCER_LABELS: Record<string, string> = {
   rerank: "Rerank",
   compress: "Compress",
@@ -80,7 +80,7 @@ const ENHANCER_DESCRIPTIONS: Record<string, string> = {
 /** Always-visible reference, positioned above the pipeline list/form so a
  * user can learn what these methods and add-ons actually do WITHOUT first
  * creating a knowledge base and a pipeline just to reach the query form
- * that used to be the only place any of this was explained (#37). */
+ * that used to be the only place any of this was explained (#485). */
 function RetrievalMethodsReference() {
   return (
     <section className={`mb-4 ${cardClass}`}>

@@ -202,7 +202,7 @@ class NetworkPlugin:
             # hosts into telegraf's managed config region. `databases` above
             # can't express this (it's for infra services, not sibling
             # plugins) -- surfaced via the marketplace's plugin-dependency
-            # graph instead (#37).
+            # graph instead (#484).
             dependencies=["telegraf"],
         )
 
