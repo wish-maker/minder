@@ -12,6 +12,7 @@ import { GraphExplorerPage } from "./pages/GraphExplorerPage";
 import { InstalledPluginsPage } from "./pages/InstalledPluginsPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
+import { LoginPage } from "./pages/LoginPage";
 import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -52,6 +53,7 @@ export function App() {
           <main className="mx-auto w-full max-w-4xl flex-1 p-6">
             <Routes>
               <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/settings" element={<SettingsPage />} />
 

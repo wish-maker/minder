@@ -1,0 +1,183 @@
+import { useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
+
+import { friendlyErrorMessage, oidcLoginUrl } from "../lib/api";
+import { useAuth } from "../lib/auth";
+import {
+  cardClass,
+  inputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+  statusClass,
+} from "../lib/ui";
+
+/** Local username/password login — the path that actually works when the client
+ * is reached directly (e.g. http://localhost:8009 or a LAN IP), where the SSO
+ * button can't: OIDC redirects the browser to the Traefik-only `*.minder.local`
+ * hostnames, which need real DNS + TLS the direct-port access path doesn't have.
+ * The api-gateway's local JWT auth (`/v1/auth/login` + `/v1/auth/register`) is
+ * reachable on the same `apiBaseUrl` the rest of the client already uses, so this
+ * form works over plain localhost. SSO stays available below for deployments that
+ * front the client with Traefik + a real domain. */
+export function LoginPage() {
+  const { isAuthenticated, login, register } = useAuth();
+  const navigate = useNavigate();
+
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (isAuthenticated) return <Navigate to="/" replace />;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      if (mode === "register") {
+        await register(username, email, password);
+      }
+      // register() only creates the account (no token), so log in either way.
+      await login(username, password);
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(friendlyErrorMessage(err));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-sm">
+      <h1 className="mb-1 text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {mode === "login" ? "Log in" : "Create an account"}
+      </h1>
+      <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        {mode === "login"
+          ? "Sign in with your Minder account to make changes. Browsing stays open without logging in."
+          : "Create a local Minder account, then you'll be signed in."}
+      </p>
+
+      <form onSubmit={handleSubmit} className={`flex flex-col gap-3 ${cardClass}`}>
+        <div>
+          <label
+            htmlFor="login-username"
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Username
+          </label>
+          <input
+            id="login-username"
+            className={inputClass}
+            type="text"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+
+        {mode === "register" && (
+          <div>
+            <label
+              htmlFor="login-email"
+              className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Email
+            </label>
+            <input
+              id="login-email"
+              className={inputClass}
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+        )}
+
+        <div>
+          <label
+            htmlFor="login-password"
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Password
+          </label>
+          <input
+            id="login-password"
+            className={inputClass}
+            type="password"
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+
+        <button type="submit" disabled={busy} className={primaryButtonClass}>
+          {busy
+            ? "Please wait…"
+            : mode === "login"
+              ? "Log in"
+              : "Create account & log in"}
+        </button>
+
+        {error && (
+          <p className={statusClass(true)} role="alert">
+            {error}
+          </p>
+        )}
+      </form>
+
+      <p className="mt-3 text-center text-sm text-gray-600 dark:text-gray-400">
+        {mode === "login" ? (
+          <>
+            No account yet?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode("register");
+                setError("");
+              }}
+              className="underline hover:text-indigo-600 dark:hover:text-indigo-400"
+            >
+              Create one
+            </button>
+          </>
+        ) : (
+          <>
+            Already have an account?{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode("login");
+                setError("");
+              }}
+              className="underline hover:text-indigo-600 dark:hover:text-indigo-400"
+            >
+              Log in
+            </button>
+          </>
+        )}
+      </p>
+
+      <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
+        <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+        or
+        <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+      </div>
+
+      <a href={oidcLoginUrl} className={`block text-center ${secondaryButtonClass}`}>
+        Sign in with SSO (Authelia)
+      </a>
+      <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
+        SSO requires reaching Minder through its Traefik hostname with a real
+        domain + TLS — it won't complete over a direct <code>localhost</code> /
+        LAN-IP address.
+      </p>
+    </div>
+  );
+}
