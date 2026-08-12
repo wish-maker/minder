@@ -3,9 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
 
 interface BundleService {
   name: string;
@@ -285,7 +286,7 @@ export function BundleManagementPage() {
         create containers by design (the docker-socket-proxy it talks to is
         start/stop/inspect only, never create).
       </InfoCallout>
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
 
       {orphaned.length > 0 && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">

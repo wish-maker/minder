@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -13,7 +14,6 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 interface Plugin {
@@ -498,7 +498,7 @@ export function AvailablePluginsPage() {
         Browse and install Minder plugins. Browsing is open for everyone; log
         in to install, enable, disable, or uninstall.
       </p>
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
 
       {featured.length > 0 && !query.trim() && (
         <section className="mb-6">

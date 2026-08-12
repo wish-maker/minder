@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { badgeClass, secondaryButtonClass } from "../lib/ui";
 
 interface ServiceStatus {
   name: string;
@@ -165,7 +166,7 @@ export function StatusPage() {
         carries — it isn't derived from the deployed Docker image tag, so
         don't treat it as a deployment-tracking signal.
       </InfoCallout>
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
       <button onClick={loadStatus} className={`${secondaryButtonClass} mb-4`}>
         🔄 Refresh
       </button>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
@@ -288,7 +289,7 @@ function PullModelForm({
           navigate away.
         </p>
       )}
-      {!pulling && <p className={statusClass(false)}>{status}</p>}
+      {!pulling && <StatusLine>{status}</StatusLine>}
     </section>
   );
 }
@@ -349,7 +350,7 @@ export function ModelManagementPage() {
         per-model settings (system prompts, parameters) if you're already
         there for chat.
       </InfoCallout>
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
       <PullModelForm token={token} onPulled={loadModels} />
       {models !== null && models.length === 0 && (
         <p className="text-sm text-gray-500 dark:text-gray-400">

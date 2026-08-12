@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { copyText, randomId } from "../lib/browser";
@@ -12,7 +13,6 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 interface KnowledgeBase {
@@ -739,7 +739,7 @@ function PipelineCard({
           Log in to delete this pipeline.
         </p>
       )}
-      <div className={statusClass(false)}>{status}</div>
+      <StatusLine isError={false}>{status}</StatusLine>
       <QueryPanel
         pipelineId={pipeline.id}
         token={token}
@@ -799,7 +799,7 @@ export function RagPipelinesPage() {
         separate from OpenWebUI's own disconnected Knowledge feature.
       </p>
       <RetrievalMethodsReference />
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
       <CreatePipelineForm
         token={token}
         kbs={kbs}

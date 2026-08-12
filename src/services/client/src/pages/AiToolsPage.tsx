@@ -2,8 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
-import { badgeClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { badgeClass, secondaryButtonClass } from "../lib/ui";
 import { usePaginatedList } from "../lib/usePaginatedList";
 
 interface LiveTool {
@@ -138,7 +139,7 @@ export function AiToolsPage() {
         function-calling feeds on — if a plugin isn't running, its tools
         won't appear here even if they're in the catalog below.
       </InfoCallout>
-      <div className={statusClass(false)}>{liveStatus}</div>
+      <StatusLine isError={false}>{liveStatus}</StatusLine>
       {liveTools !== null && liveTools.length === 0 && (
         <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
           No plugin is currently exposing an AI tool.
@@ -158,7 +159,7 @@ export function AiToolsPage() {
         tools from plugins that aren't running right now, and can lag behind
         Live Tools above since it's only updated when a plugin (re)loads.
       </InfoCallout>
-      <div className={statusClass(false)}>{catalogStatus}</div>
+      <StatusLine isError={false}>{catalogStatus}</StatusLine>
       {catalogTools.length === 0 && (
         <p className="text-sm text-gray-500 dark:text-gray-400">
           No AI tools in the catalog yet.

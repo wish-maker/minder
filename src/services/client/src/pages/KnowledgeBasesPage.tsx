@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -10,7 +11,6 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 interface ModelInfo {
@@ -243,7 +243,7 @@ function DocumentsList({
           ))}
         </ul>
       )}
-      <div className={statusClass(loadError)}>{status}</div>
+      <StatusLine isError={loadError}>{status}</StatusLine>
     </div>
   );
 }
@@ -331,7 +331,7 @@ function KnowledgeBaseCard({
         />
         <UploadWidget kb={kb} token={token} onUploaded={refreshCounts} />
       </div>
-      <div className={statusClass(false)}>{status}</div>
+      <StatusLine isError={false}>{status}</StatusLine>
     </section>
   );
 }
@@ -591,7 +591,7 @@ export function KnowledgeBasesPage() {
         <em>RAG Pipelines</em> actually search over. Browsing is open for
         everyone; log in to create, upload, or delete.
       </p>
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
       <CreateKbForm
         token={token}
         onCreated={(kb) => setKbs((prev) => [...(prev ?? []), kb])}
