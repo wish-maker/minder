@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from config import settings
 
@@ -17,13 +17,25 @@ VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto", "corrective"}
 class KnowledgeBaseCreate(BaseModel):
     """Knowledge base creation request"""
 
-    name: str
+    name: str = Field(..., min_length=1)
     # Optional — a description shouldn't be required to create a KB (#144).
     description: str = ""
     embedding_model: str = settings.OLLAMA_EMBEDDING_MODEL
     llm_model: str = settings.OLLAMA_LLM_MODEL
-    chunk_size: int = 512
-    chunk_overlap: int = 50
+    # Chunking bounds: reject non-positive/absurd sizes at the edge instead of
+    # letting them reach the splitter (a 0/negative size or overlap >= size makes
+    # the text splitter loop forever or emit degenerate chunks).
+    chunk_size: int = Field(512, ge=1, le=8192)
+    chunk_overlap: int = Field(50, ge=0, le=8192)
+
+    @model_validator(mode="after")
+    def _overlap_below_size(self) -> "KnowledgeBaseCreate":
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"chunk_overlap ({self.chunk_overlap}) must be smaller than "
+                f"chunk_size ({self.chunk_size})"
+            )
+        return self
 
 
 class KnowledgeBaseResponse(BaseModel):
@@ -90,8 +102,8 @@ class MetadataFilter(BaseModel):
 class QueryRequest(BaseModel):
     """Query request"""
 
-    question: str
-    top_k: int = 5
+    question: str = Field(..., min_length=1)
+    top_k: int = Field(5, ge=1, le=100)
     conversation_id: Optional[
         str
     ] = None  # For conversational RAG - enables conversation history

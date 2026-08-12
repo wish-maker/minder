@@ -19,6 +19,18 @@ from shared.ai.ollama_client_base import (  # noqa: F401 -- OLLAMA_AVAILABLE re-
 
 logger = logging.getLogger(__name__)
 
+
+def _model_name(entry: Dict[str, Any]) -> str:
+    """Name of a model as returned by ``client.list()``.
+
+    ollama>=0.5 renamed the list-entry field ``name``→``model`` (model-management's
+    models_api.py made the same accommodation). Reading only ``entry["name"]`` on a
+    newer client raises ``KeyError``, which ``ensure_model`` swallows — so it silently
+    stops pulling missing models. Accept either key.
+    """
+    return entry.get("model") or entry.get("name") or ""
+
+
 # ResponseError is rag-pipeline-specific (used by _describe_failover_404 below, not
 # part of the shared init lifecycle) -- OLLAMA_AVAILABLE above already covers whether
 # the real `ollama` package is installed.
@@ -90,7 +102,7 @@ class OllamaManager(OllamaClientBase):
             # List available models to verify connection
             models = await self.client.list()
             logger.info(
-                f"✅ Ollama connection verified. Available models: {[m['name'] for m in models.get('models', [])]}"
+                f"✅ Ollama connection verified. Available models: {[_model_name(m) for m in models.get('models', [])]}"
             )
         except Exception as e:
             logger.warning(f"⚠️  Ollama connection test failed: {e}")
@@ -101,7 +113,8 @@ class OllamaManager(OllamaClientBase):
         try:
             assert self.client is not None
             models = await self.client.list()
-            available = [m["name"] for m in models.get("models", [])]
+            available = [_model_name(m) for m in models.get("models", [])]
+            available = [name for name in available if name]
 
             # Check if model exists with any version tag
             model_exists = any(
