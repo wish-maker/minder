@@ -1,4 +1,7 @@
-"""System & observability routes: /health, /metrics, /initialize, / (root)."""
+"""System routes: /health, /capabilities, /initialize, / (root).
+
+(/metrics is wired up app-wide by shared.metrics.setup_metrics in main.py,
+not routed here.)"""
 
 import asyncio
 from datetime import datetime, timezone
