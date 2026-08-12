@@ -1,9 +1,10 @@
 import { useEffect, useId, useRef, useState } from "react";
 
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { badgeClass, cardClass, inputClass, primaryButtonClass, secondaryButtonClass, statusClass } from "../lib/ui";
+import { badgeClass, cardClass, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
 
 interface LanguagesResponse {
@@ -474,7 +475,7 @@ function SpeechToTextCard({
           )}
         </div>
       </fieldset>
-      <div className={statusClass(false)}>{status}</div>
+      <StatusLine isError={false}>{status}</StatusLine>
       {previewUrl && (
         <div className="mt-1 flex flex-col gap-2 rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
           <audio controls src={previewUrl} className="w-full" />

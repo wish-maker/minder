@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -12,7 +13,6 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 interface Installation {
@@ -374,7 +374,7 @@ export function InstalledPluginsPage() {
         Manage the plugins you've installed — enable, disable, uninstall, or
         edit their settings. Requires login: installs are per-user.
       </p>
-      <div className={statusClass(isError)}>{status}</div>
+      <StatusLine isError={isError}>{status}</StatusLine>
       {!isAuthenticated && (
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Log in (top right) to see your installed plugins.
