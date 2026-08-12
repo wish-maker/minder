@@ -1,6 +1,6 @@
 # RAG Methods in Minder
 
-**Status as of 2026-07-26** (verified against the running `minder-rag-pipeline` +
+**Status as of 2026-08-12** (verified against the running `minder-rag-pipeline` +
 `GET /capabilities`; supersedes the earlier 2026-07-10 "research lab" framing).
 
 ## Executive Summary
@@ -15,7 +15,9 @@ Minder splits retrieval-augmented generation across two services:
   (`rerank`, cross-encoder when `sentence-transformers` is present, else an LLM
   re-rank) and **contextual compression** (`compress`). Two retrieval strategies are
   also selectable: **hybrid** dense+BM25 (`hybrid`) and **parent-child / small-to-big**
-  (`parent_context`). `GET /capabilities` reports exactly what is live on the host.
+  (`parent_context`). **Metadata filtering** (`metadata_filter: {source, document_id}`)
+  restricts retrieval to matching chunks, orthogonal to method/strategy.
+  `GET /capabilities` reports exactly what is live on the host.
 - **`minder-graph-rag` (`:8008`)** — graph RAG. spaCy NER entity extraction +
   Neo4j knowledge-graph construction and retrieval.
 
@@ -23,13 +25,14 @@ These methods **self-degrade by hardware**: e.g. the re-ranker uses a cross-enco
 only when `sentence-transformers`/torch is installed (otherwise a lightweight LLM
 re-rank), and hybrid needs `rank-bm25`. `GET /capabilities` makes that choice
 transparent. Every technique in Bucket 1 is reachable through the live endpoint;
-**RAPTOR** is the one commonly-cited technique that is **not implemented** here (a
-candidate — see Bucket 2).
+**RAPTOR** is the one commonly-cited technique that is **not implemented** here
+(tracked as #487 — see Bucket 2).
 
 > How methods/enhancers are requested (all on `POST /pipeline/{id}/query`):
 > `{"question": "...", "top_k": 5, "method": "standard|hyde|self_rag|auto|corrective",
 > "conversation_id": "...", "rerank": false, "compress": false, "hybrid": false,
-> "parent_context": false, "llm_model": "..."}`.
+> "parent_context": false, "metadata_filter": {"source": "...", "document_id": "..."},
+> "llm_model": "..."}`.
 
 ### Generation model resolution (#241)
 
@@ -123,6 +126,16 @@ use whatever the pipeline/KB already has configured.
 
 Precedence when multiple retrieval flags are set: `parent_context` > `hybrid` > dense.
 
+### Metadata filtering
+
+| Attribute | Value |
+|-----------|-------|
+| **Status** | ✅ **LIVE** — `metadata_filter: {"source": "...", "document_id": "..."}` on the query |
+| **Implementation** | `core/retrieval.py::build_metadata_filter` (Qdrant `Filter`/`FieldCondition`) applied to every retrieval strategy's own Qdrant call (`routes/rag.py::retrieve_relevant_documents`, `core/retrieval.py::retrieve_hybrid`/`retrieve_parent_child`) |
+| **Fields** | `source` (exact filename match) and `document_id` (scope to one upload) — the two fields already stamped on every chunk at ingest (`routes/rag.py::upload_document`). ANDed when both are set. No user-settable tags/labels exist yet — filtering by anything else needs an ingest-time change first. |
+| **Hybrid's sparse side** | The BM25 corpus (`_ensure_bm25_index`) is cached per-KB and unfiltered by design (filtering it would need a filter-aware cache), so a sparse-only hit from an excluded document is dropped by `_matches_metadata_filter` as a post-filter on the merged results — never returned, but this means a narrow filter can return fewer than `top_k` hits under hybrid specifically. |
+| **Verify** | Response `method_details.metadata_filter` echoes back exactly what was applied. |
+
 ---
 
 ## Bucket 2: Candidate techniques (not implemented)
@@ -132,10 +145,9 @@ the tree. They are all buildable on the current architecture:
 
 | Method | What would be needed | Feasibility |
 |--------|----------------------|-------------|
-| **RAPTOR** | Hierarchical chunk clustering → LLM tree summaries → level-aware retrieval; needs tree construction on upload, tree storage, and a retrieve variant | MEDIUM |
+| **RAPTOR** | Hierarchical chunk clustering → LLM tree summaries → level-aware retrieval; needs tree construction on upload, tree storage, and a retrieve variant (#487) | MEDIUM |
 | **Multi-Query RAG** | LLM query expansion (Ollama) + fusion | MEDIUM |
 | **Decomposition RAG** | Query decomposition + sub-question routing | MEDIUM |
-| **Metadata Filtering** | Qdrant supports it — expose filter params on the query endpoint | HIGH |
 
 ---
 
@@ -154,16 +166,17 @@ the tree. They are all buildable on the current architecture:
 
 | Bucket | Count | Methods |
 |--------|-------|---------|
-| **Live (wired)** | 8 methods + 2 enhancers + 2 retrievers | Standard, Conversational, HyDE, Self-RAG, auto, Corrective, Graph RAG (+ rerank, compress; + hybrid, parent-child) |
-| **Buildable (not implemented)** | 4 | RAPTOR, Multi-Query, Decomposition, Metadata Filtering |
+| **Live (wired)** | 8 methods + 2 enhancers + 3 retrievers/filters | Standard, Conversational, HyDE, Self-RAG, auto, Corrective, Graph RAG (+ rerank, compress; + hybrid, parent-child, metadata filtering) |
+| **Buildable (not implemented)** | 3 | RAPTOR (#487), Multi-Query, Decomposition |
 | **Out of scope** | 4 | Agentic, Streaming, Federated, Long-Context |
 
 > **Takeaway**: `minder-rag-pipeline` now serves a full method set (Standard +
-> Conversational + HyDE/Self-RAG/auto/Corrective, with optional rerank/compress and
-> hybrid/parent-child retrieval), and `minder-graph-rag` serves spaCy-NER + Neo4j
-> graph RAG. `GET /capabilities` is the source of truth for what's active on a given
-> host. RAPTOR is **not** implemented — it is a candidate technique (Bucket 2).
+> Conversational + HyDE/Self-RAG/auto/Corrective, with optional rerank/compress,
+> hybrid/parent-child retrieval, and metadata filtering by source/document_id), and
+> `minder-graph-rag` serves spaCy-NER + Neo4j graph RAG. `GET /capabilities` is the
+> source of truth for what's active on a given host. RAPTOR is **not** implemented —
+> it is a candidate technique (Bucket 2, #487).
 
 ---
 
-**Last Updated:** 2026-07-26
+**Last Updated:** 2026-08-12

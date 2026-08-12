@@ -109,6 +109,10 @@ async def capabilities():
                 "available": True,
                 "note": "small-to-big neighbour expansion via chunk_index",
             },
+            "metadata_filter": {
+                "available": True,
+                "note": "filter by source/document_id, ANDed when both set",
+            },
         },
         "optional_deps": {
             "sentence_transformers": st_available,

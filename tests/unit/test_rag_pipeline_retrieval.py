@@ -66,8 +66,8 @@ def _isolated_import(*module_paths: str):
         sys.modules.update(saved_modules)
 
 
-retrieval, rag_routes, system_routes = _isolated_import(
-    "core.retrieval", "routes.rag", "routes.system"
+retrieval, rag_routes, system_routes, models = _isolated_import(
+    "core.retrieval", "routes.rag", "routes.system", "models"
 )
 
 
@@ -260,3 +260,241 @@ def test_delete_rag_pipeline_requires_auth():
     client = _rag_router_client()
     resp = client.delete("/v1/pipeline/p1")
     assert resp.status_code == 401
+
+
+# ── Metadata filtering (docs/rag-methods.md Bucket 2 -> shipped) ─────────────
+# "Qdrant already supports it -- expose filter params on the query endpoint."
+# Every retrieval strategy has its own independent Qdrant call (no shared
+# repository chokepoint), so each gets its own coverage below -- plus the one
+# genuinely tricky case: hybrid's BM25 corpus is cached per-KB and unfiltered,
+# so a sparse-only hit from an excluded document must be caught by the
+# post-filter, not just the dense side's query_filter.
+
+
+def test_build_metadata_filter_returns_none_when_nothing_set():
+    assert retrieval.build_metadata_filter(None) is None
+    assert retrieval.build_metadata_filter(models.MetadataFilter()) is None
+
+
+def test_build_metadata_filter_ands_both_fields_when_set():
+    flt = retrieval.build_metadata_filter(
+        models.MetadataFilter(source="doc.txt", document_id="doc-1")
+    )
+    keys = {c.key for c in flt.must}
+    assert keys == {"source", "document_id"}
+    values = {c.key: c.match.value for c in flt.must}
+    assert values == {"source": "doc.txt", "document_id": "doc-1"}
+
+
+@pytest.mark.asyncio
+async def test_retrieve_relevant_documents_passes_query_filter_to_qdrant(monkeypatch):
+    captured = {}
+
+    class _QueryResult:
+        points = []
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            captured.update(kwargs)
+            return _QueryResult()
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    monkeypatch.setattr(
+        rag_routes.state, "get_qdrant_client", lambda: _FakeQdrantClient()
+    )
+    monkeypatch.setattr(
+        rag_routes.state,
+        "knowledge_bases",
+        {"kb-1": {"embedding_model": "nomic-embed-text"}},
+    )
+    monkeypatch.setattr(
+        rag_routes.state,
+        "ollama_manager",
+        SimpleNamespace(generate_embeddings=fake_embed),
+    )
+
+    await rag_routes.retrieve_relevant_documents(
+        {"knowledge_base_ids": ["kb-1"]},
+        "what does Acme make?",
+        top_k=3,
+        metadata_filter=models.MetadataFilter(source="doc.txt"),
+    )
+
+    assert captured["query_filter"] is not None
+    assert captured["query_filter"].must[0].key == "source"
+    assert captured["query_filter"].must[0].match.value == "doc.txt"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_relevant_documents_no_filter_passes_none(monkeypatch):
+    captured = {}
+
+    class _QueryResult:
+        points = []
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            captured.update(kwargs)
+            return _QueryResult()
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    monkeypatch.setattr(
+        rag_routes.state, "get_qdrant_client", lambda: _FakeQdrantClient()
+    )
+    monkeypatch.setattr(
+        rag_routes.state,
+        "knowledge_bases",
+        {"kb-1": {"embedding_model": "nomic-embed-text"}},
+    )
+    monkeypatch.setattr(
+        rag_routes.state,
+        "ollama_manager",
+        SimpleNamespace(generate_embeddings=fake_embed),
+    )
+
+    await rag_routes.retrieve_relevant_documents(
+        {"knowledge_base_ids": ["kb-1"]}, "what does Acme make?", top_k=3
+    )
+
+    assert captured["query_filter"] is None
+
+
+@pytest.mark.asyncio
+async def test_retrieve_parent_child_passes_query_filter_to_qdrant(monkeypatch):
+    captured = {}
+
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    hit = _Hit("p1", {"text": "Acme makes widgets.", "source": "doc.txt"}, 0.9)
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            captured.update(kwargs)
+            return _QueryResult([hit])
+
+        def scroll(self, **kwargs):
+            return [hit], None
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={"kb-1": {"embedding_model": "nomic-embed-text"}},
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    await retrieval.retrieve_parent_child(
+        {"knowledge_base_ids": ["kb-1"]},
+        "what does Acme make?",
+        top_k=3,
+        metadata_filter=models.MetadataFilter(document_id="doc-1"),
+    )
+
+    assert captured["query_filter"] is not None
+    assert captured["query_filter"].must[0].key == "document_id"
+    assert captured["query_filter"].must[0].match.value == "doc-1"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
+    monkeypatch,
+):
+    """The tricky case: a document EXCLUDED by metadata_filter still lives in
+    the cached, unfiltered BM25 corpus, and BM25 alone can surface it (a
+    sparse-only hit with no dense score). Must not appear in the final result —
+    proves the post-filter (_matches_metadata_filter), not just the dense
+    side's query_filter, is actually doing the work.
+
+    Pre-seeds the BM25 cache directly (same trick as
+    test_invalidate_hybrid_index_clears_cached_index above) rather than going
+    through real indexing, so this stays a true unit test independent of
+    rank-bm25 (an optional package, not installed in every CI job).
+    """
+
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    # Only one dense hit, from the ALLOWED document.
+    allowed_hit = _Hit(
+        "allowed-1",
+        {
+            "_id": "allowed-1",
+            "text": "Acme makes widgets.",
+            "source": "allowed.txt",
+            "document_id": "doc-allowed",
+        },
+        0.9,
+    )
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            return _QueryResult([allowed_hit])
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={"kb-1": {"embedding_model": "nomic-embed-text"}},
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    # "Already indexed" cache covering BOTH documents -- unfiltered, as
+    # designed -- so _ensure_bm25_index's `if kb_id in sparse_index: return`
+    # short-circuits without touching real rank-bm25.
+    retrieval._hybrid.sparse_index["kb-1"] = object()
+    retrieval._hybrid.documents["kb-1"] = [
+        {
+            "_id": "allowed-1",
+            "text": "Acme makes widgets.",
+            "source": "allowed.txt",
+            "document_id": "doc-allowed",
+        },
+        {
+            "_id": "excluded-1",
+            "text": "Globex makes gadgets.",
+            "source": "excluded.txt",
+            "document_id": "doc-excluded",
+        },
+    ]
+
+    # Force the excluded document's chunk to win on BM25 alone (a sparse-only
+    # hit not present in `dense_scores`) by monkeypatching hybrid_search to
+    # return exactly that -- isolates the post-filter from BM25 scoring nuance.
+    async def fake_hybrid_search(kb_id, query_embedding, query, dense, top_k):
+        return [("allowed-1", 0.5), ("excluded-1", 0.9)]
+
+    monkeypatch.setattr(retrieval._hybrid, "hybrid_search", fake_hybrid_search)
+
+    result = await retrieval.retrieve_hybrid(
+        {"knowledge_base_ids": ["kb-1"]},
+        "what does Acme make?",
+        top_k=5,
+        metadata_filter=models.MetadataFilter(document_id="doc-allowed"),
+    )
+
+    sources_text = " ".join(s["text"] for s in result["sources"])
+    assert "Acme makes widgets." in sources_text
+    assert "Globex makes gadgets." not in sources_text

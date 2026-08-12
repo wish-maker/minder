@@ -74,6 +74,18 @@ class RAGPipelineInfo(BaseModel):
     created_at: str
 
 
+class MetadataFilter(BaseModel):
+    """Restrict retrieval to chunks matching these fields (docs/rag-methods.md
+    Bucket 2 → shipped). Fields left as None are not filtered; multiple set
+    fields are ANDed. Limited to what's actually stamped on every chunk at
+    ingest time (routes/rag.py's upload_document) -- there's no user-settable
+    tag/label mechanism yet, so filtering by anything beyond these two would
+    need a separate ingest-time change first."""
+
+    source: Optional[str] = None  # exact filename match, e.g. "handbook.pdf"
+    document_id: Optional[str] = None  # exact match — scope to one upload
+
+
 class QueryRequest(BaseModel):
     """Query request"""
 
@@ -99,6 +111,10 @@ class QueryRequest(BaseModel):
     # with its neighbouring chunks (parent window) for fuller context. Takes
     # precedence over hybrid when both set.
     parent_context: bool = False
+    # Metadata filtering: restrict retrieval to chunks matching source/document_id.
+    # Orthogonal to method/hybrid/parent_context — applies to whichever retrieval
+    # strategy runs.
+    metadata_filter: Optional[MetadataFilter] = None
 
     @field_validator("method")
     @classmethod
