@@ -113,6 +113,10 @@ jobs:
         working-directory: src/services/client
         run: npm run typecheck
 
+      - name: Run unit tests (Vitest)
+        working-directory: src/services/client
+        run: npm test
+
       - name: Build
         # Cheap here (no Docker), catches import/env errors before the much
         # heavier container-smoke job does a full image build.
