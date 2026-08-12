@@ -207,54 +207,11 @@ Every service has:
 
 ## Development Workflow
 
-### Local Development
-
-```bash
-# 1. Start all services
-./setup.sh
-
-# 2. Start specific service
-docker compose -f docker/docker-compose.yml up -d api-gateway
-
-# 3. View logs
-docker compose -f docker/docker-compose.yml logs -f api-gateway
-
-# 4. Restart with rebuild
-docker compose -f docker/docker-compose.yml up -d --build api-gateway
-
-# 5. Run tests
-pytest tests/unit/ -v
-```
-
-### Service Development
-
-```bash
-# Enter service container
-docker exec -it minder-api-gateway bash
-
-# Install new dependencies
-pip install new-package
-pip freeze > requirements.txt
-
-# Rebuild container
-docker compose -f docker/docker-compose.yml build api-gateway
-```
-
-### Testing
-
-```bash
-# Unit tests
-pytest tests/unit/ -v
-
-# With coverage
-pytest tests/ --cov=src --cov-report=html
-
-# Specific test
-pytest tests/unit/test_setup_bundles.py -v
-
-# Integration tests
-pytest tests/integration/ -v
-```
+See [development.md](../development/development.md) for the full local-dev setup, the
+`setup.sh` command reference, adding a service/endpoint, debugging, and storage-backend
+notes, and [testing.md](../development/testing.md) for running/writing tests, coverage,
+and CI. Kept out of this doc (an architecture/structure reference) to avoid two places
+drifting out of sync on the same commands.
 
 ## File Naming Conventions
 
@@ -457,42 +414,10 @@ docker system df
 
 ## Troubleshooting
 
-### Common Issues
-
-**Service won't start**:
-```bash
-# Check logs
-docker logs <service-name>
-
-# Check port conflicts
-lsof -i :8000
-
-# Reset service
-docker compose -f docker/docker-compose.yml restart <service>
-```
-
-**Database connection errors**:
-```bash
-# Check database is healthy
-docker exec minder-postgres pg_isready -U minder
-
-# Reset database
-docker compose -f docker/docker-compose.yml down -v
-./setup.sh
-```
-
-**Memory issues**:
-```bash
-# Check resource usage
-docker stats
-
-# Clean up unused resources
-docker system prune -f
-
-# Increase Docker memory limit (Docker Desktop settings)
-```
-
-See [Common Issues](../troubleshooting/common-issues.md) for more details.
+See [Common Issues](../troubleshooting/common-issues.md) — service-won't-start, database
+connection errors, memory/resource pressure, and more, each with the actual (not casually
+paraphrased) fix and destructive commands clearly labeled. Not duplicated here for the
+same reason as Development Workflow above.
 
 ## Contributing
 
