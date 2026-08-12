@@ -139,7 +139,8 @@ class ConversationRepository:
             max_turns: Maximum number of turns to retrieve
 
         Returns:
-            List of conversation turn dicts (oldest first)
+            List of the ``max_turns`` MOST RECENT conversation turn dicts,
+            returned oldest-first (chronological order).
 
         Raises:
             ValueError: If parameters invalid
@@ -156,12 +157,18 @@ class ConversationRepository:
 
         try:
             async with self.db_pool.acquire() as conn:
+                # Take the most-recent `max_turns` (ORDER BY DESC + LIMIT), then
+                # reverse below to hand them back oldest-first. A plain
+                # `ORDER BY timestamp ASC LIMIT $3` keeps the FIRST N turns of the
+                # whole conversation, so once it grows past max_turns the model
+                # silently loses all recent context — the opposite of what a
+                # short conversational window should do.
                 rows = await conn.fetch(
                     """
                     SELECT question, answer, timestamp, metadata
                     FROM conversation_turns
                     WHERE user_id = $1 AND conversation_id = $2
-                    ORDER BY timestamp ASC
+                    ORDER BY timestamp DESC
                     LIMIT $3
                     """,
                     user_id,
@@ -170,7 +177,7 @@ class ConversationRepository:
                 )
 
             turns = []
-            for row in rows:
+            for row in reversed(rows):
                 turn = {
                     "question": row["question"],
                     "answer": row["answer"],
