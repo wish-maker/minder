@@ -4,18 +4,19 @@ import uuid
 from typing import Any, List, Optional
 
 from core.database import get_pool
+from core.plugin_repository import PLUGIN_COLUMNS
+from core.plugin_repository import get_featured_plugins as _get_featured_plugins_page
+from core.plugin_repository import (
+    get_plugin_by_id,
+    list_plugins_page,
+    row_to_plugin_response,
+    search_plugins_page,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.plugin import PluginCreate, PluginListResponse, PluginResponse, PluginUpdate
 
 from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
-
-# Columns returned by the plugin SELECT/RETURNING clauses, shared by get/update.
-_PLUGIN_COLUMNS = """id, name, display_name, description, author,
-                 repository_url, distribution_type, docker_image,
-                 current_version, pricing_model, base_tier, status,
-                 featured, download_count, rating_average, rating_count,
-                 created_at, updated_at, published_at, developer_id, category_id, requires_services"""
 
 # Fields a PUT /plugins/{id} may change (whitelist → safe to interpolate as column
 # names; values always go through bound parameters).
@@ -36,37 +37,6 @@ _PLUGIN_UPDATABLE = {
 # manifest/config JSONB columns elsewhere in this codebase (plugin-registry's
 # core/database.py).
 _JSONB_UPDATABLE = {"requires_services"}
-
-
-def _row_to_plugin_response(row) -> PluginResponse:
-    """Map a marketplace_plugins row to the PluginResponse model."""
-    return PluginResponse(
-        id=str(row["id"]),
-        name=row["name"],
-        display_name=row["display_name"],
-        description=row["description"],
-        author=row["author"],
-        author_email=None,
-        repository_url=row["repository_url"],
-        distribution_type=row["distribution_type"],
-        docker_image=row["docker_image"],
-        current_version=row["current_version"],
-        pricing_model=row["pricing_model"],
-        base_tier=row["base_tier"],
-        status=row["status"],
-        featured=row["featured"],
-        download_count=row["download_count"],
-        rating_average=(
-            float(row["rating_average"]) if row["rating_average"] else None
-        ),
-        rating_count=row["rating_count"],
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
-        published_at=row["published_at"],
-        developer_id=str(row["developer_id"]) if row["developer_id"] else None,
-        category_id=str(row["category_id"]) if row["category_id"] else None,
-        requires_services=json.loads(row["requires_services"] or "[]"),
-    )
 
 
 router = APIRouter(prefix="/v1/marketplace", tags=["Marketplace"])
@@ -132,58 +102,11 @@ async def list_plugins(
     eff_limit, eff_offset = _resolve_pagination(limit, offset, page, page_size)
     pool = await get_pool()
 
-    # Build query conditions
-    conditions = []
-    params: List[Any] = []
-    param_count = 0
+    plugins, total_count = await list_plugins_page(
+        pool, status, category, pricing_model, eff_limit, eff_offset
+    )
 
-    if status:
-        param_count += 1
-        conditions.append(f"status = ${param_count}")
-        params.append(status)
-
-    if category:
-        param_count += 1
-        conditions.append(f"category_id = ${param_count}")
-        params.append(category)
-
-    if pricing_model:
-        param_count += 1
-        conditions.append(f"pricing_model = ${param_count}")
-        params.append(pricing_model)
-
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-    async with pool.acquire() as conn:
-        # Get total count
-        count_query = f"""
-            SELECT COUNT(*)
-            FROM marketplace_plugins
-            WHERE {where_clause}
-        """
-        total_count = await conn.fetchval(count_query, *params)
-
-        # Get plugins
-        params.extend([eff_limit, eff_offset])
-
-        rows = await conn.fetch(
-            f"""
-            SELECT id, name, display_name, description, author,
-                   repository_url, distribution_type, docker_image,
-                   current_version, pricing_model, base_tier, status,
-                   featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id, requires_services
-            FROM marketplace_plugins
-            WHERE {where_clause}
-            ORDER BY created_at DESC
-            LIMIT ${param_count + 1} OFFSET ${param_count + 2}
-            """,
-            *params,
-        )
-
-        plugins = [_row_to_plugin_response(row) for row in rows]
-
-        return _build_list_response(plugins, total_count, eff_limit, eff_offset)
+    return _build_list_response(plugins, total_count, eff_limit, eff_offset)
 
 
 @router.get("/plugins/search", response_model=PluginListResponse)
@@ -200,46 +123,11 @@ async def search_plugins(
 ):
     """Search plugins by name or description"""
     pool = await get_pool()
-
-    search_pattern = f"%{q}%"
     eff_limit, eff_offset = _resolve_pagination(limit, offset, page, page_size)
 
-    async with pool.acquire() as conn:
-        # Get total count
-        total_count = await conn.fetchval(
-            """
-            SELECT COUNT(*)
-            FROM marketplace_plugins
-            WHERE (name ILIKE $1 OR display_name ILIKE $1 OR description ILIKE $1)
-              AND status = 'approved'
-            """,
-            search_pattern,
-        )
+    plugins, total_count = await search_plugins_page(pool, q, eff_limit, eff_offset)
 
-        # Get plugins
-        rows = await conn.fetch(
-            """
-            SELECT id, name, display_name, description, author,
-                   repository_url, distribution_type, docker_image,
-                   current_version, pricing_model, base_tier, status,
-                   featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id, requires_services
-            FROM marketplace_plugins
-            WHERE (name ILIKE $1 OR display_name ILIKE $1 OR description ILIKE $1)
-              AND status = 'approved'
-            ORDER BY
-                CASE WHEN name ILIKE $1 THEN 0 ELSE 1 END,
-                download_count DESC
-            LIMIT $2 OFFSET $3
-            """,
-            search_pattern,
-            eff_limit,
-            eff_offset,
-        )
-
-        plugins = [_row_to_plugin_response(row) for row in rows]
-
-        return _build_list_response(plugins, total_count, eff_limit, eff_offset)
+    return _build_list_response(plugins, total_count, eff_limit, eff_offset)
 
 
 @router.post("/plugins", response_model=PluginResponse, status_code=201)
@@ -262,7 +150,7 @@ async def create_plugin(
 
             # Insert plugin
             row = await conn.fetchrow(
-                """
+                f"""
                 INSERT INTO marketplace_plugins (
                     id, name, display_name, description, author, author_email,
                     repository_url, distribution_type, docker_image,
@@ -272,11 +160,7 @@ async def create_plugin(
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, 0, 0, FALSE, NOW(), NOW()
                 )
-                RETURNING id, name, display_name, description, author,
-                         repository_url, distribution_type, docker_image,
-                         current_version, pricing_model, base_tier, status,
-                         featured, download_count, rating_average, rating_count,
-                         created_at, updated_at, published_at, developer_id, category_id, requires_services
+                RETURNING {PLUGIN_COLUMNS}
                 """,
                 plugin_id,
                 plugin_data.name,
@@ -295,7 +179,7 @@ async def create_plugin(
                 json.dumps(plugin_data.requires_services),
             )
 
-            return _row_to_plugin_response(row)
+            return row_to_plugin_response(row)
 
     except Exception as e:
         raise backend_http_error(e, "Creating plugin")
@@ -306,27 +190,11 @@ async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
     """Get featured plugins"""
     pool = await get_pool()
 
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT id, name, display_name, description, author,
-                   repository_url, distribution_type, docker_image,
-                   current_version, pricing_model, base_tier, status,
-                   featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id, requires_services
-            FROM marketplace_plugins
-            WHERE featured = TRUE AND status = 'approved'
-            ORDER BY download_count DESC
-            LIMIT $1
-            """,
-            limit,
-        )
+    plugins = await _get_featured_plugins_page(pool, limit)
 
-        plugins = [_row_to_plugin_response(row) for row in rows]
-
-        return PluginListResponse(
-            plugins=plugins, count=len(plugins), page=1, page_size=limit, total_pages=1
-        )
+    return PluginListResponse(
+        plugins=plugins, count=len(plugins), page=1, page_size=limit, total_pages=1
+    )
 
 
 @router.get("/plugins/{plugin_id}", response_model=PluginResponse)
@@ -334,24 +202,12 @@ async def get_plugin(plugin_id: str):
     """Get plugin by ID"""
     pool = await get_pool()
 
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            """
-            SELECT id, name, display_name, description, author,
-                   repository_url, distribution_type, docker_image,
-                   current_version, pricing_model, base_tier, status,
-                   featured, download_count, rating_average, rating_count,
-                   created_at, updated_at, published_at, developer_id, category_id, requires_services
-            FROM marketplace_plugins
-            WHERE id = $1
-            """,
-            plugin_id,
-        )
+    plugin = await get_plugin_by_id(pool, plugin_id)
 
-        if not row:
-            raise HTTPException(status_code=404, detail="Plugin not found")
+    if not plugin:
+        raise HTTPException(status_code=404, detail="Plugin not found")
 
-        return _row_to_plugin_response(row)
+    return plugin
 
 
 @router.put("/plugins/{plugin_id}", response_model=PluginResponse)
@@ -389,7 +245,7 @@ async def update_plugin(
     query = (
         f"UPDATE marketplace_plugins SET {set_clause}, updated_at = NOW() "
         f"WHERE id = ${len(params) + 1} "
-        f"RETURNING {_PLUGIN_COLUMNS}"
+        f"RETURNING {PLUGIN_COLUMNS}"
     )
 
     pool = await get_pool()
@@ -399,4 +255,4 @@ async def update_plugin(
     if not row:
         raise HTTPException(status_code=404, detail="Plugin not found")
 
-    return _row_to_plugin_response(row)
+    return row_to_plugin_response(row)
