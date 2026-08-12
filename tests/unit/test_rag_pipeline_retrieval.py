@@ -364,6 +364,123 @@ async def test_retrieve_relevant_documents_no_filter_passes_none(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_retrieve_relevant_documents_raises_503_when_embedding_backend_unavailable(
+    monkeypatch,
+):
+    async def boom(*a, **k):
+        raise ConnectionError("ollama unreachable")
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: object(),
+        knowledge_bases={"kb-1": {"embedding_model": "nomic-embed-text"}},
+        ollama_manager=SimpleNamespace(generate_embeddings=boom),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    with pytest.raises(Exception) as exc_info:
+        await retrieval.retrieve_relevant_documents(
+            {"knowledge_base_ids": ["kb-1"]}, "what is x?", top_k=3
+        )
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_retrieve_relevant_documents_merges_and_sorts_across_multiple_kbs(
+    monkeypatch,
+):
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    class _FakeQdrantClient:
+        def __init__(self):
+            self.calls = []
+
+        def query_points(self, **kwargs):
+            self.calls.append(kwargs["collection_name"])
+            if kwargs["collection_name"] == "kb-1":
+                return _QueryResult(
+                    [_Hit("a", {"text": "low score kb1", "source": "a.txt"}, 0.4)]
+                )
+            return _QueryResult(
+                [_Hit("b", {"text": "high score kb2", "source": "b.txt"}, 0.9)]
+            )
+
+    fake_client = _FakeQdrantClient()
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: fake_client,
+        knowledge_bases={
+            "kb-1": {"embedding_model": "nomic-embed-text"},
+            "kb-2": {"embedding_model": "nomic-embed-text"},
+        },
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    result = await retrieval.retrieve_relevant_documents(
+        {"knowledge_base_ids": ["kb-1", "kb-2"]}, "question", top_k=2
+    )
+
+    assert fake_client.calls == ["kb-1", "kb-2"]
+    # merged across both KBs, sorted by score descending -- kb-2's higher
+    # score must come first even though kb-1 was queried first.
+    assert result["sources"][0]["text"] == "high score kb2"
+    assert result["sources"][1]["text"] == "low score kb1"
+
+
+@pytest.mark.asyncio
+async def test_retrieve_relevant_documents_tolerates_one_kb_failing(monkeypatch):
+    """A search failure in one KB must not abort the whole query -- the other
+    KB's results should still come back (matching the existing per-KB
+    try/except around client.query_points)."""
+
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            if kwargs["collection_name"] == "kb-broken":
+                raise ConnectionError("qdrant collection missing")
+            return _QueryResult([_Hit("a", {"text": "ok", "source": "a.txt"}, 0.5)])
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={
+            "kb-broken": {"embedding_model": "nomic-embed-text"},
+            "kb-ok": {"embedding_model": "nomic-embed-text"},
+        },
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    result = await retrieval.retrieve_relevant_documents(
+        {"knowledge_base_ids": ["kb-broken", "kb-ok"]}, "question", top_k=5
+    )
+
+    assert result["sources"] == [{"text": "ok", "source": "a.txt", "score": 0.5}]
+
+
+@pytest.mark.asyncio
 async def test_retrieve_parent_child_passes_query_filter_to_qdrant(monkeypatch):
     captured = {}
 

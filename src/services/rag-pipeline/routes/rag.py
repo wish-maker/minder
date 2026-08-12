@@ -5,14 +5,14 @@ import functools
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from core import state
 from core.retrieval import (
-    build_metadata_filter,
     invalidate_hybrid_index,
     retrieve_hybrid,
     retrieve_parent_child,
+    retrieve_relevant_documents,
 )
 from domain.retrievers.hybrid import BM25_AVAILABLE
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -21,7 +21,6 @@ from models import (
     DocumentUploadResponse,
     KnowledgeBaseCreate,
     KnowledgeBaseResponse,
-    MetadataFilter,
     QueryRequest,
     QueryResponse,
     RAGPipelineCreate,
@@ -721,69 +720,3 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
         )
     result["method_details"] = method_details
     return QueryResponse(**result)
-
-
-async def retrieve_relevant_documents(
-    pipeline: Dict,
-    question: str,
-    top_k: int,
-    metadata_filter: Optional[MetadataFilter] = None,
-) -> Dict:
-    """Retrieve relevant documents from knowledge bases"""
-    client = state.get_qdrant_client()
-    qdrant_filter = build_metadata_filter(metadata_filter)
-
-    # Get embedding model from first KB
-    first_kb_id = pipeline["knowledge_base_ids"][0]
-    embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
-
-    # Create embedding for question — fail loudly if the backend is unreachable
-    # rather than searching with a garbage vector (#77).
-    try:
-        question_embeddings = await state.ollama_manager.generate_embeddings(
-            [question], model=embed_model
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Embedding backend unavailable — cannot answer query. Check that "
-                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
-            ),
-        )
-    question_embedding = question_embeddings[0]
-
-    # Search across all knowledge bases
-    all_results = []
-    for kb_id in pipeline["knowledge_base_ids"]:
-        try:
-            search_result = await asyncio.to_thread(
-                client.query_points,
-                collection_name=kb_id,
-                query=question_embedding,
-                query_filter=qdrant_filter,
-                limit=top_k,
-            )
-            # Extract points from QueryResponse
-            results = search_result.points
-            all_results.extend(results)
-        except Exception as e:
-            logger.warning(f"⚠️  Search failed for KB {kb_id}: {e}")
-
-    # Sort by score and take top_k
-    all_results = sorted(all_results, key=lambda x: x.score, reverse=True)[:top_k]
-
-    # Extract context
-    context = "\n\n".join([r.payload.get("text", "") for r in all_results])
-
-    return {
-        "context": context,
-        "sources": [
-            {
-                "text": r.payload.get("text", ""),
-                "source": r.payload.get("source", ""),
-                "score": r.score,
-            }
-            for r in all_results
-        ],
-    }

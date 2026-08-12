@@ -1,4 +1,5 @@
-"""Hybrid and parent-child retrieval orchestration for the RAG pipeline service.
+"""Dense, hybrid, and parent-child retrieval orchestration for the RAG pipeline
+service.
 
 Extracted from routes/rag.py (#357): these functions wire together app-level state
 (core.state — the Qdrant client, ollama_manager, knowledge_bases) with the
@@ -8,6 +9,11 @@ state/Qdrant/HTTPException directly — domain/retrievers/hybrid.py is explicitl
 documented as "a domain component with NO external dependencies," and moving
 route-orchestration logic in there would violate that. This mirrors graph-rag's
 routes/api.py (thin HTTP layer) + core/graph_retriever.py (orchestration) split.
+
+retrieve_relevant_documents (dense) joined hybrid/parent_child here later --
+#357 only extracted the other two, and the dense strategy left behind in
+routes/rag.py let that file regrow past its original "688-line god-module" size
+(back to 789 lines) -- the exact regression #357 was filed to prevent.
 """
 
 import asyncio
@@ -107,6 +113,72 @@ def _ensure_bm25_index(client, kb_id: str) -> None:
             break
     if docs:
         _hybrid.index_documents(kb_id, docs)
+
+
+async def retrieve_relevant_documents(
+    pipeline: Dict,
+    question: str,
+    top_k: int,
+    metadata_filter: Optional[MetadataFilter] = None,
+) -> Dict:
+    """Retrieve relevant documents from knowledge bases (dense/standard strategy)."""
+    client = state.get_qdrant_client()
+    qdrant_filter = build_metadata_filter(metadata_filter)
+
+    # Get embedding model from first KB
+    first_kb_id = pipeline["knowledge_base_ids"][0]
+    embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
+
+    # Create embedding for question — fail loudly if the backend is unreachable
+    # rather than searching with a garbage vector (#77).
+    try:
+        question_embeddings = await state.ollama_manager.generate_embeddings(
+            [question], model=embed_model
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Embedding backend unavailable — cannot answer query. Check that "
+                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
+            ),
+        )
+    question_embedding = question_embeddings[0]
+
+    # Search across all knowledge bases
+    all_results = []
+    for kb_id in pipeline["knowledge_base_ids"]:
+        try:
+            search_result = await asyncio.to_thread(
+                client.query_points,
+                collection_name=kb_id,
+                query=question_embedding,
+                query_filter=qdrant_filter,
+                limit=top_k,
+            )
+            # Extract points from QueryResponse
+            results = search_result.points
+            all_results.extend(results)
+        except Exception as e:
+            logger.warning(f"⚠️  Search failed for KB {kb_id}: {e}")
+
+    # Sort by score and take top_k
+    all_results = sorted(all_results, key=lambda x: x.score, reverse=True)[:top_k]
+
+    # Extract context
+    context = "\n\n".join([r.payload.get("text", "") for r in all_results])
+
+    return {
+        "context": context,
+        "sources": [
+            {
+                "text": r.payload.get("text", ""),
+                "source": r.payload.get("source", ""),
+                "score": r.score,
+            }
+            for r in all_results
+        ],
+    }
 
 
 async def retrieve_hybrid(
