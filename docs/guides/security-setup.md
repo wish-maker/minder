@@ -35,8 +35,8 @@ security posture of the Minder platform.
 
 ### Also in place
 
-- **SSO / 2FA (Authelia)** — enabled, enforcing on five Traefik routers (minio,
-  api-gateway, grafana, openwebui, jaeger). See [authentication.md](./authentication.md).
+- **SSO / 2FA (Authelia)** — enabled, enforcing on six Traefik routers (minio,
+  api-gateway, grafana, openwebui, jaeger, client). See [authentication.md](./authentication.md).
 
 ---
 

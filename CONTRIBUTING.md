@@ -172,6 +172,25 @@ pip install -r src/requirements/requirements-typecheck.txt
 pytest
 ```
 
+### Frontend (client) development
+
+The web client (`src/services/client/`) is a **React + Vite + TypeScript** SPA — it is
+the one service with no Python. It has its own toolchain, mirrored by the
+`Frontend Lint & Typecheck` CI job:
+
+```bash
+cd src/services/client
+npm ci                 # install pinned deps (package-lock.json)
+npm run dev            # local dev server with HMR
+npm run typecheck      # tsc -b --noEmit  (must pass)
+npm run lint           # eslint .          (must pass — 0 errors)
+npm run build          # tsc -b && vite build (what the Docker image runs)
+```
+
+> Note: `VITE_API_BASE_URL` / `VITE_OIDC_LOGIN_URL` are baked in at **build** time
+> (Vite convention), not read at container start — changing them means rebuilding the
+> image. See `docker/docker-compose.yml`'s client `build.args`.
+
 ### Branch Naming
 
 - `feature/` - New features
@@ -215,7 +234,7 @@ Add endpoint to filter plugins by name, category, and status.
 ```
 minder/
 ├── src/                  # Application source
-│   ├── services/         # Microservices (8 FastAPI apps)
+│   ├── services/         # 8 FastAPI microservices + the React/Vite web client/
 │   ├── shared/           # Shared libraries (config, log, metrics, auth, db, utils)
 │   ├── plugins/          # First-party module plugins (crypto, network, news, tefas, weather, telegraf)
 │   ├── bootstrap/        # Bootstrap config data (config/default_plugins.yml)

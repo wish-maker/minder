@@ -80,6 +80,7 @@ profile (core + inference + rag + chat) — monitoring, graph-rag, and voice are
 - Auth (1): Authelia SSO/2FA — enabled by default, enforcing forward-auth on 6 routers (minio, api-gateway, grafana, openwebui, jaeger, client)
 - Storage (7, internal-only): PostgreSQL, Redis, Qdrant, Neo4j, MinIO, RabbitMQ, Apicurio schema-registry
 - Inference (2): Ollama (internal-only), OpenWebUI (via Traefik)
+- Web Client (1): `minder-client` — Minder's own React/Vite management SPA (via Traefik, forward-auth gated)
 - Core APIs (8): API Gateway, Plugin Registry, Marketplace, Plugin State Manager, RAG Pipeline, Model Management, TTS/STT, Graph-RAG
 - Observability (7): Prometheus, Grafana, Alertmanager, InfluxDB, Telegraf, Jaeger, OTel Collector
 - Metrics Exporters (6): postgres/redis/rabbitmq/node exporters, cAdvisor, blackbox-exporter

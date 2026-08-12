@@ -52,8 +52,8 @@ backed by internal data stores and a monitoring stack. All services are Python 3
 
 #### Authelia (SSO & 2FA) — ENABLED
 **Status**: Running (`minder-authelia`) in `docker-compose.yml`, providing SSO/2FA. A Traefik
-`forwardauth` middleware references it on five routers (minio, api-gateway, grafana, openwebui,
-jaeger), and that auth **is enforced** — unauthenticated requests get a 302 redirect to the
+`forwardauth` middleware references it on six routers (minio, api-gateway, grafana, openwebui,
+jaeger, client), and that auth **is enforced** — unauthenticated requests get a 302 redirect to the
 Authelia portal. Full browser SSO still needs real DNS + TLS on the deploy.
 
 ### Data Stores (internal-only — not host-exposed)
@@ -265,7 +265,7 @@ traefik
   └── monitoring (prometheus, grafana, influxdb, jaeger, alertmanager, exporters)
 ```
 
-(Authelia sits in front of five routers: minio, api-gateway, grafana, openwebui, jaeger.)
+(Authelia sits in front of six routers: minio, api-gateway, grafana, openwebui, jaeger, client.)
 
 ## Data Flow
 
@@ -273,7 +273,7 @@ traefik
 ```
 Client → Traefik → API Gateway → Service → Database/Cache
 ```
-(Authelia forwardauth is wired and enforced on five routers.)
+(Authelia forwardauth is wired and enforced on six routers.)
 
 ### RAG Query Flow
 ```
@@ -323,7 +323,7 @@ Services use `restart: on-failure`.
 
 ### Authentication
 - JWT for API authentication (bcrypt password hashing)
-- Authelia SSO is enabled, enforcing on five Traefik routers
+- Authelia SSO is enabled, enforcing on six Traefik routers
 - **RBAC is not implemented**
 
 ## Monitoring
