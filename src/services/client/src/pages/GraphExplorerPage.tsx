@@ -3,6 +3,7 @@ import { useId, useState } from "react";
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
+import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -11,7 +12,6 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 interface Entity {
@@ -344,6 +344,7 @@ function ExploreCard({ token }: { token: string }) {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="What are you looking for?"
+              aria-label="Search the knowledge graph"
             />
             <button type="button" onClick={handleSearch} disabled={busy} className={primaryButtonClass}>
               Search
@@ -356,6 +357,7 @@ function ExploreCard({ token }: { token: string }) {
               value={entityText}
               onChange={(e) => setEntityText(e.target.value)}
               placeholder="e.g. a person or company name"
+              aria-label="Entity name to look up"
             />
             <button type="button" onClick={handleEntityLookup} disabled={busy} className={primaryButtonClass}>
               Look up
@@ -363,7 +365,7 @@ function ExploreCard({ token }: { token: string }) {
           </div>
         )}
       </fieldset>
-      <div className={statusClass(false)}>{status}</div>
+      <StatusLine>{status}</StatusLine>
 
       {mode === "search" && retrieveResult && (
         <div className="rounded-lg bg-gray-50 p-3 text-sm dark:bg-gray-800">
@@ -501,7 +503,7 @@ function DeleteDocumentCard({
           Delete
         </button>
       </fieldset>
-      <div className={statusClass(false)}>{status}</div>
+      <StatusLine>{status}</StatusLine>
     </section>
   );
 }
