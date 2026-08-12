@@ -35,7 +35,7 @@ declare -A SECRET_SPEC=(
     # registry→marketplace AI-tool sync auth (X-Service-Token); one value → both
     # containers. Was skipped → stayed empty → sync silently 401'd (#227).
     [SERVICE_SYNC_TOKEN]=32
-    # Authelia OIDC provider (#<issue>): hmac_secret signs Authelia's own internal
+    # Authelia OIDC provider: hmac_secret signs Authelia's own internal
     # OIDC session/consent tokens; MINDER_OIDC_CLIENT_SECRET is the plaintext
     # confidential-client secret shared between Authelia's configuration.yml
     # ($plaintext$ prefix) and api-gateway's token-exchange call.
@@ -68,12 +68,12 @@ prepare_env() {
     _ensure_docker_gid              # record the docker group gid as DOCKER_GID (#11, silent)
     chmod 600 "$ENV_FILE" 2>/dev/null || true
     _sync_compose_env               # mirror root .env → docker/.env (silent)
-    _ensure_oidc_issuer_key         # generate Authelia's OIDC signing key once (#<issue>, silent)
-    _render_authelia_config         # substitute it into configuration.rendered.yml (#<issue>, silent)
+    _ensure_oidc_issuer_key         # generate Authelia's OIDC signing key once (silent)
+    _render_authelia_config         # substitute it into configuration.rendered.yml (silent)
 }
 
 _ensure_oidc_issuer_key() {
-    # Generate Authelia's OIDC token-signing RSA key on first run (#<issue>).
+    # Generate Authelia's OIDC token-signing RSA key on first run.
     # Unlike the SECRET_SPEC values above, Authelia's jwks.key config wants
     # real PEM, not a bare token, so this gets its own file rather than an
     # .env entry — under docker/services/authelia/secrets/, matching the
@@ -132,7 +132,7 @@ _hash_oidc_client_secret() {
 
 _render_authelia_config() {
     # Substitute the real OIDC issuer key + client secret hash into
-    # Authelia's config (#<issue>). configuration.yml (git-tracked) holds
+    # Authelia's config. configuration.yml (git-tracked) holds
     # stable placeholders instead of key material; this writes
     # configuration.rendered.yml (gitignored) with them replaced by the
     # actual PEM (reindented as a YAML literal block scalar at the key's
@@ -152,6 +152,12 @@ _render_authelia_config() {
     local key_path="${SCRIPT_DIR}/docker/services/authelia/secrets/oidc_issuer.pem"
     [[ -f "$src" ]] || return 0
     [[ -f "$key_path" ]] || return 0
+    # Found live (Pi): Docker auto-creates a missing bind-mount SOURCE path as
+    # a directory the first time a container using it is created. If that
+    # races ahead of this function's first successful write, `>` below fails
+    # ("Is a directory") every time afterwards -- self-heal instead of
+    # leaving that to a manual `docker start` failure investigation.
+    [[ -d "$dst" ]] && rm -rf "$dst"
     local indented secret_hash
     indented="$(sed 's/^/          /' "$key_path")"
     secret_hash="$(_hash_oidc_client_secret)"

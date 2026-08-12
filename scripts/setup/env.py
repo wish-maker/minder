@@ -10,6 +10,7 @@ it refuses to auto-(re)generate secrets while a provisioned stack is running
 import os
 import re
 import secrets
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -274,7 +275,7 @@ def _hash_oidc_client_secret() -> str:
 
 def render_authelia_config() -> None:
     """Substitute the real OIDC issuer key + client secret hash into
-    Authelia's config (#<issue>).
+    Authelia's config.
 
     configuration.yml (git-tracked) holds stable placeholders instead of key
     material; this writes configuration.rendered.yml (gitignored) with them
@@ -302,7 +303,19 @@ def render_authelia_config() -> None:
     secret_hash = _hash_oidc_client_secret()
     if secret_hash:
         rendered = rendered.replace(_OIDC_CLIENT_SECRET_PLACEHOLDER, f'"{secret_hash}"')
-    _AUTHELIA_CONFIG_RENDERED.write_text(rendered, encoding="utf-8")
+    try:
+        if _AUTHELIA_CONFIG_RENDERED.is_dir():
+            # Found live (Pi): Docker auto-creates a missing bind-mount SOURCE
+            # path as a directory the first time a container using it is
+            # created. If this ever races ahead of the first successful
+            # render (or a prior render crashed before writing), every later
+            # authelia recreate then fails ("not a directory") against this
+            # stray directory forever -- self-heal instead of leaving that to
+            # a manual `docker start` failure investigation.
+            shutil.rmtree(_AUTHELIA_CONFIG_RENDERED)
+        _AUTHELIA_CONFIG_RENDERED.write_text(rendered, encoding="utf-8")
+    except OSError as e:
+        log.warn(f"Could not write rendered Authelia config: {e}")
 
 
 def _chmod_600(path: Path) -> None:
