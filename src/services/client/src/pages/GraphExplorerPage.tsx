@@ -6,6 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { randomId } from "../lib/browser";
 import {
   cardClass,
   destructiveButtonClass,
@@ -129,7 +130,7 @@ function ExtractAndBuildCard({
     setStatus("Building knowledge graph…");
     setBuilt(null);
     try {
-      const documentId = crypto.randomUUID();
+      const documentId = randomId();
       const res = await apiFetch<ConstructResponse>("/v1/graph-rag/construct-graph", {
         method: "POST",
         body: {

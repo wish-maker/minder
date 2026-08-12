@@ -4,6 +4,7 @@ API Routes for Graph RAG Service
 All FastAPI endpoints for entity extraction, graph construction, and retrieval.
 """
 
+import asyncio
 import logging
 
 from core.entity_extractor import EntityExtractor
@@ -32,8 +33,13 @@ async def extract_entities_handler(
 ) -> EntityExtractionResponse:
     """Handle entity extraction requests"""
     try:
-        result = entity_extractor.extract_entities(
-            text=request.text, extract_relationships=request.extract_relationships
+        # spaCy NER is synchronous, CPU-bound work — run it off the event loop so
+        # one extraction can't stall every other in-flight request (same class of
+        # fix as rag-pipeline's Qdrant offload, #211).
+        result = await asyncio.to_thread(
+            entity_extractor.extract_entities,
+            text=request.text,
+            extract_relationships=request.extract_relationships,
         )
 
         return EntityExtractionResponse(
@@ -57,8 +63,11 @@ async def construct_knowledge_graph_handler(
     """Handle knowledge graph construction requests"""
     try:
         # Extract entities first (honour the request's flag instead of forcing True).
-        extraction_result = entity_extractor.extract_entities(
-            text=request.text, extract_relationships=request.extract_relationships
+        # Offloaded: spaCy NER is blocking CPU work (see extract_entities_handler).
+        extraction_result = await asyncio.to_thread(
+            entity_extractor.extract_entities,
+            text=request.text,
+            extract_relationships=request.extract_relationships,
         )
 
         # Create document node. The return value MUST be checked: on failure
@@ -143,8 +152,10 @@ async def retrieve_with_graph_handler(
 
         start_time = time.time()
 
-        # Extract entities from query
-        extraction_result = entity_extractor.extract_entities(request.query)
+        # Extract entities from query (offloaded — blocking spaCy NER).
+        extraction_result = await asyncio.to_thread(
+            entity_extractor.extract_entities, request.query
+        )
 
         if extraction_result["entity_count"] == 0:
             return GraphRetrievalResponse(

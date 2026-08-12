@@ -116,7 +116,9 @@ over the Docker network or via Traefik.
   `OLLAMA_BASE_URL` is set, inference is offloaded to an external/native host and the
   container is inactive. Switch with `bash setup.sh ollama-mode`.
 - `minder-openwebui` — `ghcr.io/open-webui/open-webui:v0.10.2`, internal 8080, reached via
-  Traefik. **This is the web UI** — there is no separate Next.js/React frontend.
+  Traefik. **This is the chat UI.** Minder's own management frontend is a *separate*
+  React/Vite SPA — the `minder-client` service (internal 8009, Traefik-routed at
+  `client.minder.local`, forward-auth gated).
 
 ### Storage (internal-only)
 
@@ -143,8 +145,8 @@ See `monitoring.md` for the full stack and instrumentation details.
   IP-whitelisted). **Minder does not use Nginx.**
 - **Authelia** — **enabled** (a live, active service in compose with no profile gate;
   depends on postgres and redis being healthy). Traefik has an `authelia-forwardauth`
-  middleware wired and **enforced** on five routers (minio, api-gateway, grafana,
-  openwebui, jaeger) — unauthenticated requests get a 302 redirect to the Authelia
+  middleware wired and **enforced** on six routers (minio, api-gateway, grafana,
+  openwebui, jaeger, client) — unauthenticated requests get a 302 redirect to the Authelia
   portal. Full browser SSO still needs real DNS + TLS on this deploy.
 
 ---

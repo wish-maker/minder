@@ -1,25 +1,24 @@
 import { Link } from "react-router-dom";
 
-import { oidcLoginUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { secondaryButtonClass } from "../lib/ui";
 
-/** The platform's one login control (#<issue>) -- lives once, in the top
- * nav, instead of a LoginPanel form repeated on every page that needed
- * auth. "Log in" is a full-page navigation (not a fetch/click-handler)
- * into Authelia's real hosted login page; the client never collects a
- * password itself for this path. */
+/** The platform's one login control. Routes to the /login page, which offers
+ * local username/password auth (works over a direct localhost / LAN-IP address)
+ * AND an SSO button for Traefik-fronted deployments. Previously this was a bare
+ * link straight into the OIDC flow, which dead-ends over localhost since SSO
+ * needs the `*.minder.local` Traefik hostnames (real DNS + TLS). */
 export function UserMenu() {
   const { isAuthenticated, username, logout } = useAuth();
 
   if (!isAuthenticated) {
     return (
-      <a
-        href={oidcLoginUrl}
+      <Link
+        to="/login"
         className="rounded-md bg-indigo-600 px-3 py-1 text-sm font-medium text-white hover:bg-indigo-700"
       >
         Log in
-      </a>
+      </Link>
     );
   }
 

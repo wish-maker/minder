@@ -9,10 +9,8 @@ pytest-timeout>=2.2.0,<3.0.0
 pytest-mock>=3.12.0,<4.0.0
 
 # Test-time service deps (needed to import service modules during tests;
-# e.g. marketplace models use pydantic EmailStr -> email-validator; the
-# api-gateway app wires rate limiting -> slowapi)
+# e.g. marketplace models use pydantic EmailStr -> email-validator)
 email-validator>=2.1.0,<3.0.0
-slowapi>=0.1.9,<0.2.0
 
 # Code Quality
 mypy>=1.8.0,<2.0.0

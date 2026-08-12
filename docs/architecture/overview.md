@@ -114,8 +114,8 @@ Total: 36 services defined across core APIs, inference, storage, and observabili
 
 #### Authelia (9091) — ✅ ENABLED
 - Provides SSO and 2FA, running as `minder-authelia` in `docker-compose.yml`
-- A `forwardauth` middleware is wired on five Traefik routers (minio, api-gateway, grafana,
-  openwebui, jaeger), and that auth **is enforced** — unauthenticated requests get a 302
+- A `forwardauth` middleware is wired on six Traefik routers (minio, api-gateway, grafana,
+  openwebui, jaeger, client), and that auth **is enforced** — unauthenticated requests get a 302
   redirect to the Authelia portal. Full browser SSO still needs real DNS + TLS on the deploy.
 
 ### Core APIs
@@ -224,8 +224,8 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 
 ### Authentication Flow
 1. Requests enter through Traefik (TLS termination, routing).
-2. Traefik has an Authelia `forwardauth` middleware wired on five routers (minio, api-gateway,
-   grafana, openwebui, jaeger); Authelia is enabled, so unauthenticated requests are
+2. Traefik has an Authelia `forwardauth` middleware wired on six routers (minio, api-gateway,
+   grafana, openwebui, jaeger, client); Authelia is enabled, so unauthenticated requests are
    302-redirected to the Authelia portal.
 3. Core APIs validate JWT tokens (issued by the API Gateway, bcrypt-hashed credentials).
 

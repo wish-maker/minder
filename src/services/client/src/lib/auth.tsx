@@ -17,6 +17,13 @@ interface JwtClaims {
   username: string;
   email: string;
   role: string;
+  exp: number; // seconds since epoch; 0 when the token carries no expiry
+}
+
+/** True once the token's `exp` has passed. Tokens without an `exp` (exp === 0)
+ * are treated as non-expiring so this never regresses such tokens to logged-out. */
+function isExpired(exp: number): boolean {
+  return exp > 0 && Date.now() >= exp * 1000;
 }
 
 interface AuthContextValue {
@@ -57,9 +64,10 @@ function decodeJwtClaims(jwt: string): JwtClaims {
       username: typeof decoded.username === "string" ? decoded.username : "",
       email: typeof decoded.email === "string" ? decoded.email : "",
       role: typeof decoded.role === "string" ? decoded.role : "",
+      exp: typeof decoded.exp === "number" ? decoded.exp : 0,
     };
   } catch {
-    return { username: "", email: "", role: "" };
+    return { username: "", email: "", role: "", exp: 0 };
   }
 }
 
@@ -68,6 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => sessionStorage.getItem(TOKEN_KEY) || "",
   );
   const claims = useMemo(() => decodeJwtClaims(token), [token]);
+  // An expired JWT left in sessionStorage must NOT read as logged-in — otherwise
+  // the header shows a username while every write silently 401s. Treated as
+  // not-authenticated so the app routes back to login (#472-adjacent UX gap).
+  const authenticated = !!token && !isExpired(claims.exp);
 
   const login = useCallback(async (user: string, password: string) => {
     const res = await fetch(`${apiBaseUrl}/v1/auth/login`, {
@@ -110,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: claims.username,
         email: claims.email,
         role: claims.role,
-        isAuthenticated: !!token,
+        isAuthenticated: authenticated,
         login,
         loginWithToken,
         register,

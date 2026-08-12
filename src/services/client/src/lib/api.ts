@@ -5,12 +5,14 @@
 export const apiBaseUrl: string =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-// Unlike apiBaseUrl (fetch() calls, fine over the direct-port bypass), this
-// is a full-page navigation into Authelia's forward-auth + OIDC authorize
-// flow -- it only exists at a real Traefik-routed hostname.
+// OIDC/SSO entry point. Defaults to the gateway's own endpoint on apiBaseUrl so
+// it isn't hardcoded to one deployment's Traefik hostname; a real SSO deployment
+// sets VITE_OIDC_LOGIN_URL to its `*.minder.local`/domain gateway URL. Note the
+// flow still redirects on to Authelia's hosted login, which needs real DNS + TLS
+// — so over a direct localhost/LAN-IP address, local login (LoginPage) is the
+// path that actually completes.
 export const oidcLoginUrl: string =
-  import.meta.env.VITE_OIDC_LOGIN_URL ||
-  "https://api.minder.local/v1/auth/oidc/login";
+  import.meta.env.VITE_OIDC_LOGIN_URL || `${apiBaseUrl}/v1/auth/oidc/login`;
 
 export class ApiError extends Error {
   status: number;
