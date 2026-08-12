@@ -4,6 +4,9 @@ This directory contains all documentation for the Minder platform.
 
 ## 📚 Documentation Structure
 
+### 🧭 Start here
+- [Vision & North Star](vision.md) - What Minder is, its principles, and where it's headed
+
 ### 🚀 Getting Started (`getting-started/`)
 - [Installation](getting-started/installation.md) - System installation via `setup.sh`
 - [Quick Start](quickstart.md) - Get started fast

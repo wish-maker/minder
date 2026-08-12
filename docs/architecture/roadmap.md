@@ -49,7 +49,7 @@ collector, plus six exporters.
 
 **Reverse proxy & auth:** Traefik v3, plus Authelia SSO/2FA — **enabled** by default,
 enforcing forward-auth on 6 Traefik routers (minio, api-gateway, grafana, openwebui,
-jaeger). Full browser SSO still needs real DNS + TLS on the deploy.
+jaeger, client). Full browser SSO still needs real DNS + TLS on the deploy.
 
 **Not present / not implemented (do not expect these):**
 - Model fine-tuning service — **removed** (do not re-add)
