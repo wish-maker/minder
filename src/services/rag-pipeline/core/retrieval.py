@@ -12,14 +12,60 @@ routes/api.py (thin HTTP layer) + core/graph_retriever.py (orchestration) split.
 
 import asyncio
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from core import state
 from domain.retrievers.hybrid import HybridSearchRetriever
 from fastapi import HTTPException
+from models import MetadataFilter
 from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
 
 logger = logging.getLogger(__name__)
+
+
+def build_metadata_filter(
+    metadata_filter: Optional[MetadataFilter],
+) -> Optional[Filter]:
+    """Build a Qdrant `Filter` from a `MetadataFilter` (source/document_id exact
+    match, ANDed). Returns None when nothing is set, so every call site can pass
+    the result straight through as `query_filter`/`scroll_filter` unconditionally."""
+    if metadata_filter is None:
+        return None
+    conditions = []
+    if metadata_filter.source is not None:
+        conditions.append(
+            FieldCondition(key="source", match=MatchValue(value=metadata_filter.source))
+        )
+    if metadata_filter.document_id is not None:
+        conditions.append(
+            FieldCondition(
+                key="document_id", match=MatchValue(value=metadata_filter.document_id)
+            )
+        )
+    return Filter(must=conditions) if conditions else None
+
+
+def _matches_metadata_filter(
+    doc: Dict, metadata_filter: Optional[MetadataFilter]
+) -> bool:
+    """Post-filter for hybrid's sparse side: BM25 scores the whole cached corpus
+    (see _ensure_bm25_index), so a metadata_filter applied only to the dense Qdrant
+    call would still let a sparse-only hit from a filtered-out document through.
+    Checked against `doc` dicts built from Qdrant payloads (source/document_id)."""
+    if metadata_filter is None:
+        return True
+    if (
+        metadata_filter.source is not None
+        and doc.get("source") != metadata_filter.source
+    ):
+        return False
+    if (
+        metadata_filter.document_id is not None
+        and doc.get("document_id") != metadata_filter.document_id
+    ):
+        return False
+    return True
+
 
 # One process-local HybridSearchRetriever holds the in-memory BM25 index per KB. The
 # index is built lazily from the chunks already stored in Qdrant (so it survives
@@ -54,6 +100,7 @@ def _ensure_bm25_index(client, kb_id: str) -> None:
                     "_id": str(p.id),
                     "text": p.payload.get("text", ""),
                     "source": p.payload.get("source", ""),
+                    "document_id": p.payload.get("document_id", ""),
                 }
             )
         if offset is None or len(docs) >= 10000:
@@ -62,11 +109,23 @@ def _ensure_bm25_index(client, kb_id: str) -> None:
         _hybrid.index_documents(kb_id, docs)
 
 
-async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
-    """Retrieve via dense + BM25 hybrid scoring (same shape as the dense retriever)."""
+async def retrieve_hybrid(
+    pipeline: Dict,
+    question: str,
+    top_k: int,
+    metadata_filter: Optional[MetadataFilter] = None,
+) -> Dict:
+    """Retrieve via dense + BM25 hybrid scoring (same shape as the dense retriever).
+
+    metadata_filter is applied to the dense Qdrant call directly, AND as a
+    post-filter on the merged results — the BM25 corpus (_ensure_bm25_index) is
+    cached per-KB and unfiltered, so a sparse-only hit from a document the filter
+    excludes must still be dropped before returning (see _matches_metadata_filter).
+    """
     client = state.get_qdrant_client()
     first_kb_id = pipeline["knowledge_base_ids"][0]
     embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
+    qdrant_filter = build_metadata_filter(metadata_filter)
 
     try:
         question_embeddings = await state.ollama_manager.generate_embeddings(
@@ -90,6 +149,7 @@ async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
                     client.query_points,
                     collection_name=kb_id,
                     query=question_embedding,
+                    query_filter=qdrant_filter,
                     # wider candidate set so BM25 can surface keyword hits
                     limit=top_k * 3,
                 )
@@ -110,6 +170,7 @@ async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
                 {
                     "text": r.payload.get("text", ""),
                     "source": r.payload.get("source", ""),
+                    "document_id": r.payload.get("document_id", ""),
                 },
             )
 
@@ -118,6 +179,8 @@ async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
         )
         for did, score in pairs:
             d = docmap.get(did, {})
+            if not _matches_metadata_filter(d, metadata_filter):
+                continue  # sparse-only hit from a doc the filter excludes
             merged.append(
                 {
                     "text": d.get("text", ""),
@@ -139,11 +202,17 @@ async def retrieve_hybrid(pipeline: Dict, question: str, top_k: int) -> Dict:
 PARENT_WINDOW = 1  # neighbours on each side → a 2*W+1 chunk parent
 
 
-async def retrieve_parent_child(pipeline: Dict, question: str, top_k: int) -> Dict:
+async def retrieve_parent_child(
+    pipeline: Dict,
+    question: str,
+    top_k: int,
+    metadata_filter: Optional[MetadataFilter] = None,
+) -> Dict:
     """Retrieve child chunks, expand each to its neighbour window (same doc/source)."""
     client = state.get_qdrant_client()
     first_kb_id = pipeline["knowledge_base_ids"][0]
     embed_model = state.knowledge_bases[first_kb_id]["embedding_model"]
+    qdrant_filter = build_metadata_filter(metadata_filter)
 
     try:
         question_embeddings = await state.ollama_manager.generate_embeddings(
@@ -170,6 +239,7 @@ async def retrieve_parent_child(pipeline: Dict, question: str, top_k: int) -> Di
                     client.query_points,
                     collection_name=kb_id,
                     query=question_embedding,
+                    query_filter=qdrant_filter,
                     limit=top_k,
                 )
             ).points

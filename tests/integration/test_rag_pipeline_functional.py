@@ -90,6 +90,94 @@ def auth_token():
     return r.json()["access_token"]
 
 
+@pytest.fixture(scope="module")
+def filter_pipeline_id():
+    """A KB with two documents carrying distinct sentinel facts, dedicated to
+    metadata_filter tests -- proves filtering actually excludes chunks from the
+    non-matching document rather than just silently accepting the parameter."""
+    kb = httpx.post(
+        f"{BASE}/knowledge-bases",
+        json={
+            "name": f"test-filter-{os.getpid()}",
+            "description": "metadata filter test",
+        },
+        timeout=20.0,
+    )
+    assert kb.status_code == 200, kb.text
+    kb_id = kb.json()["id"]
+
+    up_a = httpx.post(
+        f"{BASE}/knowledge-bases/{kb_id}/upload",
+        files={
+            "file": (
+                "filter-doc-a.txt",
+                io.BytesIO(b"Document A's sentinel token is FILTERALPHA-1."),
+                "text/plain",
+            )
+        },
+        timeout=60.0,
+    )
+    assert up_a.status_code == 200, up_a.text
+
+    up_b = httpx.post(
+        f"{BASE}/knowledge-bases/{kb_id}/upload",
+        files={
+            "file": (
+                "filter-doc-b.txt",
+                io.BytesIO(b"Document B's sentinel token is FILTERBETA-2."),
+                "text/plain",
+            )
+        },
+        timeout=60.0,
+    )
+    assert up_b.status_code == 200, up_b.text
+
+    pl = httpx.post(
+        f"{BASE}/pipeline",
+        json={
+            "name": f"test-filter-pl-{os.getpid()}",
+            "knowledge_base_ids": [kb_id],
+        },
+        timeout=20.0,
+    )
+    assert pl.status_code == 200, pl.text
+    return pl.json()["pipeline_id"]
+
+
+def test_metadata_filter_excludes_non_matching_source_dense(filter_pipeline_id):
+    r = httpx.post(
+        f"{BASE}/pipeline/{filter_pipeline_id}/query",
+        json={
+            "question": "What is the sentinel token?",
+            "top_k": 5,
+            "metadata_filter": {"source": "filter-doc-a.txt"},
+        },
+        timeout=180.0,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["sources"], "no sources returned"
+    assert all(s["source"] == "filter-doc-a.txt" for s in body["sources"])
+    assert body["method_details"]["metadata_filter"] == {"source": "filter-doc-a.txt"}
+
+
+def test_metadata_filter_excludes_non_matching_source_hybrid(filter_pipeline_id):
+    r = httpx.post(
+        f"{BASE}/pipeline/{filter_pipeline_id}/query",
+        json={
+            "question": "What is the sentinel token?",
+            "top_k": 5,
+            "hybrid": True,
+            "metadata_filter": {"source": "filter-doc-b.txt"},
+        },
+        timeout=180.0,
+    )
+    assert r.status_code == 200, r.text
+    sources = r.json()["sources"]
+    assert sources, "no sources returned"
+    assert all(s["source"] == "filter-doc-b.txt" for s in sources)
+
+
 @pytest.fixture
 def doc_kb_id():
     """A fresh, empty KB dedicated to document list/delete tests (#427) -- kept

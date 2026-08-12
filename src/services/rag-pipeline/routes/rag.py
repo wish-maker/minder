@@ -1,13 +1,15 @@
 """RAG API routes: knowledge bases, document upload, pipelines, and query."""
 
 import asyncio
+import functools
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from core import state
 from core.retrieval import (
+    build_metadata_filter,
     invalidate_hybrid_index,
     retrieve_hybrid,
     retrieve_parent_child,
@@ -19,6 +21,7 @@ from models import (
     DocumentUploadResponse,
     KnowledgeBaseCreate,
     KnowledgeBaseResponse,
+    MetadataFilter,
     QueryRequest,
     QueryResponse,
     RAGPipelineCreate,
@@ -660,6 +663,14 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             retrieval_notes.append(
                 "hybrid requested but rank_bm25 unavailable — used dense retrieval"
             )
+    if request.metadata_filter is not None:
+        # Bind metadata_filter as a kwarg rather than changing retrieve_fn's shared
+        # (pipeline, query, top_k) call signature — that signature is also called
+        # from rag/runner.py and rag/methods/corrective.py's re-retrieve, neither of
+        # which need to know about metadata_filter.
+        retrieve_fn = functools.partial(
+            retrieve_fn, metadata_filter=request.metadata_filter
+        )
     components = state.RagComponents(
         ollama_manager=state.ollama_manager,
         retrieve=retrieve_fn,
@@ -704,15 +715,23 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     method_details["retrieval"] = retrieval_strategy
     if retrieval_notes:
         method_details.setdefault("degraded", []).extend(retrieval_notes)
+    if request.metadata_filter is not None:
+        method_details["metadata_filter"] = request.metadata_filter.model_dump(
+            exclude_none=True
+        )
     result["method_details"] = method_details
     return QueryResponse(**result)
 
 
 async def retrieve_relevant_documents(
-    pipeline: Dict, question: str, top_k: int
+    pipeline: Dict,
+    question: str,
+    top_k: int,
+    metadata_filter: Optional[MetadataFilter] = None,
 ) -> Dict:
     """Retrieve relevant documents from knowledge bases"""
     client = state.get_qdrant_client()
+    qdrant_filter = build_metadata_filter(metadata_filter)
 
     # Get embedding model from first KB
     first_kb_id = pipeline["knowledge_base_ids"][0]
@@ -742,6 +761,7 @@ async def retrieve_relevant_documents(
                 client.query_points,
                 collection_name=kb_id,
                 query=question_embedding,
+                query_filter=qdrant_filter,
                 limit=top_k,
             )
             # Extract points from QueryResponse

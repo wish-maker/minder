@@ -43,6 +43,7 @@ interface Capabilities {
     dense: { available: boolean };
     hybrid: { available: boolean };
     parent_child: { available: boolean; note?: string };
+    metadata_filter: { available: boolean; note?: string };
   };
 }
 
@@ -134,7 +135,11 @@ interface QueryResponse {
   model_used: string;
   tokens_used?: number | null;
   method: string;
-  method_details?: { retrieval: string; degraded?: string[] } | null;
+  method_details?: {
+    retrieval: string;
+    degraded?: string[];
+    metadata_filter?: { source?: string; document_id?: string };
+  } | null;
 }
 
 interface Turn {
@@ -177,6 +182,11 @@ function QueryResultCard({
       {response.method_details?.degraded && response.method_details.degraded.length > 0 && (
         <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
           ⚠ Degraded: {response.method_details.degraded.join(", ")}
+        </p>
+      )}
+      {response.method_details?.metadata_filter && (
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Filtered to: {response.method_details.metadata_filter.source}
         </p>
       )}
       {!compact && response.sources.length > 0 && (
@@ -338,6 +348,7 @@ function QueryPanel({
   const questionId = useId();
   const topKId = useId();
   const methodId = useId();
+  const sourceFilterId = useId();
   const [question, setQuestion] = useState("");
   const [topK, setTopK] = useState("5");
   const [method, setMethod] = useState<Method>("standard");
@@ -347,6 +358,7 @@ function QueryPanel({
   const [parentContext, setParentContext] = useState(false);
   const [continueConversation, setContinueConversation] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState("");
   const [status, setStatus] = useState("");
   const [result, setResult] = useState<QueryResponse | null>(null);
   // Only populated in continue-conversation mode -- server-side context
@@ -361,9 +373,14 @@ function QueryPanel({
   const compressAvailable = capabilities?.enhancers.compress.available ?? false;
   const hybridAvailable = capabilities?.retrievers.hybrid.available ?? false;
   const conversationalAvailable = capabilities?.methods.conversational ?? false;
-  const advancedActiveCount = [rerank, compress, hybrid, parentContext, continueConversation].filter(
-    Boolean,
-  ).length;
+  const advancedActiveCount = [
+    rerank,
+    compress,
+    hybrid,
+    parentContext,
+    continueConversation,
+    sourceFilter.trim().length > 0,
+  ].filter(Boolean).length;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -389,6 +406,9 @@ function QueryPanel({
         parent_context: parentContext,
       };
       if (continueConversation && convId) body.conversation_id = convId;
+      if (sourceFilter.trim()) {
+        body.metadata_filter = { source: sourceFilter.trim() };
+      }
       const res = await apiFetch<QueryResponse>(
         `/v1/rag/pipeline/${pipelineId}/query`,
         { method: "POST", body, token },
@@ -570,6 +590,23 @@ function QueryPanel({
                 <p className={fieldHintClass}>
                   {ENHANCER_DESCRIPTIONS.continue_conversation} Shows the whole
                   thread below instead of just the latest answer.
+                </p>
+              </div>
+              <div>
+                <label className="flex flex-col gap-1 text-sm" htmlFor={sourceFilterId}>
+                  Filter by filename
+                  <input
+                    id={sourceFilterId}
+                    className={inputClass}
+                    type="text"
+                    placeholder="e.g. handbook.pdf"
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                  />
+                </label>
+                <p className={fieldHintClass}>
+                  Only search chunks from one uploaded file — exact filename
+                  match. Leave empty to search everything the pipeline covers.
                 </p>
               </div>
             </div>
