@@ -34,8 +34,27 @@ http_request_duration_seconds = Histogram(
 http_requests_in_progress = Gauge(
     "http_requests_in_progress",
     "HTTP requests currently in progress",
-    ["method", "endpoint"],
+    # Labelled by method ONLY: a request's matched route isn't known until AFTER
+    # routing (post call_next), but an in-progress gauge must inc() before the
+    # request runs. Method-only keeps it bounded; per-endpoint in-flight counts add
+    # little and would need the raw path (unbounded) here.
+    ["method"],
 )
+
+
+def route_template(request: Request) -> str:
+    """Bounded ``endpoint`` label: the matched route TEMPLATE, not the raw path.
+
+    ``request.url.path`` is the concrete URL (``/v1/models/llama3.2:latest``), so a
+    Counter/Histogram labelled with it grows one time series per distinct id value —
+    unbounded Prometheus cardinality. The matched route's ``path`` is the template
+    (``/v1/models/{model_id}``), a small fixed set. Only populated AFTER routing, so
+    call this from the post-``call_next`` path. Unmatched requests (404s, scanners
+    hitting random URLs) collapse to a single ``__unmatched__`` bucket rather than
+    spawning a series each."""
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    return path if path else "__unmatched__"
 
 
 def setup_metrics(app: FastAPI) -> None:
@@ -44,8 +63,7 @@ def setup_metrics(app: FastAPI) -> None:
     @app.middleware("http")
     async def _track_requests(request: Request, call_next):
         method = request.method
-        endpoint = request.url.path
-        http_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
+        http_requests_in_progress.labels(method=method).inc()
         start = time.time()
         status = 500
         try:
@@ -54,7 +72,8 @@ def setup_metrics(app: FastAPI) -> None:
             return response
         finally:
             duration = time.time() - start
-            http_requests_in_progress.labels(method=method, endpoint=endpoint).dec()
+            http_requests_in_progress.labels(method=method).dec()
+            endpoint = route_template(request)
             http_requests_total.labels(
                 method=method, endpoint=endpoint, status=status
             ).inc()
