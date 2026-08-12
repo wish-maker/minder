@@ -4,6 +4,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { copyText, randomId } from "../lib/browser";
 import {
   badgeClass,
   cardClass,
@@ -390,7 +391,7 @@ function QueryPanel({
     }
     let convId = conversationId;
     if (continueConversation && !convId) {
-      convId = crypto.randomUUID();
+      convId = randomId();
       setConversationId(convId);
     }
     setStatus("Querying…");
@@ -699,7 +700,7 @@ function PipelineCard({
   }
 
   async function handleCopy() {
-    await navigator.clipboard.writeText(pipeline.id);
+    if (!(await copyText(pipeline.id))) return;
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
