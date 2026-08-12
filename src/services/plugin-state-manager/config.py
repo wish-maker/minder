@@ -31,5 +31,18 @@ class Settings(MinderBaseSettings):
     DB_NAME: str = "minder_marketplace"
     DEFAULT_PLUGINS_CONFIG: str = "/app/src/bootstrap/config/default_plugins.yml"
 
+    # Downstream service URLs. Resolved from config (env-overridable) instead of
+    # hardcoded literals scattered across core/, so a moved peer / renamed container /
+    # off-network run doesn't require editing call sites.
+    MARKETPLACE_URL: str = "http://minder-marketplace:8002"
+    PLUGIN_REGISTRY_URL: str = "http://minder-plugin-registry:8001"
+
+    # HTTP timeouts (seconds). An actual AI-tool execution may do real work (e.g. the
+    # network/nmap plugin), so it gets a generous ceiling aligned with the gateway's
+    # _call_plugin_tool (60s) — otherwise a slow tool 504s via this path while
+    # succeeding via the gateway. Marketplace catalog lookups are fast reads.
+    TOOL_EXECUTION_TIMEOUT: float = 60.0
+    CATALOG_HTTP_TIMEOUT: float = 10.0
+
 
 settings = Settings()

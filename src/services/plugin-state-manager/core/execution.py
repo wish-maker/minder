@@ -16,7 +16,35 @@ from models.tool_execution import (
     ToolSchema,
 )
 
+from config import settings
+
 logger = logging.getLogger(__name__)
+
+
+def _row_to_tool_schema(tool_data: Dict[str, Any]) -> ToolSchema:
+    """Build a ToolSchema from a marketplace AI-tools row.
+
+    parameters/response_format arrive as either dicts or JSON strings depending on
+    the marketplace serializer, so normalise both. Shared by the two discovery
+    endpoints below (they carried a byte-identical copy of this loop body)."""
+    parameters = tool_data.get("parameters", {})
+    if isinstance(parameters, str):
+        parameters = json.loads(parameters)
+
+    response_format = tool_data.get("response_format", {})
+    if isinstance(response_format, str):
+        response_format = json.loads(response_format)
+
+    return ToolSchema(
+        name=tool_data["tool_name"],
+        description=tool_data["description"],
+        type=tool_data["type"],
+        parameters=parameters,
+        response_format=response_format,
+        endpoint=tool_data["endpoint"],
+        method=tool_data["method"],
+        required_tier=tool_data["required_tier"],
+    )
 
 
 def _build_execution_url(
@@ -51,11 +79,13 @@ async def execute_tool(
     """
     start_time = time.time()
 
-    # Get tool details from marketplace
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    # Get tool details from marketplace. This client also wraps the actual tool
+    # execution below, so it uses the generous tool-execution timeout (a real tool
+    # may do work); the marketplace lookup itself returns fast within it.
+    async with httpx.AsyncClient(timeout=settings.TOOL_EXECUTION_TIMEOUT) as client:
         # Get tool info
         tool_response = await client.get(
-            f"http://minder-marketplace:8002/v1/marketplace/ai/tools/{tool_name}"
+            f"{settings.MARKETPLACE_URL}/v1/marketplace/ai/tools/{tool_name}"
         )
 
         if tool_response.status_code == 404:
@@ -112,7 +142,7 @@ async def execute_tool(
                 )
 
         # Execute tool via plugin registry
-        registry_url = "http://minder-plugin-registry:8001"
+        registry_url = settings.PLUGIN_REGISTRY_URL
 
         tool_endpoint = tool_data.get("endpoint", f"/{tool_name}")
         http_method = tool_data.get("method", "POST")
@@ -163,7 +193,7 @@ async def discover_tools(
     Returns:
         Tool discovery response
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=settings.CATALOG_HTTP_TIMEOUT) as client:
         params = {}
         if active_only:
             params["active_only"] = "true"
@@ -171,36 +201,13 @@ async def discover_tools(
             params["tier"] = tier_filter
 
         response = await client.get(
-            "http://minder-marketplace:8002/v1/marketplace/ai/tools", params=params
+            f"{settings.MARKETPLACE_URL}/v1/marketplace/ai/tools", params=params
         )
 
         response.raise_for_status()
         data = response.json()
 
-        tools = []
-        for tool_data in data.get("tools", []):
-            # Parse JSON strings for parameters and response_format
-            parameters = tool_data.get("parameters", {})
-            if isinstance(parameters, str):
-                parameters = json.loads(parameters)
-
-            response_format = tool_data.get("response_format", {})
-            if isinstance(response_format, str):
-                response_format = json.loads(response_format)
-
-            tools.append(
-                ToolSchema(
-                    name=tool_data["tool_name"],
-                    description=tool_data["description"],
-                    type=tool_data["type"],
-                    parameters=parameters,
-                    response_format=response_format,
-                    endpoint=tool_data["endpoint"],
-                    method=tool_data["method"],
-                    required_tier=tool_data["required_tier"],
-                )
-            )
-
+        tools = [_row_to_tool_schema(t) for t in data.get("tools", [])]
         return ToolDiscoveryResponse(tools=tools, count=len(tools))
 
 
@@ -214,36 +221,13 @@ async def discover_plugin_tools(plugin_id: str) -> ToolDiscoveryResponse:
     Returns:
         Tool discovery response
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=settings.CATALOG_HTTP_TIMEOUT) as client:
         response = await client.get(
-            f"http://minder-marketplace:8002/v1/marketplace/ai/plugins/{plugin_id}/tools"
+            f"{settings.MARKETPLACE_URL}/v1/marketplace/ai/plugins/{plugin_id}/tools"
         )
 
         response.raise_for_status()
         data = response.json()
 
-        tools = []
-        for tool_data in data.get("tools", []):
-            # Parse JSON strings for parameters and response_format
-            parameters = tool_data.get("parameters", {})
-            if isinstance(parameters, str):
-                parameters = json.loads(parameters)
-
-            response_format = tool_data.get("response_format", {})
-            if isinstance(response_format, str):
-                response_format = json.loads(response_format)
-
-            tools.append(
-                ToolSchema(
-                    name=tool_data["tool_name"],
-                    description=tool_data["description"],
-                    type=tool_data["type"],
-                    parameters=parameters,
-                    response_format=response_format,
-                    endpoint=tool_data["endpoint"],
-                    method=tool_data["method"],
-                    required_tier=tool_data["required_tier"],
-                )
-            )
-
+        tools = [_row_to_tool_schema(t) for t in data.get("tools", [])]
         return ToolDiscoveryResponse(tools=tools, count=len(tools))
