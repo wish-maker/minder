@@ -650,8 +650,21 @@ def _fake_kb(**overrides):
     return kb
 
 
+def _fake_chunk_text(text, chunk_size=512, chunk_overlap=50):
+    """Stand-in for the real chunk_text: langchain-text-splitters is an
+    optional per-service dependency (rag-pipeline's own requirements.txt),
+    not installed in CI's plain "Unit Tests" job (root requirements.txt
+    only) -- same class of gap as the rank-bm25 one fixed earlier this
+    session. One chunk per non-empty text is enough to exercise
+    ingest_document's own logic; the real splitter's behavior is covered by
+    its own dedicated tests, not re-tested here."""
+    return [text] if text.strip() else []
+
+
 @pytest.mark.asyncio
-async def test_ingest_document_raises_400_when_no_text_extracted():
+async def test_ingest_document_raises_400_when_no_text_extracted(monkeypatch):
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
+
     with pytest.raises(Exception) as exc_info:
         await ingestion.ingest_document("kb-1", _fake_kb(), "empty.txt", b"")
     assert exc_info.value.status_code == 400
@@ -661,6 +674,8 @@ async def test_ingest_document_raises_400_when_no_text_extracted():
 async def test_ingest_document_raises_503_when_embedding_backend_unavailable(
     monkeypatch,
 ):
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
+
     async def boom(texts, model):
         raise ConnectionError("ollama unreachable")
 
@@ -682,6 +697,7 @@ async def test_ingest_document_raises_503_when_embedding_backend_unavailable(
 
 @pytest.mark.asyncio
 async def test_ingest_document_stores_chunks_and_updates_kb_stats(monkeypatch):
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
     captured = {}
 
     class _FakeQdrantClient:
@@ -724,6 +740,7 @@ async def test_ingest_document_stores_chunks_and_updates_kb_stats(monkeypatch):
 async def test_ingest_document_invalidates_hybrid_cache(monkeypatch):
     """Proves invalidate_hybrid_index is actually called, not just imported --
     a stale cache would let a hybrid query miss the newly-uploaded chunks."""
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
 
     class _FakeQdrantClient:
         def upsert(self, **kwargs):
