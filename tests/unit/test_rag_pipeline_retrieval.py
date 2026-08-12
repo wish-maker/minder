@@ -417,7 +417,13 @@ async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
     the cached, unfiltered BM25 corpus, and BM25 alone can surface it (a
     sparse-only hit with no dense score). Must not appear in the final result —
     proves the post-filter (_matches_metadata_filter), not just the dense
-    side's query_filter, is actually doing the work."""
+    side's query_filter, is actually doing the work.
+
+    Pre-seeds the BM25 cache directly (same trick as
+    test_invalidate_hybrid_index_clears_cached_index above) rather than going
+    through real indexing, so this stays a true unit test independent of
+    rank-bm25 (an optional package, not installed in every CI job).
+    """
 
     class _Hit:
         def __init__(self, id_, payload, score):
@@ -429,8 +435,7 @@ async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
         def __init__(self, points):
             self.points = points
 
-    # Only one dense hit, from the ALLOWED document -- the excluded document's
-    # chunk is in the BM25 corpus (via scroll) but never among the dense hits.
+    # Only one dense hit, from the ALLOWED document.
     allowed_hit = _Hit(
         "allowed-1",
         {
@@ -441,24 +446,10 @@ async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
         },
         0.9,
     )
-    excluded_point = _Hit(
-        "excluded-1",
-        {
-            "_id": "excluded-1",
-            "text": "Globex makes gadgets.",
-            "source": "excluded.txt",
-            "document_id": "doc-excluded",
-        },
-        0.0,
-    )
 
     class _FakeQdrantClient:
         def query_points(self, **kwargs):
             return _QueryResult([allowed_hit])
-
-        def scroll(self, **kwargs):
-            # BM25 corpus covers BOTH documents -- unfiltered, as designed.
-            return [allowed_hit, excluded_point], None
 
     async def fake_embed(texts, model):
         return [[0.1, 0.2, 0.3]]
@@ -469,6 +460,25 @@ async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
         ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
     )
     monkeypatch.setattr(retrieval, "state", fake_state)
+
+    # "Already indexed" cache covering BOTH documents -- unfiltered, as
+    # designed -- so _ensure_bm25_index's `if kb_id in sparse_index: return`
+    # short-circuits without touching real rank-bm25.
+    retrieval._hybrid.sparse_index["kb-1"] = object()
+    retrieval._hybrid.documents["kb-1"] = [
+        {
+            "_id": "allowed-1",
+            "text": "Acme makes widgets.",
+            "source": "allowed.txt",
+            "document_id": "doc-allowed",
+        },
+        {
+            "_id": "excluded-1",
+            "text": "Globex makes gadgets.",
+            "source": "excluded.txt",
+            "document_id": "doc-excluded",
+        },
+    ]
 
     # Force the excluded document's chunk to win on BM25 alone (a sparse-only
     # hit not present in `dense_scores`) by monkeypatching hybrid_search to
