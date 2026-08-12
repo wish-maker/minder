@@ -6,8 +6,9 @@
 
 This guide covers local development setup, workflow, and conventions for the Minder
 platform. Minder is a set of Python (3.11 / 3.12) FastAPI services orchestrated with
-Docker Compose, fronted by the **Traefik** reverse proxy. There is **no separate frontend
-app** — the web UI is **OpenWebUI**.
+Docker Compose, fronted by the **Traefik** reverse proxy. Two web UIs sit behind Traefik:
+**OpenWebUI** (the chat UI) and Minder's own **`minder-client`** — a separate React/Vite +
+TypeScript SPA (`src/services/client/`, the one non-Python service).
 
 ## Prerequisites
 
