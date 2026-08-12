@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS marketplace_plugins (
 );
 
 -- Backend services a plugin actually needs at runtime (e.g. ["influxdb"]) --
--- synced from plugin-registry's own PluginMetadata.databases (#37). Surfaced
+-- synced from plugin-registry's own PluginMetadata.databases (#484). Surfaced
 -- on Available/Installed Plugins so a user can tell a plugin needs a bundle
 -- they haven't enabled, instead of it just silently writing nowhere.
 ALTER TABLE marketplace_plugins

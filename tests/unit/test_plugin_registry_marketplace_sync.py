@@ -126,7 +126,7 @@ async def test_module_plugin_sync_carries_databases_as_requires_services(
     """The plugin's declared PluginMetadata.databases (backend services it
     needs at runtime, e.g. ["influxdb"]) must land in the marketplace create
     payload as requires_services -- surfaced on Available/Installed Plugins
-    so a user can tell a plugin needs a bundle they haven't enabled (#37)."""
+    so a user can tell a plugin needs a bundle they haven't enabled (#484)."""
     await marketplace_sync.sync_plugin_ai_tools(
         "weather",
         tmp_path,
@@ -173,7 +173,7 @@ async def test_plugin_dependencies_are_recorded_in_the_graph(
     """ "network" declares plugin_dependencies=["telegraf"] (a real runtime
     dependency: network reads plugin_instances["telegraf"] directly) -- must
     resolve telegraf's marketplace id and POST a "requires" edge, in
-    addition to network's own marketplace sync (#37)."""
+    addition to network's own marketplace sync (#484)."""
     await marketplace_sync.sync_plugin_ai_tools(
         "network",
         tmp_path,

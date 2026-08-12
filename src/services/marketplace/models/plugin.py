@@ -53,7 +53,7 @@ class PluginCreate(BaseModel):
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
     # Backend services this plugin needs at runtime (e.g. ["influxdb"]) -- synced
-    # from plugin-registry's own PluginMetadata.databases (#37), surfaced on
+    # from plugin-registry's own PluginMetadata.databases (#484), surfaced on
     # Available/Installed Plugins so a user can tell it needs a bundle they
     # haven't enabled instead of it just silently writing nowhere.
     requires_services: List[str] = Field(default_factory=list)

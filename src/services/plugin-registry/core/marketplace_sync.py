@@ -125,14 +125,14 @@ async def sync_plugin_ai_tools(
         databases: backend services this plugin needs at runtime (e.g.
             ["influxdb"], from PluginMetadata.databases) -- synced onward as
             the marketplace's requires_services so Available/Installed
-            Plugins can show what a plugin actually needs enabled (#37).
+            Plugins can show what a plugin actually needs enabled (#484).
         plugin_dependencies: OTHER PLUGINS this one calls into directly at
             runtime (e.g. "network" reads `plugin_instances["telegraf"]` to
             push discovered hosts into telegraf's managed config region --
             a real dependency `PluginMetadata.databases` can't express, since
             that field is for backend services, not sibling plugins). Synced
             as "requires" edges in the marketplace's plugin-dependency graph
-            (#37) -- see _sync_plugin_dependencies.
+            (#484) -- see _sync_plugin_dependencies.
     """
     try:
         # Load a plugin manifest if one exists (manifest plugins).
@@ -269,7 +269,7 @@ async def _sync_plugin_dependencies(
     plugin_id: str, plugin_name: str, depends_on: List[str]
 ) -> None:
     """Push "plugin_name requires depends_on[i]" edges into the marketplace's
-    plugin-dependency graph (#37) -- e.g. network REQUIRES telegraf, since
+    plugin-dependency graph (#484) -- e.g. network REQUIRES telegraf, since
     network pushes discovered hosts into telegraf's managed config region at
     runtime. Best-effort per edge: one failed edge shouldn't block the rest,
     or the AI-tool sync that follows in the caller."""

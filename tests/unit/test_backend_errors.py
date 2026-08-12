@@ -1,5 +1,5 @@
 """Unit tests for the shared backend-error sanitizer (#234 item 1) and the
-global unhandled-exception handler (#37).
+global unhandled-exception handler (#357).
 
 Guards the contract every service's handlers now delegate to: a backend being
 unreachable → 503 (retryable), any other failure → generic 500, and in NEITHER

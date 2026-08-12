@@ -1,6 +1,6 @@
 # Minder Plugin Architecture
 
-> **Last Updated:** 2026-07-17
+> **Last Updated:** 2026-08-12
 
 ## Overview
 
@@ -131,6 +131,41 @@ above. Only actions in that declared subset are exposed this way — mutating ac
 previously gated behind the same JWT requirement as mutating actions purely because both
 shared one POST route; a plugin author opts a method into this path deliberately, it isn't
 automatic for every action.
+
+## Plugin Dependencies & Required Services (#484)
+
+Two distinct, easily-confused relationships a plugin can declare, both surfaced on the
+**Available Plugins** page so a user doesn't have to guess them from behaviour:
+
+- **`PluginMetadata.databases`** — backend *services* (in the [storage-backend list](
+  #storage-backends-available-to-plugins) above) the plugin needs at runtime, e.g. `weather`
+  declares `["influxdb"]`. Synced into the marketplace catalog as `requires_services` and
+  rendered as **"Needs: influxdb"** on the plugin's card — the piece that tells a user *why*
+  a plugin might not work yet (its bundle isn't enabled) without them having to inspect bundle
+  claims themselves. Not a dependency edge — no graph entry.
+- **`PluginMetadata.dependencies`** — other **plugins** this one requires to function, e.g.
+  `network` declares `["telegraf"]` because it pushes discovered hosts into telegraf's managed
+  config region at runtime (see `network` in [Shipped Plugins](#shipped-plugins)). This *is* a
+  graph edge: on every load, `plugin-registry`'s `marketplace_sync.py` resolves each declared
+  dependency to its marketplace plugin id (creating a bare placeholder row if the target hasn't
+  synced yet — a pure lookup-or-bare-create, never overwriting a target's real metadata) and
+  records a `requires` edge via marketplace's `POST /v1/graph/dependencies`. One failed edge
+  doesn't block the rest — best-effort per dependency.
+
+Marketplace persists the edges in **Neo4j** (`DEPENDS_ON`/`RECOMMENDS`/`CONFLICTS_WITH`
+relationships, keyed by `dependency_type` — `requires`/`suggests`/`conflicts_with`) and exposes
+them read-only:
+
+```bash
+GET /v1/graph/dependencies/{plugin_id}   # direct + transitive deps (BFS depth)
+GET /v1/graph/conflicts/{plugin_id}      # declared conflicts
+```
+
+A plugin's card on **Available Plugins** has a collapsible **"Dependencies & conflicts"** panel
+(lazy-fetched on first expand) rendering **"Depends on: telegraf"** / **"Conflicts with: ..."**,
+or a note that no relationship is recorded yet if the graph has nothing for that plugin —
+the dependency graph is built incrementally as plugins declare relationships, not computed
+up front.
 
 ## API Endpoints
 
