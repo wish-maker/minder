@@ -23,8 +23,5 @@ asyncpg==0.31.0
 # Redis integration
 redis==8.1.0
 
-# Rate limiting
-slowapi==0.1.10
-
 # Monitoring and logging
 prometheus-client==0.26.0

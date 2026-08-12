@@ -21,7 +21,9 @@ from shared.utils.redis_client import create_redis_client_from_settings  # noqa:
 # Redis client for rate limiting and caching. ping=False keeps the original lazy
 # behaviour (this is a module-level singleton created at import, before Redis is
 # guaranteed reachable) — redis.Redis connects on first command, unchanged from the
-# previous hand-rolled client. Same host/port/password/db=0/decode_responses.
+# previous hand-rolled client. Same host/port/password/db=0/decode_responses. The
+# rate-limit middleware offloads its calls via run_in_threadpool so they don't block
+# the event loop.
 redis_client = create_redis_client_from_settings(settings, ping=False)
 
 # HTTP client for proxying requests (with connection pooling)

@@ -12,6 +12,7 @@ import uuid
 from core.clients import redis_client
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 from config import settings
 
@@ -29,6 +30,18 @@ from shared.metrics import (  # noqa: E402
 from shared.utils.cors import add_cors_from_string  # noqa: E402
 
 logger = logging.getLogger("minder.api-gateway")
+
+
+def _client_ip(request: Request) -> str:
+    """Client IP used as the rate-limit key.
+
+    Replaces slowapi's get_remote_address (the only thing slowapi was used for — its
+    Limiter was instantiated but never actually applied to any route). Returns the
+    connecting peer's host; behind Traefik that is whatever ProxyHeaders resolves
+    request.client to, unchanged from the previous behaviour.
+    """
+    client = request.client
+    return client.host if client else "127.0.0.1"
 
 
 def register_middleware(app: FastAPI) -> None:
@@ -71,56 +84,46 @@ def register_middleware(app: FastAPI) -> None:
         return response
 
     if settings.RATE_LIMIT_ENABLED:
-        from slowapi import Limiter
-        from slowapi.util import get_remote_address
-
-        limiter = Limiter(key_func=get_remote_address)
-        app.state.limiter = limiter
+        # Paths exempt from rate limiting: health/metrics (monitoring), API docs,
+        # and static/frontend assets.
+        exempt_prefixes = ("/static/", "/favicon")
+        exempt_exact = {"/health", "/metrics", "/docs", "/redoc", "/openapi.json"}
 
         @app.middleware("http")
         async def rate_limit_middleware(request: Request, call_next):
-            """Apply rate limiting based on user IP or JWT token"""
-            # Skip rate limiting for health checks and internal monitoring
-            if request.url.path == "/health":
+            """Fixed-window per-IP rate limiting backed by Redis.
+
+            The synchronous redis-py calls are offloaded via run_in_threadpool so they
+            don't block the event loop on every request at the gateway (a thread pool
+            hop, not an inline blocking call). An atomic INCR + first-hit EXPIRE
+            replaces the old GET-then-INCR, which was a TOCTOU race: concurrent
+            requests both read the pre-increment value and could each be admitted past
+            the limit. (Threadpool-over-sync rather than redis.asyncio deliberately:
+            an async client's connection pool binds to one event loop, which breaks
+            under Starlette's TestClient — and buys nothing here since the work is a
+            sub-millisecond Redis round-trip either way.)
+            """
+            path = request.url.path
+            if path in exempt_exact or path.startswith(exempt_prefixes):
                 return await call_next(request)
 
-            # Skip rate limiting for metrics (monitoring)
-            if request.url.path == "/metrics":
-                return await call_next(request)
-
-            # Skip rate limiting for API documentation
-            if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
-                return await call_next(request)
-
-            # Skip rate limiting for static files and frontend assets
-            if request.url.path.startswith("/static/") or request.url.path.startswith(
-                "/favicon"
-            ):
-                return await call_next(request)
-
-            # Get identifier (JWT token subject or IP address)
-            identifier = get_remote_address(request)
-
-            # Check rate limit in Redis (with error handling)
+            # Atomic fixed-window counter: INCR returns the post-increment value, so
+            # the window's first request sees 1 (and we stamp the 60s TTL then).
+            # No read-modify-write, so no race. Fail open if Redis is unreachable.
             try:
-                key = f"ratelimit:{identifier}"
-                current = redis_client.get(key)
-
-                if current is None:
-                    # First request in window
-                    redis_client.setex(key, 60, 1)
-                else:
-                    count = int(current)
-                    if count >= settings.RATE_LIMIT_PER_MINUTE:
-                        return JSONResponse(
-                            status_code=429,
-                            content={
-                                "error": "Rate limit exceeded",
-                                "limit": settings.RATE_LIMIT_PER_MINUTE,
-                                "window": "60 seconds",
-                            },
-                        )
-                    redis_client.incr(key)
+                key = f"ratelimit:{_client_ip(request)}"
+                count = await run_in_threadpool(redis_client.incr, key)
+                if count == 1:
+                    await run_in_threadpool(redis_client.expire, key, 60)
+                if count > settings.RATE_LIMIT_PER_MINUTE:
+                    return JSONResponse(
+                        status_code=429,
+                        content={
+                            "error": "Rate limit exceeded",
+                            "limit": settings.RATE_LIMIT_PER_MINUTE,
+                            "window": "60 seconds",
+                        },
+                    )
             except Exception as e:
                 # Redis unavailable, bypass rate limiting (fail open)
                 logger.warning(f"Rate limiting unavailable: {e}")
