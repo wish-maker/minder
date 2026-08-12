@@ -26,6 +26,7 @@ from shared.metrics import (  # noqa: E402
     http_request_duration_seconds,
     http_requests_in_progress,
     http_requests_total,
+    route_template,
 )
 from shared.utils.cors import add_cors_from_string  # noqa: E402
 
@@ -58,18 +59,21 @@ def register_middleware(app: FastAPI) -> None:
         request.state.request_id = request_id
         request.state.start_time = time.time()
 
-        # Update metrics
-        endpoint = request.url.path
+        # Update metrics. in_progress is method-only (bounded); the request's route
+        # template isn't known until after routing (post call_next).
         method = request.method
-        http_requests_in_progress.labels(method=method, endpoint=endpoint).inc()
+        http_requests_in_progress.labels(method=method).inc()
 
         response = await call_next(request)
 
         # Calculate request duration
         duration = time.time() - request.state.start_time
 
-        # Update metrics
-        http_requests_in_progress.labels(method=method, endpoint=endpoint).dec()
+        # Update metrics. Label total/duration with the matched route TEMPLATE
+        # (e.g. /v1/rag/{path}) not the raw path — the gateway proxies every id
+        # through path params, so raw-path labels are unbounded cardinality (#503).
+        endpoint = route_template(request)
+        http_requests_in_progress.labels(method=method).dec()
         http_requests_total.labels(
             method=method, endpoint=endpoint, status=response.status_code
         ).inc()
