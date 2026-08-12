@@ -76,8 +76,9 @@ class RAGPipelineInfo(BaseModel):
 
 class MetadataFilter(BaseModel):
     """Restrict retrieval to chunks matching these fields (docs/rag-methods.md
-    Bucket 2 → shipped). Fields left as None are not filtered; multiple set
-    fields are ANDed. Limited to what's actually stamped on every chunk at
+    Bucket 1 — moved there from Bucket 2 once shipped). Fields left as None
+    are not filtered; multiple set fields are ANDed. Limited to what's
+    actually stamped on every chunk at
     ingest time (routes/rag.py's upload_document) -- there's no user-settable
     tag/label mechanism yet, so filtering by anything beyond these two would
     need a separate ingest-time change first."""

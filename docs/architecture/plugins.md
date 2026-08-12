@@ -20,8 +20,11 @@ Plugin lifecycle and discovery are handled by the **Plugin Registry** service (`
 runtime state and AI-tool execution handled by the **Plugin State Manager** (`:8003`).
 
 > **Six module plugins ship today** (`telegraf`, `network`, `crypto`, `weather`, `news`, `tefas`
-> — see [Shipped Plugins](#shipped-plugins)); #34 is done. They're loaded from disk on registry
-> startup and declare a central `CONFIG_SCHEMA` (`GET/PUT /v1/plugins/{name}/config`). The
+> — see [Shipped Plugins](#shipped-plugins)); #34 is done. All six load from disk on registry
+> startup; four (`crypto`, `weather`, `news`, `tefas`) declare a `CONFIG_SCHEMA` reachable via
+> `GET/PUT /v1/plugins/{name}/config`. `telegraf`/`network` have no schema (configured via
+> Compose env vars instead — see their own sections below) — the config route degrades
+> gracefully for them (`"configurable": false`, empty schema) rather than erroring. The
 > plugin-state-manager bootstrap `default_plugins.yml` remains an empty stub — a separate mechanism.
 
 ## Plugin Lifecycle
