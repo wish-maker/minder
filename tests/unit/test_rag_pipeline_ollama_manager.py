@@ -54,7 +54,13 @@ class _FakeAsyncClient:
         self.host = host
         self.list = AsyncMock(return_value={"models": [{"name": "llama3.2:latest"}]})
         self.pull = AsyncMock(return_value=None)
-        self.embeddings = AsyncMock(return_value={"embedding": [0.1, 0.2, 0.3]})
+        # Batch embed API: ollama's .embed(input=[...]) returns one vector per
+        # input, in order (mirrors the real EmbedResponse["embeddings"]).
+        self.embed = AsyncMock(
+            side_effect=lambda **kw: {
+                "embeddings": [[0.1, 0.2, 0.3] for _ in kw["input"]]
+            }
+        )
         self.generate = AsyncMock(
             return_value={"response": "hi", "prompt_eval_count": 3, "eval_count": 5}
         )
@@ -152,7 +158,7 @@ async def test_generate_embeddings_lazily_initializes_and_returns_vectors(
 async def test_generate_embeddings_raises_on_backend_error(patched_client):
     mgr = _manager()
     await mgr.initialize()
-    mgr.embed_client.embeddings = AsyncMock(side_effect=RuntimeError("boom"))
+    mgr.embed_client.embed = AsyncMock(side_effect=RuntimeError("boom"))
     with pytest.raises(RuntimeError, match="embedding generation failed"):
         await mgr.generate_embeddings(["hello"], model="nomic-embed")
 
@@ -161,9 +167,29 @@ async def test_generate_embeddings_raises_on_backend_error(patched_client):
 async def test_generate_embeddings_raises_on_empty_vector(patched_client):
     mgr = _manager()
     await mgr.initialize()
-    mgr.embed_client.embeddings = AsyncMock(return_value={"embedding": []})
+    mgr.embed_client.embed = AsyncMock(return_value={"embeddings": [[]]})
     with pytest.raises(RuntimeError, match="empty vector"):
         await mgr.generate_embeddings(["hello"], model="nomic-embed")
+
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_raises_on_count_mismatch(patched_client):
+    mgr = _manager()
+    await mgr.initialize()
+    # Backend returns fewer vectors than inputs -- must fail loudly, otherwise the
+    # batched vectors would be paired with the wrong chunks on upsert.
+    mgr.embed_client.embed = AsyncMock(return_value={"embeddings": [[0.1, 0.2, 0.3]]})
+    with pytest.raises(RuntimeError, match="vectors for"):
+        await mgr.generate_embeddings(["a", "b"], model="nomic-embed")
+
+
+@pytest.mark.asyncio
+async def test_generate_embeddings_empty_input_short_circuits(patched_client):
+    mgr = _manager()
+    await mgr.initialize()
+    mgr.embed_client.embed = AsyncMock()
+    assert await mgr.generate_embeddings([], model="nomic-embed") == []
+    mgr.embed_client.embed.assert_not_awaited()
 
 
 @pytest.mark.asyncio
