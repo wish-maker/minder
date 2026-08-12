@@ -5,9 +5,10 @@ import functools
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import List
 
 from core import state
+from core.ingestion import group_documents, ingest_document
 from core.retrieval import (
     invalidate_hybrid_index,
     retrieve_hybrid,
@@ -32,11 +33,9 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
-    PointStruct,
     VectorParams,
 )
 from rag.model_selection import resolve_llm_model
-from rag.text_utils import chunk_text, extract_text_from_file
 
 from config import EMBEDDING_DIMENSIONS, settings
 from shared.auth.jwt_middleware import get_current_user_or_service
@@ -271,126 +270,12 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
 
     kb = state.knowledge_bases[kb_id]
 
-    # Read file
+    # Read file — UploadFile.filename is Optional; normalise to a real string so
+    # extension sniffing (.pdf/.txt/.md) and the stored payload never see None.
     content = await file.read()
-
-    # UploadFile.filename is Optional; normalise to a real string so extension
-    # sniffing (.pdf/.txt/.md) and the stored payload never see None.
     filename = file.filename or "upload"
 
-    # Extract text
-    text = await extract_text_from_file(content, filename)
-
-    # Chunk text
-    chunks = chunk_text(
-        text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"]
-    )
-
-    if not chunks:
-        raise HTTPException(status_code=400, detail="No text content extracted")
-
-    # Generate embeddings — fail loudly if the backend is unreachable rather than
-    # storing zero-vectors, which would make the document silently unsearchable (#77).
-    try:
-        with state.embedding_generation_duration.labels(
-            model=kb["embedding_model"]
-        ).time():
-            embeddings = await state.ollama_manager.generate_embeddings(
-                chunks, model=kb["embedding_model"]
-            )
-    except Exception as e:
-        state.documents_processed_total.labels(status="failed").inc()
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Embedding backend unavailable — document was NOT indexed. Check that "
-                f"OLLAMA_BASE_URL is reachable from the containers. ({e})"
-            ),
-        )
-
-    # Store in Qdrant
-    client = state.get_qdrant_client()
-
-    # One id per upload call (not per chunk) so every chunk from THIS upload can be
-    # listed/deleted together via GET|DELETE .../documents/{document_id} (#427) --
-    # `source` (filename) alone can't distinguish two separate uploads of the same
-    # filename.
-    document_id = str(uuid.uuid4())
-    uploaded_at = datetime.now(timezone.utc).isoformat()
-
-    points = []
-    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-        points.append(
-            PointStruct(
-                id=str(uuid.uuid4()),  # Generate proper UUID
-                vector=embedding,
-                payload={
-                    "text": chunk,
-                    "source": filename,
-                    "chunk_index": i,
-                    "kb_id": kb_id,
-                    "document_id": document_id,
-                    "uploaded_at": uploaded_at,
-                },
-            )
-        )
-
-    # Upsert points to Qdrant using PointStruct list. Off the event loop (#211): a
-    # large upload's upsert is the worst blocker on the sync client.
-    await asyncio.to_thread(
-        client.upsert,
-        collection_name=kb_id,
-        points=points,
-    )
-
-    # New chunks landed → drop any cached BM25 index so the next hybrid query
-    # rebuilds it over the full, current set (#45).
-    invalidate_hybrid_index(kb_id)
-
-    # Update knowledge base stats
-    kb["document_count"] += 1
-    kb["vector_count"] += len(chunks)
-
-    # Save updated KB to PostgreSQL if available
-    if state.PG_AVAILABLE:
-        try:
-            await state.save_kb_to_postgres(kb_id, kb)
-            logger.info(f"✅ Updated KB in PostgreSQL: {kb_id}")
-        except Exception as e:
-            logger.warning(f"⚠️  Failed to update KB in PostgreSQL: {e}")
-
-    logger.info(f"✅ Uploaded {filename} to KB {kb_id}: {len(chunks)} chunks")
-
-    state.documents_processed_total.labels(status="success").inc()
-
-    return DocumentUploadResponse(
-        message="Document uploaded successfully",
-        chunks_processed=len(chunks),
-        vectors_created=len(chunks),
-        filename=filename,
-        document_id=document_id,
-    )
-
-
-def _group_documents(records: List) -> List[DocumentInfo]:
-    """Aggregate a KB's Qdrant points into one entry per uploaded document
-    (#427). Points from before `document_id` existed are grouped by `source`
-    (filename) instead, with a synthetic `legacy:<filename>` id -- the finest
-    granularity available for that older data (see DocumentInfo's docstring)."""
-    groups: Dict[str, Dict] = {}
-    for record in records:
-        payload = record.payload or {}
-        source = payload.get("source", "")
-        doc_id = payload.get("document_id") or f"legacy:{source}"
-        entry = groups.setdefault(
-            doc_id,
-            {"document_id": doc_id, "filename": source, "chunk_count": 0},
-        )
-        entry["chunk_count"] += 1
-        uploaded_at = payload.get("uploaded_at")
-        if uploaded_at:
-            entry["uploaded_at"] = uploaded_at
-    return [DocumentInfo(**g) for g in groups.values()]
+    return await ingest_document(kb_id, kb, filename, content)
 
 
 @router.get(
@@ -427,7 +312,7 @@ async def list_documents(kb_id: str):
         records.extend(batch)
         if next_offset is None:
             break
-    return _group_documents(records)
+    return group_documents(records)
 
 
 @router.delete(
