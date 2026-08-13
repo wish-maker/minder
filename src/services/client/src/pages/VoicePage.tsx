@@ -4,6 +4,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { matchingSttLanguage } from "../lib/stt";
 import { badgeClass, cardClass, confidenceBadgeColor, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
 
@@ -33,22 +34,6 @@ const TTS_EXAMPLES: { label: string; text: string }[] = [
   { label: "English pangram", text: "The quick brown fox jumps over the lazy dog." },
   { label: "Numbers", text: "One, two, three, four, five." },
 ];
-
-/** STT language codes are BCP-47 ("tr-TR"); TTS's are bare ("tr") -- #449 --
- * so "verify by transcribing" a just-synthesized clip has to bridge the two
- * lists itself. Matches on the BCP-47 code's language prefix; returns null
- * (not a guess) when no STT locale covers this TTS language, so the caller
- * can disable the action instead of silently transcribing in the wrong
- * language. */
-function matchingSttLanguage(
-  ttsCode: string,
-  sttLanguages: Record<string, string>,
-): string | null {
-  const match = Object.keys(sttLanguages).find(
-    (code) => code.split("-")[0] === ttsCode,
-  );
-  return match ?? null;
-}
 
 function TextToSpeechCard({
   token,
