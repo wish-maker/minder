@@ -6,6 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { EmptyState } from "../components/EmptyState";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
+import type { Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
@@ -311,8 +312,8 @@ export function ModelManagementPage() {
   const loadModels = useCallback(async () => {
     setStatusMsg("Loading…");
     try {
-      const res = await apiFetch<ModelInfo[]>("/v1/models");
-      setModels(res);
+      const res = await apiFetch<Paginated<ModelInfo>>("/v1/models?limit=500");
+      setModels(res.items);
       setStatusMsg("");
     } catch (e) {
       setStatusMsg(friendlyErrorMessage(e), true);

@@ -115,4 +115,30 @@ def test_list_models_success_path_unaffected():
     r = _client(ollama_manager).get("/models")
 
     assert r.status_code == 200
-    assert r.json()[0]["id"] == "llama3.2:latest"
+    # #519: returns the shared {items,total,limit,offset} envelope, not a bare
+    # array — the model at items[0] is the one Ollama reported.
+    body = r.json()
+    assert set(body) == {"items", "total", "limit", "offset"}
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == "llama3.2:latest"
+
+
+def test_list_models_envelope_paginates_and_reports_total():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(
+                return_value=[{"model": f"m{i}:latest", "size": 1} for i in range(5)]
+            )
+        },
+    )()
+
+    r = _client(ollama_manager).get("/models?limit=2&offset=1")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 5  # pre-slice total, not the page length
+    assert body["limit"] == 2
+    assert body["offset"] == 1
+    assert [m["id"] for m in body["items"]] == ["m1:latest", "m2:latest"]

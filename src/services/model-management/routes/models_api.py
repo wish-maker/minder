@@ -4,9 +4,7 @@ Built via a factory with the Ollama manager, the in-memory cache dict, and the l
 injected by ``main`` — same pattern as the other services' route modules.
 """
 
-from typing import List
-
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from models import (
     FineTuneRequest,
     ModelConstraints,
@@ -17,18 +15,26 @@ from models import (
 
 from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
+from shared.models import PaginatedList
 
 
 def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     router = APIRouter(tags=["Models"])
 
-    @router.get("/v1/models", response_model=List[ModelInfo])
+    @router.get("/v1/models", response_model=PaginatedList[ModelInfo])
     @router.get(
-        "/models", response_model=List[ModelInfo], include_in_schema=False
+        "/models",
+        response_model=PaginatedList[ModelInfo],
+        include_in_schema=False,
     )  # deprecated unversioned alias
-    async def list_models():
+    async def list_models(
+        limit: int = Query(50, ge=1, le=500),
+        offset: int = Query(0, ge=0),
+    ):
         """List all models from Ollama (real-time), refreshing the cache.
 
+        Returns the shared `{items, total, limit, offset}` envelope (#519, matching
+        rag-pipeline's #501 conversion) so a caller can page and see the true total.
         Served at both /v1/models and the legacy /models directly — the old /models
         used a 301 redirect, which drops the method/body on non-GET clients (#147).
         """
@@ -57,7 +63,8 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             for m in result:
                 models[m.id] = m.model_dump()
             logger.info(f"✅ Listed {len(result)} models from Ollama")
-            return result
+            # Full list is in memory; slice + wrap in the shared envelope (#519).
+            return PaginatedList.paginate(result, limit, offset)
         except HTTPException:
             raise
         except Exception as e:

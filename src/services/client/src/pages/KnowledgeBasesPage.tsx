@@ -366,8 +366,8 @@ function CreateKbForm({
     // source) -- offer that list instead. Best-effort: an empty list just
     // means every dropdown falls back to its single "(server default)"
     // option, same as before this existed.
-    apiFetch<ModelInfo[]>("/v1/models")
-      .then(setModels)
+    apiFetch<Paginated<ModelInfo>>("/v1/models?limit=500")
+      .then((res) => setModels(res.items))
       .catch(() => {});
   }, []);
 

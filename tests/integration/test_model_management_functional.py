@@ -36,10 +36,12 @@ def test_health():
 def test_list_models_returns_local_models():
     r = httpx.get(f"{BASE}/models", timeout=15.0)
     assert r.status_code == 200
-    models = r.json()
-    assert isinstance(models, list)
+    body = r.json()
+    # #519: shared {items,total,limit,offset} envelope, not a bare array.
+    assert set(body) >= {"items", "total", "limit", "offset"}
+    assert body["total"] >= len(body["items"])
     # a clean install pulls at least one model (nomic-embed-text / llama3.2)
-    for m in models:
+    for m in body["items"]:
         assert {"id", "name", "provider", "status"} <= set(m)
 
 
