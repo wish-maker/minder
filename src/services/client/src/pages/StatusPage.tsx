@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
+import { EmptyState } from "../components/EmptyState";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, badgeTone, secondaryButtonClass } from "../lib/ui";
+import { useAsyncResource } from "../lib/useAsyncResource";
 
 interface ServiceStatus {
   name: string;
@@ -129,29 +131,11 @@ function ServiceCard({ service, token }: { service: ServiceStatus; token: string
 
 export function StatusPage() {
   const { token } = useAuth();
-  const [services, setServices] = useState<ServiceStatus[] | null>(null);
-  const [status, setStatus] = useState("");
-  const [isError, setIsError] = useState(false);
-
-  const setStatusMsg = useCallback((msg: string, err = false) => {
-    setStatus(msg);
-    setIsError(err);
-  }, []);
-
-  const loadStatus = useCallback(async () => {
-    setStatusMsg("Loading…");
-    try {
-      const res = await apiFetch<StatusResponse>("/v1/status");
-      setServices(res.services);
-      setStatusMsg("");
-    } catch (e) {
-      setStatusMsg(friendlyErrorMessage(e), true);
-    }
-  }, [setStatusMsg]);
-
-  useEffect(() => {
-    loadStatus();
-  }, [loadStatus]);
+  // Single whole-object read → useAsyncResource (cancels on unmount, drops a
+  // stale response if Refresh is clicked twice fast). #502
+  const services = useAsyncResource((signal) =>
+    apiFetch<StatusResponse>("/v1/status", { signal }).then((r) => r.services),
+  );
 
   return (
     <>
@@ -166,16 +150,19 @@ export function StatusPage() {
         carries — it isn't derived from the deployed Docker image tag, so
         don't treat it as a deployment-tracking signal.
       </InfoCallout>
-      <StatusLine isError={isError}>{status}</StatusLine>
-      <button onClick={loadStatus} className={`${secondaryButtonClass} mb-4`}>
+      <StatusLine isError={!!services.error}>
+        {services.error ?? (services.loading ? "Loading…" : "")}
+      </StatusLine>
+      <button
+        onClick={services.reload}
+        className={`${secondaryButtonClass} mb-4`}
+      >
         🔄 Refresh
       </button>
-      {services?.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No services reported by the server.
-        </p>
+      {services.data?.length === 0 && (
+        <EmptyState>No services reported by the server.</EmptyState>
       )}
-      {services?.map((s) => (
+      {services.data?.map((s) => (
         <ServiceCard key={s.name} service={s} token={token} />
       ))}
     </>
