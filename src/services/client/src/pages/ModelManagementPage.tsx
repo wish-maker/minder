@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
@@ -7,6 +7,7 @@ import { StatusLine } from "../components/StatusLine";
 import { EmptyState } from "../components/EmptyState";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import type { Paginated } from "../lib/api";
+import { useAsyncResource } from "../lib/useAsyncResource";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
@@ -299,30 +300,16 @@ function PullModelForm({
 export function ModelManagementPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
-  const [models, setModels] = useState<ModelInfo[] | null>(null);
+  // Single list read → useAsyncResource (cancels on unmount, stale-guard). Pull
+  // and delete refresh via reload() rather than local optimistic edits, so the
+  // list (and each model's derived size/status) always reflects Ollama. #502
+  const modelsRes = useAsyncResource((signal) =>
+    apiFetch<Paginated<ModelInfo>>("/v1/models?limit=500", { signal }).then(
+      (r) => r.items,
+    ),
+  );
+  const models = modelsRes.data;
   const [filter, setFilter] = useState("");
-  const [status, setStatus] = useState("");
-  const [isError, setIsError] = useState(false);
-
-  const setStatusMsg = useCallback((msg: string, err = false) => {
-    setStatus(msg);
-    setIsError(err);
-  }, []);
-
-  const loadModels = useCallback(async () => {
-    setStatusMsg("Loading…");
-    try {
-      const res = await apiFetch<Paginated<ModelInfo>>("/v1/models?limit=500");
-      setModels(res.items);
-      setStatusMsg("");
-    } catch (e) {
-      setStatusMsg(friendlyErrorMessage(e), true);
-    }
-  }, [setStatusMsg]);
-
-  useEffect(() => {
-    loadModels();
-  }, [loadModels]);
 
   const needle = filter.trim().toLowerCase();
   const visibleModels = needle
@@ -352,8 +339,10 @@ export function ModelManagementPage() {
         per-model settings (system prompts, parameters) if you're already
         there for chat.
       </InfoCallout>
-      <StatusLine isError={isError}>{status}</StatusLine>
-      <PullModelForm token={token} onPulled={loadModels} />
+      <StatusLine isError={!!modelsRes.error}>
+        {modelsRes.error ?? (modelsRes.loading ? "Loading…" : "")}
+      </StatusLine>
+      <PullModelForm token={token} onPulled={modelsRes.reload} />
       {models !== null && models.length === 0 && (
         <EmptyState>No models pulled yet — use the form above.</EmptyState>
       )}
@@ -381,7 +370,7 @@ export function ModelManagementPage() {
           key={m.id}
           model={m}
           token={token}
-          onDeleted={(id) => setModels((prev) => (prev ?? []).filter((mm) => mm.id !== id))}
+          onDeleted={modelsRes.reload}
           confirm={confirm}
         />
       ))}
