@@ -522,12 +522,19 @@ Errors follow the standard FastAPI shape:
 | Status | Meaning |
 |--------|---------|
 | 200 | Success |
-| 400 | Bad request (invalid input) |
+| 400 | Bad request — semantically invalid input the route rejected (e.g. undecodable audio, an unknown config key) |
 | 401 | Unauthorized (missing/invalid JWT) |
-| 404 | Not found |
-| 422 | Validation error (FastAPI request-body validation) |
-| 429 | Rate limited |
-| 500 | Internal server error |
+| 403 | Forbidden — authenticated but not permitted (insufficient license tier, a disabled account, or a disabled plugin) |
+| 404 | Not found — unknown resource, **or a malformed id** (e.g. a non-UUID `plugin_id` is treated as "no such plugin", not a server error) |
+| 422 | Validation error — FastAPI request-body/param validation (wrong type, out-of-range, empty required field) |
+| 429 | Rate limited (Redis-backed, 60s window; fail-open) |
+| 500 | Internal server error — a genuine bug |
+| 503 | Service unavailable — a required downstream/backend (DB, Ollama, Qdrant, …) is unreachable; **retryable** |
+
+**Conventions (enforced platform-wide via `shared.errors.backend_http_error`):**
+
+- **Malformed or not-found input is always a 4xx, never a 5xx.** Validation happens at the request boundary (typed bodies, `Field(min_length=…)`, bounded ints, existence checks) so bad input can't fail deep in a driver and surface as a 500. A malformed id 404s like an absent one; an empty/undecodable payload 422/400s rather than 500.
+- **5xx messages are sanitized.** `503`/`500` bodies carry a generic message ("… failed: a required backend is unreachable" / "… failed. See the service logs for details.") — the raw driver/exception string is **never** returned to the caller in production (it's only echoed when `ENVIRONMENT=development`). `503` means "backend down, retry"; `500` means "a real bug, check logs".
 
 ---
 
@@ -571,6 +578,19 @@ the full observability port map.
 ---
 
 ## Changelog
+
+### 2026-08-13
+- **Standardized list responses** behind the shared `{items, total, limit, offset}` envelope
+  (`shared.models.PaginatedList`): rag-pipeline's knowledge-bases / documents / pipelines
+  (#501) and model-management's `/v1/models` (#519) — previously bare JSON arrays. Registry
+  `/v1/plugins` and marketplace still carry their own wrappers (convergence pending).
+- **Error-handling hardening across services** — malformed / not-found input now returns a
+  clean 4xx instead of a leaking 5xx (validated at the request boundary): marketplace non-UUID
+  `plugin_id` → 404 (#526); plugin-config invalid bool → 400 (#530); model-management
+  test-unknown → 404 / pull-empty-id → 422 (#532); tts empty text → 422 (#534); STT empty /
+  non-audio file → 422 / 400 (#536); graph-rag construct-graph empty `document_id`/`text` →
+  422 (#538). Documented the resulting conventions in **Error Handling** above (added the
+  503 "backend unreachable / retryable" status + the sanitize-5xx / 4xx-for-bad-input rules).
 
 ### 2026-08-02
 - Re-verified every route table against each service's live `/openapi.json` on a real
