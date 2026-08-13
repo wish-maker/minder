@@ -639,6 +639,12 @@ services:
         # Authelia's forward-auth + OIDC authorize flow, which only exists
         # at that hostname.
         VITE_OIDC_LOGIN_URL: ${CLIENT_OIDC_LOGIN_URL:-https://api.minder.local/v1/auth/oidc/login}
+        # Optional link target for the Settings page's "change your password /
+        # groups" pointer -- Authelia's self-service portal. Like the OIDC URL
+        # it only exists at a real Traefik hostname, so it has NO default:
+        # unset -> the Settings page shows the guidance as plain text instead of
+        # a dead link (see src/lib/api.ts autheliaPortalUrl).
+        VITE_AUTHELIA_PORTAL_URL: ${CLIENT_AUTHELIA_PORTAL_URL:-}
     image: minder/client:1.0.0
     container_name: minder-client
     restart: on-failure

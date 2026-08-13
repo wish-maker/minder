@@ -5,7 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { badgeClass, secondaryButtonClass } from "../lib/ui";
+import { badgeClass, badgeTone, secondaryButtonClass } from "../lib/ui";
 
 interface ServiceStatus {
   name: string;
@@ -32,9 +32,9 @@ interface LogsResponse {
 }
 
 function statusBadgeColor(status: string): string {
-  if (status === "healthy") return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
-  if (status === "degraded") return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
-  return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
+  if (status === "healthy") return badgeTone.success;
+  if (status === "degraded") return badgeTone.warn;
+  return badgeTone.danger;
 }
 
 function LogViewer({ name, token }: { name: string; token: string }) {

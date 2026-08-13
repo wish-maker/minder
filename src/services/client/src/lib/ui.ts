@@ -35,5 +35,31 @@ export const cardClass =
 export const badgeClass =
   "inline-block rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-800 dark:text-gray-300";
 
+/** Muted secondary text (empty-state notices, inline captions). Was spelled out
+ * verbatim at ~a dozen sites; centralized so the `EmptyState` primitive and any
+ * ad-hoc muted line share one token. */
+export const mutedTextClass = "text-sm text-gray-500 dark:text-gray-400";
+
+/** Sub-field caption under a form control ("How many chunks to retrieve…").
+ * Was defined identically in KnowledgeBasesPage and RagPipelinesPage (#509). */
+export const fieldHintClass = "mt-0.5 text-xs text-gray-500 dark:text-gray-400";
+
+/** The three semantic badge tones (green/amber/red, dark-mode aware). The exact
+ * colour triplets were re-spelled inside confidenceBadgeColor (×2) and two
+ * different statusBadgeColor helpers; this is the single source they map onto. */
+export const badgeTone = {
+  success: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
+  warn: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  danger: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+} as const;
+
+/** Confidence score (0..1) → badge tone. Shared by the RAG query result panel
+ * and the voice STT verify panels (previously duplicated in both, #509). */
+export function confidenceBadgeColor(confidence: number): string {
+  if (confidence >= 0.8) return badgeTone.success;
+  if (confidence >= 0.5) return badgeTone.warn;
+  return badgeTone.danger;
+}
+
 export const statusClass = (isError: boolean) =>
   `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;

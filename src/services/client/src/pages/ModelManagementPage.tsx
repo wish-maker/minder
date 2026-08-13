@@ -4,18 +4,19 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
+import { EmptyState } from "../components/EmptyState";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
 import {
   badgeClass,
+  badgeTone,
   cardClass,
   destructiveButtonClass,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 type ModelType = "local" | "remote";
@@ -51,9 +52,9 @@ interface TestResponse {
 }
 
 function statusBadgeColor(status: ModelStatusValue): string {
-  if (status === "ready") return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
-  if (status === "error") return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
-  return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
+  if (status === "ready") return badgeTone.success;
+  if (status === "error") return badgeTone.danger;
+  return badgeTone.warn;
 }
 
 function ModelDetailPanel({ modelId }: { modelId: string }) {
@@ -282,12 +283,12 @@ function PullModelForm({
         </p>
       )}
       {pulling && (
-        <p className={statusClass(false)}>
+        <StatusLine>
           <span className="inline-block animate-spin">⏳</span> Pulling —{" "}
           {formatElapsed(elapsed)} elapsed. This blocks until the download
           finishes (can take several minutes for large models) — don't
           navigate away.
-        </p>
+        </StatusLine>
       )}
       {!pulling && <StatusLine>{status}</StatusLine>}
     </section>
@@ -353,9 +354,7 @@ export function ModelManagementPage() {
       <StatusLine isError={isError}>{status}</StatusLine>
       <PullModelForm token={token} onPulled={loadModels} />
       {models !== null && models.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No models pulled yet — use the form above.
-        </p>
+        <EmptyState>No models pulled yet — use the form above.</EmptyState>
       )}
       {models !== null && models.length > 0 && (
         <div className="mb-3 flex items-center gap-3">
@@ -374,9 +373,7 @@ export function ModelManagementPage() {
         </div>
       )}
       {needle && visibleModels?.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No pulled models match "{filter}".
-        </p>
+        <EmptyState>No pulled models match "{filter}".</EmptyState>
       )}
       {visibleModels?.map((m) => (
         <ModelCard

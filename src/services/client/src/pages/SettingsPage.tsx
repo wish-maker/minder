@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 
+import { autheliaPortalUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, secondaryButtonClass } from "../lib/ui";
 
@@ -50,12 +51,16 @@ export function SettingsPage() {
         <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
           Signed in via Authelia SSO or a local Minder account. To change
           your password, display name, or group membership, use{" "}
-          <a
-            href="https://authelia.minder.local"
-            className="underline hover:text-indigo-600 dark:hover:text-indigo-400"
-          >
-            Authelia's own portal
-          </a>{" "}
+          {autheliaPortalUrl ? (
+            <a
+              href={autheliaPortalUrl}
+              className="underline hover:text-indigo-600 dark:hover:text-indigo-400"
+            >
+              Authelia's own portal
+            </a>
+          ) : (
+            "your identity provider's portal (Authelia)"
+          )}{" "}
           — that's the actual identity source for SSO logins, not this page.
         </p>
       </section>
