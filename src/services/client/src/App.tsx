@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { UserMenu } from "./components/UserMenu";
 import { AuthProvider } from "./lib/auth";
@@ -24,6 +25,9 @@ export function App() {
   // lg:translate-x-0 lg:static), this only controls the slide-in overlay
   // below that breakpoint.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Re-key the ErrorBoundary per route so navigating to another page clears a
+  // previous page's crash instead of staying stuck on the fallback.
+  const location = useLocation();
 
   return (
     <AuthProvider>
@@ -51,80 +55,100 @@ export function App() {
             </div>
           </header>
           <main className="mx-auto w-full max-w-4xl flex-1 p-6">
-            <Routes>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/auth/callback" element={<AuthCallbackPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+            <ErrorBoundary key={location.pathname}>
+              <Routes>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
 
-              <Route path="/rag" element={<KnowledgeBasesPage />} />
-              <Route path="/rag/pipelines" element={<RagPipelinesPage />} />
-              <Route path="/rag/graph" element={<GraphExplorerPage />} />
+                <Route path="/rag" element={<KnowledgeBasesPage />} />
+                <Route path="/rag/pipelines" element={<RagPipelinesPage />} />
+                <Route path="/rag/graph" element={<GraphExplorerPage />} />
 
-              {/* Plugins and Bundles are both "things you turn on for this
+                {/* Plugins and Bundles are both "things you turn on for this
                   installation" -- grouping them under one Marketplace
                   section (sidebar-level now, not a page-level tab) keeps
                   that relationship visible instead of accidental. */}
-              <Route
-                path="/marketplace"
-                element={<Navigate to="/marketplace/plugins/available" replace />}
-              />
-              <Route
-                path="/marketplace/plugins"
-                element={<Navigate to="/marketplace/plugins/available" replace />}
-              />
-              <Route
-                path="/marketplace/plugins/available"
-                element={<AvailablePluginsPage />}
-              />
-              <Route
-                path="/marketplace/plugins/installed"
-                element={<InstalledPluginsPage />}
-              />
-              <Route
-                path="/marketplace/plugins/ai-tools"
-                element={<AiToolsPage />}
-              />
-              <Route path="/marketplace/bundles" element={<BundleManagementPage />} />
+                <Route
+                  path="/marketplace"
+                  element={
+                    <Navigate to="/marketplace/plugins/available" replace />
+                  }
+                />
+                <Route
+                  path="/marketplace/plugins"
+                  element={
+                    <Navigate to="/marketplace/plugins/available" replace />
+                  }
+                />
+                <Route
+                  path="/marketplace/plugins/available"
+                  element={<AvailablePluginsPage />}
+                />
+                <Route
+                  path="/marketplace/plugins/installed"
+                  element={<InstalledPluginsPage />}
+                />
+                <Route
+                  path="/marketplace/plugins/ai-tools"
+                  element={<AiToolsPage />}
+                />
+                <Route
+                  path="/marketplace/bundles"
+                  element={<BundleManagementPage />}
+                />
 
-              <Route path="/platform" element={<ModelManagementPage />} />
-              <Route path="/platform/status" element={<StatusPage />} />
-              <Route path="/platform/voice" element={<VoicePage />} />
+                <Route path="/platform" element={<ModelManagementPage />} />
+                <Route path="/platform/status" element={<StatusPage />} />
+                <Route path="/platform/voice" element={<VoicePage />} />
 
-              {/* Old flat/pre-restructure routes, kept as redirects so existing
+                {/* Old flat/pre-restructure routes, kept as redirects so existing
                   bookmarks/links still land somewhere sensible instead of the
                   catch-all. */}
-              <Route path="/knowledge-bases" element={<Navigate to="/rag" replace />} />
-              <Route
-                path="/rag-pipelines"
-                element={<Navigate to="/rag/pipelines" replace />}
-              />
-              <Route
-                path="/plugins"
-                element={<Navigate to="/marketplace/plugins/available" replace />}
-              />
-              <Route
-                path="/plugins/config"
-                element={<Navigate to="/marketplace/plugins/installed" replace />}
-              />
-              <Route
-                path="/plugins/ai-tools"
-                element={<Navigate to="/marketplace/plugins/ai-tools" replace />}
-              />
-              <Route
-                path="/plugin-config"
-                element={<Navigate to="/marketplace/plugins/installed" replace />}
-              />
-              <Route
-                path="/platform/bundles"
-                element={<Navigate to="/marketplace/bundles" replace />}
-              />
+                <Route
+                  path="/knowledge-bases"
+                  element={<Navigate to="/rag" replace />}
+                />
+                <Route
+                  path="/rag-pipelines"
+                  element={<Navigate to="/rag/pipelines" replace />}
+                />
+                <Route
+                  path="/plugins"
+                  element={
+                    <Navigate to="/marketplace/plugins/available" replace />
+                  }
+                />
+                <Route
+                  path="/plugins/config"
+                  element={
+                    <Navigate to="/marketplace/plugins/installed" replace />
+                  }
+                />
+                <Route
+                  path="/plugins/ai-tools"
+                  element={
+                    <Navigate to="/marketplace/plugins/ai-tools" replace />
+                  }
+                />
+                <Route
+                  path="/plugin-config"
+                  element={
+                    <Navigate to="/marketplace/plugins/installed" replace />
+                  }
+                />
+                <Route
+                  path="/platform/bundles"
+                  element={<Navigate to="/marketplace/bundles" replace />}
+                />
 
-              {/* Unmatched paths (including the removed /model-management, still
+                {/* Unmatched paths (including the removed /model-management, still
                   served 200 by nginx's SPA fallback since it can't tell client-side
                   routes apart) redirect home instead of rendering a blank page. */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </ErrorBoundary>
           </main>
         </div>
       </div>
