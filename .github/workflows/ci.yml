@@ -324,19 +324,22 @@ jobs:
             --tb=short \
             --timeout=600 2>&1 | tee /tmp/integration-output.log
 
-      - name: Flag *_functional.py tests skipped for lack of a live stack (#437)
-        # test_rag_pipeline_functional.py / test_marketplace_gateway_functional.py
-        # hit a real running service over HTTP and skip if it's unreachable --
-        # this job has no docker-composed stack, only in-process module loading,
-        # so they ALWAYS skip here. A skip doesn't fail the job, so without this
-        # step "Integration Tests: pass" silently reads as full coverage when
-        # these specific tests never actually executed (this is exactly the gap
-        # that let a real bug ship once already -- see #436).
+      - name: Flag graph-rag functional tests skipped for lack of a live stack (#583)
+        # test_rag_pipeline_functional.py / test_marketplace_gateway_functional.py /
+        # test_model_management_functional.py moved to tests/e2e/ (#437) and now run
+        # for real against the live-process harness there. test_graph_rag_functional.py
+        # is the one remaining *_functional.py file that still hits a real running
+        # service over HTTP and skips if it's unreachable -- this job has no
+        # docker-composed stack, only in-process module loading, so it ALWAYS skips
+        # here. A skip doesn't fail the job, so without this step "Integration Tests:
+        # pass" silently reads as full coverage when this specific test never
+        # actually executed (this is exactly the gap that let a real bug ship once
+        # already -- see #436).
         if: always()
         run: |
-          skipped=$(grep -cE "test_(rag_pipeline_functional|marketplace_gateway_functional)\.py::.*SKIPPED" /tmp/integration-output.log || true)
+          skipped=$(grep -cE "test_graph_rag_functional\.py::.*SKIPPED" /tmp/integration-output.log || true)
           if [ "$skipped" -gt 0 ]; then
-            echo "::warning::${skipped} live-stack integration test(s) skipped -- no network-reachable service in this job (#437). These only run for real against a live stack (manual verification, or once tests/e2e/'s process harness covers the target service)."
+            echo "::warning::${skipped} graph-rag functional test(s) skipped -- no network-reachable service in this job (#583). These only run for real against a live stack (manual verification) until graph-rag joins tests/e2e/'s process harness."
           fi
 
   e2e-tests:
@@ -400,6 +403,7 @@ jobs:
           pip install -r src/services/plugin-registry/requirements.txt
           pip install -r src/services/rag-pipeline/requirements.txt
           pip install -r src/services/marketplace/requirements.txt
+          pip install -r src/services/model-management/requirements.txt
 
       - name: Prepare /app (container-absolute-path symlinks, #318)
         # tests/e2e/conftest.py symlinks /app/{src,plugins,services/plugin-registry}
