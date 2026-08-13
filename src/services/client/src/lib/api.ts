@@ -50,6 +50,16 @@ export interface ApiOptions {
   token?: string;
 }
 
+/** The shared list envelope every Minder `list` endpoint returns (#501):
+ * `{items, total, limit, offset}`. `total` is the pre-slice count, so
+ * `offset + items.length < total` means another page exists. */
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 /** Thin fetch wrapper: prefixes the gateway base URL, injects the bearer
  * token when present, and centralizes JSON parsing + error handling --
  * replacing the copy-pasted try/catch blocks the old plugin_config.html and

@@ -262,6 +262,72 @@ def test_delete_rag_pipeline_requires_auth():
     assert resp.status_code == 401
 
 
+# ── #501: list endpoints return the shared {items,total,limit,offset} envelope ──
+# rag-pipeline was the only service whose list endpoints returned a bare JSON
+# array (no total/limit/offset), so a client couldn't tell if more pages existed.
+# These prove the conversion to shared PaginatedList[T] landed on all three list
+# endpoints and that pagination bounds/total are honoured. state.* dicts are the
+# process-global stores the endpoints read; snapshot + restore so tests don't leak.
+
+
+@contextlib.contextmanager
+def _seed_state(**dicts):
+    saved = {name: getattr(rag_routes.state, name) for name in dicts}
+    for name, value in dicts.items():
+        setattr(rag_routes.state, name, value)
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            setattr(rag_routes.state, name, value)
+
+
+def _kb(kb_id):
+    return {
+        "id": kb_id,
+        "name": kb_id,
+        "description": "d",
+        "embedding_model": "e",
+        "llm_model": "l",
+        "document_count": 0,
+        "vector_count": 0,
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+
+
+def test_list_knowledge_bases_returns_envelope_with_total():
+    client = _rag_router_client()
+    kbs = {f"kb{i}": _kb(f"kb{i}") for i in range(5)}
+    with _seed_state(knowledge_bases=kbs):
+        resp = client.get("/v1/knowledge-bases?limit=2&offset=1")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"items", "total", "limit", "offset"}
+    assert body["total"] == 5  # pre-slice total, not the page length
+    assert body["limit"] == 2
+    assert body["offset"] == 1
+    assert len(body["items"]) == 2  # sliced to the requested page
+
+
+def test_list_rag_pipelines_returns_envelope():
+    client = _rag_router_client()
+    pipes = {
+        "p1": {
+            "id": "p1",
+            "name": "p1",
+            "knowledge_base_ids": ["kb1"],
+            "created_at": "2026-01-01T00:00:00Z",
+        }
+    }
+    with _seed_state(rag_pipelines=pipes):
+        resp = client.get("/v1/pipeline")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"items", "total", "limit", "offset"}
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == "p1"
+
+
 # ── Metadata filtering (docs/rag-methods.md Bucket 2 -> shipped) ─────────────
 # "Qdrant already supports it -- expose filter params on the query endpoint."
 # Every retrieval strategy has its own independent Qdrant call (no shared

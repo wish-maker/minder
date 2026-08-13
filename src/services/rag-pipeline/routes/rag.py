@@ -40,7 +40,7 @@ from rag.model_selection import resolve_llm_model
 from config import EMBEDDING_DIMENSIONS, settings
 from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
-from shared.pagination import paginate
+from shared.models import PaginatedList
 
 logger = logging.getLogger("minder.rag-pipeline")
 
@@ -136,12 +136,12 @@ async def create_knowledge_base(request: KnowledgeBaseCreate):
 
 @router.get(
     "/v1/knowledge-bases",
-    response_model=List[KnowledgeBaseResponse],
+    response_model=PaginatedList[KnowledgeBaseResponse],
     tags=["Knowledge Base"],
 )
 @router.get(
     "/knowledge-bases",
-    response_model=List[KnowledgeBaseResponse],
+    response_model=PaginatedList[KnowledgeBaseResponse],
     tags=["Knowledge Base"],
     include_in_schema=False,
 )  # deprecated unversioned alias
@@ -149,13 +149,13 @@ async def list_knowledge_bases(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
-    """List knowledge bases (paginated via limit/offset, #147/C6).
+    """List knowledge bases in the shared `{items, total, limit, offset}`
+    envelope (#501; paginated via limit/offset, #147/C6).
 
     Served at both /v1/knowledge-bases and the legacy /knowledge-bases directly — not
     a redirect, which would drop the method/body on non-GET clients (#147).
     """
-    page, _total = paginate(list(state.knowledge_bases.values()), limit, offset)
-    return page
+    return PaginatedList.paginate(list(state.knowledge_bases.values()), limit, offset)
 
 
 @router.get(
@@ -280,12 +280,12 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
 
 @router.get(
     "/v1/knowledge-bases/{kb_id}/documents",
-    response_model=List[DocumentInfo],
+    response_model=PaginatedList[DocumentInfo],
     tags=["Knowledge Base"],
 )
 @router.get(
     "/knowledge-bases/{kb_id}/documents",
-    response_model=List[DocumentInfo],
+    response_model=PaginatedList[DocumentInfo],
     tags=["Knowledge Base"],
     include_in_schema=False,
 )  # deprecated unversioned alias -- also what the gateway proxy actually calls
@@ -293,7 +293,10 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
 # the remainder, landing on this unversioned path, not /v1/...) (#144/#147)
 async def list_documents(kb_id: str):
     """List the documents uploaded into a knowledge base, one entry per
-    upload (not per chunk) (#427). 404 if the KB is unknown."""
+    upload (not per chunk) (#427), in the shared `{items, total, limit, offset}`
+    envelope (#501). Every document is returned in one page (no server-side
+    slicing here), so `limit == total` and `offset == 0`. 404 if the KB is
+    unknown."""
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
@@ -312,7 +315,10 @@ async def list_documents(kb_id: str):
         records.extend(batch)
         if next_offset is None:
             break
-    return group_documents(records)
+    documents = group_documents(records)
+    return PaginatedList.from_page(
+        documents, total=len(documents), limit=len(documents), offset=0
+    )
 
 
 @router.delete(
@@ -433,10 +439,14 @@ async def create_rag_pipeline(request: RAGPipelineCreate):
     )
 
 
-@router.get("/v1/pipeline", response_model=List[RAGPipelineInfo], tags=["Pipeline"])
+@router.get(
+    "/v1/pipeline",
+    response_model=PaginatedList[RAGPipelineInfo],
+    tags=["Pipeline"],
+)
 @router.get(
     "/pipeline",
-    response_model=List[RAGPipelineInfo],
+    response_model=PaginatedList[RAGPipelineInfo],
     tags=["Pipeline"],
     include_in_schema=False,
 )  # deprecated unversioned alias
@@ -444,13 +454,13 @@ async def list_rag_pipelines(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
-    """List RAG pipelines (paginated via limit/offset, matching /knowledge-bases).
+    """List RAG pipelines in the shared `{items, total, limit, offset}` envelope
+    (#501; paginated via limit/offset, matching /knowledge-bases).
 
     Added in #426 -- before this, a pipeline_id only ever existed in the create
     response, with no way to recover it (clients had to track it themselves).
     """
-    page, _total = paginate(list(state.rag_pipelines.values()), limit, offset)
-    return page
+    return PaginatedList.paginate(list(state.rag_pipelines.values()), limit, offset)
 
 
 @router.get(
