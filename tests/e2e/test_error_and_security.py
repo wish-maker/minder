@@ -60,10 +60,12 @@ def test_rag_pipeline_404_propagates_through_gateway_proxy_exactly(live_stack):
 
 
 def test_unreachable_downstream_surfaces_as_503_via_gateway(live_stack):
-    """model-management is deliberately pointed at an unreachable dummy URL
-    for this harness (#318's minimal 3-service set doesn't run it) -- a real,
-    always-on trigger for routes/proxy.py's own httpx.ConnectError -> 503
-    handling, not a contrived failure."""
-    resp = httpx.get(f"{live_stack.gateway_url}/v1/models", timeout=10.0)
+    """tts-stt isn't part of this harness's process set (#437 added
+    model-management, the harness's previous "guaranteed unreachable" proxy
+    target) -- SERVICE_REGISTRY["tts_stt"] still resolves to its real
+    docker-compose hostname (settings.TTS_STT_URL), which can't connect here.
+    A real, always-on trigger for routes/proxy.py's own
+    httpx.ConnectError -> 503 handling, not a contrived failure."""
+    resp = httpx.get(f"{live_stack.gateway_url}/v1/stt/languages", timeout=10.0)
     assert resp.status_code == 503
     assert "unreachable" in resp.json()["detail"].lower()

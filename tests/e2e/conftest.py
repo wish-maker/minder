@@ -1,11 +1,21 @@
 """Real multi-service E2E harness (#318).
 
 Starts real `uvicorn` subprocesses for api-gateway, plugin-registry,
-rag-pipeline, and marketplace bound to `127.0.0.1`, wired to each other via
-the same env vars `docker-compose.yml` uses (just `localhost` instead of
-`minder-<service>` hostnames), against real Postgres/Redis/Qdrant and a
-deterministic fake-Ollama stub (`fake_ollama.py`). No Docker, no image builds
-— just real sockets, real FastAPI apps, real routing code.
+rag-pipeline, marketplace, and model-management bound to `127.0.0.1`, wired
+to each other via the same env vars `docker-compose.yml` uses (just
+`localhost` instead of `minder-<service>` hostnames), against real
+Postgres/Redis/Qdrant and a deterministic fake-Ollama stub (`fake_ollama.py`).
+No Docker, no image builds — just real sockets, real FastAPI apps, real
+routing code.
+
+graph-rag is deliberately NOT part of this harness: it has a hard, critical-
+path dependency on a real Neo4j instance, plus a `python -m spacy download
+en_core_web_sm` fetch from `github.com/explosion/spacy-models` at
+build/install time — the exact same GitHub-release download that has shown
+real, repeated connectivity flakiness in this project's own deploy pipeline.
+Adding it here would import that flake into every CI run instead of just
+image builds. `tests/integration/test_graph_rag_functional.py` still covers
+it, still skip-gated, until that download can be made reliable (#583).
 
 marketplace normally uses its own `minder_marketplace` Postgres database and
 a real Neo4j graph store (#437) -- neither exists in this harness. `DB_NAME`
@@ -58,6 +68,7 @@ GATEWAY_PORT = 8000
 REGISTRY_PORT = 8001
 MARKETPLACE_PORT = 8002
 RAG_PORT = 8004
+MODEL_MGMT_PORT = 8005
 
 STARTUP_TIMEOUT_S = 60
 
@@ -170,11 +181,20 @@ def _common_env(extra: dict) -> dict:
 
 
 class LiveStack:
-    def __init__(self, gateway_url, registry_url, rag_url, marketplace_url, ollama_url):
+    def __init__(
+        self,
+        gateway_url,
+        registry_url,
+        rag_url,
+        marketplace_url,
+        model_mgmt_url,
+        ollama_url,
+    ):
         self.gateway_url = gateway_url
         self.registry_url = registry_url
         self.rag_url = rag_url
         self.marketplace_url = marketplace_url
+        self.model_mgmt_url = model_mgmt_url
         self.ollama_url = ollama_url
 
     def reset_ollama(self):
@@ -270,13 +290,22 @@ def live_stack():
         marketplace_url = f"http://127.0.0.1:{MARKETPLACE_PORT}"
         _wait_for_health(marketplace_url, STARTUP_TIMEOUT_S, marketplace_proc)
 
+        model_mgmt_env = _common_env({"OLLAMA_HOST": ollama_url})
+        model_mgmt_proc = _spawn_uvicorn(
+            _SERVICES / "model-management", MODEL_MGMT_PORT, model_mgmt_env
+        )
+        procs.append(("model-management", model_mgmt_proc))
+
+        model_mgmt_url = f"http://127.0.0.1:{MODEL_MGMT_PORT}"
+        _wait_for_health(model_mgmt_url, STARTUP_TIMEOUT_S, model_mgmt_proc)
+
         gateway_env = _common_env(
             {
                 "OLLAMA_BASE_URL": ollama_url,
                 "PLUGIN_REGISTRY_URL": registry_url,
                 "RAG_PIPELINE_URL": rag_url,
                 "MARKETPLACE_URL": marketplace_url,
-                "MODEL_MANAGEMENT_URL": "http://127.0.0.1:1/unused",
+                "MODEL_MANAGEMENT_URL": model_mgmt_url,
             }
         )
         gateway_proc = _spawn_uvicorn(
@@ -287,7 +316,14 @@ def live_stack():
         gateway_url = f"http://127.0.0.1:{GATEWAY_PORT}"
         _wait_for_health(gateway_url, STARTUP_TIMEOUT_S, gateway_proc)
 
-        yield LiveStack(gateway_url, registry_url, rag_url, marketplace_url, ollama_url)
+        yield LiveStack(
+            gateway_url,
+            registry_url,
+            rag_url,
+            marketplace_url,
+            model_mgmt_url,
+            ollama_url,
+        )
     finally:
         for name, proc in reversed(procs):
             proc.terminate()

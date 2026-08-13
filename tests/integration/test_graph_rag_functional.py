@@ -6,7 +6,13 @@ extract, construct-graph, retrieve, entity-context. The entity-context case
 guards a signature-mismatch bug (handler passed `entity_text`/`include_neighbors`
 to a method expecting `entity_name`/`context_window`) fixed on 2026-07-10.
 
-Skips automatically if the service is unreachable, so it never hangs.
+Skips automatically if the service is unreachable, so it never hangs. Unlike
+the other three tests/integration/*_functional.py files (#437), this one is
+NOT wired into tests/e2e/'s live-process harness -- graph-rag needs a real
+Neo4j plus a `spacy download` fetch from a GitHub-hosted release that has
+shown real CI-flake risk elsewhere in this project. See #583 for what it
+would take to close this gap; this file still only runs against a manually
+started live stack (or a real deployed host) in the meantime.
 """
 
 import os
