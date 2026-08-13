@@ -102,7 +102,7 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | ANY | `/v1/graph/{path:path}` | marketplace's plugin dependency/conflict/recommendation graph — a second, disjoint route namespace the same service exposes (#402) |
 | GET/POST | `/v1/tts`, `/v1/tts/{path:path}` | tts-stt (writes require JWT). `POST /v1/tts` returns binary WAV/MP3 audio, not JSON — the proxy passes non-JSON bodies through raw instead of force-decoding them |
 | GET/POST | `/v1/stt`, `/v1/stt/{path:path}` | tts-stt (writes require JWT) — `POST /v1/stt` is a multipart audio upload |
-| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT) |
+| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/stats`, `graph/documents`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT) |
 | GET | `/v1/tools` | plugin-state-manager (tool discovery, list) |
 | GET/POST | `/v1/tools/{path:path}` | plugin-state-manager (tool detail, `.../execute`, license `validate`) — a deliberately separate prefix from `/v1/plugins/{path:path}` above so the two services' plugin-adjacent APIs don't collide at the gateway (writes require JWT; `execute` is also independently JWT-gated inside plugin-state-manager itself) |
 
@@ -496,6 +496,8 @@ Every route below also has a legacy unversioned alias kept for compatibility
 | POST | `/v1/construct-graph` | Build a Neo4j knowledge graph from documents/entities (idempotent — Cypher `MERGE`, so re-posting the same `document_id` upserts rather than duplicating) |
 | POST | `/v1/retrieve` | Graph-based retrieval over entity relationships |
 | POST | `/v1/entity-context` | Retrieve context / neighbors around an entity |
+| GET | `/v1/graph/stats` | Graph overview — total node / relationship / document / entity counts + the per-NER-label entity distribution (`entity_types`); confirms a `construct-graph` populated the graph. Open read |
+| GET | `/v1/graph/documents` | List the Document nodes (id / title / source / created_at / entity_count), newest first — browse what's built. Open read |
 | DELETE | `/v1/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
@@ -582,6 +584,20 @@ the full observability port map.
 ## Changelog
 
 ### 2026-08-13
+- **New: graph overview endpoints** — `GET /v1/graph/stats` (node / relationship / document /
+  entity counts + per-NER-label `entity_types`) (#570) and `GET /v1/graph/documents` (list the
+  Document nodes, newest first) (#572) on graph-rag. Both open reads (gateway
+  `/v1/graph-rag/graph/{stats,documents}`); surfaced in the client's Knowledge Graph page as a
+  "Graph overview" card + a document browser (#571/#573) — you can now *see* what's in the graph,
+  not just build/query/delete it.
+- **More error-handling hardening** (continuing the 4xx-not-5xx sweep below) — malformed / unknown
+  input that reached a driver or a downstream now returns a clean 4xx: `ContextualCompressor`
+  empty-text contexts no longer ZeroDivisionError a `compress:true` query (#566); marketplace
+  license `validate`/`activate` non-UUID `plugin_id` (a **body** param, so #526's path guard missed
+  it) → 404 (#574); plugin-state-manager `GET /v1/tools/plugins/{plugin_id}/tools` → 404 for a
+  non-UUID **and** for a plugin absent from the catalog (a downstream 404 was being re-wrapped as a
+  500) (#576); api-gateway `POST /v1/ai/chat/completions` with an uninstalled model → 404
+  "model not found" instead of 500 (#578).
 - **New: edit endpoints** — `PATCH /v1/knowledge-bases/{kb_id}` (name / description / llm_model;
   `embedding_model` immutable) (#544) and `PATCH /v1/pipeline/{pipeline_id}` (name /
   knowledge_base_ids) (#545). Both update in place — no more delete + recreate (which, for a KB,
