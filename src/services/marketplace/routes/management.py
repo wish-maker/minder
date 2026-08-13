@@ -1,5 +1,6 @@
 # services/marketplace/routes/management.py
 from core.database import get_pool
+from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.installation import InstallationResponse
 
@@ -10,7 +11,7 @@ router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
 @router.post("/{plugin_id}/install", response_model=InstallationResponse)
 async def install_plugin(
-    plugin_id: str,
+    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
 ):
     """Install a plugin for the authenticated user.
@@ -100,7 +101,7 @@ async def install_plugin(
 
 @router.delete("/{plugin_id}/uninstall")
 async def uninstall_plugin(
-    plugin_id: str,
+    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
 ):
     """Uninstall the authenticated user's plugin (identity from JWT, #147/C7)."""
@@ -136,7 +137,7 @@ async def uninstall_plugin(
 
 @router.post("/{plugin_id}/enable")
 async def enable_plugin(
-    plugin_id: str,
+    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
 ):
     """Enable the authenticated user's plugin (identity from JWT, #147/C7)."""
@@ -172,7 +173,7 @@ async def enable_plugin(
 
 @router.post("/{plugin_id}/disable")
 async def disable_plugin(
-    plugin_id: str,
+    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
 ):
     """Disable the authenticated user's plugin (identity from JWT, #147/C7)."""
@@ -208,7 +209,7 @@ async def disable_plugin(
 
 @router.get("/{plugin_id}/installations")
 async def get_plugin_installations(
-    plugin_id: str,
+    plugin_id: str = Depends(valid_plugin_id),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):

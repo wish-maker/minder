@@ -12,6 +12,7 @@ from core.plugin_repository import (
     row_to_plugin_response,
     search_plugins_page,
 )
+from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.plugin import PluginCreate, PluginListResponse, PluginResponse, PluginUpdate
 
@@ -198,7 +199,7 @@ async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
 
 
 @router.get("/plugins/{plugin_id}", response_model=PluginResponse)
-async def get_plugin(plugin_id: str):
+async def get_plugin(plugin_id: str = Depends(valid_plugin_id)):
     """Get plugin by ID"""
     pool = await get_pool()
 
@@ -212,8 +213,8 @@ async def get_plugin(plugin_id: str):
 
 @router.put("/plugins/{plugin_id}", response_model=PluginResponse)
 async def update_plugin(
-    plugin_id: str,
     plugin_update: PluginUpdate,
+    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user_or_service),
 ):
     """Partially update a plugin's marketplace metadata.
