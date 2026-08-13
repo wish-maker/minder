@@ -22,6 +22,7 @@ proxy itself is what's wrong.
 """
 
 import os
+import uuid
 
 import httpx
 import pytest
@@ -53,12 +54,20 @@ def auth_token(live_stack):
 
 @pytest.fixture
 def plugin_id(live_stack, auth_token):
-    """A fresh marketplace plugin listing, created THROUGH THE GATEWAY."""
+    """A fresh marketplace plugin listing, created THROUGH THE GATEWAY.
+
+    Function-scoped -- every test that uses this gets its OWN plugin, so
+    `name` must be unique per call, not just per process: `os.getpid()` alone
+    collided across the 3 tests in this file that all request this fixture
+    within the same pytest run, 500ing on marketplace's real unique
+    constraint on `name` (masked until now by #437 -- this file never
+    actually executed before).
+    """
     r = httpx.post(
         f"{live_stack.gateway_url}/v1/marketplace/plugins",
         headers={"Authorization": f"Bearer {auth_token}"},
         json={
-            "name": f"test-mkt-plugin-{os.getpid()}",
+            "name": f"test-mkt-plugin-{os.getpid()}-{uuid.uuid4().hex[:8]}",
             "display_name": "Test Marketplace Plugin",
             "description": "Created by test_marketplace_gateway_functional.py",
             "author": "Integration Test",

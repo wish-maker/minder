@@ -62,7 +62,13 @@ class GenerateResponsesBody(BaseModel):
 
 @app.get("/api/tags")
 async def tags():
-    return {"models": [{"name": name} for name in _KNOWN_MODELS]}
+    # The installed `ollama` client (>=0.5) parses each entry into
+    # ListResponse.Model, which only has a `model` field -- "name" (the old
+    # wire key) leaves it None, which model-management's list_models() then
+    # feeds into ModelInfo(id=..., name=...) as a null, failing Pydantic
+    # validation with a 500 (#437: never caught before since nothing exercised
+    # this path against a real ollama client in CI until now).
+    return {"models": [{"model": name} for name in _KNOWN_MODELS]}
 
 
 @app.post("/api/embeddings")
