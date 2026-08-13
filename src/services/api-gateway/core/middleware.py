@@ -120,13 +120,25 @@ def register_middleware(app: FastAPI) -> None:
                 if count == 1:
                     await run_in_threadpool(redis_client.expire, key, 60)
                 if count > settings.RATE_LIMIT_PER_MINUTE:
+                    # Remaining seconds in the fixed window, so the client (and any
+                    # proxy) can back off precisely via Retry-After. Falls back to
+                    # the full 60s window if the TTL is unset/expired mid-flight.
+                    ttl = await run_in_threadpool(redis_client.ttl, key)
+                    retry_after = ttl if isinstance(ttl, int) and ttl > 0 else 60
                     return JSONResponse(
                         status_code=429,
+                        # Platform-standard {"detail": ...} envelope (every other
+                        # error uses it; the old {"error", "limit", "window"} shape
+                        # was the one off-standard response) — see docs/api Error
+                        # Handling. #541
                         content={
-                            "error": "Rate limit exceeded",
-                            "limit": settings.RATE_LIMIT_PER_MINUTE,
-                            "window": "60 seconds",
+                            "detail": (
+                                f"Rate limit exceeded: "
+                                f"{settings.RATE_LIMIT_PER_MINUTE} requests per 60 "
+                                f"seconds. Retry in {retry_after}s."
+                            )
                         },
+                        headers={"Retry-After": str(retry_after)},
                     )
             except Exception as e:
                 # Redis unavailable, bypass rate limiting (fail open)
