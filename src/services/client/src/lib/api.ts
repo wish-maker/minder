@@ -48,6 +48,10 @@ export interface ApiOptions {
   method?: string;
   body?: unknown;
   token?: string;
+  // Optional AbortSignal so a caller (e.g. useAsyncResource) can cancel an
+  // in-flight request on unmount / supersession / timeout. When the signal
+  // aborts, fetch rejects with an AbortError the caller is expected to swallow.
+  signal?: AbortSignal;
 }
 
 /** The shared list envelope every Minder `list` endpoint returns (#501):
@@ -66,7 +70,7 @@ export interface Paginated<T> {
  * model_management.html each carried independently. */
 export async function apiFetch<T>(
   path: string,
-  { method = "GET", body, token }: ApiOptions = {},
+  { method = "GET", body, token, signal }: ApiOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = {};
   const isFormData = body instanceof FormData;
@@ -83,6 +87,7 @@ export async function apiFetch<T>(
     headers,
     body:
       body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) throw new ApiError(await parseErrorDetail(res), res.status);
@@ -98,7 +103,7 @@ export async function apiFetch<T>(
  * header info. */
 export async function apiFetchBlob(
   path: string,
-  { method = "GET", body, token }: ApiOptions = {},
+  { method = "GET", body, token, signal }: ApiOptions = {},
 ): Promise<{ blob: Blob; headers: Headers }> {
   const headers: Record<string, string> = {};
   const isFormData = body instanceof FormData;
@@ -112,6 +117,7 @@ export async function apiFetchBlob(
     headers,
     body:
       body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
+    signal,
   });
 
   if (!res.ok) throw new ApiError(await parseErrorDetail(res), res.status);

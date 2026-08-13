@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
-import { apiFetch, friendlyErrorMessage } from "../lib/api";
+import { apiFetch } from "../lib/api";
 import { badgeClass, secondaryButtonClass } from "../lib/ui";
+import { useAsyncResource } from "../lib/useAsyncResource";
 import { usePaginatedList } from "../lib/usePaginatedList";
 
 interface LiveTool {
@@ -88,8 +89,15 @@ function CatalogToolCard({ tool }: { tool: CatalogTool }) {
 }
 
 export function AiToolsPage() {
-  const [liveTools, setLiveTools] = useState<LiveTool[] | null>(null);
-  const [liveStatus, setLiveStatus] = useState("");
+  // Live tools are a single whole-object read — the canonical useAsyncResource
+  // case (cancels on unmount, guards against a stale response). #502
+  const liveTools = useAsyncResource(
+    (signal) =>
+      apiFetch<LiveToolsResponse>("/v1/plugins/ai/tools", { signal }).then(
+        (r) => r.tools,
+      ),
+    { timeoutMs: 15_000 },
+  );
 
   const fetchCatalogPage = useCallback(async (offset: number) => {
     const res = await apiFetch<CatalogToolsResponse>(
@@ -105,19 +113,8 @@ export function AiToolsPage() {
     hasMore: hasMoreCatalogTools,
   } = usePaginatedList(fetchCatalogPage);
 
-  const loadLiveTools = useCallback(async () => {
-    setLiveStatus("Loading…");
-    try {
-      const res = await apiFetch<LiveToolsResponse>("/v1/plugins/ai/tools");
-      setLiveTools(res.tools);
-      setLiveStatus("");
-    } catch (e) {
-      setLiveStatus(friendlyErrorMessage(e));
-    }
-  }, []);
-
   useEffect(() => {
-    loadLiveTools();
+    // usePaginatedList doesn't self-load; liveTools (useAsyncResource) does.
     reloadCatalogTools();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -139,14 +136,16 @@ export function AiToolsPage() {
         function-calling feeds on — if a plugin isn't running, its tools
         won't appear here even if they're in the catalog below.
       </InfoCallout>
-      <StatusLine isError={false}>{liveStatus}</StatusLine>
-      {liveTools !== null && liveTools.length === 0 && (
+      <StatusLine isError={!!liveTools.error}>
+        {liveTools.error ?? (liveTools.loading ? "Loading…" : "")}
+      </StatusLine>
+      {liveTools.data !== null && liveTools.data.length === 0 && (
         <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
           No plugin is currently exposing an AI tool.
         </p>
       )}
       <div className="mb-6">
-        {liveTools?.map((t) => (
+        {liveTools.data?.map((t) => (
           <LiveToolCard key={`${t.metadata.plugin}:${t.function.name}`} tool={t} />
         ))}
       </div>

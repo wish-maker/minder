@@ -8,23 +8,11 @@ import {
 } from "react";
 
 import { apiBaseUrl } from "./api";
+import { decodeJwtClaims, isExpired } from "./jwt";
 
 // Same sessionStorage key the old plugin_config.html/model_management.html
 // pages used, kept for continuity across the migration (#422 -> this client).
 const TOKEN_KEY = "minder_jwt";
-
-interface JwtClaims {
-  username: string;
-  email: string;
-  role: string;
-  exp: number; // seconds since epoch; 0 when the token carries no expiry
-}
-
-/** True once the token's `exp` has passed. Tokens without an `exp` (exp === 0)
- * are treated as non-expiring so this never regresses such tokens to logged-out. */
-function isExpired(exp: number): boolean {
-  return exp > 0 && Date.now() >= exp * 1000;
-}
 
 interface AuthContextValue {
   token: string;
@@ -47,28 +35,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 async function parseError(res: Response): Promise<string> {
   const data = await res.json().catch(() => ({}) as { detail?: string });
   return data.detail || `Request failed (${res.status})`;
-}
-
-/** Every display claim (username/email/role) lives in the JWT payload
- * already -- decoded fresh from the token itself rather than duplicated
- * into separate state, so there is exactly one source of truth for "who is
- * this" no matter which path (local login, SSO callback, page reload from
- * sessionStorage) produced the token. Malformed/absent input fails open
- * into empty strings rather than throwing: a broken token should read as
- * "not really logged in", not crash the app. */
-function decodeJwtClaims(jwt: string): JwtClaims {
-  try {
-    const payload = jwt.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = JSON.parse(atob(payload)) as Record<string, unknown>;
-    return {
-      username: typeof decoded.username === "string" ? decoded.username : "",
-      email: typeof decoded.email === "string" ? decoded.email : "",
-      role: typeof decoded.role === "string" ? decoded.role : "",
-      exp: typeof decoded.exp === "number" ? decoded.exp : 0,
-    };
-  } catch {
-    return { username: "", email: "", role: "", exp: 0 };
-  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
