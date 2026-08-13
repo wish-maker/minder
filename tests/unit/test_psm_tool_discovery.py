@@ -48,8 +48,9 @@ def execution_mod():
 
 
 class _FakeResponse:
-    def __init__(self, json_data):
+    def __init__(self, json_data, status_code=200):
         self._json = json_data
+        self.status_code = status_code
 
     def raise_for_status(self):
         pass
@@ -59,8 +60,9 @@ class _FakeResponse:
 
 
 class _FakeAsyncClient:
-    def __init__(self, json_data):
+    def __init__(self, json_data, status_code=200):
         self._json = json_data
+        self._status_code = status_code
 
     async def __aenter__(self):
         return self
@@ -69,7 +71,7 @@ class _FakeAsyncClient:
         return False
 
     async def get(self, url, **kwargs):
-        return _FakeResponse(self._json)
+        return _FakeResponse(self._json, status_code=self._status_code)
 
 
 def _tool_row(**overrides):
@@ -171,3 +173,26 @@ async def test_discover_plugin_tools_parses_json_string_parameters(
     result = await execution_mod.discover_plugin_tools("some-plugin-id")
     assert result.count == 1
     assert result.tools[0].parameters["symbol"].type == "string"
+
+
+@pytest.mark.asyncio
+async def test_discover_plugin_tools_unknown_plugin_404_not_500(
+    monkeypatch, execution_mod
+):
+    """#576: a plugin absent from the catalog makes marketplace return 404. That
+    must surface as a clean 404, not a 500 (raise_for_status used to bubble an
+    httpx error into the route's generic handler → sanitized 500 for EVERY
+    unknown plugin)."""
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        execution_mod.httpx,
+        "AsyncClient",
+        lambda **kw: _FakeAsyncClient({}, status_code=404),
+    )
+    with pytest.raises(HTTPException) as exc:
+        await execution_mod.discover_plugin_tools(
+            "00000000-0000-0000-0000-000000000000"
+        )
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "Plugin not found"

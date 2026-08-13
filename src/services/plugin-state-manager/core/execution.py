@@ -226,6 +226,13 @@ async def discover_plugin_tools(plugin_id: str) -> ToolDiscoveryResponse:
             f"{settings.MARKETPLACE_URL}/v1/marketplace/ai/plugins/{plugin_id}/tools"
         )
 
+        # A plugin absent from the catalog makes marketplace return 404. Surface that
+        # as our own clean 404 rather than letting raise_for_status() bubble an
+        # httpx.HTTPStatusError up to the route's generic handler, which turned every
+        # unknown-plugin lookup into a 500 (#576).
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+
         response.raise_for_status()
         data = response.json()
 

@@ -6,6 +6,7 @@ Tool discovery and execution endpoints
 import logging
 
 from core.execution import discover_plugin_tools, discover_tools, execute_tool
+from core.validation import ensure_valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.tool_execution import (
     LicenseValidationRequest,
@@ -105,8 +106,15 @@ async def execute_tool_endpoint(
 @router.get("/plugins/{plugin_id}/tools", response_model=ToolDiscoveryResponse)
 async def list_plugin_tools(plugin_id: str):
     """List all tools for a specific plugin"""
+    # plugin_id is queried against the marketplace DB's UUID id column — reject a
+    # non-UUID here with a clean 404 instead of a 500 from the driver (#576).
+    ensure_valid_plugin_id(plugin_id)
     try:
         return await discover_plugin_tools(plugin_id)
+    except HTTPException:
+        # discover_plugin_tools raises a clean 404 for an unknown plugin — don't
+        # re-wrap it as a 500 (#576).
+        raise
     except Exception as e:
         logger.error(f"Failed to discover tools for plugin {plugin_id}: {e}")
         raise backend_http_error(e, "Plugin tool discovery")
