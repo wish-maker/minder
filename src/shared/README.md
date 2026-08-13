@@ -16,7 +16,7 @@ on `sys.path`, so the import root is **`shared`** (NOT `services.shared`):
 
 ```python
 from shared.config.base_settings import MinderBaseSettings
-from shared.models import HealthCheckResponse, SuccessResponse, ErrorResponse, LicenseTier
+from shared.models import PaginatedList, LicenseTier
 from shared.utils.redis_client import create_redis_client_from_settings
 from shared.utils.cors import add_cors_middleware
 from shared.metrics import setup_metrics
@@ -59,8 +59,8 @@ src/shared/
 │   ├── pool.py                # create_pg_pool(...): asyncpg pool + optional CREATE DATABASE
 │   └── schema.py               # apply_schema(pool, sql_path): run a service's schema.sql at startup
 ├── models/
-│   ├── __init__.py           # exports the response models + license-tier vocabulary below
-│   ├── responses.py          # standard Pydantic response envelopes
+│   ├── __init__.py           # exports PaginatedList + license-tier vocabulary below
+│   ├── pagination.py          # PaginatedList[T]: the canonical {items,total,limit,offset} list envelope (#501)
 │   └── tiers.py               # LicenseTier / normalize_tier / tier_rank: canonical tier vocabulary (#142)
 ├── utils/
 │   ├── __init__.py           # exports cors + redis_client helpers
@@ -96,21 +96,27 @@ class Settings(MinderBaseSettings):
 settings = Settings()   # raises if DB_PASSWORD / REDIS_PASSWORD / JWT_SECRET are unset
 ```
 
-### Models — `models/responses.py`
+### Models — `models/pagination.py`
 
-Standard response envelopes, all importable from `shared.models`:
-
-`SuccessResponse`, `ErrorResponse`, `PaginatedResponse`, `HealthCheckResponse`,
-`DetailedHealthCheck`, `CreateResponse`, `UpdateResponse`, `DeleteResponse`,
-`BatchOperationResponse`, `ValidationErrorResponse`, `ConfigurationResponse`.
+`PaginatedList[T]` is the canonical list-response envelope (#501): every service's
+`list` endpoint returns `{items, total, limit, offset}`, so a cross-service client
+never re-learns a per-service wrapper key. `total` is the pre-slice count, so
+`offset + len(items) < total` means another page exists.
 
 ```python
-from shared.models import HealthCheckResponse
+from shared.models import PaginatedList
+from shared.pagination import paginate  # or PaginatedList.paginate / .from_page
 
-@app.get("/health", response_model=HealthCheckResponse)
-async def health():
-    return HealthCheckResponse(service="marketplace", status="healthy", version="1.0.0")
+@app.get("/v1/things", response_model=PaginatedList[Thing])
+async def list_things(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, ge=0)):
+    return PaginatedList.paginate(list(things.values()), limit, offset)
 ```
+
+> The old `models/responses.py` "standard responses" set (`SuccessResponse`,
+> `CreateResponse`, `HealthCheckResponse`, …) was removed in #501 — nothing ever
+> referenced it (health bodies are service-specific by design, see `health.py`), and
+> its `datetime.now` defaults predated the #239 UTC rule. `PaginatedList` is the one
+> shared response model that services actually adopt.
 
 ### License tiers — `models/tiers.py`
 
@@ -308,13 +314,15 @@ failure.
 | `utils.redis_client` | api-gateway, plugin-registry |
 | `config.MinderBaseSettings` | plugin-state-manager (broader adoption evaluated and closed in #49 — see below) |
 | `ai.tool_validator` | plugin-registry |
-| `models.responses` | (envelopes available; a shared `HealthCheckResponse` body was deliberately rejected in #49 — see `health.py` above) |
+| `models.pagination.PaginatedList` | rag-pipeline (3 list endpoints, #501; the `{items,total,limit,offset}` envelope — other services' list shapes to converge here next) |
 | `models.tiers.LicenseTier` | marketplace, plugin-state-manager (the only 2 services with a license concept) |
 
-> `config.MinderBaseSettings`/`models.responses` were evaluated for wider adoption in #49
-> and intentionally left as-is: every service's `/health` body and settings carry
-> genuinely different fields, so forcing the shared shapes would either drop
-> service-specific data or need per-service subclasses — no clean win remained.
+> `config.MinderBaseSettings` was evaluated for wider adoption in #49 and intentionally
+> left as-is: every service's settings carry genuinely different fields, so forcing the
+> shared shape would either drop service-specific data or need per-service subclasses —
+> no clean win remained. The old `models.responses` "standard responses" set was likewise
+> never adopted (health bodies are service-specific — see `health.py`) and was **removed
+> in #501**, replaced by the one envelope services do share: `models.pagination.PaginatedList`.
 
 ## 🤝 Contributing
 

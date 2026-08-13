@@ -4,6 +4,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
+import type { Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
   cardClass,
@@ -173,8 +174,8 @@ function DocumentsList({
 
   useEffect(() => {
     setLoadError(false);
-    apiFetch<KbDocument[]>(`/v1/rag/knowledge-bases/${kbId}/documents`)
-      .then(setDocs)
+    apiFetch<Paginated<KbDocument>>(`/v1/rag/knowledge-bases/${kbId}/documents`)
+      .then((res) => setDocs(res.items))
       .catch((e) => {
         // A real fetch failure must not render as "no documents" -- that's
         // indistinguishable from a genuinely empty KB and hides the actual
@@ -570,8 +571,10 @@ export function KnowledgeBasesPage() {
   const loadKbs = useCallback(async () => {
     setStatusMsg("Loading knowledge bases…");
     try {
-      const list = await apiFetch<KnowledgeBase[]>("/v1/rag/knowledge-bases?limit=100");
-      setKbs(list);
+      const list = await apiFetch<Paginated<KnowledgeBase>>(
+        "/v1/rag/knowledge-bases?limit=100",
+      );
+      setKbs(list.items);
       setStatusMsg("");
     } catch (e) {
       setStatusMsg(friendlyErrorMessage(e), true);
