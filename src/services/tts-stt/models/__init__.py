@@ -1,6 +1,6 @@
 """Pydantic request/response models for the TTS/STT service."""
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from config import SUPPORTED_LANGUAGES, settings
 
@@ -8,7 +8,10 @@ from config import SUPPORTED_LANGUAGES, settings
 class TTSRequest(BaseModel):
     """Text-to-Speech request"""
 
-    text: str
+    # min_length=1 so empty text is a clean 422 at the edge instead of a 500 from
+    # failing deep in the Piper/gTTS engine with nothing to synthesize (#534) —
+    # matches the language field's edge validation below.
+    text: str = Field(min_length=1)
     language: str = settings.DEFAULT_TTS_LANG
     slow: bool = False
 
