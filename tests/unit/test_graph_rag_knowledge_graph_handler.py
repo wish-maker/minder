@@ -93,13 +93,14 @@ class _FakeConstructor:
     stands in for create_document_node/create_entity_nodes/
     create_relationship_nodes/link_document_to_entities."""
 
-    def __init__(self, entity_ids, relationship_count=0, linked_count=None):
+    def __init__(self, entity_ids, relationship_count=0, linked_count=None, stats=None):
         self._entity_ids = entity_ids
         self._relationship_count = relationship_count
         self._linked_count = (
             linked_count if linked_count is not None else len(entity_ids)
         )
         self.linked_with = None
+        self._stats = stats
 
     async def create_document_node(self, **kwargs):
         return True
@@ -113,6 +114,17 @@ class _FakeConstructor:
     async def link_document_to_entities(self, document_id, entity_ids):
         self.linked_with = entity_ids
         return self._linked_count
+
+    async def get_graph_statistics(self):
+        if isinstance(self._stats, Exception):
+            raise self._stats
+        return self._stats or {
+            "nodes": 5,
+            "relationships": 3,
+            "documents": 1,
+            "entities": 4,
+            "entity_types": {"ORG": 2, "PERSON": 2},
+        }
 
 
 def _request():
@@ -231,3 +243,60 @@ def test_extract_entities_is_unaffected():
 
     resp = client.post("/v1/extract", json={"text": "hello"})
     assert resp.status_code == 200
+
+
+# ── graph overview: GET /v1/graph/stats (a read — open, like the other GETs) ──
+
+
+@pytest.mark.asyncio
+async def test_graph_stats_handler_returns_overview():
+    constructor = _FakeConstructor(
+        entity_ids=[],
+        stats={
+            "nodes": 7,
+            "relationships": 4,
+            "documents": 2,
+            "entities": 5,
+            "entity_types": {"PERSON": 3, "ORG": 2},
+        },
+    )
+    result = await _api.get_graph_stats_handler(constructor)
+    assert result.success is True
+    assert result.nodes == 7 and result.relationships == 4
+    assert result.documents == 2 and result.entities == 5
+    assert result.entity_types == {"PERSON": 3, "ORG": 2}
+
+
+@pytest.mark.asyncio
+async def test_graph_stats_handler_503_when_constructor_missing():
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        await _api.get_graph_stats_handler(None)
+    assert exc.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_graph_stats_handler_maps_backend_error():
+    from fastapi import HTTPException
+
+    constructor = _FakeConstructor(
+        entity_ids=[], stats=ConnectionRefusedError("neo4j down")
+    )
+    with pytest.raises(HTTPException) as exc:
+        await _api.get_graph_stats_handler(constructor)
+    # backend_http_error maps a connectivity failure to 503, not a raw 500.
+    assert exc.value.status_code == 503
+
+
+def test_graph_stats_endpoint_is_open_read():
+    # A GET read is ungated (Authelia's job, #15) — unlike the mutating routes.
+    client = _graph_router_client()
+    resp = client.get("/v1/graph/stats")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert (
+        set(["nodes", "relationships", "documents", "entities", "entity_types"])
+        <= body.keys()
+    )

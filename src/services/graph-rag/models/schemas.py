@@ -115,3 +115,17 @@ class EntityContextResponse(BaseModel):
         default_factory=list, description="Documents containing this entity"
     )
     context_window: int
+
+
+class GraphStatsResponse(BaseModel):
+    """Response model for a knowledge-graph overview."""
+
+    success: bool
+    nodes: int = Field(description="Total node count (all labels)")
+    relationships: int = Field(description="Total relationship count")
+    documents: int = Field(description="Number of Document nodes")
+    entities: int = Field(description="Number of Entity nodes")
+    entity_types: Dict[str, int] = Field(
+        default_factory=dict,
+        description="Entity count per NER label (e.g. PERSON, ORG), most first",
+    )

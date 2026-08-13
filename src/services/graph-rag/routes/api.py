@@ -18,6 +18,7 @@ from models.schemas import (
     EntityExtractionResponse,
     GraphRetrievalRequest,
     GraphRetrievalResponse,
+    GraphStatsResponse,
     KnowledgeGraphRequest,
     KnowledgeGraphResponse,
 )
@@ -139,6 +140,22 @@ async def delete_document_graph_handler(
     except Exception as e:
         logger.error(f"❌ Failed to delete document graph {document_id}: {e}")
         raise backend_http_error(e, "Knowledge graph deletion")
+
+
+async def get_graph_stats_handler(
+    graph_constructor: KnowledgeGraphConstructor,
+) -> GraphStatsResponse:
+    """Overview of the knowledge graph: node/relationship/document/entity counts +
+    the per-NER-label entity distribution, so a caller can confirm a construct-graph
+    actually populated the graph and see what it holds."""
+    if graph_constructor is None:
+        raise HTTPException(status_code=503, detail="graph constructor not initialized")
+    try:
+        stats = await graph_constructor.get_graph_statistics()
+        return GraphStatsResponse(success=True, **stats)
+    except Exception as e:
+        logger.error(f"❌ Failed to get graph statistics: {e}")
+        raise backend_http_error(e, "Graph statistics")
 
 
 async def retrieve_with_graph_handler(
@@ -320,6 +337,25 @@ def build_graph_router(
         which drops the method/body on non-GET clients (#147).
         """
         return await delete_document_graph_handler(document_id, graph_constructor)
+
+    @router.get(
+        "/v1/graph/stats",
+        response_model=GraphStatsResponse,
+        tags=["Knowledge Graph"],
+    )
+    @router.get(
+        "/graph/stats",
+        response_model=GraphStatsResponse,
+        tags=["Knowledge Graph"],
+        include_in_schema=False,  # deprecated unversioned alias
+    )
+    async def get_graph_stats():
+        """Overview of the knowledge graph (counts + entity-type distribution).
+
+        Served at both /v1/graph/stats and the legacy /graph/stats. A read, so it's
+        open at the gateway (Authelia's job, #15) like the other GETs.
+        """
+        return await get_graph_stats_handler(graph_constructor)
 
     @router.post(
         "/v1/retrieve",
