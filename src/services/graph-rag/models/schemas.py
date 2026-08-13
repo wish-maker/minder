@@ -4,7 +4,7 @@ Pydantic Models for Graph RAG Service
 Request and response schemas for API endpoints.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -115,6 +115,24 @@ class EntityContextResponse(BaseModel):
         default_factory=list, description="Documents containing this entity"
     )
     context_window: int
+
+
+class GraphDocument(BaseModel):
+    """One Document node in the knowledge graph."""
+
+    id: str
+    title: Optional[str] = None
+    source: Optional[str] = None
+    created_at: Optional[str] = None
+    entity_count: int = Field(default=0, description="Entities this document mentions")
+
+
+class GraphDocumentsResponse(BaseModel):
+    """Response model for listing the graph's Document nodes."""
+
+    success: bool
+    documents: List[GraphDocument] = Field(default_factory=list)
+    count: int = Field(description="Number of documents in the graph")
 
 
 class GraphStatsResponse(BaseModel):
