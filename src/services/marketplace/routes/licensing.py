@@ -2,6 +2,7 @@
 import logging
 
 from core.licensing import create_license, get_user_licenses, validate_license
+from core.validation import ensure_valid_plugin_id
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
 
@@ -40,6 +41,10 @@ async def validate_license_endpoint(
     request: LicenseValidateRequest, current_user: dict = Depends(get_current_user)
 ):
     """Validate a license key"""
+    # plugin_id is queried against the UUID id column — reject a non-UUID here with
+    # a clean 404 instead of letting asyncpg 500 (and leak the raw driver error,
+    # since this handler has no try/except) (#574).
+    ensure_valid_plugin_id(request.plugin_id)
     result = await validate_license(
         license_key=request.license_key, plugin_id=request.plugin_id
     )
@@ -52,6 +57,10 @@ async def activate_license(
     request: LicenseActivateRequest, current_user: dict = Depends(get_current_user)
 ):
     """Activate a license for a user and plugin"""
+    # Same UUID guard as validate (#574): a non-UUID plugin_id would otherwise hit
+    # the UUID column and 500 (sanitized, via backend_http_error below) instead of a
+    # clean 404.
+    ensure_valid_plugin_id(request.plugin_id)
     try:
         license_data = await create_license(
             user_id=request.user_id, plugin_id=request.plugin_id, tier=request.tier
