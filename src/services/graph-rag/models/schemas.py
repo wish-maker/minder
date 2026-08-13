@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 class EntityExtractionRequest(BaseModel):
     """Request model for entity extraction"""
 
-    text: str = Field(..., description="Text to extract entities from")
+    # min_length=1: extracting from empty text is a no-op — reject at the edge
+    # with a 422 rather than returning a misleading "0 entities" success (#538).
+    text: str = Field(..., min_length=1, description="Text to extract entities from")
     extract_relationships: bool = Field(
         default=True, description="Whether to extract relationships between entities"
     )
@@ -21,8 +23,11 @@ class EntityExtractionRequest(BaseModel):
 class KnowledgeGraphRequest(BaseModel):
     """Request model for knowledge graph construction"""
 
-    document_id: str = Field(..., description="Document identifier")
-    text: str = Field(..., description="Document text for processing")
+    # min_length=1: document_id is the key the constructed nodes are stored
+    # under in Neo4j (an empty id can't be retrieved/managed later), and empty
+    # text is nothing to build a graph from — reject both at the edge (#538).
+    document_id: str = Field(..., min_length=1, description="Document identifier")
+    text: str = Field(..., min_length=1, description="Document text for processing")
     title: str = Field(default="", description="Document title")
     source: str = Field(default="unknown", description="Document source")
     metadata: Dict[str, Any] = Field(
