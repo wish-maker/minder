@@ -7,6 +7,7 @@ import { StatusLine } from "../components/StatusLine";
 import { EmptyState } from "../components/EmptyState";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import type { Paginated } from "../lib/api";
+import { filterByText } from "../lib/filterByText";
 import { useAsyncResource } from "../lib/useAsyncResource";
 import { useAuth } from "../lib/auth";
 import { openWebUiUrl } from "../lib/links";
@@ -312,14 +313,11 @@ export function ModelManagementPage() {
   const [filter, setFilter] = useState("");
 
   const needle = filter.trim().toLowerCase();
-  const visibleModels = needle
-    ? (models ?? []).filter(
-        (m) =>
-          m.name.toLowerCase().includes(needle) ||
-          m.provider.toLowerCase().includes(needle) ||
-          m.type.toLowerCase().includes(needle),
-      )
-    : models;
+  const visibleModels = filterByText(models ?? [], filter, (m) => [
+    m.name,
+    m.provider,
+    m.type,
+  ]);
 
   return (
     <>
