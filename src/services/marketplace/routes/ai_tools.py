@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 
 from core.ai_tools_importer import sync_plugin_tools
 from core.database import get_pool
+from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -124,7 +125,7 @@ async def list_all_ai_tools(
 
 
 @router.get("/plugins/{plugin_id}/tools")
-async def get_plugin_ai_tools(plugin_id: str):
+async def get_plugin_ai_tools(plugin_id: str = Depends(valid_plugin_id)):
     """Get all AI tools for a specific plugin"""
     pool = await get_pool()
 
@@ -269,7 +270,8 @@ async def sync_ai_tools(
 
 @router.delete("/plugins/{plugin_id}/tools")
 async def deactivate_plugin_tools(
-    plugin_id: str, current_user: dict = Depends(get_current_user)
+    plugin_id: str = Depends(valid_plugin_id),
+    current_user: dict = Depends(get_current_user),
 ):
     """
     Deactivate all AI tools for a plugin
