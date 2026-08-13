@@ -134,20 +134,30 @@ class OllamaManager(OllamaClientBase):
         except Exception as e:
             logger.warning(f"⚠️  Could not verify/pull model {model_name}: {e}")
 
+    # Ollama's /api/embed accepts a batch `input` list and returns embeddings in
+    # order, so a document's chunks embed in a handful of round-trips instead of one
+    # HTTP call per chunk (the dominant ingest cost on the Pi). Capped so a very large
+    # document doesn't build one enormous request/response.
+    EMBED_BATCH_SIZE = 96
+
     async def generate_embeddings(
         self, texts: List[str], model: str = settings.OLLAMA_EMBEDDING_MODEL
     ) -> List[List[float]]:
-        """Generate embeddings using Ollama"""
+        """Generate embeddings using Ollama (batched)."""
         await self._ensure_initialized()
 
         await self.ensure_model(model)
 
-        embeddings = []
-        for text in texts:
+        if not texts:
+            return []
+
+        assert self.embed_client is not None
+        embeddings: List[List[float]] = []
+        for start in range(0, len(texts), self.EMBED_BATCH_SIZE):
+            batch = texts[start : start + self.EMBED_BATCH_SIZE]
             try:
-                assert self.embed_client is not None
-                response = await self.embed_client.embeddings(model=model, prompt=text)
-                embedding = response.get("embedding", [])
+                response = await self.embed_client.embed(model=model, input=batch)
+                vectors = response.get("embeddings", []) or []
             except Exception as e:
                 # Do NOT substitute a zero-vector — that silently corrupts the index
                 # (upload would "succeed" with an unsearchable doc, queries return
@@ -156,11 +166,19 @@ class OllamaManager(OllamaClientBase):
                 raise RuntimeError(
                     f"embedding generation failed for model '{model}': {e}"
                 ) from e
-            if not embedding:
+            # A short/over-long batch would silently misalign chunks with their
+            # vectors on upsert — treat any count mismatch as a hard failure.
+            if len(vectors) != len(batch):
                 raise RuntimeError(
-                    f"embedding backend returned an empty vector for model '{model}'"
+                    f"embedding backend returned {len(vectors)} vectors for "
+                    f"{len(batch)} inputs (model '{model}')"
                 )
-            embeddings.append(embedding)
+            for vector in vectors:
+                if not vector:
+                    raise RuntimeError(
+                        f"embedding backend returned an empty vector for model '{model}'"
+                    )
+            embeddings.extend(vectors)
 
         return embeddings
 
