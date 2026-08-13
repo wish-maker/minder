@@ -197,9 +197,13 @@ class TestAPIGatewayIntegration:
         assert all(r.status_code != 429 for r in responses[:3])
         # The 4th must be rejected -- this is the actual mechanism this test
         # exists to prove works at all.
-        assert responses[3].status_code == 429
-        body = responses[3].json()
-        assert body["limit"] == 3
+        rejected = responses[3]
+        assert rejected.status_code == 429
+        # #541: platform-standard {"detail": ...} envelope (not the old
+        # {"error","limit","window"} shape) + a Retry-After header for backoff.
+        body = rejected.json()
+        assert "detail" in body and "rate limit exceeded" in body["detail"].lower()
+        assert int(rejected.headers["Retry-After"]) > 0
 
 
 class TestAPIGatewayErrorHandling:
