@@ -11,6 +11,7 @@ import os
 from typing import Any, Dict, List, Tuple
 
 _TRUE = {"1", "true", "yes", "on"}
+_FALSE = {"0", "false", "no", "off"}
 
 
 def _coerce(value: Any, typ: str) -> Any:
@@ -87,4 +88,11 @@ def validate_update(instance: Any, incoming: Dict[str, Any]) -> Tuple[bool, str]
                 (int if typ == "int" else float)(val)
             except (TypeError, ValueError):
                 return False, f"'{key}' must be {typ}"
+        elif typ == "bool":
+            # Without this, _coerce silently maps any unrecognized value to False
+            # (str(val).lower() in _TRUE) — a garbage bool would flip the flag off
+            # with a 200 instead of a clean 400 (#530). The client sends real JSON
+            # booleans (checkbox), which pass here.
+            if not isinstance(val, bool) and str(val).lower() not in (_TRUE | _FALSE):
+                return False, f"'{key}' must be a boolean"
     return True, ""

@@ -141,6 +141,22 @@ def test_validate_rejects_bad_int():
     assert not ok and "must be int" in msg
 
 
+def test_validate_rejects_bad_bool():
+    # #530: without a bool check, _coerce silently maps "banana" -> False (200);
+    # it must 400 like a bad int instead of flipping the flag off.
+    ok, msg = pc.validate_update(_FakePlugin(), {"ENABLED": "not-a-bool"})
+    assert not ok and "must be a boolean" in msg
+
+
+def test_validate_accepts_real_and_recognized_bools():
+    # real JSON booleans (what the checkbox UI sends)
+    assert pc.validate_update(_FakePlugin(), {"ENABLED": True}) == (True, "")
+    assert pc.validate_update(_FakePlugin(), {"ENABLED": False}) == (True, "")
+    # recognized bool strings, case-insensitive
+    for v in ("true", "False", "1", "0", "yes", "no", "on", "off"):
+        assert pc.validate_update(_FakePlugin(), {"ENABLED": v}) == (True, ""), v
+
+
 def test_validate_accepts_valid_and_empty():
     assert pc.validate_update(_FakePlugin(), {"MAX_ITEMS": "5", "SYMBOLS": "x"}) == (
         True,
