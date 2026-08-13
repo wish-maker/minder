@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
+import { StatusLine } from "../components/StatusLine";
 import { friendlyErrorMessage, oidcLoginUrl } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import {
@@ -8,7 +9,6 @@ import {
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
-  statusClass,
 } from "../lib/ui";
 
 /** Local username/password login — the path that actually works when the client
@@ -126,11 +126,7 @@ export function LoginPage() {
               : "Create account & log in"}
         </button>
 
-        {error && (
-          <p className={statusClass(true)} role="alert">
-            {error}
-          </p>
-        )}
+        <StatusLine isError>{error}</StatusLine>
       </form>
 
       <p className="mt-3 text-center text-sm text-gray-600 dark:text-gray-400">

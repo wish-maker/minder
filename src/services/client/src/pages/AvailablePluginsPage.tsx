@@ -368,6 +368,7 @@ function SearchAndFilters({
       <input
         className={`${inputClass} max-w-xs`}
         type="text"
+        aria-label="Search plugins"
         placeholder="Search plugins…"
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
