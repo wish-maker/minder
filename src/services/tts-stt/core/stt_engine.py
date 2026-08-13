@@ -35,8 +35,15 @@ def transcribe(audio_bytes: bytes, language: str) -> tuple[str, float]:
 
     recognizer = sr.Recognizer()
     try:
-        with sr.AudioFile(temp_path) as source:
-            audio_data = recognizer.record(source)
+        try:
+            with sr.AudioFile(temp_path) as source:
+                audio_data = recognizer.record(source)
+        except Exception as e:
+            # An empty / truncated / non-WAV upload fails to decode here. Raise a
+            # distinct ValueError so the route can return a 400 (client sent bad
+            # audio) instead of a 500 (#536) — real recognizer-service failures
+            # surface separately as sr.RequestError below.
+            raise ValueError("could not decode audio; expected a valid WAV file") from e
         try:
             text = recognizer.recognize_google(audio_data, language=language)
             return text, 0.9
