@@ -318,6 +318,66 @@ async def test_update_unknown_kb_404():
     assert exc_info.value.status_code == 404
 
 
+# ── PATCH /v1/pipeline/{id}: edit a pipeline without delete+recreate ──────────
+
+
+def test_update_rag_pipeline_requires_auth():
+    client = _rag_router_client()
+    resp = client.patch("/v1/pipeline/p1", json={"name": "new"})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_update_pipeline_changes_name_and_kbs():
+    pipe = {
+        "id": "p1",
+        "name": "old",
+        "knowledge_base_ids": ["kb1"],
+        "retrieval_config": {},
+        "generation_config": {},
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    with _seed_state(
+        rag_pipelines={"p1": pipe},
+        knowledge_bases={"kb1": _kb("kb1"), "kb2": _kb("kb2")},
+        PG_AVAILABLE=False,
+    ):
+        resp = await rag_routes.update_rag_pipeline(
+            "p1",
+            models.RAGPipelineUpdate(name="renamed", knowledge_base_ids=["kb1", "kb2"]),
+            {"sub": "1"},
+        )
+    assert resp["name"] == "renamed"
+    assert resp["knowledge_base_ids"] == ["kb1", "kb2"]
+
+
+@pytest.mark.asyncio
+async def test_update_pipeline_unknown_kb_404():
+    pipe = {"id": "p1", "name": "n", "knowledge_base_ids": ["kb1"], "created_at": "x"}
+    with _seed_state(
+        rag_pipelines={"p1": pipe},
+        knowledge_bases={"kb1": _kb("kb1")},
+        PG_AVAILABLE=False,
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.update_rag_pipeline(
+                "p1",
+                models.RAGPipelineUpdate(knowledge_base_ids=["nope"]),
+                {"sub": "1"},
+            )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_unknown_pipeline_404():
+    with _seed_state(rag_pipelines={}, knowledge_bases={}, PG_AVAILABLE=False):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.update_rag_pipeline(
+                "nope", models.RAGPipelineUpdate(name="x"), {"sub": "1"}
+            )
+    assert exc_info.value.status_code == 404
+
+
 # ── #501: list endpoints return the shared {items,total,limit,offset} envelope ──
 # rag-pipeline was the only service whose list endpoints returned a bare JSON
 # array (no total/limit/offset), so a client couldn't tell if more pages existed.

@@ -79,6 +79,19 @@ class RAGPipelineCreate(BaseModel):
     generation_config: Dict[str, Any] = {}
 
 
+class RAGPipelineUpdate(BaseModel):
+    """Partial update of a RAG pipeline (PATCH): name and/or knowledge_base_ids.
+
+    A pipeline is just config (no vectors of its own), so unlike a KB this is
+    cheap and fully mutable. If knowledge_base_ids is provided it must be
+    non-empty — retrieval reads knowledge_base_ids[0], so an empty list would
+    make every query 500 (IndexError).
+    """
+
+    name: Optional[str] = Field(default=None, min_length=1)
+    knowledge_base_ids: Optional[List[str]] = Field(default=None, min_length=1)
+
+
 class RAGPipelineResponse(BaseModel):
     """RAG pipeline creation response (typed instead of a raw dict, #144)."""
 

@@ -663,16 +663,42 @@ function PipelineCard({
   token,
   capabilities,
   onDeleted,
+  onUpdated,
   confirm,
 }: {
   pipeline: RagPipeline;
   token: string;
   capabilities: Capabilities | null;
   onDeleted: (id: string) => void;
+  onUpdated: (pipeline: RagPipeline) => void;
   confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
   const [status, setStatus] = useState("");
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(pipeline.name);
+  const [saving, setSaving] = useState(false);
+
+  async function handleRename() {
+    if (!editName.trim()) {
+      setStatus("Name can't be empty.");
+      return;
+    }
+    setSaving(true);
+    setStatus("Saving…");
+    try {
+      const updated = await apiFetch<RagPipeline>(
+        `/v1/rag/pipeline/${pipeline.id}`,
+        { method: "PATCH", body: { name: editName.trim() }, token },
+      );
+      onUpdated(updated);
+      setStatus("");
+      setEditing(false);
+    } catch (e) {
+      setStatus(friendlyErrorMessage(e));
+    }
+    setSaving(false);
+  }
 
   async function handleDelete() {
     const ok = await confirm({
@@ -704,10 +730,36 @@ function PipelineCard({
   return (
     <section className={`mb-4 ${cardClass}`}>
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            <span aria-hidden="true">🧠</span> {pipeline.name}
-          </h2>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <input
+                className={inputClass}
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                aria-label="Pipeline name"
+                disabled={saving}
+              />
+              <button
+                className={primaryButtonClass}
+                onClick={handleRename}
+                disabled={saving}
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
+              <button
+                className={secondaryButtonClass}
+                onClick={() => setEditing(false)}
+                disabled={saving}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              <span aria-hidden="true">🧠</span> {pipeline.name}
+            </h2>
+          )}
           <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
             id: <code>{pipeline.id}</code>{" "}
             <button
@@ -722,17 +774,32 @@ function PipelineCard({
             Knowledge bases: {pipeline.knowledge_base_ids.join(", ")}
           </p>
         </div>
-        <button
-          className={destructiveButtonClass}
-          onClick={handleDelete}
-          disabled={!token}
-        >
-          🗑 Delete
-        </button>
+        {!editing && (
+          <div className="flex shrink-0 gap-2">
+            <button
+              className={secondaryButtonClass}
+              onClick={() => {
+                setEditName(pipeline.name);
+                setStatus("");
+                setEditing(true);
+              }}
+              disabled={!token}
+            >
+              ✏️ Rename
+            </button>
+            <button
+              className={destructiveButtonClass}
+              onClick={handleDelete}
+              disabled={!token}
+            >
+              🗑 Delete
+            </button>
+          </div>
+        )}
       </div>
       {!token && (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Log in to delete this pipeline.
+          Log in to rename or delete this pipeline.
         </p>
       )}
       <StatusLine isError={false}>{status}</StatusLine>
@@ -785,6 +852,10 @@ export function RagPipelinesPage() {
     setPipelines((prev) => prev.filter((p) => p.id !== id));
   }
 
+  function handlePipelineUpdated(updated: RagPipeline) {
+    setPipelines((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  }
+
   return (
     <>
       {dialog}
@@ -813,6 +884,7 @@ export function RagPipelinesPage() {
           token={token}
           capabilities={capabilities}
           onDeleted={handlePipelineDeleted}
+          onUpdated={handlePipelineUpdated}
           confirm={confirm}
         />
       ))}

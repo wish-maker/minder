@@ -28,6 +28,7 @@ from models import (
     RAGPipelineCreate,
     RAGPipelineInfo,
     RAGPipelineResponse,
+    RAGPipelineUpdate,
 )
 from qdrant_client.models import (
     Distance,
@@ -531,6 +532,51 @@ async def get_rag_pipeline(pipeline_id: str):
     pipeline = state.rag_pipelines.get(pipeline_id)
     if not pipeline:
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
+    return pipeline
+
+
+@router.patch(
+    "/v1/pipeline/{pipeline_id}",
+    response_model=RAGPipelineInfo,
+    tags=["Pipeline"],
+)
+@router.patch(
+    "/pipeline/{pipeline_id}",
+    response_model=RAGPipelineInfo,
+    tags=["Pipeline"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+async def update_rag_pipeline(
+    pipeline_id: str,
+    request: RAGPipelineUpdate,
+    current_user: dict = Depends(get_current_user_or_service),
+):
+    """Update a RAG pipeline's `name` and/or `knowledge_base_ids` in place —
+    no more delete + recreate just to rename one or re-point it at different
+    knowledge bases. JWT-gated like delete. 404 if the pipeline (or a supplied
+    KB) is unknown."""
+    pipeline = state.rag_pipelines.get(pipeline_id)
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="RAG pipeline not found")
+
+    changes = request.model_dump(exclude_unset=True)
+    if changes.get("knowledge_base_ids") is not None:
+        for kb_id in changes["knowledge_base_ids"]:
+            if kb_id not in state.knowledge_bases:
+                raise HTTPException(
+                    status_code=404, detail=f"Knowledge base {kb_id} not found"
+                )
+        pipeline["knowledge_base_ids"] = changes["knowledge_base_ids"]
+    if changes.get("name") is not None:
+        pipeline["name"] = changes["name"]
+
+    if state.PG_AVAILABLE:
+        try:
+            await state.save_pipeline_to_postgres(pipeline_id, pipeline)
+            logger.info(f"✅ Updated pipeline in PostgreSQL: {pipeline_id}")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to persist pipeline update: {e}")
+
     return pipeline
 
 
