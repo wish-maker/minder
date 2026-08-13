@@ -8,6 +8,7 @@ import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
+import { usePaginatedList } from "../lib/usePaginatedList";
 import {
   badgeClass,
   cardClass,
@@ -378,21 +379,11 @@ function SearchAndFilters({
 export function AvailablePluginsPage() {
   const { token, isAuthenticated } = useAuth();
   const { confirm, dialog } = useConfirm();
-  const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
   const [queryInput, setQueryInput] = useState("");
   const query = useDebouncedValue(queryInput, 300);
   const [myInstallations, setMyInstallations] = useState<Installation[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [featured, setFeatured] = useState<Plugin[]>([]);
-  const [status, setStatus] = useState("");
-  const [isError, setIsError] = useState(false);
-
-  const setStatusMsg = useCallback((msg: string, err = false) => {
-    setStatus(msg);
-    setIsError(err);
-  }, []);
 
   const loadFeatured = useCallback(async () => {
     try {
@@ -408,24 +399,23 @@ export function AvailablePluginsPage() {
     loadFeatured();
   }, [loadFeatured]);
 
-  const loadPlugins = useCallback(
-    async (nextOffset: number, replace: boolean) => {
-      setStatusMsg("Loading…");
-      try {
-        const path = query.trim()
-          ? `/v1/marketplace/plugins/search?q=${encodeURIComponent(query.trim())}&limit=20&offset=${nextOffset}`
-          : `/v1/marketplace/plugins?limit=20&offset=${nextOffset}`;
-        const res = await apiFetch<PluginListResponse>(path);
-        setPlugins((prev) => (replace ? res.plugins : [...prev, ...res.plugins]));
-        setTotal(res.total);
-        setOffset(nextOffset);
-        setStatusMsg("");
-      } catch (e) {
-        setStatusMsg(friendlyErrorMessage(e), true);
-      }
+  const fetchPluginsPage = useCallback(
+    async (nextOffset: number) => {
+      const path = query.trim()
+        ? `/v1/marketplace/plugins/search?q=${encodeURIComponent(query.trim())}&limit=20&offset=${nextOffset}`
+        : `/v1/marketplace/plugins?limit=20&offset=${nextOffset}`;
+      const res = await apiFetch<PluginListResponse>(path);
+      return { items: res.plugins, total: res.total };
     },
-    [query, setStatusMsg],
+    [query],
   );
+  const {
+    items: plugins,
+    status,
+    reload: reloadPlugins,
+    loadMore: loadMorePlugins,
+    hasMore: hasMorePlugins,
+  } = usePaginatedList(fetchPluginsPage);
 
   const loadMyInstallations = useCallback(async () => {
     if (!isAuthenticated) {
@@ -458,10 +448,10 @@ export function AvailablePluginsPage() {
   }, [isAuthenticated, token]);
 
   useEffect(() => {
-    loadPlugins(0, true);
-    // query changes trigger a fresh search from offset 0 (see loadPlugins' own deps)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+    // query changes trigger a fresh search from offset 0 (reloadPlugins'
+    // identity changes with it, since it flows through fetchPluginsPage).
+    reloadPlugins();
+  }, [reloadPlugins]);
 
   useEffect(() => {
     loadMyInstallations();
@@ -499,7 +489,7 @@ export function AvailablePluginsPage() {
         Browse and install Minder plugins. Browsing is open for everyone; log
         in to install, enable, disable, or uninstall.
       </p>
-      <StatusLine isError={isError}>{status}</StatusLine>
+      <StatusLine isError={false}>{status}</StatusLine>
 
       {featured.length > 0 && !query.trim() && (
         <section className="mb-6">
@@ -566,11 +556,8 @@ export function AvailablePluginsPage() {
           confirm={confirm}
         />
       ))}
-      {plugins.length < total && (
-        <button
-          onClick={() => loadPlugins(offset + 20, false)}
-          className={secondaryButtonClass}
-        >
+      {hasMorePlugins && (
+        <button onClick={loadMorePlugins} className={secondaryButtonClass}>
           Load more
         </button>
       )}
