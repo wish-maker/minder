@@ -4,6 +4,7 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
+import type { Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { copyText, randomId } from "../lib/browser";
 import {
@@ -763,13 +764,13 @@ export function RagPipelinesPage() {
     setStatusMsg("Loading…");
     try {
       const [kbList, caps, pipelineList] = await Promise.all([
-        apiFetch<KnowledgeBase[]>("/v1/rag/knowledge-bases?limit=100"),
+        apiFetch<Paginated<KnowledgeBase>>("/v1/rag/knowledge-bases?limit=100"),
         apiFetch<Capabilities>("/v1/rag/capabilities"),
-        apiFetch<RagPipeline[]>("/v1/rag/pipeline?limit=100"),
+        apiFetch<Paginated<RagPipeline>>("/v1/rag/pipeline?limit=100"),
       ]);
-      setKbs(kbList);
+      setKbs(kbList.items);
       setCapabilities(caps);
-      setPipelines(pipelineList);
+      setPipelines(pipelineList.items);
       setStatusMsg("");
     } catch (e) {
       setStatusMsg(friendlyErrorMessage(e), true);

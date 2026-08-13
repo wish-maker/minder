@@ -199,9 +199,14 @@ def test_health_reports_ollama_available():
 
 
 def test_list_knowledge_bases():
+    # #501: list endpoints return the shared {items,total,limit,offset} envelope,
+    # not a bare array -- so a client can tell whether more pages exist.
     r = httpx.get(f"{BASE}/knowledge-bases", timeout=10.0)
     assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    body = r.json()
+    assert set(body) >= {"items", "total", "limit", "offset"}
+    assert isinstance(body["items"], list)
+    assert body["total"] >= len(body["items"])
 
 
 def test_list_pipelines_includes_created_pipeline(pipeline_id):
@@ -209,7 +214,7 @@ def test_list_pipelines_includes_created_pipeline(pipeline_id):
     # create response -- confirm it's actually recoverable via list.
     r = httpx.get(f"{BASE}/pipeline", timeout=10.0)
     assert r.status_code == 200
-    ids = [p["id"] for p in r.json()]
+    ids = [p["id"] for p in r.json()["items"]]  # #501 envelope
     assert pipeline_id in ids
 
 
@@ -287,7 +292,7 @@ def test_list_documents_groups_by_upload_not_by_chunk(doc_kb_id):
 
     r = httpx.get(f"{BASE}/knowledge-bases/{doc_kb_id}/documents", timeout=10.0)
     assert r.status_code == 200, r.text
-    docs = [d for d in r.json() if d["filename"] == "same-name.txt"]
+    docs = [d for d in r.json()["items"] if d["filename"] == "same-name.txt"]
     assert len(docs) == 2
     assert docs[0]["document_id"] != docs[1]["document_id"]
     assert all(d["chunk_count"] >= 1 for d in docs)
@@ -317,7 +322,7 @@ def test_delete_document_removes_it_and_updates_kb_counts(doc_kb_id, auth_token)
     assert kb_after["vector_count"] < kb_before["vector_count"]
 
     listing = httpx.get(f"{BASE}/knowledge-bases/{doc_kb_id}/documents", timeout=10.0)
-    assert document_id not in [dd["document_id"] for dd in listing.json()]
+    assert document_id not in [dd["document_id"] for dd in listing.json()["items"]]
 
 
 def test_delete_unknown_document_404s(doc_kb_id, auth_token):
@@ -359,7 +364,7 @@ def test_documents_endpoints_reachable_through_gateway(doc_kb_id, auth_token):
         f"{GATEWAY}/v1/rag/knowledge-bases/{doc_kb_id}/documents", timeout=10.0
     )
     assert listing.status_code == 200, listing.text
-    assert any(d["filename"] == "gateway-test.txt" for d in listing.json())
+    assert any(d["filename"] == "gateway-test.txt" for d in listing.json()["items"])
 
     d = httpx.delete(
         f"{GATEWAY}/v1/rag/knowledge-bases/{doc_kb_id}/documents/{document_id}",
