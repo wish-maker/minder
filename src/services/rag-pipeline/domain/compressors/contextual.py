@@ -99,6 +99,18 @@ class ContextualCompressor:
         original_text = "\n\n".join([ctx.get("text", "") for ctx in contexts])
         original_length = len(original_text)
 
+        # Non-empty context list but no actual text (every ctx missing/empty 'text',
+        # e.g. a zero-vector/empty chunk from retrieval). Treat like the no-contexts
+        # case — the `not contexts` guard above only catches an empty list, and the
+        # percentage log below would divide by original_length (0).
+        if original_length == 0:
+            logger.debug("Contexts present but empty; nothing to compress")
+            return {
+                "compressed_context": "",
+                "original_length": 0,
+                "compressed_length": 0,
+            }
+
         # Calculate target length
         target_length = int(original_length * self.compression_ratio)
 
