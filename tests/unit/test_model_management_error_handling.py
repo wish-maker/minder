@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -142,3 +143,39 @@ def test_list_models_envelope_paginates_and_reports_total():
     assert body["limit"] == 2
     assert body["offset"] == 1
     assert [m["id"] for m in body["items"]] == ["m1:latest", "m2:latest"]
+
+
+def test_test_unknown_model_is_404_not_503(monkeypatch):
+    # #532: testing a model that isn't pulled must be a clean 404 (like
+    # get/delete), not a 503 that leaks ollama's own "not found" message.
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "test_model": AsyncMock(
+                side_effect=AssertionError("must not reach ollama for an unknown model")
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager).post(
+        "/models/no-such-model/test", json={"prompt": "hi"}
+    )
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "Model 'no-such-model' not found"
+
+
+def test_pull_empty_model_id_rejected_at_the_edge():
+    # #532: an empty model_id must fail request-body validation (→ 422 at the
+    # edge) rather than passing through and failing deep in the ollama client's
+    # own PullRequest, which surfaced as a 503 leaking that internal error.
+    # Asserted at the model level (the endpoint itself is auth-gated).
+    import pydantic
+
+    models_api = _isolated_import("routes.models_api")
+    with pytest.raises(pydantic.ValidationError):
+        models_api.ModelPullRequest(model_id="")
+    # a non-empty id is still accepted
+    assert models_api.ModelPullRequest(model_id="llama3.2").model_id == "llama3.2"

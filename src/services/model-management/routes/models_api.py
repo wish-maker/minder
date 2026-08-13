@@ -205,6 +205,16 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         (#147).
         """
         try:
+            # 404 for an unknown model instead of letting ollama's own 404 become
+            # a blanket 503 that leaks the raw message (#532) — mirrors get_model
+            # / delete_model (#145).
+            exists = any(
+                m.get("model") == model_id for m in await ollama_manager.list_models()
+            )
+            if not exists:
+                raise HTTPException(
+                    status_code=404, detail=f"Model '{model_id}' not found"
+                )
             result = await ollama_manager.test_model(model_id, request.prompt)
             logger.info(f"✅ Model tested: {model_id}")
             return result
