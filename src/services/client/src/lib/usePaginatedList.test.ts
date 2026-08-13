@@ -71,4 +71,41 @@ describe("usePaginatedList", () => {
     await waitFor(() => expect(result.current.status).toBe("nope"));
     expect(result.current.items).toEqual([]);
   });
+
+  it("drops a stale response when a newer reload supersedes it (#502)", async () => {
+    // Two searches race: the first (slow) resolves AFTER the second (fresh).
+    // Without the run-id guard, the stale "old" page would clobber the fresh one.
+    function deferred<T>() {
+      let resolve!: (v: T) => void;
+      const promise = new Promise<T>((r) => (resolve = r));
+      return { promise, resolve };
+    }
+    type Pg = { items: string[]; total: number };
+    const first = deferred<Pg>();
+    const second = deferred<Pg>();
+    const calls = [first, second];
+    let call = 0;
+    const fetchPage = () => calls[call++].promise;
+
+    const { result } = renderHook(() => usePaginatedList(fetchPage));
+
+    // Kick off two reloads back-to-back (neither resolved yet).
+    act(() => {
+      result.current.reload();
+      result.current.reload();
+    });
+
+    // Resolve the NEWER run first, then the older/slower one.
+    await act(async () => {
+      second.resolve({ items: ["fresh"], total: 1 });
+    });
+    await waitFor(() => expect(result.current.items).toEqual(["fresh"]));
+
+    await act(async () => {
+      first.resolve({ items: ["stale"], total: 99 });
+    });
+    // The late "stale" page must NOT clobber the fresh results.
+    expect(result.current.items).toEqual(["fresh"]);
+    expect(result.current.total).toBe(1);
+  });
 });
