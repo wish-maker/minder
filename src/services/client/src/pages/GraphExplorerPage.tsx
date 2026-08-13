@@ -14,6 +14,7 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "../lib/ui";
+import { type AsyncResource, useAsyncResource } from "../lib/useAsyncResource";
 
 interface Entity {
   text: string;
@@ -75,11 +76,99 @@ function EntityBadge({ entity }: { entity: Entity | RelatedEntity }) {
   );
 }
 
+interface GraphStats {
+  success: boolean;
+  nodes: number;
+  relationships: number;
+  documents: number;
+  entities: number;
+  entity_types: Record<string, number>;
+}
+
 interface BuiltDoc {
   documentId: string;
   title: string;
   entityCount: number;
   relationshipCount: number;
+}
+
+function StatTile({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-800">
+      <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+        {value.toLocaleString()}
+      </div>
+      <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
+    </div>
+  );
+}
+
+function GraphOverviewCard({ stats }: { stats: AsyncResource<GraphStats> }) {
+  const data = stats.data;
+  const isEmpty = data != null && data.nodes === 0;
+  const entityTypes = data ? Object.entries(data.entity_types) : [];
+
+  return (
+    <section className={`mb-6 ${cardClass}`}>
+      <div className="mb-1 flex items-center justify-between">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+          <span aria-hidden="true">📊</span> Graph overview
+        </h2>
+        <button
+          type="button"
+          onClick={stats.reload}
+          disabled={stats.loading}
+          className={secondaryButtonClass}
+        >
+          {stats.loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
+        What's currently in the Neo4j knowledge graph. Updates after you build or
+        remove a document below.
+      </p>
+
+      {stats.error && <StatusLine>{stats.error}</StatusLine>}
+
+      {data && !stats.error && (
+        <>
+          {isEmpty ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              The graph is empty — build a document from some text in{" "}
+              <span className="font-medium">Extract &amp; Build</span> below to
+              populate it.
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <StatTile label="entities" value={data.entities} />
+                <StatTile label="relationships" value={data.relationships} />
+                <StatTile label="documents" value={data.documents} />
+                <StatTile label="total nodes" value={data.nodes} />
+              </div>
+              {entityTypes.length > 0 && (
+                <div className="mt-3">
+                  <p className="mb-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                    Entities by type
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entityTypes.map(([label, count]) => (
+                      <span
+                        key={label}
+                        className="inline-block rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
+                      >
+                        {label} <span className="opacity-70">{count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
 
 function ExtractAndBuildCard({
@@ -514,12 +603,20 @@ export function GraphExplorerPage() {
   const { confirm, dialog } = useConfirm();
   const [builtDocs, setBuiltDocs] = useState<BuiltDoc[]>([]);
 
+  // Whole-graph overview (an open read). Lifted here so a build/delete below can
+  // reload() it — the counts then reflect the change without a manual refresh. #502
+  const stats = useAsyncResource<GraphStats>((signal) =>
+    apiFetch<GraphStats>("/v1/graph-rag/graph/stats", { signal }),
+  );
+
   function handleBuilt(doc: BuiltDoc) {
     setBuiltDocs((prev) => [doc, ...prev.filter((d) => d.documentId !== doc.documentId)]);
+    stats.reload();
   }
 
   function handleDeleted(documentId: string) {
     setBuiltDocs((prev) => prev.filter((d) => d.documentId !== documentId));
+    stats.reload();
   }
 
   return (
@@ -536,6 +633,7 @@ export function GraphExplorerPage() {
         Marketplace page — same underlying Neo4j instance, unrelated data.
       </InfoCallout>
       {dialog}
+      <GraphOverviewCard stats={stats} />
       <ExtractAndBuildCard token={token} onBuilt={handleBuilt} />
       <ExploreCard token={token} />
       <DeleteDocumentCard
