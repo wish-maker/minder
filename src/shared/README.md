@@ -275,6 +275,30 @@ from shared.ai.tool_validator import validate_ai_tools
 validate_ai_tools(manifest)   # validates a plugin's declared AI tools
 ```
 
+### Bundle graph — `bundle_graph.py`
+
+The pure claim-graph "brain" behind the bundle control-plane (#65), shared by the
+setup CLI (`scripts/setup/bundles.py`) and the registry's bundle API
+(`plugin-registry/routes/bundles.py`) so both derive the SAME service map from the
+compose file's `minder.bundle=` labels — no hand-maintained duplicate. Given the
+enabled-bundle set it computes which services are claimed and which are **orphans**
+(reference-counted: a service no enabled bundle claims). No I/O, no Docker calls —
+just parsing + the graph math, so it's unit-testable and can't drift between the
+two callers:
+
+```python
+from shared.bundle_graph import parse_bundle_labels, parse_state, ClaimGraph
+
+bundles = parse_bundle_labels(compose_text)   # {bundle: (service, ...)} from minder.bundle= labels
+graph = ClaimGraph(bundles, parse_state(state_text))
+graph.service_active("minder-grafana")        # is any enabled bundle claiming it?
+graph.orphans_after("monitoring")             # services freed if 'monitoring' is disabled
+```
+
+Also parses plugin manifests (`parse_plugin_manifest`, `claims_from_plugin_manifests`,
+`bindings_from_plugin_manifests`) for plugin-introduced bundle claims + managed/
+external bindings.
+
 ### AI — `ai/ollama_client_base.py`
 
 ```python
@@ -314,8 +338,9 @@ failure.
 | `utils.redis_client` | api-gateway, plugin-registry |
 | `config.MinderBaseSettings` | plugin-state-manager (broader adoption evaluated and closed in #49 — see below) |
 | `ai.tool_validator` | plugin-registry |
-| `models.pagination.PaginatedList` | rag-pipeline (3 list endpoints, #501; the `{items,total,limit,offset}` envelope — other services' list shapes to converge here next) |
+| `models.pagination.PaginatedList` | rag-pipeline (3 list endpoints, #501), model-management (`/v1/models`, #519) — the `{items,total,limit,offset}` envelope; other services' list shapes to converge here next |
 | `models.tiers.LicenseTier` | marketplace, plugin-state-manager (the only 2 services with a license concept) |
+| `bundle_graph.ClaimGraph` | plugin-registry `routes/bundles.py` + the setup CLI `scripts/setup/bundles.py` (one brain, two callers, #65) |
 
 > `config.MinderBaseSettings` was evaluated for wider adoption in #49 and intentionally
 > left as-is: every service's settings carry genuinely different fields, so forcing the
