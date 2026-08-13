@@ -268,6 +268,40 @@ function KnowledgeBaseCard({
 }) {
   const [status, setStatus] = useState("");
   const [docsVersion, setDocsVersion] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(kb.name);
+  const [editDesc, setEditDesc] = useState(kb.description);
+  const [saving, setSaving] = useState(false);
+
+  function startEdit() {
+    setEditName(kb.name);
+    setEditDesc(kb.description);
+    setStatus("");
+    setEditing(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!editName.trim()) {
+      setStatus("Name can't be empty.");
+      return;
+    }
+    setSaving(true);
+    setStatus("Saving…");
+    try {
+      // Metadata-only edit — does NOT touch the documents/vectors (unlike
+      // delete + recreate, which drops the whole collection).
+      const updated = await apiFetch<KnowledgeBase>(
+        `/v1/rag/knowledge-bases/${kb.id}`,
+        { method: "PATCH", body: { name: editName.trim(), description: editDesc }, token },
+      );
+      onRefresh(updated);
+      setStatus("");
+      setEditing(false);
+    } catch (e) {
+      setStatus(friendlyErrorMessage(e));
+    }
+    setSaving(false);
+  }
 
   async function handleDelete() {
     const ok = await confirm({
@@ -297,33 +331,82 @@ function KnowledgeBaseCard({
 
   return (
     <section className={`mb-4 ${cardClass}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-            <span aria-hidden="true">📚</span> {kb.name}
-          </h2>
-          {kb.description && (
-            <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
-              {kb.description}
-            </p>
-          )}
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {kb.document_count} document{kb.document_count === 1 ? "" : "s"} ·{" "}
-            {kb.vector_count} vectors · embedding: {kb.embedding_model} · llm:{" "}
-            {kb.llm_model}
+      {editing ? (
+        <div className="flex flex-col gap-2">
+          <input
+            className={inputClass}
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            placeholder="Name"
+            aria-label="Knowledge base name"
+            disabled={saving}
+          />
+          <input
+            className={inputClass}
+            value={editDesc}
+            onChange={(e) => setEditDesc(e.target.value)}
+            placeholder="Description (optional)"
+            aria-label="Knowledge base description"
+            disabled={saving}
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Editing name/description only — documents and vectors are untouched.
           </p>
+          <div className="flex gap-2">
+            <button
+              className={primaryButtonClass}
+              onClick={handleSaveEdit}
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button
+              className={secondaryButtonClass}
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-        <button
-          className={destructiveButtonClass}
-          onClick={handleDelete}
-          disabled={!token}
-        >
-          🗑 Delete KB
-        </button>
-      </div>
+      ) : (
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              <span aria-hidden="true">📚</span> {kb.name}
+            </h2>
+            {kb.description && (
+              <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">
+                {kb.description}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {kb.document_count} document{kb.document_count === 1 ? "" : "s"} ·{" "}
+              {kb.vector_count} vectors · embedding: {kb.embedding_model} · llm:{" "}
+              {kb.llm_model}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              className={secondaryButtonClass}
+              onClick={startEdit}
+              disabled={!token}
+            >
+              ✏️ Edit
+            </button>
+            <button
+              className={destructiveButtonClass}
+              onClick={handleDelete}
+              disabled={!token}
+            >
+              🗑 Delete KB
+            </button>
+          </div>
+        </div>
+      )}
       {!token && (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Log in to delete this knowledge base.
+          Log in to edit or delete this knowledge base.
         </p>
       )}
       <div className="mt-3 flex flex-col gap-3">

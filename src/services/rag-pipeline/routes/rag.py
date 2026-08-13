@@ -22,6 +22,7 @@ from models import (
     DocumentUploadResponse,
     KnowledgeBaseCreate,
     KnowledgeBaseResponse,
+    KnowledgeBaseUpdate,
     QueryRequest,
     QueryResponse,
     RAGPipelineCreate,
@@ -190,6 +191,59 @@ async def get_knowledge_base(kb_id: str):
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
     return kb
+
+
+@router.patch(
+    "/v1/knowledge-bases/{kb_id}",
+    response_model=KnowledgeBaseResponse,
+    tags=["Knowledge Base"],
+)
+@router.patch(
+    "/knowledge-bases/{kb_id}",
+    response_model=KnowledgeBaseResponse,
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias
+async def update_knowledge_base(
+    kb_id: str,
+    request: KnowledgeBaseUpdate,
+    current_user: dict = Depends(get_current_user_or_service),
+):
+    """Update a knowledge base's mutable metadata (name / description /
+    llm_model) WITHOUT touching its documents or vectors.
+
+    Previously the only way to rename or re-describe a KB was to delete and
+    recreate it — which drops the whole Qdrant collection (every uploaded
+    document) and forces a full re-ingest. This edits metadata in place.
+    `embedding_model` and the chunk params are immutable (see KnowledgeBaseUpdate).
+    JWT-gated like delete. 404 if the KB is unknown.
+    """
+    kb = state.knowledge_bases.get(kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    changes = request.model_dump(exclude_unset=True)
+    for field in ("name", "description", "llm_model"):
+        if field in changes and changes[field] is not None:
+            kb[field] = changes[field]
+
+    if state.PG_AVAILABLE:
+        try:
+            await state.save_kb_to_postgres(kb_id, kb)
+            logger.info(f"✅ Updated KB metadata in PostgreSQL: {kb_id}")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to persist KB update: {e}")
+
+    return KnowledgeBaseResponse(
+        id=kb_id,
+        name=kb["name"],
+        description=kb["description"],
+        embedding_model=kb["embedding_model"],
+        llm_model=kb["llm_model"],
+        document_count=kb["document_count"],
+        vector_count=kb["vector_count"],
+        created_at=kb["created_at"],
+    )
 
 
 @router.delete("/v1/knowledge-bases/{kb_id}", tags=["Knowledge Base"])
