@@ -85,6 +85,20 @@ interface GraphStats {
   entity_types: Record<string, number>;
 }
 
+interface GraphDocument {
+  id: string;
+  title: string | null;
+  source: string | null;
+  created_at: string | null;
+  entity_count: number;
+}
+
+interface GraphDocumentsResponse {
+  success: boolean;
+  documents: GraphDocument[];
+  count: number;
+}
+
 interface BuiltDoc {
   documentId: string;
   title: string;
@@ -510,17 +524,18 @@ function ExploreCard({ token }: { token: string }) {
 function DeleteDocumentCard({
   token,
   confirm,
-  builtDocs,
+  graphDocs,
   onDeleted,
 }: {
   token: string;
   confirm: ReturnType<typeof useConfirm>["confirm"];
-  builtDocs: BuiltDoc[];
+  graphDocs: AsyncResource<GraphDocumentsResponse>;
   onDeleted: (documentId: string) => void;
 }) {
   const [documentId, setDocumentId] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const documents = graphDocs.data?.documents ?? [];
 
   async function handleDelete() {
     if (!documentId.trim()) {
@@ -556,31 +571,52 @@ function DeleteDocumentCard({
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Removes one document's relationships and orphaned entities from
-        Neo4j (entities shared with other documents are kept). There's no
-        full document browser here yet — pick one you built this session
-        below, or paste any other document id.
+        Neo4j (entities shared with other documents are kept). Pick one from the
+        graph below, or paste any document id.
       </p>
-      {builtDocs.length > 0 && (
-        <div className="mb-3 flex flex-col gap-1">
+      <div className="mb-3 flex flex-col gap-1">
+        <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
-            Built this session:
+            In the graph{graphDocs.data ? ` (${graphDocs.data.count})` : ""}:
           </p>
-          <ul className="flex flex-col gap-1">
-            {builtDocs.map((doc) => (
-              <li key={doc.documentId}>
+          <button
+            type="button"
+            onClick={graphDocs.reload}
+            disabled={graphDocs.loading}
+            className="text-xs text-indigo-600 hover:underline disabled:opacity-50 dark:text-indigo-400"
+          >
+            {graphDocs.loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+        {graphDocs.error ? (
+          <StatusLine>{graphDocs.error}</StatusLine>
+        ) : documents.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {graphDocs.loading
+              ? "Loading…"
+              : "No documents in the graph yet — build one from text above."}
+          </p>
+        ) : (
+          <ul className="flex max-h-48 flex-col gap-1 overflow-y-auto">
+            {documents.map((doc) => (
+              <li key={doc.id}>
                 <button
                   type="button"
-                  onClick={() => setDocumentId(doc.documentId)}
-                  className="text-left text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+                  onClick={() => setDocumentId(doc.id)}
+                  className={`text-left text-xs hover:underline ${
+                    documentId === doc.id
+                      ? "font-medium text-indigo-700 dark:text-indigo-300"
+                      : "text-indigo-600 dark:text-indigo-400"
+                  }`}
                 >
-                  {doc.title} — {doc.entityCount} entities, {doc.relationshipCount} relationships{" "}
-                  <code className="text-gray-500 dark:text-gray-400">({doc.documentId})</code>
+                  {doc.title || doc.source || "Untitled"} — {doc.entity_count} entities{" "}
+                  <code className="text-gray-500 dark:text-gray-400">({doc.id || "—"})</code>
                 </button>
               </li>
             ))}
           </ul>
-        </div>
-      )}
+        )}
+      </div>
       <fieldset disabled={!token} className="flex items-center gap-2">
         <input
           className={inputClass}
@@ -601,22 +637,20 @@ function DeleteDocumentCard({
 export function GraphExplorerPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
-  const [builtDocs, setBuiltDocs] = useState<BuiltDoc[]>([]);
 
-  // Whole-graph overview (an open read). Lifted here so a build/delete below can
-  // reload() it — the counts then reflect the change without a manual refresh. #502
+  // Whole-graph overview + the document list (both open reads), lifted here so a
+  // build/delete below can reload() them — the overview counts and the document
+  // browser then reflect the change without a manual refresh. #502
   const stats = useAsyncResource<GraphStats>((signal) =>
     apiFetch<GraphStats>("/v1/graph-rag/graph/stats", { signal }),
   );
+  const graphDocs = useAsyncResource<GraphDocumentsResponse>((signal) =>
+    apiFetch<GraphDocumentsResponse>("/v1/graph-rag/graph/documents", { signal }),
+  );
 
-  function handleBuilt(doc: BuiltDoc) {
-    setBuiltDocs((prev) => [doc, ...prev.filter((d) => d.documentId !== doc.documentId)]);
+  function handleChanged() {
     stats.reload();
-  }
-
-  function handleDeleted(documentId: string) {
-    setBuiltDocs((prev) => prev.filter((d) => d.documentId !== documentId));
-    stats.reload();
+    graphDocs.reload();
   }
 
   return (
@@ -634,13 +668,13 @@ export function GraphExplorerPage() {
       </InfoCallout>
       {dialog}
       <GraphOverviewCard stats={stats} />
-      <ExtractAndBuildCard token={token} onBuilt={handleBuilt} />
+      <ExtractAndBuildCard token={token} onBuilt={handleChanged} />
       <ExploreCard token={token} />
       <DeleteDocumentCard
         token={token}
         confirm={confirm}
-        builtDocs={builtDocs}
-        onDeleted={handleDeleted}
+        graphDocs={graphDocs}
+        onDeleted={handleChanged}
       />
     </>
   );
