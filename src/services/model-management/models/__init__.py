@@ -2,7 +2,7 @@
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # Constrained vocabularies so an invalid value is a 422 at the edge (and shows in
 # /docs) instead of a free string (#143). These match the values the service actually
@@ -32,7 +32,9 @@ class ModelPullRequest(BaseModel):
 
     model_config = ConfigDict(protected_namespaces=())
 
-    model_id: str
+    # min_length=1 so an empty id is a clean 422 at the edge, not a 503 leaking
+    # the ollama client's own internal PullRequest validation error (#532).
+    model_id: str = Field(min_length=1)
 
 
 class ModelTestRequest(BaseModel):
