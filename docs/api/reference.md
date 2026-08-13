@@ -394,14 +394,14 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | POST | `/initialize` | Initialize the Ollama client / warm the pipeline |
 | GET | `/capabilities` | What's actually live on this host (rerank backend, hybrid/parent-context availability, etc.) — see [rag-methods.md](../rag-methods.md) |
 | POST | `/knowledge-bases` | Create a knowledge base (`name` required, `description` optional; pick embedding + LLM model) |
-| GET | `/knowledge-bases` | List knowledge bases |
+| GET | `/knowledge-bases` | List knowledge bases — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#501) |
 | GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
 | DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
 | POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector). Response includes a `document_id`, one per upload call (#427) |
-| GET | `/knowledge-bases/{kb_id}/documents` | List documents in a KB, one entry per upload — not per chunk (404 if the KB is unknown, #427) |
+| GET | `/knowledge-bases/{kb_id}/documents` | List documents in a KB, one entry per upload — not per chunk (404 if the KB is unknown, #427). Returns the shared `{items, total, limit, offset}` envelope (#501; all docs in one page) |
 | DELETE | `/knowledge-bases/{kb_id}/documents/{document_id}` | Delete a single document's chunks/vectors, leaving the rest of the KB intact (404 if the KB or document is unknown, #427) |
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
-| GET | `/pipeline` | List RAG pipelines (#426) |
+| GET | `/pipeline` | List RAG pipelines (#426) — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#501) |
 | GET | `/pipeline/{pipeline_id}` | Get a single RAG pipeline (404 if unknown, #426) |
 | DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
@@ -445,7 +445,7 @@ Model lifecycle over the Ollama runtime.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/models` | List local models (live from Ollama) |
+| GET | `/models` | List local models (live from Ollama) — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#519) |
 | POST | `/models` | Pull a model — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists |
 | GET | `/models/{model_id}` | Model details, including a `capabilities` list (e.g. `tools`) sourced from Ollama's own model metadata — **not** a guarantee the model reliably uses tools when offered them, see [testing.md](../development/testing.md#tool-calling-model-reliability-328) (**404** if unknown) |
 | DELETE | `/models/{model_id}` | Delete a local model (**404** if unknown) |
