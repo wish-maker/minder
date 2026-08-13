@@ -396,6 +396,7 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | POST | `/knowledge-bases` | Create a knowledge base (`name` required, `description` optional; pick embedding + LLM model) |
 | GET | `/knowledge-bases` | List knowledge bases — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#501) |
 | GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
+| PATCH | `/knowledge-bases/{kb_id}` | Update a KB's **mutable metadata** — `name` / `description` / `llm_model` — in place, WITHOUT touching its documents or vectors (JWT-gated; 404 if unknown). `embedding_model` and the chunk params are immutable (changing them would invalidate the stored vectors). Previously renaming meant delete + recreate, which drops every document |
 | DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
 | POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector). Response includes a `document_id`, one per upload call (#427) |
 | GET | `/knowledge-bases/{kb_id}/documents` | List documents in a KB, one entry per upload — not per chunk (404 if the KB is unknown, #427). Returns the shared `{items, total, limit, offset}` envelope (#501; all docs in one page) |

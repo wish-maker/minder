@@ -38,6 +38,22 @@ class KnowledgeBaseCreate(BaseModel):
         return self
 
 
+class KnowledgeBaseUpdate(BaseModel):
+    """Partial update of a knowledge base's mutable metadata (PATCH).
+
+    Only name / description / llm_model. `embedding_model` and the chunking
+    params are intentionally NOT updatable: changing the embedding model would
+    invalidate every stored vector (they'd need full re-ingestion), and the
+    chunk sizes only apply at ingest time — editing them post-hoc would silently
+    desync the stored chunks from the declared config. Rename / re-describe /
+    swap the generation model without touching the Qdrant collection.
+    """
+
+    name: Optional[str] = Field(default=None, min_length=1)
+    description: Optional[str] = None
+    llm_model: Optional[str] = None
+
+
 class KnowledgeBaseResponse(BaseModel):
     """Knowledge base response"""
 

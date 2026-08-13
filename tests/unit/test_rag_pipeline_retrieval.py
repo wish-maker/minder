@@ -262,6 +262,62 @@ def test_delete_rag_pipeline_requires_auth():
     assert resp.status_code == 401
 
 
+# ── PATCH /v1/knowledge-bases/{id}: edit metadata without dropping documents ──
+# Previously renaming/re-describing a KB meant delete+recreate, which drops the
+# whole Qdrant collection. These prove the in-place metadata update, its auth
+# gate, that embedding_model stays immutable, and the 404 path.
+
+
+def _kb_full(kb_id, **over):
+    base = {
+        "id": kb_id,
+        "name": "old-name",
+        "description": "old-desc",
+        "embedding_model": "nomic",
+        "llm_model": "old-llm",
+        "chunk_size": 512,
+        "chunk_overlap": 50,
+        "document_count": 3,
+        "vector_count": 9,
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    base.update(over)
+    return base
+
+
+def test_update_knowledge_base_requires_auth():
+    client = _rag_router_client()
+    resp = client.patch("/v1/knowledge-bases/kb1", json={"name": "new"})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_update_kb_changes_mutable_metadata_only():
+    kb = _kb_full("kb1")
+    with _seed_state(knowledge_bases={"kb1": kb}, PG_AVAILABLE=False):
+        resp = await rag_routes.update_knowledge_base(
+            "kb1",
+            models.KnowledgeBaseUpdate(name="new-name", llm_model="new-llm"),
+            {"sub": "1"},
+        )
+    assert resp.name == "new-name"
+    assert resp.llm_model == "new-llm"
+    assert resp.description == "old-desc"  # untouched (not in the patch)
+    assert resp.embedding_model == "nomic"  # immutable
+    assert resp.document_count == 3 and resp.vector_count == 9  # vectors untouched
+    assert kb["name"] == "new-name"  # in-memory store mutated in place
+
+
+@pytest.mark.asyncio
+async def test_update_unknown_kb_404():
+    with _seed_state(knowledge_bases={}, PG_AVAILABLE=False):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.update_knowledge_base(
+                "nope", models.KnowledgeBaseUpdate(name="x"), {"sub": "1"}
+            )
+    assert exc_info.value.status_code == 404
+
+
 # ── #501: list endpoints return the shared {items,total,limit,offset} envelope ──
 # rag-pipeline was the only service whose list endpoints returned a bare JSON
 # array (no total/limit/offset), so a client couldn't tell if more pages existed.
