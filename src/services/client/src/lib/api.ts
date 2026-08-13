@@ -5,14 +5,16 @@
 export const apiBaseUrl: string =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-// OIDC/SSO entry point. Defaults to the gateway's own endpoint on apiBaseUrl so
-// it isn't hardcoded to one deployment's Traefik hostname; a real SSO deployment
-// sets VITE_OIDC_LOGIN_URL to its `*.minder.local`/domain gateway URL. Note the
-// flow still redirects on to Authelia's hosted login, which needs real DNS + TLS
-// — so over a direct localhost/LAN-IP address, local login (LoginPage) is the
-// path that actually completes.
+// OIDC/SSO entry point — a full-page navigation into Authelia's forward-auth +
+// OIDC authorize flow, which only exists at a real Traefik hostname with valid
+// DNS + TLS. So there is NO default (mirroring `autheliaPortalUrl` below): the
+// old fallback baked in `https://api.minder.local/...`, which just dead-ends
+// over a plain localhost/LAN address (the host doesn't resolve). A real SSO
+// deployment sets VITE_OIDC_LOGIN_URL to its gateway URL; when unset the SSO
+// button is hidden and local login (LoginPage) — the path that actually
+// completes over localhost — is the only option shown.
 export const oidcLoginUrl: string =
-  import.meta.env.VITE_OIDC_LOGIN_URL || `${apiBaseUrl}/v1/auth/oidc/login`;
+  import.meta.env.VITE_OIDC_LOGIN_URL || "";
 
 // The Authelia self-service portal (change password / display name / groups).
 // Deployment-specific and only reachable over real DNS + TLS, so there is NO

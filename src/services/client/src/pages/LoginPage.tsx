@@ -17,8 +17,9 @@ import {
  * hostnames, which need real DNS + TLS the direct-port access path doesn't have.
  * The api-gateway's local JWT auth (`/v1/auth/login` + `/v1/auth/register`) is
  * reachable on the same `apiBaseUrl` the rest of the client already uses, so this
- * form works over plain localhost. SSO stays available below for deployments that
- * front the client with Traefik + a real domain. */
+ * form works over plain localhost. The SSO button below is shown only when
+ * VITE_OIDC_LOGIN_URL is configured (a Traefik + real-domain deployment) — no
+ * dead-end button over localhost. */
 export function LoginPage() {
   const { isAuthenticated, login, register } = useAuth();
   const navigate = useNavigate();
@@ -164,20 +165,31 @@ export function LoginPage() {
         )}
       </p>
 
-      <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
-        <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-        or
-        <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-      </div>
+      {/* Only offer SSO when it's actually configured (VITE_OIDC_LOGIN_URL set
+          to a real Traefik hostname). Otherwise the button dead-ends: the old
+          baked-in api.minder.local can't resolve over a plain localhost/LAN
+          address, so a real domain + TLS is required for the OIDC flow to
+          complete. Unconfigured → local login above is the working path. */}
+      {oidcLoginUrl && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
+            <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+            or
+            <span className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+          </div>
 
-      <a href={oidcLoginUrl} className={`block text-center ${secondaryButtonClass}`}>
-        Sign in with SSO (Authelia)
-      </a>
-      <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
-        SSO requires reaching Minder through its Traefik hostname with a real
-        domain + TLS — it won't complete over a direct <code>localhost</code> /
-        LAN-IP address.
-      </p>
+          <a
+            href={oidcLoginUrl}
+            className={`block text-center ${secondaryButtonClass}`}
+          >
+            Sign in with SSO (Authelia)
+          </a>
+          <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
+            SSO requires reaching Minder through its Traefik hostname with a real
+            domain + TLS.
+          </p>
+        </>
+      )}
     </div>
   );
 }
