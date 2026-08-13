@@ -29,6 +29,7 @@ python -m pytest tests/unit/test_graph_rag_*.py
 | POST | `/v1/construct-graph` | Extract entities + relationships from `text` and persist them into Neo4j (optionally tagged with a `document_id`) |
 | POST | `/v1/retrieve` | Graph-aware retrieval for a query — pull the relevant entity subgraph as context |
 | POST | `/v1/entity-context` | The neighbourhood (linked entities/relationships) around a named entity |
+| GET | `/v1/graph/stats` | Graph overview: node / relationship / document / entity counts + the per-NER-label entity distribution (confirm a build populated the graph) |
 | DELETE | `/v1/graph/document/{document_id}` | Remove all nodes/edges contributed by one document |
 
 Every route is served at both `/v1/...` and the legacy unversioned path.

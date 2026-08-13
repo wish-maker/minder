@@ -230,12 +230,13 @@ class KnowledgeGraphConstructor:
             "orphan_entities_deleted": orphans_deleted,
         }
 
-    async def get_graph_statistics(self) -> Dict[str, int]:
+    async def get_graph_statistics(self) -> Dict[str, Any]:
         """
-        Get graph statistics
+        Get graph statistics — an overview of what's in the knowledge graph.
 
         Returns:
-            Dict with node and relationship counts
+            Dict with total node/relationship counts, the Document and Entity node
+            counts, and the per-NER-label entity distribution (``entity_types``).
         """
         async with self.driver.session() as session:
             # Count nodes
@@ -255,4 +256,28 @@ class KnowledgeGraphConstructor:
             doc_record = await doc_result.single()
             doc_count = doc_record["count"] if doc_record else 0
 
-        return {"nodes": node_count, "relationships": rel_count, "documents": doc_count}
+            # Count entities + break them down by NER label so a caller can see what
+            # kind of things the graph holds (PERSON/ORG/GPE/…), most common first.
+            entity_result = await session.run(
+                "MATCH (e:Entity) RETURN count(e) as count"
+            )
+            entity_record = await entity_result.single()
+            entity_count = entity_record["count"] if entity_record else 0
+
+            types_result = await session.run(
+                "MATCH (e:Entity) RETURN e.label as label, count(e) as count "
+                "ORDER BY count DESC"
+            )
+            entity_types = {
+                record["label"]: record["count"]
+                async for record in types_result
+                if record["label"] is not None
+            }
+
+        return {
+            "nodes": node_count,
+            "relationships": rel_count,
+            "documents": doc_count,
+            "entities": entity_count,
+            "entity_types": entity_types,
+        }
