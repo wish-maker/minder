@@ -630,3 +630,36 @@ def sample_plugin_list():
             "last_health_check": "2026-05-01T09:07:23.559549",
         },
     ]
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    """Make silently-skipped `*_functional.py` tests LOUD (#437).
+
+    Those tests self-skip via `skipif(not _up(), ...)` when no live stack is
+    reachable — which is every CI run today (the integration-tests job starts
+    only Postgres + Redis, nothing listening on :8000/:8004/...). They then show
+    as SKIPPED, not PASSED, and the job still reports green — so "N passed, M
+    skipped" reads as clean success even though these live-flow tests verified
+    NOTHING. Print a prominent warning naming them so a green run can't be
+    mistaken for "these passed". Non-fatal by design (skips are legitimate with
+    no live stack); the real fix is a live-process harness, tracked in #437.
+    """
+    skipped = terminalreporter.stats.get("skipped", [])
+    functional = sorted(
+        {
+            report.nodeid.split("::")[0]
+            for report in skipped
+            if "_functional.py" in report.nodeid
+        }
+    )
+    if not functional:
+        return
+    terminalreporter.write_sep("=", "LIVE-FLOW TESTS SKIPPED (not run)", yellow=True)
+    terminalreporter.write_line(
+        "⚠️  These *_functional.py suites self-skipped (no live stack reachable) "
+        "— they verified NOTHING this run. A green result does NOT mean they "
+        "passed. See #437.",
+        yellow=True,
+    )
+    for path in functional:
+        terminalreporter.write_line(f"      - {path}", yellow=True)
