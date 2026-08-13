@@ -404,6 +404,7 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
 | GET | `/pipeline` | List RAG pipelines (#426) — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#501) |
 | GET | `/pipeline/{pipeline_id}` | Get a single RAG pipeline (404 if unknown, #426) |
+| PATCH | `/pipeline/{pipeline_id}` | Update a pipeline's `name` and/or `knowledge_base_ids` in place (JWT-gated; 404 if the pipeline or a supplied KB is unknown). No more delete + recreate just to rename or re-point it |
 | DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
 | GET | `/health` | Service health |
