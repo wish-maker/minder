@@ -25,12 +25,19 @@ COPY src/services/client/ .
 ARG VITE_API_BASE_URL=http://localhost:8000
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# The one login trigger (#<issue>) -- a full-page navigation into Authelia's
-# forward-auth + OIDC flow, which only exists at a real Traefik-routed
-# hostname (unlike VITE_API_BASE_URL's fetch() calls, which work fine over
-# the direct-port bypass above).
-ARG VITE_OIDC_LOGIN_URL=https://api.minder.local/v1/auth/oidc/login
+# The SSO login trigger -- a full-page navigation into Authelia's forward-auth +
+# OIDC flow, which only exists at a real Traefik-routed hostname with valid DNS +
+# TLS (unlike VITE_API_BASE_URL's fetch() calls, which work fine over the
+# direct-port bypass above). DEFAULT EMPTY: baking in api.minder.local dead-ends
+# over a plain localhost/LAN address, so unset -> the client hides the SSO button
+# and offers only local login. A real deployment sets CLIENT_OIDC_LOGIN_URL.
+ARG VITE_OIDC_LOGIN_URL=
 ENV VITE_OIDC_LOGIN_URL=$VITE_OIDC_LOGIN_URL
+
+# Authelia self-service portal link for the Settings page -- same deal, no
+# default (declared here so the compose build arg is actually consumed).
+ARG VITE_AUTHELIA_PORTAL_URL=
+ENV VITE_AUTHELIA_PORTAL_URL=$VITE_AUTHELIA_PORTAL_URL
 
 RUN npm run build
 

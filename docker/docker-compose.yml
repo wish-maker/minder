@@ -633,12 +633,16 @@ services:
       dockerfile: src/services/client/Dockerfile
       args:
         VITE_API_BASE_URL: ${CLIENT_API_BASE_URL:-http://localhost:8000}
-        # The one login trigger (#<issue>) -- unlike VITE_API_BASE_URL
-        # (fetch() calls, fine over the direct-port bypass), this MUST be a
-        # real Traefik-routed hostname: it's a full-page navigation into
-        # Authelia's forward-auth + OIDC authorize flow, which only exists
-        # at that hostname.
-        VITE_OIDC_LOGIN_URL: ${CLIENT_OIDC_LOGIN_URL:-https://api.minder.local/v1/auth/oidc/login}
+        # The SSO login trigger -- unlike VITE_API_BASE_URL (fetch() calls, fine
+        # over the direct-port bypass), this MUST be a real Traefik-routed
+        # hostname: it's a full-page navigation into Authelia's forward-auth +
+        # OIDC authorize flow, which only exists at that hostname with real DNS +
+        # TLS. So NO default (like VITE_AUTHELIA_PORTAL_URL): baking in
+        # api.minder.local just dead-ends over a plain localhost/LAN address.
+        # Unset -> the SSO button is hidden and local login is the only option;
+        # a real SSO deployment sets CLIENT_OIDC_LOGIN_URL to its gateway URL
+        # (e.g. https://api.<domain>/v1/auth/oidc/login).
+        VITE_OIDC_LOGIN_URL: ${CLIENT_OIDC_LOGIN_URL:-}
         # Optional link target for the Settings page's "change your password /
         # groups" pointer -- Authelia's self-service portal. Like the OIDC URL
         # it only exists at a real Traefik hostname, so it has NO default:
