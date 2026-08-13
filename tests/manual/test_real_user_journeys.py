@@ -368,11 +368,11 @@ def _pick_model(base_url: str) -> str:
     try:
         resp = httpx.get(f"{base_url}/v1/models", timeout=10.0)
         resp.raise_for_status()
-        models = resp.json()
-        names = [
-            m.get("name") or m.get("model")
-            for m in (models if isinstance(models, list) else models.get("models", []))
-        ]
+        body = resp.json()
+        # #519: /v1/models returns the {items,...} envelope; tolerate a bare
+        # list too so this stays robust against older/other deployments.
+        models = body.get("items", []) if isinstance(body, dict) else body
+        names = [m.get("name") or m.get("model") for m in models]
         names = [n for n in names if n]
         if names:
             return names[0]
