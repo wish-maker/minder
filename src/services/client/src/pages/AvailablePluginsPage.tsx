@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
@@ -541,16 +542,16 @@ export function AvailablePluginsPage() {
       <SearchAndFilters query={queryInput} onQueryChange={setQueryInput} />
 
       {plugins.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           {query
             ? "No plugins match your search."
             : "No plugins in the catalog yet."}
-        </p>
+        </EmptyState>
       )}
       {plugins.length > 0 && visiblePlugins.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           Every plugin on this page is already shown above in Featured.
-        </p>
+        </EmptyState>
       )}
       {visiblePlugins.map((plugin) => (
         <PluginCard

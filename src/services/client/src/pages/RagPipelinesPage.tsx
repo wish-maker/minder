@@ -880,9 +880,9 @@ export function RagPipelinesPage() {
         onCreated={(p) => setPipelines((prev) => [...prev, p])}
       />
       {pipelines.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           No pipelines created yet — pick at least one knowledge base above.
-        </p>
+        </EmptyState>
       )}
       {pipelines.length > 1 && (
         <div className="mb-3 flex items-center gap-3">
@@ -902,9 +902,7 @@ export function RagPipelinesPage() {
         </div>
       )}
       {pipelines.length > 0 && visiblePipelines.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No pipelines match "{filter}".
-        </p>
+        <EmptyState>No pipelines match "{filter}".</EmptyState>
       )}
       {visiblePipelines.map((p) => (
         <PipelineCard

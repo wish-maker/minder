@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { EmptyState } from "../components/EmptyState";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
@@ -376,18 +377,18 @@ export function InstalledPluginsPage() {
       </p>
       <StatusLine isError={isError}>{status}</StatusLine>
       {!isAuthenticated && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           Log in (top right) to see your installed plugins.
-        </p>
+        </EmptyState>
       )}
       {isAuthenticated && installations !== null && installations.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           No plugins installed yet —{" "}
           <Link to="/marketplace/plugins/available" className="underline hover:text-indigo-600 dark:hover:text-indigo-400">
             browse Available Plugins
           </Link>
           .
-        </p>
+        </EmptyState>
       )}
       {isAuthenticated && installations !== null && installations.length > 0 && (
         <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
