@@ -582,10 +582,15 @@ the full observability port map.
 ## Changelog
 
 ### 2026-08-13
+- **New: edit endpoints** — `PATCH /v1/knowledge-bases/{kb_id}` (name / description / llm_model;
+  `embedding_model` immutable) (#544) and `PATCH /v1/pipeline/{pipeline_id}` (name /
+  knowledge_base_ids) (#545). Both update in place — no more delete + recreate (which, for a KB,
+  drops the whole Qdrant collection). JWT-gated; 404 on unknown KB/pipeline (or a supplied KB).
 - **Standardized list responses** behind the shared `{items, total, limit, offset}` envelope
   (`shared.models.PaginatedList`): rag-pipeline's knowledge-bases / documents / pipelines
   (#501) and model-management's `/v1/models` (#519) — previously bare JSON arrays. Registry
-  `/v1/plugins` and marketplace still carry their own wrappers (convergence pending).
+  `/v1/plugins` and marketplace still carry their own wrappers (convergence pending); marketplace's
+  legacy `page`/`page_size` query params are now flagged `deprecated` in OpenAPI (#543).
 - **Error-handling hardening across services** — malformed / not-found input now returns a
   clean 4xx instead of a leaking 5xx (validated at the request boundary): marketplace non-UUID
   `plugin_id` → 404 (#526); plugin-config invalid bool → 400 (#530); model-management
