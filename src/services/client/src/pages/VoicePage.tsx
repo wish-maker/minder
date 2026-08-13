@@ -4,7 +4,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import { badgeClass, cardClass, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
+import { badgeClass, cardClass, confidenceBadgeColor, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
 
 interface LanguagesResponse {
@@ -33,12 +33,6 @@ const TTS_EXAMPLES: { label: string; text: string }[] = [
   { label: "English pangram", text: "The quick brown fox jumps over the lazy dog." },
   { label: "Numbers", text: "One, two, three, four, five." },
 ];
-
-function confidenceBadgeColor(confidence: number): string {
-  if (confidence >= 0.8) return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
-  if (confidence >= 0.5) return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
-  return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
-}
 
 /** STT language codes are BCP-47 ("tr-TR"); TTS's are bare ("tr") -- #449 --
  * so "verify by transcribing" a just-synthesized clip has to bridge the two
