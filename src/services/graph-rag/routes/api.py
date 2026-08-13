@@ -16,6 +16,7 @@ from models.schemas import (
     EntityContextResponse,
     EntityExtractionRequest,
     EntityExtractionResponse,
+    GraphDocumentsResponse,
     GraphRetrievalRequest,
     GraphRetrievalResponse,
     GraphStatsResponse,
@@ -140,6 +141,23 @@ async def delete_document_graph_handler(
     except Exception as e:
         logger.error(f"❌ Failed to delete document graph {document_id}: {e}")
         raise backend_http_error(e, "Knowledge graph deletion")
+
+
+async def list_graph_documents_handler(
+    graph_constructor: KnowledgeGraphConstructor,
+) -> GraphDocumentsResponse:
+    """List the Document nodes in the graph so a caller can browse/pick one (e.g. to
+    delete) without knowing its id up front."""
+    if graph_constructor is None:
+        raise HTTPException(status_code=503, detail="graph constructor not initialized")
+    try:
+        documents = await graph_constructor.list_documents()
+        return GraphDocumentsResponse(
+            success=True, documents=documents, count=len(documents)
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to list graph documents: {e}")
+        raise backend_http_error(e, "Graph document listing")
 
 
 async def get_graph_stats_handler(
@@ -356,6 +374,22 @@ def build_graph_router(
         open at the gateway (Authelia's job, #15) like the other GETs.
         """
         return await get_graph_stats_handler(graph_constructor)
+
+    @router.get(
+        "/v1/graph/documents",
+        response_model=GraphDocumentsResponse,
+        tags=["Knowledge Graph"],
+    )
+    @router.get(
+        "/graph/documents",
+        response_model=GraphDocumentsResponse,
+        tags=["Knowledge Graph"],
+        include_in_schema=False,  # deprecated unversioned alias
+    )
+    async def list_graph_documents():
+        """List the Document nodes in the graph (browse what's built). A read → open
+        at the gateway like the other GETs."""
+        return await list_graph_documents_handler(graph_constructor)
 
     @router.post(
         "/v1/retrieve",

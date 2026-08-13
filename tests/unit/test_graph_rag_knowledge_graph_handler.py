@@ -93,7 +93,14 @@ class _FakeConstructor:
     stands in for create_document_node/create_entity_nodes/
     create_relationship_nodes/link_document_to_entities."""
 
-    def __init__(self, entity_ids, relationship_count=0, linked_count=None, stats=None):
+    def __init__(
+        self,
+        entity_ids,
+        relationship_count=0,
+        linked_count=None,
+        stats=None,
+        documents=None,
+    ):
         self._entity_ids = entity_ids
         self._relationship_count = relationship_count
         self._linked_count = (
@@ -101,6 +108,7 @@ class _FakeConstructor:
         )
         self.linked_with = None
         self._stats = stats
+        self._documents = documents
 
     async def create_document_node(self, **kwargs):
         return True
@@ -125,6 +133,11 @@ class _FakeConstructor:
             "entities": 4,
             "entity_types": {"ORG": 2, "PERSON": 2},
         }
+
+    async def list_documents(self):
+        if isinstance(self._documents, Exception):
+            raise self._documents
+        return self._documents if self._documents is not None else []
 
 
 def _request():
@@ -300,3 +313,61 @@ def test_graph_stats_endpoint_is_open_read():
         set(["nodes", "relationships", "documents", "entities", "entity_types"])
         <= body.keys()
     )
+
+
+# ── graph documents: GET /v1/graph/documents (browse what's built) ────────────
+
+
+@pytest.mark.asyncio
+async def test_list_documents_handler_returns_documents_and_count():
+    docs = [
+        {
+            "id": "d1",
+            "title": "Notes",
+            "source": "client",
+            "created_at": "2026-08-13T00:00:00Z",
+            "entity_count": 3,
+        },
+        {
+            "id": "d2",
+            "title": None,
+            "source": None,
+            "created_at": None,
+            "entity_count": 0,
+        },
+    ]
+    result = await _api.list_graph_documents_handler(
+        _FakeConstructor(entity_ids=[], documents=docs)
+    )
+    assert result.success is True
+    assert result.count == 2
+    assert [d.id for d in result.documents] == ["d1", "d2"]
+    assert result.documents[0].entity_count == 3
+
+
+@pytest.mark.asyncio
+async def test_list_documents_handler_empty_is_zero_count():
+    result = await _api.list_graph_documents_handler(
+        _FakeConstructor(entity_ids=[], documents=[])
+    )
+    assert result.success is True
+    assert result.count == 0
+    assert result.documents == []
+
+
+@pytest.mark.asyncio
+async def test_list_documents_handler_503_when_constructor_missing():
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        await _api.list_graph_documents_handler(None)
+    assert exc.value.status_code == 503
+
+
+def test_list_documents_endpoint_is_open_read():
+    client = _graph_router_client()
+    resp = client.get("/v1/graph/documents")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert "documents" in body and "count" in body

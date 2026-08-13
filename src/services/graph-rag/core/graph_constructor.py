@@ -281,3 +281,32 @@ class KnowledgeGraphConstructor:
             "entities": entity_count,
             "entity_types": entity_types,
         }
+
+    async def list_documents(self) -> List[Dict[str, Any]]:
+        """List the Document nodes in the graph (id/title/source + how many entities
+        each mentions), newest first — so a caller can browse what's in the graph and
+        pick a document to inspect or delete without knowing its id up front."""
+        async with self.driver.session() as session:
+            result = await session.run(
+                "MATCH (d:Document) "
+                "OPTIONAL MATCH (d)-[:MENTIONS]->(e:Entity) "
+                "RETURN d.id AS id, d.title AS title, d.source AS source, "
+                "d.created_at AS created_at, count(e) AS entity_count "
+                "ORDER BY d.created_at DESC"
+            )
+            documents = []
+            async for record in result:
+                created_at = record["created_at"]
+                documents.append(
+                    {
+                        "id": record["id"],
+                        "title": record["title"],
+                        "source": record["source"],
+                        # Neo4j DateTime isn't JSON-serializable — stringify it.
+                        "created_at": str(created_at)
+                        if created_at is not None
+                        else None,
+                        "entity_count": record["entity_count"],
+                    }
+                )
+        return documents
