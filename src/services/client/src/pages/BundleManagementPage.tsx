@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { EmptyState } from "../components/EmptyState";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { badgeClass, cardClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
+import { useAsyncResource } from "../lib/useAsyncResource";
 
 interface BundleService {
   name: string;
@@ -225,8 +227,17 @@ function BundleCard({
 export function BundleManagementPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
-  const [bundles, setBundles] = useState<Bundle[] | null>(null);
-  const [orphaned, setOrphaned] = useState<string[]>([]);
+  // The bundle list is a single read (bundles + orphaned in one payload) →
+  // useAsyncResource (cancels on unmount, drops a stale response). Every
+  // mutation below refreshes via reload(). #502
+  const bundlesRes = useAsyncResource((signal) =>
+    apiFetch<BundlesResponse>("/v1/bundles", { signal }),
+  );
+  const bundles = bundlesRes.data?.bundles ?? null;
+  const orphaned = bundlesRes.data?.orphaned ?? [];
+
+  // Local status is for the mutation flows (reconcile / child enable-disable);
+  // the load's own error surfaces through bundlesRes.error.
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
   const [reconciling, setReconciling] = useState(false);
@@ -235,22 +246,6 @@ export function BundleManagementPage() {
     setStatus(msg);
     setIsError(err);
   }, []);
-
-  const loadBundles = useCallback(async () => {
-    setStatusMsg("Loading…");
-    try {
-      const res = await apiFetch<BundlesResponse>("/v1/bundles");
-      setBundles(res.bundles);
-      setOrphaned(res.orphaned);
-      setStatusMsg("");
-    } catch (e) {
-      setStatusMsg(friendlyErrorMessage(e), true);
-    }
-  }, [setStatusMsg]);
-
-  useEffect(() => {
-    loadBundles();
-  }, [loadBundles]);
 
   async function handleReconcile() {
     setReconciling(true);
@@ -261,7 +256,7 @@ export function BundleManagementPage() {
         token,
       });
       setStatusMsg(`Reconciled: ${outcomeSummary(res)}`);
-      loadBundles();
+      bundlesRes.reload();
     } catch (e) {
       setStatusMsg(friendlyErrorMessage(e), true);
     }
@@ -286,7 +281,9 @@ export function BundleManagementPage() {
         create containers by design (the docker-socket-proxy it talks to is
         start/stop/inspect only, never create).
       </InfoCallout>
-      <StatusLine isError={isError}>{status}</StatusLine>
+      <StatusLine isError={isError || !!bundlesRes.error}>
+        {status || bundlesRes.error || (bundlesRes.loading ? "Loading…" : "")}
+      </StatusLine>
 
       {orphaned.length > 0 && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
@@ -305,16 +302,14 @@ export function BundleManagementPage() {
       </button>
 
       {bundles?.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No bundles reported by the server.
-        </p>
+        <EmptyState>No bundles reported by the server.</EmptyState>
       )}
       {bundles?.map((b) => (
         <BundleCard
           key={b.name}
           bundle={b}
           token={token}
-          onChanged={loadBundles}
+          onChanged={bundlesRes.reload}
           confirm={confirm}
         />
       ))}
