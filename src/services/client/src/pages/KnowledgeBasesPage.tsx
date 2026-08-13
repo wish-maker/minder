@@ -5,6 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import type { Paginated } from "../lib/api";
+import { useAsyncResource } from "../lib/useAsyncResource";
 import { useAuth } from "../lib/auth";
 import {
   cardClass,
@@ -168,23 +169,22 @@ function DocumentsList({
   onDeleted: () => void;
   confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
-  const [docs, setDocs] = useState<KbDocument[] | null>(null);
   const [status, setStatus] = useState("");
-  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
-    setLoadError(false);
-    apiFetch<Paginated<KbDocument>>(`/v1/rag/knowledge-bases/${kbId}/documents`)
-      .then((res) => setDocs(res.items))
-      .catch((e) => {
-        // A real fetch failure must not render as "no documents" -- that's
-        // indistinguishable from a genuinely empty KB and hides the actual
-        // error (e.g. an expired session) from the user entirely.
-        setDocs([]);
-        setLoadError(true);
-        setStatus(friendlyErrorMessage(e));
-      });
-  }, [kbId, refreshToken]);
+  // Re-fetches whenever the selected KB (or an upload's refreshToken) changes.
+  // The hook's stale-response guard is what matters here: clicking KB A then
+  // quickly KB B previously raced two /documents loads, and if A resolved last
+  // it showed A's documents under B. Now the superseded response is dropped.
+  // (#502) A real fetch failure surfaces as `error`, never as an empty list —
+  // "no documents" would be indistinguishable from a genuinely empty KB.
+  const docsRes = useAsyncResource(
+    (signal) =>
+      apiFetch<Paginated<KbDocument>>(
+        `/v1/rag/knowledge-bases/${kbId}/documents`,
+        { signal },
+      ).then((res) => res.items),
+    { deps: [kbId, refreshToken] },
+  );
 
   async function handleDelete(doc: KbDocument) {
     const ok = await confirm({
@@ -199,15 +199,19 @@ function DocumentsList({
         method: "DELETE",
         token,
       });
-      setDocs((prev) => (prev ?? []).filter((d) => d.document_id !== doc.document_id));
       setStatus("");
       onDeleted();
+      docsRes.reload();
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
     }
   }
 
-  if (docs === null) return null;
+  // Don't render the section until the first load settles (data or error) --
+  // avoids a flash of "no documents" before the fetch returns.
+  if (docsRes.data === null && !docsRes.error) return null;
+
+  const docs = docsRes.data ?? [];
 
   return (
     <div>
@@ -216,7 +220,7 @@ function DocumentsList({
       </h3>
       {docs.length === 0 ? (
         <EmptyState>
-          {loadError
+          {docsRes.error
             ? "Couldn't load documents — see error below."
             : "No documents uploaded yet — use the upload field below."}
         </EmptyState>
@@ -244,7 +248,7 @@ function DocumentsList({
           ))}
         </ul>
       )}
-      <StatusLine isError={loadError}>{status}</StatusLine>
+      <StatusLine isError={!!docsRes.error}>{docsRes.error ?? status}</StatusLine>
     </div>
   );
 }
