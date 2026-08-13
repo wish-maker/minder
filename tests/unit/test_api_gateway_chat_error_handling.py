@@ -96,3 +96,62 @@ async def test_tool_augmented_fallback_failure_does_not_leak_exception_text(
 
     assert exc_info.value.status_code == 503
     assert secret_looking not in str(exc_info.value.detail)
+
+
+# ── #578: a clean 4xx from Ollama (e.g. unknown model) must NOT become a 500 ──
+
+
+@pytest.mark.asyncio
+async def test_plain_chat_unknown_model_4xx_surfaces_not_500(monkeypatch):
+    from fastapi import HTTPException
+
+    async def model_not_found(body):
+        raise HTTPException(status_code=404, detail="model 'nope' not found")
+
+    monkeypatch.setattr(ai, "_ollama_chat", model_not_found)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ai.chat_completions(_FakeRequest({"model": "nope", "messages": []}))
+
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.detail == "model 'nope' not found"
+
+
+@pytest.mark.asyncio
+async def test_tool_path_unknown_model_4xx_surfaces_via_fallback(monkeypatch):
+    from fastapi import HTTPException
+
+    async def boom_tools(body, auth_header):
+        # the tools call itself hit the unknown model
+        raise HTTPException(status_code=404, detail="model 'nope' not found")
+
+    async def plain_model_not_found(body):
+        raise HTTPException(status_code=404, detail="model 'nope' not found")
+
+    monkeypatch.setattr(ai, "_chat_with_tools", boom_tools)
+    monkeypatch.setattr(ai, "_ollama_chat", plain_model_not_found)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ai.chat_completions(
+            _FakeRequest({"model": "nope", "messages": [], "minder_tools": True})
+        )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_tool_failure_still_falls_back_to_working_plain_chat(monkeypatch):
+    # A tool-path failure (e.g. the model doesn't support tools) must still fall back
+    # to a plain passthrough that succeeds — the #578 re-raise must not break this.
+    async def boom_tools(body, auth_header):
+        raise RuntimeError("model does not support tools")
+
+    async def plain_ok(body):
+        return {"message": {"content": "hello from plain chat"}}
+
+    monkeypatch.setattr(ai, "_chat_with_tools", boom_tools)
+    monkeypatch.setattr(ai, "_ollama_chat", plain_ok)
+
+    result = await ai.chat_completions(
+        _FakeRequest({"model": "llama3.2", "messages": [], "minder_tools": True})
+    )
+    assert result == {"message": {"content": "hello from plain chat"}}

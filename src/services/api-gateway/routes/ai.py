@@ -217,6 +217,21 @@ async def _ollama_chat(body: Dict) -> Dict:
         response = await client.post(
             f"{OLLAMA_BASE_URL}/api/chat", json=payload, timeout=120.0
         )
+        # Ollama rejects a bad request (most commonly a 404 for an uninstalled
+        # model) with a 4xx — surface that as a clean client error carrying Ollama's
+        # own message, instead of letting raise_for_status() bubble an
+        # httpx.HTTPStatusError into the handler's `except Exception` → a sanitized
+        # 500 (#578). A 5xx is a genuine backend failure, so leave it to
+        # raise_for_status()/backend_http_error below.
+        if 400 <= response.status_code < 500:
+            detail = "Ollama rejected the request"
+            try:
+                err = response.json().get("error")
+                if err:
+                    detail = str(err)
+            except Exception:
+                pass
+            raise HTTPException(status_code=response.status_code, detail=detail)
         response.raise_for_status()
         return response.json()
 
@@ -380,6 +395,10 @@ async def chat_completions(request: Request):
     if not use_tools:
         try:
             return await _ollama_chat(body)
+        except HTTPException:
+            # A clean 4xx from Ollama (e.g. unknown model) — surface as-is, don't
+            # re-wrap into a 500 (#578).
+            raise
         except Exception as e:
             logger.error(f"Chat completion failed: {e}")
             raise backend_http_error(e, "Chat completion")
@@ -387,11 +406,18 @@ async def chat_completions(request: Request):
     try:
         return await _chat_with_tools(body, request.headers.get("Authorization"))
     except Exception as e:
+        # Fall back to a plain passthrough for ANY tool-path failure — incl. a model
+        # that doesn't support `tools` (Ollama 400) or a tool bug — so a tool problem
+        # never breaks a chat that would otherwise work.
         logger.warning(
             f"Tool-augmented chat failed ({e}); falling back to plain passthrough"
         )
         try:
             return await _ollama_chat(body)
+        except HTTPException:
+            # The plain retry still got a clean 4xx from Ollama (e.g. the model just
+            # doesn't exist) — surface it, don't re-wrap into a 500 (#578).
+            raise
         except Exception as e2:
             logger.error(f"Chat completion failed: {e2}")
             raise backend_http_error(e2, "Chat completion")
