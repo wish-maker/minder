@@ -19,6 +19,8 @@ import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 _SERVICE_DIR = Path(__file__).resolve().parents[2] / "src" / "services" / "tts-stt"
 
 
@@ -103,6 +105,29 @@ def test_transcribe_request_error_surfaces_api_error_message(monkeypatch):
     text, confidence = _mod.transcribe(b"fake-wav-bytes", "tr-TR")
     assert text == "[API Error: quota exceeded]"
     assert confidence == 0.0
+
+
+def test_transcribe_bad_audio_raises_valueerror(monkeypatch):
+    # #536: an empty / non-WAV / truncated upload fails to open as audio; that's
+    # a client error → transcribe raises a ValueError the route maps to 400,
+    # NOT a bare exception the route would 500 on.
+    class _BadAudioFile:
+        def __init__(self, path):
+            pass
+
+        def __enter__(self):
+            raise RuntimeError("file does not start with RIFF id")
+
+        def __exit__(self, *exc):
+            return False
+
+    unlinked = []
+    monkeypatch.setattr(_mod.sr, "AudioFile", _BadAudioFile)
+    monkeypatch.setattr(_mod.os, "unlink", lambda p: unlinked.append(p))
+
+    with pytest.raises(ValueError, match="could not decode audio"):
+        _mod.transcribe(b"not-audio", "tr-TR")
+    assert len(unlinked) == 1  # temp file still cleaned up on the error path
 
 
 def test_transcribe_cleans_up_temp_file(monkeypatch, tmp_path):

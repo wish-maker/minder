@@ -52,9 +52,12 @@ async def speech_to_text(
             ),
         )
 
-    try:
-        audio_bytes = await file.read()
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        stt_requests_total.labels(language=language, status="error").inc()
+        raise HTTPException(status_code=422, detail="audio file is empty")
 
+    try:
         # Transcription is blocking (CPU + network); run it off the event loop so a
         # single request can't stall the service.
         text, confidence = await asyncio.to_thread(transcribe, audio_bytes, language)
@@ -63,6 +66,10 @@ async def speech_to_text(
 
         return STTResponse(text=text, language=language, confidence=confidence)
 
+    except ValueError as e:
+        # Bad/undecodable audio is a client error, not a backend failure (#536).
+        stt_requests_total.labels(language=language, status="error").inc()
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         stt_requests_total.labels(language=language, status="error").inc()
         logger.error(f"❌ STT failed: {e}")
