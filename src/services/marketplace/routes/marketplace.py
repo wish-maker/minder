@@ -80,9 +80,11 @@ async def list_plugins(
         None, ge=1, le=100, description="Page size (canonical)"
     ),
     offset: Optional[int] = Query(None, ge=0, description="Items to skip (canonical)"),
-    page: int = Query(1, ge=1, description="Deprecated: use limit/offset"),
+    page: int = Query(
+        1, ge=1, deprecated=True, description="Deprecated: use limit/offset"
+    ),
     page_size: int = Query(
-        10, ge=1, le=100, description="Deprecated: use limit/offset"
+        10, ge=1, le=100, deprecated=True, description="Deprecated: use limit/offset"
     ),
     category: Optional[str] = None,
     pricing_model: Optional[str] = None,
@@ -117,9 +119,11 @@ async def search_plugins(
         None, ge=1, le=100, description="Page size (canonical)"
     ),
     offset: Optional[int] = Query(None, ge=0, description="Items to skip (canonical)"),
-    page: int = Query(1, ge=1, description="Deprecated: use limit/offset"),
+    page: int = Query(
+        1, ge=1, deprecated=True, description="Deprecated: use limit/offset"
+    ),
     page_size: int = Query(
-        10, ge=1, le=100, description="Deprecated: use limit/offset"
+        10, ge=1, le=100, deprecated=True, description="Deprecated: use limit/offset"
     ),
 ):
     """Search plugins by name or description"""
