@@ -3,7 +3,7 @@
 fastapi==0.141.1
 uvicorn==0.52.1
 pydantic==2.13.4
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
 
 # Database
 asyncpg==0.31.0
