@@ -136,6 +136,8 @@ function TestPromptWidget({ modelId, token }: { modelId: string; token: string }
       <div className="flex gap-2">
         <input
           className={inputClass}
+          aria-label="Test prompt"
+          placeholder="Ask the model something…"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
         />
@@ -270,6 +272,7 @@ function PullModelForm({
         <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
           <input
             className={inputClass}
+            aria-label="Model id to pull"
             placeholder="e.g. llama3.2:latest"
             value={modelId}
             onChange={(e) => setModelId(e.target.value)}
@@ -349,6 +352,7 @@ export function ModelManagementPage() {
           <input
             className={`${inputClass} max-w-xs`}
             type="text"
+            aria-label="Filter models"
             placeholder="Filter by name, provider, or type…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
