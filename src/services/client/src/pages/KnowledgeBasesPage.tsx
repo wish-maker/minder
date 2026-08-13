@@ -8,17 +8,17 @@ import { useAuth } from "../lib/auth";
 import {
   cardClass,
   destructiveButtonClass,
+  fieldHintClass,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../lib/ui";
+import { EmptyState } from "../components/EmptyState";
 
 interface ModelInfo {
   id: string;
   name: string;
 }
-
-const fieldHintClass = "mt-0.5 text-xs text-gray-500 dark:text-gray-400";
 
 interface KnowledgeBase {
   id: string;
@@ -214,11 +214,11 @@ function DocumentsList({
         Documents
       </h3>
       {docs.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           {loadError
             ? "Couldn't load documents — see error below."
             : "No documents uploaded yet — use the upload field below."}
-        </p>
+        </EmptyState>
       ) : (
         <ul className="flex flex-col gap-1.5">
           {docs.map((d) => (
@@ -597,9 +597,9 @@ export function KnowledgeBasesPage() {
         onCreated={(kb) => setKbs((prev) => [...(prev ?? []), kb])}
       />
       {kbs !== null && kbs.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           No knowledge bases yet — create one above to get started.
-        </p>
+        </EmptyState>
       )}
       {kbs?.map((kb) => (
         <KnowledgeBaseCard

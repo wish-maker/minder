@@ -9,11 +9,14 @@ import { copyText, randomId } from "../lib/browser";
 import {
   badgeClass,
   cardClass,
+  confidenceBadgeColor,
   destructiveButtonClass,
+  fieldHintClass,
   inputClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../lib/ui";
+import { EmptyState } from "../components/EmptyState";
 
 interface KnowledgeBase {
   id: string;
@@ -148,12 +151,6 @@ interface Turn {
   response: QueryResponse;
 }
 
-function confidenceBadgeColor(confidence: number): string {
-  if (confidence >= 0.8) return "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300";
-  if (confidence >= 0.5) return "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300";
-  return "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300";
-}
-
 /** Shared by the single-shot result panel and each turn in a conversation
  * thread -- `compact` drops the source list for non-latest turns so an
  * ongoing conversation doesn't grow a wall of repeated citations. */
@@ -208,8 +205,6 @@ function QueryResultCard({
     </>
   );
 }
-
-const fieldHintClass = "mt-0.5 text-xs text-gray-500 dark:text-gray-400";
 
 function CreatePipelineForm({
   token,
@@ -277,10 +272,10 @@ function CreatePipelineForm({
         <span aria-hidden="true">➕</span> Create a pipeline
       </h2>
       {kbs.length === 0 ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState>
           Create a knowledge base first — a pipeline needs at least one to
           search over.
-        </p>
+        </EmptyState>
       ) : (
         <form onSubmit={handleSubmit}>
           <fieldset disabled={!token} className="mt-2 flex flex-col gap-3">

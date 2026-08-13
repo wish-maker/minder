@@ -14,6 +14,15 @@ export const apiBaseUrl: string =
 export const oidcLoginUrl: string =
   import.meta.env.VITE_OIDC_LOGIN_URL || `${apiBaseUrl}/v1/auth/oidc/login`;
 
+// The Authelia self-service portal (change password / display name / groups).
+// Deployment-specific and only reachable over real DNS + TLS, so there is NO
+// hardcoded default — over a plain localhost/LAN address the portal isn't up,
+// and a dead `https://authelia.minder.local` link (the old hardcoded value)
+// just 404s. Baked at build time like the other VITE_* config; when unset the
+// Settings page shows the guidance as plain text instead of a broken link.
+export const autheliaPortalUrl: string =
+  import.meta.env.VITE_AUTHELIA_PORTAL_URL || "";
+
 export class ApiError extends Error {
   status: number;
 
