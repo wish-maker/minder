@@ -7,6 +7,7 @@ import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
 import type { Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { copyText, randomId } from "../lib/browser";
+import { filterByText } from "../lib/filterByText";
 import {
   badgeClass,
   cardClass,
@@ -819,8 +820,14 @@ export function RagPipelinesPage() {
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [pipelines, setPipelines] = useState<RagPipeline[]>([]);
+  const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
+
+  const visiblePipelines = filterByText(pipelines, filter, (p) => [
+    p.name,
+    ...p.knowledge_base_ids,
+  ]);
 
   const setStatusMsg = useCallback((msg: string, err = false) => {
     setStatus(msg);
@@ -877,7 +884,29 @@ export function RagPipelinesPage() {
           No pipelines created yet — pick at least one knowledge base above.
         </p>
       )}
-      {pipelines.map((p) => (
+      {pipelines.length > 1 && (
+        <div className="mb-3 flex items-center gap-3">
+          <input
+            className={`${inputClass} max-w-xs`}
+            type="text"
+            placeholder="Filter by name or knowledge base id…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filter pipelines"
+          />
+          {filter.trim() && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {visiblePipelines.length} of {pipelines.length}
+            </span>
+          )}
+        </div>
+      )}
+      {pipelines.length > 0 && visiblePipelines.length === 0 && (
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          No pipelines match "{filter}".
+        </p>
+      )}
+      {visiblePipelines.map((p) => (
         <PipelineCard
           key={p.id}
           pipeline={p}

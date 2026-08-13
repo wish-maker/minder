@@ -5,6 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { apiFetch, friendlyErrorMessage } from "../lib/api";
 import type { Paginated } from "../lib/api";
+import { filterByText } from "../lib/filterByText";
 import { useAsyncResource } from "../lib/useAsyncResource";
 import { useAuth } from "../lib/auth";
 import {
@@ -647,8 +648,14 @@ export function KnowledgeBasesPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [kbs, setKbs] = useState<KnowledgeBase[] | null>(null);
+  const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
   const [isError, setIsError] = useState(false);
+
+  const visibleKbs = filterByText(kbs ?? [], filter, (k) => [
+    k.name,
+    k.description,
+  ]);
 
   const setStatusMsg = useCallback((msg: string, err = false) => {
     setStatus(msg);
@@ -691,7 +698,27 @@ export function KnowledgeBasesPage() {
           No knowledge bases yet — create one above to get started.
         </EmptyState>
       )}
-      {kbs?.map((kb) => (
+      {kbs !== null && kbs.length > 1 && (
+        <div className="mb-3 flex items-center gap-3">
+          <input
+            className={`${inputClass} max-w-xs`}
+            type="text"
+            placeholder="Filter by name or description…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filter knowledge bases"
+          />
+          {filter.trim() && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {visibleKbs.length} of {kbs.length}
+            </span>
+          )}
+        </div>
+      )}
+      {kbs !== null && kbs.length > 0 && visibleKbs.length === 0 && (
+        <EmptyState>No knowledge bases match "{filter}".</EmptyState>
+      )}
+      {visibleKbs.map((kb) => (
         <KnowledgeBaseCard
           key={kb.id}
           kb={kb}
