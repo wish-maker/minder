@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 
+import { EmptyState } from "../components/EmptyState";
 import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
@@ -140,9 +141,9 @@ export function AiToolsPage() {
         {liveTools.error ?? (liveTools.loading ? "Loading…" : "")}
       </StatusLine>
       {liveTools.data !== null && liveTools.data.length === 0 && (
-        <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
+        <EmptyState className="mb-6">
           No plugin is currently exposing an AI tool.
-        </p>
+        </EmptyState>
       )}
       <div className="mb-6">
         {liveTools.data?.map((t) => (
@@ -160,9 +161,7 @@ export function AiToolsPage() {
       </InfoCallout>
       <StatusLine isError={false}>{catalogStatus}</StatusLine>
       {catalogTools.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No AI tools in the catalog yet.
-        </p>
+        <EmptyState>No AI tools in the catalog yet.</EmptyState>
       )}
       {catalogTools.map((t) => (
         <CatalogToolCard key={t.id} tool={t} />
