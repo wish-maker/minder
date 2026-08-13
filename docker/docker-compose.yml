@@ -351,7 +351,7 @@ services:
   ollama:
     labels:
     - minder.bundle=inference,rag,chat
-    image: ollama/ollama:0.32.5
+    image: ollama/ollama:0.32.6
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
@@ -683,7 +683,7 @@ services:
   docker-socket-proxy:
     labels:
     - minder.bundle=core
-    image: ghcr.io/wollomatic/socket-proxy:1.12.3
+    image: ghcr.io/wollomatic/socket-proxy:1.13.0
     container_name: minder-docker-socket-proxy
     restart: on-failure
     # PILLAR 5 (#379): limit sized from live Pi profiling (idle ~3.6MiB) + headroom
@@ -1166,7 +1166,7 @@ services:
     - --storage.path=/alertmanager
     - --web.external-url=http://localhost:9093
   grafana:
-    image: grafana/grafana:13.1.2
+    image: grafana/grafana:13.1.3
     container_name: minder-grafana
     restart: on-failure
     environment:
@@ -1518,7 +1518,7 @@ services:
   redis-exporter:
     labels:
     - minder.bundle=monitoring
-    image: oliver006/redis_exporter:v1.88.0
+    image: oliver006/redis_exporter:v1.89.0
     container_name: minder-redis-exporter
     restart: on-failure
     environment:
@@ -1693,7 +1693,7 @@ services:
   otel-collector:
     labels:
     - minder.bundle=monitoring
-    image: otel/opentelemetry-collector:0.157.0
+    image: otel/opentelemetry-collector:0.158.0
     container_name: minder-otel-collector
     restart: on-failure
     command:
