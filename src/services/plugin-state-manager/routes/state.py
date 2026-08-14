@@ -3,6 +3,7 @@
 Plugin state management endpoints
 """
 
+import json
 import logging
 from typing import Optional
 
@@ -165,16 +166,18 @@ async def update_plugin_config(
                 status_code=404, detail=f"Plugin {plugin_name} not found"
             )
 
-        # Update config
+        # Update config. asyncpg has no codec registered for jsonb (shared/db/pool.py
+        # calls plain asyncpg.create_pool()), so a bound dict param must be
+        # pre-serialized -- passing request.config as-is raises asyncpg.DataError
+        # ("a dict is not a str"). Matches plugin-registry's core/database.py
+        # convention for the same kind of write.
         await conn.execute(
             """
             UPDATE plugin_states
-            SET config = $1, metadata = COALESCE($2, metadata), updated_at = NOW()
-            WHERE plugin_name = $3
-            RETURNING *
+            SET config = $1, updated_at = NOW()
+            WHERE plugin_name = $2
             """,
-            request.config,
-            request.metadata,
+            json.dumps(request.config),
             plugin_name,
         )
 

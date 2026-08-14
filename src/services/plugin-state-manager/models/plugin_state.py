@@ -42,7 +42,6 @@ class PluginStateResponse(BaseModel):
     enabled_at: Optional[datetime] = None
     disabled_at: Optional[datetime] = None
     config: Dict[str, Any] = Field(default_factory=dict)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
 
@@ -76,7 +75,6 @@ class UpdatePluginConfigRequest(BaseModel):
     """Update plugin configuration"""
 
     config: Dict[str, Any]
-    metadata: Optional[Dict[str, Any]] = None
 
 
 class DefaultPluginResponse(BaseModel):

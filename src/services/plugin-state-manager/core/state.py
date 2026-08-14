@@ -25,7 +25,7 @@ def _record_to_dict(record) -> Optional[Dict]:
         if key == "id" and hasattr(value, "__str__"):
             result[key] = str(value)
         # Handle JSONB fields - asyncpg returns them as strings
-        elif key in ("config", "metadata"):
+        elif key == "config":
             if isinstance(value, str):
                 result[key] = json.loads(value)
             else:
@@ -74,14 +74,16 @@ async def create_plugin_state(
         initial_state.value,
         license_tier.value,
     )
-    return dict(row)
+    # A plain INSERT...RETURNING with no WHERE clause always returns exactly one row.
+    result = _record_to_dict(row)
+    assert result is not None
+    return result
 
 
 async def update_plugin_state(
     conn: asyncpg.Connection,
     plugin_name: str,
     state: PluginState,
-    metadata: Optional[Dict] = None,
 ) -> Dict:
     """Update plugin state"""
     # enabled_at/disabled_at/updated_at are naive TIMESTAMP columns → store naive-UTC
@@ -111,15 +113,11 @@ async def update_plugin_state(
         """
 
     row = await conn.fetchrow(query, state.value, now, plugin_name)
-
-    if metadata:
-        await conn.execute(
-            "UPDATE plugin_states SET metadata = $1 WHERE plugin_name = $2",
-            metadata,
-            plugin_name,
-        )
-
-    return dict(row)
+    # Every caller already confirmed the row exists (via get_plugin_state) before
+    # calling this, so the UPDATE...WHERE plugin_name always matches one row.
+    result = _record_to_dict(row)
+    assert result is not None
+    return result
 
 
 async def enable_plugin(
