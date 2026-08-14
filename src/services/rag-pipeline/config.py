@@ -37,6 +37,15 @@ class Settings(MinderBaseSettings):
     OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
     OLLAMA_LLM_MODEL: str = "llama3.2"
 
+    # Document upload — enforced in routes/rag.py's upload_document. Was
+    # previously unenforced anywhere in the platform (found live: an upload of
+    # any size gets fully buffered into memory with no limit) -- a real risk on
+    # the Pi-class hardware this deploys to, where a large upload could exhaust
+    # RAM shared with the rest of the stack. Matches marketplace's own
+    # MAX_UPLOAD_SIZE_MB naming; 50MB comfortably covers real PDFs/docs while
+    # still bounding worst-case memory use.
+    MAX_UPLOAD_SIZE_MB: int = 50
+
 
 settings = Settings()
 
