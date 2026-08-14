@@ -175,26 +175,35 @@ Full browser SSO still needs real DNS + TLS on the deploy.
 - Brute-force protection and session regulation — Authelia defaults
 - Access-control rules per domain — see `configuration.yml`'s `access_control` section
 
-### Rotating the admin password
+### The admin password
 
-`docker/services/authelia/users_database.yml` is a **tracked file** — every
-clone of this repo ships the exact same `admin` account with the exact same
-password hash. That password is not written down anywhere (the file only
-holds a one-way argon2id hash), but it is still a single **shared secret
-identical across every Minder install** until you change it — treat it the
-same as any other default credential and rotate it before exposing this
-instance to any network beyond your own machine. This is not yet automated
-by `setup.sh` — tracked as
-[#473](https://github.com/wish-maker/minder/issues/473) — so for now, do it by hand:
+`docker/services/authelia/users_database.yml` is a **tracked template** —
+it holds a placeholder, not a real hash. `setup.sh start`/`install` generates
+a random `MINDER_AUTHELIA_ADMIN_PASSWORD` in `.env` on first run (same
+self-healing SECRET_SPEC mechanism as every other secret — `JWT_SECRET`,
+`POSTGRES_PASSWORD`, etc.), argon2id-hashes it via Authelia's own CLI, and
+writes the real value into `users_database.rendered.yml` (gitignored, the
+file `docker-compose.yml` actually mounts). Every deployment gets its own
+password instead of the one hardcoded value every clone used to share (#473).
 
-```bash
-docker exec minder-authelia authelia crypto hash generate argon2 \
-  --memory 32768 --iterations 3 --parallelism 2 --password '<your new password>'
+**The plaintext is printed to the terminal exactly once**, the moment it's
+generated — record it then, since it is never shown again and is never
+written to a log file:
+
+```
+┌──────────────────────────────────────────────────┐
+│  🔑 Authelia Admin Password (generated)           │
+└──────────────────────────────────────────────────┘
+⚠ Record this now -- it will not be shown again.
+  Username: admin
+  Password: <random>
 ```
 
-Paste the resulting `$argon2id$…` string over the `password:` value in
-`users_database.yml`, then `docker compose restart authelia` (or
-`bash setup.sh restart`) to apply it.
+If you lose it, rotate: clear the `MINDER_AUTHELIA_ADMIN_PASSWORD` line in
+`.env` and re-run `bash setup.sh start` (or set
+`MINDER_ALLOW_SECRET_REGEN=1` first if the stack is already running — see
+`docs/guides/security-setup.md`'s secret-rotation section) to generate and
+print a new one.
 
 ---
 

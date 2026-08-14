@@ -1,15 +1,27 @@
-# Authelia Users Database
+# Authelia Users Database (TEMPLATE — tracked in git)
 # https://www.authelia.com/configuration/authentication/file/
 #
 # Passwords are argon2id, low-memory profile (m=32768,t=3,p=2) — Pi-friendly (#15).
-# Rotate: authelia crypto hash generate argon2 --memory 32768 -i 3 -p 2 --password '<pw>'
-# then paste the $argon2id$… hash below and restart authelia.
+#
+# The placeholder in the password field below is substituted by setup's
+# render_users_database() (scripts/setup/env.py) / _render_users_database()
+# (scripts/lib/env.sh) into users_database.rendered.yml (gitignored, the file
+# docker-compose.yml actually mounts) with a fresh per-deployment random
+# password's argon2id hash — MINDER_AUTHELIA_ADMIN_PASSWORD in .env (#473).
+# The generated plaintext is printed ONCE to the terminal (never logged to
+# disk) the first time it's created; record it then, since it isn't shown
+# again. To rotate later: clear MINDER_AUTHELIA_ADMIN_PASSWORD in .env and
+# re-run `setup.sh start` (see docs/guides/authentication.md).
+#
+# (Deliberately not spelling the placeholder token out again here in prose --
+# a plain string substitution would replace every occurrence in this file,
+# including inside a comment.)
 
 users:
   admin:
     disabled: false
     displayname: Admin
-    password: "$argon2id$v=19$m=32768,t=3,p=2$8A1kyTJysQE36yhIUrTnvA$xhgjuxh/6/Y6d9LB0HQ7txS2BUEnR1+idmvx7PcnrS8"
+    password: "__MINDER_AUTHELIA_ADMIN_PASSWORD_HASH__"
     email: admin@minder.local
     groups:
       - admins
