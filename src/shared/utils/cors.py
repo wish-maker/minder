@@ -2,10 +2,13 @@
 CORS configuration utility - Standardized CORS setup across services
 """
 
+import logging
 from typing import List, Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 def add_cors_middleware(
@@ -45,6 +48,26 @@ def add_cors_middleware(
 
     if allow_headers is None:
         allow_headers = ["*"]
+
+    # Starlette's CORSMiddleware doesn't send a literal `*` when
+    # allow_credentials=True is paired with a wildcard origin -- it reflects the
+    # request's actual Origin header back explicitly plus
+    # Access-Control-Allow-Credentials: true, so any arbitrary site's JS can
+    # issue a credentialed cross-origin request and have the browser attach
+    # and read back cookies. No cookie-based session exists anywhere in this
+    # codebase today, so nothing currently relies on this combination -- but
+    # it's a footgun baked into infrastructure every service reuses, one
+    # accidental cookie away from becoming a real cross-origin credential
+    # leak. Refuse the combination outright rather than silently reflecting
+    # any origin with credentials attached.
+    if allow_credentials and "*" in allowed_origins:
+        logger.warning(
+            "CORS: allow_credentials=True with a wildcard origin is refused "
+            "(reflected-origin-with-credentials is a real footgun, not a no-op) "
+            "-- forcing allow_credentials=False. Set explicit allowed_origins "
+            "if credentialed cross-origin requests are actually needed."
+        )
+        allow_credentials = False
 
     app.add_middleware(
         CORSMiddleware,
