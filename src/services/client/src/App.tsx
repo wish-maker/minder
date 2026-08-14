@@ -10,11 +10,11 @@ import { AvailableBundlesPage } from "./pages/AvailableBundlesPage";
 import { AvailablePluginsPage } from "./pages/AvailablePluginsPage";
 import { AvailableToolsPage } from "./pages/AvailableToolsPage";
 import { GraphExplorerPage } from "./pages/GraphExplorerPage";
+import { HomePage } from "./pages/HomePage";
 import { InstalledBundlesPage } from "./pages/InstalledBundlesPage";
 import { InstalledPluginsPage } from "./pages/InstalledPluginsPage";
 import { InstalledToolsPage } from "./pages/InstalledToolsPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
-import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
@@ -59,7 +59,7 @@ export function App() {
           <main className="mx-auto w-full max-w-4xl flex-1 p-6">
             <ErrorBoundary key={location.pathname}>
               <Routes>
-                <Route path="/" element={<LandingPage />} />
+                <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/auth/callback" element={<AuthCallbackPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
