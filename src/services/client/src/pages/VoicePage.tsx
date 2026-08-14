@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
-import { apiFetch, apiFetchBlob, friendlyErrorMessage } from "../lib/api";
+import { apiFetch, apiFetchBlob, friendlyErrorMessage, type Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { matchingSttLanguage } from "../lib/stt";
 import { badgeClass, cardClass, confidenceBadgeColor, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
@@ -45,6 +45,34 @@ const TTS_EXAMPLES: { label: string; text: string }[] = [
   { label: "Numbers", text: "One, two, three, four, five." },
 ];
 
+/** Regional Turkish speaking styles for the "character voice" rewrite (#596
+ * follow-up). Piper only ships ONE Turkish voice (tr_TR-dfki-medium, checked
+ * live against Piper's own catalog) -- there's no synthesis-level accent to
+ * pick, so a "region" here changes the WORDING via an LLM rewrite, not the
+ * audio itself. Kept to a small, well-known set rather than a long list: an
+ * LLM's grasp of a lesser-known dialect's real phrasing is inconsistent, and
+ * an honest small set beats a long one that reads the same for every entry. */
+interface RegionalStyle {
+  id: string;
+  label: string;
+}
+
+const REGIONAL_STYLES: RegionalStyle[] = [
+  { id: "karadeniz", label: "Karadeniz" },
+  { id: "ege", label: "Ege" },
+  { id: "trakya", label: "Trakya" },
+  { id: "guneydogu", label: "Güneydoğu" },
+];
+
+interface ModelListItem {
+  id: string;
+  status: string;
+}
+
+interface ChatCompletionResponse {
+  message?: { content?: string };
+}
+
 function TextToSpeechCard({
   token,
   seed,
@@ -55,6 +83,7 @@ function TextToSpeechCard({
   const textId = useId();
   const languageId = useId();
   const voiceId = useId();
+  const regionalStyleId = useId();
   const [languages, setLanguages] = useState<Record<string, string>>({});
   const [sttLanguages, setSttLanguages] = useState<Record<string, string>>({});
   const [text, setText] = useState("");
@@ -68,6 +97,9 @@ function TextToSpeechCard({
   const [meta, setMeta] = useState<{ language: string; duration: string } | null>(null);
   const [verifyResult, setVerifyResult] = useState<SttResponse | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [regionalStyle, setRegionalStyle] = useState("");
+  const [rewriting, setRewriting] = useState(false);
+  const [preRewriteText, setPreRewriteText] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const lastBlobRef = useRef<Blob | null>(null);
 
@@ -107,7 +139,10 @@ function TextToSpeechCard({
   }, []);
 
   useEffect(() => {
-    if (seed) setText(seed.text);
+    if (seed) {
+      setText(seed.text);
+      setPreRewriteText(null);
+    }
   }, [seed]);
 
   async function handleSpeak() {
@@ -163,6 +198,70 @@ function TextToSpeechCard({
     setVerifyBusy(false);
   }
 
+  /** Rewrites the text's WORDING in a regional style via Ollama chat (#596
+   * follow-up: "creating a character and hearing that character's voice").
+   * This does NOT change the synthesized voice/accent -- Piper only ships
+   * one Turkish voice -- it changes the phrasing an LLM produces, which the
+   * standard voice then reads aloud. Explicitly a stylized approximation,
+   * not a linguistically accurate dialect transcription; the result lands
+   * back in the editable Text box (with Undo) rather than being spoken
+   * automatically, so a bad rewrite is never a surprise. */
+  async function handleRewrite() {
+    const style = REGIONAL_STYLES.find((s) => s.id === regionalStyle);
+    if (!text.trim() || !style) return;
+    setRewriting(true);
+    setStatus("");
+    try {
+      const models = await apiFetch<Paginated<ModelListItem>>("/v1/models?limit=500");
+      // Skip embedding-only models (there's no capability flag to check here,
+      // but "embed" in the name is a near-universal Ollama naming convention --
+      // e.g. nomic-embed-text -- and those can't chat at all).
+      const model = models.items.find(
+        (m) => m.status === "ready" && !m.id.toLowerCase().includes("embed"),
+      )?.id;
+      if (!model) {
+        setStatus(
+          "No ready model available to rewrite text — pull one on Model Management first.",
+        );
+        return;
+      }
+      const res = await apiFetch<ChatCompletionResponse>("/v1/ai/chat/completions", {
+        method: "POST",
+        body: {
+          model,
+          messages: [
+            {
+              role: "system",
+              content:
+                `Sen bir metin yeniden yazma asistanısın. Kullanıcının verdiği Türkçe ` +
+                `cümleyi, seslendirme (TTS) amaçlı olarak ${style.label} bölgesinin ağzına/` +
+                `şivesine yakın, günlük konuşma diline uygun şekilde yeniden yaz. Anlamı ` +
+                `değiştirme. SADECE yeniden yazılmış cümleyi yaz — bölge adı, tırnak ` +
+                `işareti, açıklama veya başka hiçbir şey ekleme.`,
+            },
+            { role: "user", content: text },
+          ],
+        },
+      });
+      const rewritten = res.message?.content?.trim();
+      if (!rewritten) {
+        setStatus("The model returned an empty rewrite.");
+        return;
+      }
+      setPreRewriteText(text);
+      setText(rewritten);
+    } catch (e) {
+      setStatus(friendlyErrorMessage(e));
+    }
+    setRewriting(false);
+  }
+
+  function handleUndoRewrite() {
+    if (preRewriteText === null) return;
+    setText(preRewriteText);
+    setPreRewriteText(null);
+  }
+
   return (
     <section className={`mb-6 ${cardClass}`}>
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
@@ -180,7 +279,10 @@ function TextToSpeechCard({
             <button
               key={ex.label}
               type="button"
-              onClick={() => setText(ex.text)}
+              onClick={() => {
+                setText(ex.text);
+                setPreRewriteText(null);
+              }}
               className="rounded-full border border-gray-300 px-2.5 py-1 text-xs text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-800"
             >
               {ex.label}
@@ -199,7 +301,10 @@ function TextToSpeechCard({
             className={inputClass}
             rows={3}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              setPreRewriteText(null);
+            }}
             placeholder="Type something to hear it spoken, or pick an example above…"
           />
         </div>
@@ -256,6 +361,51 @@ function TextToSpeechCard({
             Speak slowly
           </label>
         </div>
+        {language === "tr" && (
+          <div className="flex flex-wrap items-end gap-3 rounded-lg bg-gray-50 p-3 dark:bg-gray-800">
+            <div className="max-w-xs flex-1">
+              <label
+                htmlFor={regionalStyleId}
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Regional style (experimental)
+              </label>
+              <select
+                id={regionalStyleId}
+                className={inputClass}
+                value={regionalStyle}
+                onChange={(e) => setRegionalStyle(e.target.value)}
+              >
+                <option value="">None (standard)</option>
+                {REGIONAL_STYLES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              onClick={handleRewrite}
+              disabled={rewriting || !regionalStyle || !text.trim()}
+              className={secondaryButtonClass}
+            >
+              {rewriting ? "Rewriting…" : "🪄 Rewrite text in this style"}
+            </button>
+            {preRewriteText !== null && (
+              <button type="button" onClick={handleUndoRewrite} className={secondaryButtonClass}>
+                ↺ Undo rewrite
+              </button>
+            )}
+            <p className="w-full text-xs text-gray-500 dark:text-gray-400">
+              Rewrites the wording above using AI to sound like this region's
+              everyday speech, then reads it in the same standard Turkish
+              voice — Piper doesn't synthesize a different accent, only the
+              phrasing changes. A stylized approximation for fun, not a
+              linguistically accurate dialect.
+            </p>
+          </div>
+        )}
         <div className="flex items-center gap-3">
           <button type="button" onClick={handleSpeak} disabled={busy} className={primaryButtonClass}>
             {busy ? "Synthesizing…" : "▶ Speak"}
