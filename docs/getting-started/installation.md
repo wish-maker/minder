@@ -145,10 +145,14 @@ bash setup.sh shell <service>        # Interactive shell in container
 bash setup.sh migrate                # Run Alembic DB migrations
 bash setup.sh doctor                 # Deep diagnostics (disk, ports, secrets, images, versions)
 bash setup.sh ollama-mode <mode>     # Switch Ollama between internal / external
+bash setup.sh tts-stt-mode <mode>    # Switch Voice's STT/TTS backend (internal / external URL)
 bash setup.sh sync-postgres-password # Re-sync the Postgres password across services
+bash setup.sh bundle status                       # List bundles, their services, enable state
+bash setup.sh bundle enable|disable <name>        # Toggle a capability bundle (add --stop-orphans to also stop services no longer claimed)
+bash setup.sh bundle reconcile                    # Converge running containers to match enabled bundles
 
 # Data management
-bash setup.sh backup                 # Full backup (Postgres, Neo4j, InfluxDB, Qdrant, .env)
+bash setup.sh backup                 # Full backup (.env, Postgres, Neo4j, InfluxDB, Qdrant, MinIO, RabbitMQ)
 bash setup.sh restore <archive>      # Restore from backup
 
 # Updates & uninstall

@@ -87,5 +87,5 @@ This directory contains all documentation for the Minder platform.
 
 ---
 
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-14
 **Language:** English

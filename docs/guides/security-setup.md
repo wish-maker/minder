@@ -1,6 +1,6 @@
 # Minder Platform - Security Setup Guide
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-14
 **Priority:** P1 - CRITICAL (Must complete before production deployment)
 
 ---
@@ -27,10 +27,16 @@ security posture of the Minder platform.
   are **not** published to the host.
 - **Traefik IP-whitelist middleware** on the dashboard, RabbitMQ management, and
   Neo4j browser routes.
+- **docker-socket-proxy**: services that need Docker Engine API access (bundle
+  enable/disable, container logs) go through a least-privilege proxy with an
+  explicit allowlist of paths/methods, instead of a raw `docker.sock` mount.
 
 ### What is NOT in place (do not assume)
 
-- **No RBAC** — access is gated by holding a valid JWT only.
+- **RBAC is partial** — `role` is checked on a specific admin-only action set
+  (model pull/delete/fine-tune, bundle enable/disable/reconcile, listing a
+  plugin's installations, #474); most other write endpoints are still gated
+  by holding a valid JWT only, regardless of role.
 - **No application-level audit logging** beyond ordinary service/access logs.
 
 ### Also in place
