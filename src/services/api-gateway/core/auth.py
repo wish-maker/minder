@@ -252,13 +252,15 @@ async def get_or_create_oidc_user(
             username,
         )
         if existing:
+            role = "admin" if "admins" in groups else "user"
             row = await conn.fetchrow(
                 """
-                UPDATE users SET authelia_subject = $1, updated_at = NOW()
-                WHERE id = $2
+                UPDATE users SET authelia_subject = $1, role = $2, updated_at = NOW()
+                WHERE id = $3
                 RETURNING id, username, email, role
                 """,
                 authelia_subject,
+                role,
                 existing["id"],
             )
             logger.info(f"Linked existing local account to Authelia SSO: {username}")
