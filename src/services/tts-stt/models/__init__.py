@@ -14,6 +14,13 @@ class TTSRequest(BaseModel):
     text: str = Field(min_length=1)
     language: str = settings.DEFAULT_TTS_LANG
     slow: bool = False
+    # Which Piper voice to use for `language` (see config.PIPER_VOICES), e.g.
+    # "male"/"female"/"default" (#588) -- unset or unknown-for-this-language
+    # silently falls back to that language's default rather than erroring
+    # (tts_engine._resolve_voice_id), since a caller's exact voice choice not
+    # landing is a much smaller problem than a synthesis request 422ing over
+    # it. Ignored entirely for gTTS-only languages (no per-voice selection).
+    voice: str | None = None
 
     @field_validator("language")
     @classmethod

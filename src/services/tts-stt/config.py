@@ -31,13 +31,33 @@ class Settings(MinderBaseSettings):
     # other voices.
     TTS_PIPER_VOICE_EN: str = "en_US-lessac-low"
     TTS_PIPER_VOICE_TR: str = "tr_TR-dfki-medium"
+    # Explicitly gender-labeled Piper voices (#588) -- "amy"/"ryan"-style names
+    # are commonly assumed to be a given gender but that's not verified anywhere
+    # in Piper's own catalog, so only voices whose OWN name states a gender are
+    # offered as a gender choice here. Same "hfc" (High-Fidelity Corpus) dataset,
+    # medium quality, so the two are a fair like-for-like pair.
+    TTS_PIPER_VOICE_EN_FEMALE: str = "en_US-hfc_female-medium"
+    TTS_PIPER_VOICE_EN_MALE: str = "en_US-hfc_male-medium"
 
 
 settings = Settings()
 
+# {language: {voice_id: {"model": <onnx basename>, "label": <UI label>}}}.
+# "default" always matches TTS_PIPER_VOICE_{EN,TR} above (unlabeled callers, and
+# every language, keep working exactly as before). Turkish has exactly one
+# entry: Piper's own voice catalog (`python -m piper.download_voices`, checked
+# live) offers only tr_TR-dfki-medium for Turkish at all -- there is no second
+# Turkish voice to offer a choice between yet, so no "male"/"female" entry is
+# fabricated for it.
 PIPER_VOICES = {
-    "en": settings.TTS_PIPER_VOICE_EN,
-    "tr": settings.TTS_PIPER_VOICE_TR,
+    "en": {
+        "default": {"model": settings.TTS_PIPER_VOICE_EN, "label": "Default"},
+        "female": {"model": settings.TTS_PIPER_VOICE_EN_FEMALE, "label": "Female"},
+        "male": {"model": settings.TTS_PIPER_VOICE_EN_MALE, "label": "Male"},
+    },
+    "tr": {
+        "default": {"model": settings.TTS_PIPER_VOICE_TR, "label": "Default"},
+    },
 }
 
 SUPPORTED_LANGUAGES = {

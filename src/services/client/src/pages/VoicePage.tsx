@@ -15,6 +15,16 @@ interface LanguagesResponse {
   auto_detect?: boolean;
 }
 
+interface TtsVoice {
+  id: string;
+  label: string;
+}
+
+interface VoicesResponse {
+  language: string;
+  voices: TtsVoice[];
+}
+
 interface SttResponse {
   text: string;
   language: string;
@@ -44,10 +54,13 @@ function TextToSpeechCard({
 }) {
   const textId = useId();
   const languageId = useId();
+  const voiceId = useId();
   const [languages, setLanguages] = useState<Record<string, string>>({});
   const [sttLanguages, setSttLanguages] = useState<Record<string, string>>({});
   const [text, setText] = useState("");
   const [language, setLanguage] = useState("tr");
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
+  const [voice, setVoice] = useState("");
   const [slow, setSlow] = useState(false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -73,6 +86,18 @@ function TextToSpeechCard({
       .catch(() => {});
   }, []);
 
+  // Voice choices are per-language (a gTTS-only language has none at all) --
+  // refetch whenever the selected language changes, and reset the current
+  // pick so a voice id from the PREVIOUS language never gets sent silently
+  // alongside a new one.
+  useEffect(() => {
+    if (!language) return;
+    setVoice("");
+    apiFetch<VoicesResponse>(`/v1/tts/voices?language=${encodeURIComponent(language)}`)
+      .then((res) => setVoices(res.voices))
+      .catch(() => setVoices([]));
+  }, [language]);
+
   useEffect(() => {
     // Revoke the previous object URL whenever it's replaced/unmounted --
     // otherwise every synthesis leaks a blob URL for the session's lifetime.
@@ -97,7 +122,7 @@ function TextToSpeechCard({
     try {
       const { blob, headers } = await apiFetchBlob("/v1/tts", {
         method: "POST",
-        body: { text, language, slow },
+        body: { text, language, slow, voice: voice || undefined },
         token,
       });
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
@@ -145,7 +170,9 @@ function TextToSpeechCard({
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
         Piper (offline) synthesizes bundled languages as WAV; anything else
-        falls back to gTTS (online) as MP3.
+        falls back to gTTS (online) as MP3. A Voice picker appears when the
+        selected language has more than one bundled option (English currently
+        offers Male/Female; Turkish has one voice for now).
       </p>
       <fieldset disabled={!token} className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-1.5">
@@ -197,6 +224,28 @@ function TextToSpeechCard({
               ))}
             </select>
           </div>
+          {voices.length > 1 && (
+            <div className="max-w-xs flex-1">
+              <label
+                htmlFor={voiceId}
+                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                Voice
+              </label>
+              <select
+                id={voiceId}
+                className={inputClass}
+                value={voice}
+                onChange={(e) => setVoice(e.target.value)}
+              >
+                {voices.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <label className="flex items-center gap-2 pb-1.5 text-sm text-gray-700 dark:text-gray-300">
             <input
               className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-60"

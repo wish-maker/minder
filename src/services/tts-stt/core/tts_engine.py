@@ -48,28 +48,65 @@ TTS_AVAILABLE = GTTS_AVAILABLE or PIPER_AVAILABLE
 _piper_cache: Dict[str, Any] = {}
 
 
-def _piper_voice_path(language: str) -> Optional[str]:
-    """Absolute path to the bundled Piper .onnx for `language`, or None if absent."""
-    name = PIPER_VOICES.get(language)
-    if not name:
+def _resolve_voice_id(language: str, voice: Optional[str]) -> Optional[str]:
+    """The voice_id to actually use: `voice` if it's a real option for
+    `language`, else that language's "default" entry. An unknown/unsupported
+    voice_id is a silent fallback, not an error -- a caller's voice choice
+    being ignored is a much smaller problem than a synthesis request 422ing
+    over a cosmetic mismatch."""
+    voices = PIPER_VOICES.get(language)
+    if not voices:
         return None
+    if voice and voice in voices:
+        return voice
+    return "default" if "default" in voices else next(iter(voices), None)
+
+
+def _piper_voice_path(language: str, voice: Optional[str]) -> Optional[str]:
+    """Absolute path to the bundled Piper .onnx for `language`/`voice`, or None
+    if no such voice is configured or its .onnx wasn't actually downloaded."""
+    voices = PIPER_VOICES.get(language)
+    if not voices:
+        return None
+    voice_id = _resolve_voice_id(language, voice)
+    if voice_id is None:
+        return None
+    name = voices[voice_id]["model"]
     path = os.path.join(settings.TTS_VOICES_DIR, f"{name}.onnx")
     return path if os.path.isfile(path) else None
 
 
-def _load_piper(language: str) -> Optional[Any]:
-    if language not in _piper_cache:
-        path = _piper_voice_path(language)
+def _load_piper(language: str, voice: Optional[str]) -> Optional[Any]:
+    cache_key = f"{language}:{_resolve_voice_id(language, voice)}"
+    if cache_key not in _piper_cache:
+        path = _piper_voice_path(language, voice)
         if not path:
             return None
-        _piper_cache[language] = PiperVoice.load(path)
-    return _piper_cache[language]
+        _piper_cache[cache_key] = PiperVoice.load(path)
+    return _piper_cache[cache_key]
 
 
-def _synthesize_piper(text: str, language: str, slow: bool) -> Optional[bytes]:
+def list_voices(language: str) -> list:
+    """Voice choices actually available for `language` right now -- only ones
+    whose .onnx is really present on disk, so the UI never offers a voice this
+    deployment can't actually synthesize. Empty for any gTTS-only language
+    (gTTS has no per-voice selection at all)."""
+    voices = PIPER_VOICES.get(language, {})
+    return [
+        {"id": voice_id, "label": entry["label"]}
+        for voice_id, entry in voices.items()
+        if os.path.isfile(
+            os.path.join(settings.TTS_VOICES_DIR, f"{entry['model']}.onnx")
+        )
+    ]
+
+
+def _synthesize_piper(
+    text: str, language: str, slow: bool, voice: Optional[str]
+) -> Optional[bytes]:
     """WAV bytes via Piper, or None when no bundled voice exists for `language`."""
-    voice = _load_piper(language)
-    if voice is None:
+    voice_obj = _load_piper(language, voice)
+    if voice_obj is None:
         return None
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -78,9 +115,9 @@ def _synthesize_piper(text: str, language: str, slow: bool) -> Optional[bytes]:
 
             # slow → stretch the audio (higher length_scale = slower speech).
             cfg = SynthesisConfig(length_scale=1.5) if slow else None
-            voice.synthesize_wav(text, wf, syn_config=cfg)
+            voice_obj.synthesize_wav(text, wf, syn_config=cfg)
         except (ImportError, TypeError):
-            voice.synthesize_wav(text, wf)
+            voice_obj.synthesize_wav(text, wf)
     return buf.getvalue()
 
 
@@ -97,15 +134,20 @@ def _synthesize_gtts(text: str, language: str, slow: bool) -> bytes:
         os.unlink(temp_path)
 
 
-def synthesize(text: str, language: str, slow: bool) -> Tuple[bytes, str, str]:
+def synthesize(
+    text: str, language: str, slow: bool, voice: Optional[str] = None
+) -> Tuple[bytes, str, str]:
     """Synthesize `text` → ``(audio_bytes, media_type, extension)``.
 
     Prefers Piper (offline) when TTS_ENGINE allows it and a voice is bundled for
-    `language`; otherwise falls back to gTTS (online). Blocking (synthesis + I/O) —
-    call via ``asyncio.to_thread`` so concurrent requests aren't stalled.
+    `language`; otherwise falls back to gTTS (online, no voice selection). Blocking
+    (synthesis + I/O) — call via ``asyncio.to_thread`` so concurrent requests aren't
+    stalled. `voice` picks among PIPER_VOICES[language]'s entries (#588); an
+    unset/unknown value silently falls back to that language's "default" voice
+    rather than erroring.
     """
     if settings.TTS_ENGINE != "gtts" and PIPER_AVAILABLE:
-        data = _synthesize_piper(text, language, slow)
+        data = _synthesize_piper(text, language, slow, voice)
         if data is not None:
             return data, "audio/wav", "wav"
     if GTTS_AVAILABLE:
