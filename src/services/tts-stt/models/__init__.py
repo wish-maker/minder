@@ -10,8 +10,11 @@ class TTSRequest(BaseModel):
 
     # min_length=1 so empty text is a clean 422 at the edge instead of a 500 from
     # failing deep in the Piper/gTTS engine with nothing to synthesize (#534) —
-    # matches the language field's edge validation below.
-    text: str = Field(min_length=1)
+    # matches the language field's edge validation below. max_length bounds
+    # worst-case synthesis time/memory -- neither Piper nor gTTS has a ceiling
+    # of its own, so an unbounded `text` field would be synthesized in full
+    # regardless of size.
+    text: str = Field(min_length=1, max_length=settings.TTS_MAX_TEXT_LENGTH)
     language: str = settings.DEFAULT_TTS_LANG
     slow: bool = False
     # Which Piper voice to use for `language` (see config.PIPER_VOICES), e.g.

@@ -122,12 +122,20 @@ def _synthesize_piper(
 
 
 def _synthesize_gtts(text: str, language: str, slow: bool) -> bytes:
-    """MP3 bytes via gTTS (online). Owns the temp-file lifecycle end to end."""
+    """MP3 bytes via gTTS (online). Owns the temp-file lifecycle end to end.
+
+    The temp file is created (delete=False) before tts.save() -- a network
+    call to Google Translate that can raise (DNS failure, rate-limiting, any
+    outage) -- so the whole lifecycle from creation to unlink must be one
+    try/finally. It used to only wrap the read, leaving every failed gTTS
+    call (exactly the failure mode most likely to recur repeatedly) leak one
+    file into /tmp with no cleanup.
+    """
     tts = gTTS(text=text, lang=language, slow=slow)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
-        tts.save(temp_file.name)
         temp_path = temp_file.name
     try:
+        tts.save(temp_path)
         with open(temp_path, "rb") as audio_file:
             return audio_file.read()
     finally:

@@ -39,6 +39,15 @@ class Settings(MinderBaseSettings):
     TTS_PIPER_VOICE_EN_FEMALE: str = "en_US-hfc_female-medium"
     TTS_PIPER_VOICE_EN_MALE: str = "en_US-hfc_male-medium"
 
+    # Enforced in models.TTSRequest.text's max_length. Neither engine has a hard
+    # ceiling of its own (gTTS auto-chunks into <200-char calls to Google
+    # Translate; Piper just takes proportionally longer) -- without one, a
+    # multi-megabyte `text` field is accepted as-is and synthesized in full,
+    # consuming a to_thread worker and unbounded memory for the audio buffer for
+    # as long as that takes. 5000 chars comfortably covers a real paragraph/
+    # assistant-response read-aloud while bounding worst-case resource use.
+    TTS_MAX_TEXT_LENGTH: int = 5000
+
 
 settings = Settings()
 
