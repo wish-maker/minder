@@ -114,17 +114,18 @@ async def auto_enable_plugins():
     logger.info("Auto-enabling all plugins...")
 
     for plugin_name, plugin_info in plugins_db.items():
+        # #351: persist BEFORE mutating in-memory state -- matches the fix already
+        # applied to routes/plugins.py's enable_plugin. A DB failure here used to be
+        # silently swallowed while in-memory state already said "enabled," leaving
+        # the two out of sync until the next restart reloaded from DB.
         try:
-            # Update in-memory status
-            plugin_info.enabled = True
-            plugin_info.status = "enabled"
-
-            # Update in database
             await update_plugin_in_database(plugin_name, enabled=True, status="enabled")
-
-            logger.info(f"✅ Auto-enabled plugin: {plugin_name}")
         except Exception as e:
             logger.error(f"❌ Failed to auto-enable {plugin_name}: {e}")
+            continue
+        plugin_info.enabled = True
+        plugin_info.status = "enabled"
+        logger.info(f"✅ Auto-enabled plugin: {plugin_name}")
 
 
 async def data_collection_scheduler():
