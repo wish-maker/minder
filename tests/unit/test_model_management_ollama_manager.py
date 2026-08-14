@@ -134,13 +134,33 @@ async def test_show_model_success_normalizes_to_dict(patched_client):
 
 
 @pytest.mark.asyncio
-async def test_show_model_wraps_failure_as_404(patched_client):
-    mgr = _manager()
+async def test_show_model_wraps_genuine_not_found_as_404(patched_client):
+    """A real Ollama "model not found" (ResponseError, status_code=404) should
+    still surface as 404."""
+    mod = _isolated_import("core.ollama_manager")
+    mgr = mod.OllamaManager()
     await mgr._ensure_initialized()
-    mgr.client.show = AsyncMock(side_effect=RuntimeError("not found"))
+    mgr.client.show = AsyncMock(
+        side_effect=mod.ResponseError("model not found", status_code=404)
+    )
     with pytest.raises(Exception) as exc_info:
         await mgr.show_model("nope:latest")
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_show_model_wraps_other_failures_as_503_not_404(patched_client):
+    """A transient failure (timeout, connection drop, malformed response) must
+    NOT be misreported as "model not found" -- that used to blanket-map every
+    exception here to 404, which is indistinguishable from an actually missing
+    model and hides a real Ollama outage from the caller."""
+    mgr = _manager()
+    await mgr._ensure_initialized()
+    mgr.client.show = AsyncMock(side_effect=RuntimeError("connection reset"))
+    with pytest.raises(Exception) as exc_info:
+        await mgr.show_model("llama3.2:latest")
+    assert exc_info.value.status_code == 503
+    assert "Failed to show model" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

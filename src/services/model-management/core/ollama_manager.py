@@ -17,6 +17,14 @@ from shared.ai.ollama_client_base import (  # noqa: F401 -- re-exported for main
     OllamaClientBase,
 )
 
+# Guarded the same way rag-pipeline's ollama_manager.py does: OLLAMA_AVAILABLE above
+# already covers whether the real `ollama` package is installed; this is just so
+# `isinstance(e, ResponseError)` below doesn't NameError when it isn't.
+try:
+    from ollama import ResponseError
+except ImportError:
+    ResponseError = Exception  # type: ignore[misc,assignment]  # unreachable without the package
+
 logger = logging.getLogger("minder.model-management")
 
 OLLAMA_HOST = settings.OLLAMA_HOST
@@ -71,7 +79,18 @@ class OllamaManager(OllamaClientBase):
             return response.model_dump()
         except Exception as e:
             logger.error(f"❌ Failed to show model {model_id}: {e}")
-            raise HTTPException(status_code=404, detail=f"Model not found: {model_id}")
+            # Only a genuine "model not found" from Ollama itself should surface as
+            # 404 -- blanket-mapping every exception here (a timeout, a connection
+            # drop, a malformed response) to 404 misreports a real Ollama outage as
+            # "model not found", which the caller can't tell apart from an actually
+            # missing model. Mirrors rag-pipeline's ollama_manager.py precedent.
+            if isinstance(e, ResponseError) and e.status_code == 404:
+                raise HTTPException(
+                    status_code=404, detail=f"Model not found: {model_id}"
+                )
+            raise HTTPException(
+                status_code=503, detail=f"Failed to show model: {str(e)}"
+            )
 
     async def delete_model(self, model_id: str) -> Dict[str, Any]:
         """Delete a model from local storage"""
