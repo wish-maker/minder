@@ -18,9 +18,18 @@ against the real plugin-registry) was pulled out into the pure
 plugin-state-manager is a hyphenated service dir, so core.execution is loaded
 by path, same isolated-import pattern as test_psm_state_transitions.py /
 test_psm_license.py.
+
+core.execution also does a bare `from config import settings` -- "config" is
+just as collision-prone across this shared pytest process as "core"/"models"
+(every service has its own config.py, all competing for the same bare module
+name). This loads plugin-state-manager's own config.py fresh from its file and
+registers *that* under "config" for the duration of the fixture, instead of a
+bare `import config` left to whatever ambient sys.path order some other
+already-run test happened to leave behind.
 """
 
 import importlib
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -28,7 +37,13 @@ from pathlib import Path
 import pytest
 
 _PSM = Path(__file__).resolve().parents[2] / "src" / "services" / "plugin-state-manager"
-_COLLISION_PRONE = ("core", "core.execution", "models", "models.tool_execution")
+_COLLISION_PRONE = (
+    "core",
+    "core.execution",
+    "models",
+    "models.tool_execution",
+    "config",
+)
 
 
 @pytest.fixture
@@ -38,6 +53,10 @@ def execution_mod():
     for k in _COLLISION_PRONE:
         sys.modules.pop(k, None)
     sys.path.insert(0, str(_PSM))
+    config_spec = importlib.util.spec_from_file_location("config", _PSM / "config.py")
+    config_mod = importlib.util.module_from_spec(config_spec)
+    sys.modules["config"] = config_mod
+    config_spec.loader.exec_module(config_mod)
     try:
         yield importlib.import_module("core.execution")
     finally:
