@@ -477,8 +477,9 @@ should use the `/v1/` path.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers |
+| POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers. Optional `voice` field (e.g. `"male"`/`"female"`) picks among that language's bundled Piper voices — silently falls back to the language's default on an unknown/unsupported value rather than erroring; ignored entirely for gTTS-only languages |
 | GET | `/v1/tts/languages` | Supported TTS languages |
+| GET | `/v1/tts/voices?language=` | Voice choices for `language` — only ones whose `.onnx` is actually bundled on this deployment. Empty for a gTTS-only language (no per-voice selection) or a language with no bundled Piper voice. English currently offers `default`/`female`/`male`; every other bundled language has just `default` |
 | POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field. **Locale-qualified codes** (`tr-TR`, `en-US`, …) — Google's `recognize_google()` requires them; a bare `tr` is rejected |
 | GET | `/v1/stt/languages` | Supported STT languages — a **different code set than TTS above** (`tr-TR` not `tr`); don't reuse a TTS language code here or vice versa |
 | GET | `/health` | Service health |
@@ -487,8 +488,17 @@ should use the `/v1/` path.
 Reachable through the gateway at `/v1/tts`/`/v1/tts/{path:path}` and
 `/v1/stt`/`/v1/stt/{path:path}` (writes require JWT) — see the API Gateway's
 Proxy routes table above. The `client` service has a `/platform/voice` page
-(the "Platform" nav section's 4th tab) for trying synthesis/transcription
-without `curl`.
+(the "Platform" nav section's 3rd tab) for trying synthesis/transcription
+without `curl` — including an experimental "Regional style" rewrite for
+Turkish that sends the typed text through `POST /v1/ai/chat/completions`
+(a plain LLM wording rewrite, not a synthesized accent — Piper only ships
+one Turkish voice) before it's spoken.
+
+STT mic recordings are normalized to WAV via `ffmpeg` before transcription
+(`core/stt_engine.py`'s `_to_wav()`) — the browser's `MediaRecorder` API has
+no way to emit raw WAV, only WebM/Opus, which `speech_recognition`'s
+`AudioFile` cannot parse directly. This also means non-WAV file uploads
+(mp3, ogg, …) work the same way, not just mic recordings.
 
 ---
 
