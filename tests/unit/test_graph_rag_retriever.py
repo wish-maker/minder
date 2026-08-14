@@ -335,3 +335,144 @@ async def test_reingest_sends_the_new_title_as_the_on_match_value(monkeypatch):
     calls = constructor.driver.fake_session.calls
     assert len(calls) == 2
     assert calls[1][1]["title"] == "Final Title"
+
+
+# --- core/graph_constructor.py: delete_document -------------------------------
+#
+# Found in the same audit: the three delete statements (RELATES_TO edges,
+# DETACH DELETE the Document, then a global orphan scan) each ran as their own
+# auto-commit statement, not one transaction -- a concurrent construct-graph
+# call could MERGE a fresh edge onto a momentarily-orphaned entity between the
+# document delete and the orphan scan, then have that entity deleted out from
+# under it a moment later. The orphan scan was also unscoped -- `MATCH
+# (e:Entity) WHERE NOT (e)--() DELETE e` deletes ANY orphaned entity anywhere
+# in the graph, not just ones freed by this document's deletion.
+
+
+class _FakeTxResult:
+    def __init__(self, records=None, relationships_deleted=0, nodes_deleted=0):
+        from types import SimpleNamespace
+
+        self._records = list(records or [])
+        self._counters = SimpleNamespace(
+            relationships_deleted=relationships_deleted, nodes_deleted=nodes_deleted
+        )
+
+    def __aiter__(self):
+        return self._aiter()
+
+    async def _aiter(self):
+        for r in self._records:
+            yield r
+
+    async def consume(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(counters=self._counters)
+
+
+class _FakeDeleteTx:
+    """Routes on query text. `orphan_map` maps (text, label) -> nodes_deleted
+    for the per-entity orphan-check query."""
+
+    def __init__(self, mentioned, rels_deleted, docs_deleted, orphan_map):
+        self.mentioned = mentioned
+        self.rels_deleted = rels_deleted
+        self.docs_deleted = docs_deleted
+        self.orphan_map = orphan_map
+        self.entity_orphan_check_calls = []
+
+    async def run(self, query, **kwargs):
+        if "MENTIONS" in query:
+            return _FakeTxResult(
+                records=[{"text": t, "label": lbl} for t, lbl in self.mentioned]
+            )
+        if "RELATES_TO" in query:
+            return _FakeTxResult(relationships_deleted=self.rels_deleted)
+        if "DETACH DELETE d" in query:
+            return _FakeTxResult(nodes_deleted=self.docs_deleted)
+        # Per-entity orphan-check/delete -- the scoped replacement for the old
+        # global `MATCH (e:Entity) WHERE NOT (e)--() DELETE e` scan.
+        key = (kwargs.get("text"), kwargs.get("label"))
+        self.entity_orphan_check_calls.append(key)
+        return _FakeTxResult(nodes_deleted=self.orphan_map.get(key, 0))
+
+
+class _FakeDeleteSession:
+    def __init__(self, tx):
+        self._tx = tx
+        self.execute_write_called = False
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def execute_write(self, fn):
+        self.execute_write_called = True
+        return await fn(self._tx)
+
+
+class _FakeDeleteDriver:
+    def __init__(self, session):
+        self._session = session
+
+    def session(self):
+        return self._session
+
+
+def _make_constructor_for_delete(
+    monkeypatch, mentioned, rels_deleted, docs_deleted, orphan_map
+):
+    module = _load_constructor()
+    tx = _FakeDeleteTx(mentioned, rels_deleted, docs_deleted, orphan_map)
+    session = _FakeDeleteSession(tx)
+    monkeypatch.setattr(
+        module.AsyncGraphDatabase,
+        "driver",
+        lambda *a, **k: _FakeDeleteDriver(session),
+    )
+    constructor = module.KnowledgeGraphConstructor("bolt://fake:7687", "neo4j", "pw")
+    return constructor, tx, session
+
+
+async def test_delete_document_runs_in_a_single_transaction(monkeypatch):
+    constructor, tx, session = _make_constructor_for_delete(
+        monkeypatch, mentioned=[], rels_deleted=0, docs_deleted=1, orphan_map={}
+    )
+    await constructor.delete_document("doc-1")
+    assert session.execute_write_called is True
+
+
+async def test_delete_document_only_checks_entities_this_document_touched(monkeypatch):
+    """The orphan check must be scoped to entities this document actually
+    MENTIONS, not a global scan that would also re-check (and possibly
+    delete) unrelated orphaned entities elsewhere in the graph."""
+    mentioned = [("Alice", "PERSON"), ("Acme Corp", "ORG")]
+    constructor, tx, session = _make_constructor_for_delete(
+        monkeypatch,
+        mentioned=mentioned,
+        rels_deleted=2,
+        docs_deleted=1,
+        orphan_map={("Alice", "PERSON"): 1, ("Acme Corp", "ORG"): 0},
+    )
+
+    result = await constructor.delete_document("doc-1")
+
+    assert set(tx.entity_orphan_check_calls) == set(mentioned)
+    assert result == {
+        "document_deleted": 1,
+        "relationships_deleted": 2,
+        "orphan_entities_deleted": 1,
+    }
+
+
+async def test_delete_document_with_no_mentioned_entities_checks_nothing(monkeypatch):
+    constructor, tx, session = _make_constructor_for_delete(
+        monkeypatch, mentioned=[], rels_deleted=0, docs_deleted=1, orphan_map={}
+    )
+    result = await constructor.delete_document("doc-1")
+
+    assert tx.entity_orphan_check_calls == []
+    assert result["orphan_entities_deleted"] == 0
