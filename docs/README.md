@@ -19,6 +19,7 @@ This directory contains all documentation for the Minder platform.
 - [Microservices](architecture/microservices.md) - Service structure
 - [Plugin System](architecture/plugins.md) - Plugin architecture
 - [Service Bundles](architecture/bundles.md) - Capability control-plane (enable/disable service groups)
+- [RAPTOR RAG](architecture/raptor-rag.md) - Hierarchical clustering + tree summarization retrieval design decisions
 - [Project Structure](architecture/project-structure.md) - Code organization
 - [Roadmap](architecture/roadmap.md) - Future plans
 
