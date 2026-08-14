@@ -335,7 +335,17 @@ async def upload_document(
 
     # Read file — UploadFile.filename is Optional; normalise to a real string so
     # extension sniffing (.pdf/.txt/.md) and the stored payload never see None.
-    content = await file.read()
+    # Bounded read (previously unenforced anywhere: an upload of any size got
+    # fully buffered into memory) — read one byte past the limit so an
+    # oversized file is caught here, before ever reaching chunk/embed/store,
+    # rather than buffering the whole thing first to then reject it.
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds the {settings.MAX_UPLOAD_SIZE_MB}MB upload limit",
+        )
     filename = file.filename or "upload"
 
     return await ingest_document(kb_id, kb, filename, content, build_tree=build_tree)

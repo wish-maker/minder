@@ -1030,3 +1030,72 @@ def test_group_documents_falls_back_to_legacy_source_grouping():
     assert len(result) == 1
     assert result[0].document_id == "legacy:old.txt"
     assert result[0].chunk_count == 2
+
+
+# ── Upload size limit (routes/rag.py's upload_document) ────────────────────
+# Previously unenforced anywhere in the platform: an upload of any size was
+# fully buffered into memory with no limit -- a real risk on the Pi-class
+# hardware this deploys to. These prove the bounded-read rejects an oversized
+# file before it ever reaches ingest_document, and passes a within-limit file
+# through unchanged.
+
+
+class _FakeUploadFile:
+    def __init__(self, data: bytes, filename: str = "doc.txt"):
+        self._data = data
+        self.filename = filename
+
+    async def read(self, size=None):
+        if size is None:
+            return self._data
+        return self._data[:size]
+
+
+@pytest.mark.asyncio
+async def test_upload_document_rejects_file_over_the_configured_limit(monkeypatch):
+    monkeypatch.setattr(rag_routes.settings, "MAX_UPLOAD_SIZE_MB", 0)
+    monkeypatch.setattr(rag_routes.state, "knowledge_bases", {"kb-1": _fake_kb()})
+    called = {"ingest": False}
+
+    async def fake_ingest(*a, **k):
+        called["ingest"] = True
+
+    monkeypatch.setattr(rag_routes, "ingest_document", fake_ingest)
+
+    with pytest.raises(Exception) as exc_info:
+        await rag_routes.upload_document(
+            kb_id="kb-1", file=_FakeUploadFile(b"way more than one byte")
+        )
+
+    assert exc_info.value.status_code == 413
+    assert called["ingest"] is False  # rejected before ever reaching ingestion
+
+
+@pytest.mark.asyncio
+async def test_upload_document_passes_within_limit_file_through(monkeypatch):
+    monkeypatch.setattr(rag_routes.settings, "MAX_UPLOAD_SIZE_MB", 1)
+    kb = _fake_kb()
+    monkeypatch.setattr(rag_routes.state, "knowledge_bases", {"kb-1": kb})
+    captured = {}
+
+    async def fake_ingest(kb_id, kb_arg, filename, content, build_tree=False):
+        captured.update(
+            kb_id=kb_id, filename=filename, content=content, build_tree=build_tree
+        )
+        return "ok"
+
+    monkeypatch.setattr(rag_routes, "ingest_document", fake_ingest)
+
+    result = await rag_routes.upload_document(
+        kb_id="kb-1",
+        file=_FakeUploadFile(b"small document", filename="doc.txt"),
+        build_tree=False,
+    )
+
+    assert result == "ok"
+    assert captured == {
+        "kb_id": "kb-1",
+        "filename": "doc.txt",
+        "content": b"small document",
+        "build_tree": False,
+    }
