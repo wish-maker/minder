@@ -35,6 +35,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from shared.auth.jwt_middleware import get_current_user_or_service
+
 _SERVICES = Path(__file__).resolve().parents[2] / "src" / "services"
 
 _SERVICE_TOKEN = "unit-test-service-token"
@@ -160,3 +162,53 @@ def test_model_management_fine_tune_requires_auth():
     client = _app_with_router(router)
     resp = client.post("/v1/models/fine-tune", json={"model_id": "llama3.2:latest"})
     assert resp.status_code == 401
+
+
+# ── model-management: #474 -- a real (non-admin) user JWT must 403, not just
+# require *a* token. require_role_or_service still preserves the #405 service-
+# token bypass unconditionally (proven by the _accepts_service_token tests
+# above); these prove the ADDED restriction on the user-JWT path.
+
+
+def _app_with_non_admin_user(router):
+    app = FastAPI()
+    app.include_router(router)
+    # require_role_or_service resolves the user via Depends(get_current_user_or_service)
+    # -- a real nested FastAPI dependency -- so overriding THAT function (not the
+    # get_current_user it calls internally as a plain function, not via Depends)
+    # is what actually intercepts it.
+    app.dependency_overrides[get_current_user_or_service] = lambda: {
+        "sub": "1",
+        "role": "user",
+    }
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_model_management_register_rejects_non_admin():
+    models_api = _fresh_import("model-management", "routes.models_api")
+    router = models_api.build_models_router(
+        ollama_manager=MagicMock(), models={}, logger=MagicMock()
+    )
+    client = _app_with_non_admin_user(router)
+    resp = client.post("/v1/models", json={"model_id": "llama3.2:latest"})
+    assert resp.status_code == 403
+
+
+def test_model_management_delete_rejects_non_admin():
+    models_api = _fresh_import("model-management", "routes.models_api")
+    router = models_api.build_models_router(
+        ollama_manager=MagicMock(), models={}, logger=MagicMock()
+    )
+    client = _app_with_non_admin_user(router)
+    resp = client.delete("/v1/models/llama3.2:latest")
+    assert resp.status_code == 403
+
+
+def test_model_management_fine_tune_rejects_non_admin():
+    models_api = _fresh_import("model-management", "routes.models_api")
+    router = models_api.build_models_router(
+        ollama_manager=MagicMock(), models={}, logger=MagicMock()
+    )
+    client = _app_with_non_admin_user(router)
+    resp = client.post("/v1/models/fine-tune", json={"model_id": "llama3.2:latest"})
+    assert resp.status_code == 403

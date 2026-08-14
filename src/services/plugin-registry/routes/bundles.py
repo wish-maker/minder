@@ -23,7 +23,7 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import require_role
 from shared.bundle_graph import (
     ClaimGraph,
     claims_from_plugin_manifests,
@@ -195,10 +195,12 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
         return out
 
     @router.post("/v1/bundles/{name}/enable")
-    async def enable_bundle(name: str, current_user: dict = Depends(get_current_user)):
+    async def enable_bundle(
+        name: str, current_user: dict = Depends(require_role("admin"))
+    ):
         """Enable a bundle: persist intent, then START its claimed services that exist.
         Services never materialised come up on the next host start/restart converge
-        (reported as ``pending_create``). JWT-gated (#65 item 2, PR2)."""
+        (reported as ``pending_create``). Admin-only (#65 item 2, PR2; #474)."""
         claims, state = _load()
         _known_bundle(name, claims)
         state[name] = {"enabled": True}
@@ -217,10 +219,12 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
         }
 
     @router.post("/v1/bundles/{name}/disable")
-    async def disable_bundle(name: str, current_user: dict = Depends(get_current_user)):
+    async def disable_bundle(
+        name: str, current_user: dict = Depends(require_role("admin"))
+    ):
         """Disable a bundle: persist intent, then STOP the services it was keeping alive
         that no other enabled bundle claims (orphans). ``core`` cannot be disabled.
-        JWT-gated (#65 item 2, PR2)."""
+        Admin-only (#65 item 2, PR2; #474)."""
         if name == CORE_BUNDLE:
             raise HTTPException(status_code=409, detail="core is the always-on kernel")
         claims, state = _load()
@@ -244,9 +248,9 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
         }
 
     @router.post("/v1/bundles/reconcile")
-    async def reconcile_bundles(current_user: dict = Depends(get_current_user)):
+    async def reconcile_bundles(current_user: dict = Depends(require_role("admin"))):
         """Converge the running set to the enabled bundles: START every active service
-        and STOP every orphan. JWT-gated (#65 item 2, PR2)."""
+        and STOP every orphan. Admin-only (#65 item 2, PR2; #474)."""
         claims, state = _load()
         graph = ClaimGraph(claims, state, CORE_BUNDLE)
         all_services = {s for svcs in claims.values() for s in svcs}

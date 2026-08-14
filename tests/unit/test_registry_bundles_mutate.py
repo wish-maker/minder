@@ -16,6 +16,8 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from shared.auth.jwt_middleware import get_current_user
+
 _ROUTE = (
     Path(__file__).resolve().parents[2]
     / "src"
@@ -63,7 +65,7 @@ class FakeOps:
         return "changed" if svc in self.existing else "absent"
 
 
-def _client(tmp_path, *, state, ops, auth=True):
+def _client(tmp_path, *, state, ops, auth=True, role="admin"):
     compose = tmp_path / "docker-compose.yml"
     compose.write_text(_COMPOSE, encoding="utf-8")
     state_path = tmp_path / "bundles.state.json"
@@ -81,7 +83,15 @@ def _client(tmp_path, *, state, ops, auth=True):
         mod.build_bundles_router(settings=settings, logger=logger, container_ops=ops)
     )
     if auth:
-        app.dependency_overrides[mod.get_current_user] = lambda: {"sub": "tester"}
+        # bundles.py's routes now depend on require_role("admin") (#474), whose
+        # own Depends(get_current_user) is a REAL nested FastAPI dependency (not
+        # a plain function call) precisely so this override still works --
+        # overriding the shared jwt_middleware function, not one on `mod` (which
+        # no longer imports get_current_user directly at all).
+        app.dependency_overrides[get_current_user] = lambda: {
+            "sub": "tester",
+            "role": role,
+        }
     return TestClient(app, raise_server_exceptions=True), state_path
 
 
@@ -147,5 +157,11 @@ def test_reconcile_starts_active_and_stops_orphans(tmp_path):
 
 def test_mutating_endpoints_require_auth(tmp_path):
     client, _ = _client(tmp_path, state=None, ops=FakeOps(existing=set()), auth=False)
-    # No auth override + no token → get_current_user rejects.
-    assert client.post("/v1/bundles/voice/disable").status_code in (401, 403)
+    # No auth override + no token → get_current_user (nested under require_role) rejects.
+    assert client.post("/v1/bundles/voice/disable").status_code == 401
+
+
+def test_mutating_endpoints_reject_non_admin(tmp_path):
+    """#474: authenticated but role="user" must 403, not just require *a* token."""
+    client, _ = _client(tmp_path, state=None, ops=FakeOps(existing=set()), role="user")
+    assert client.post("/v1/bundles/voice/disable").status_code == 403

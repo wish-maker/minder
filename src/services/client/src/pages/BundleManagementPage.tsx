@@ -120,11 +120,13 @@ function ServiceRow({
 function BundleCard({
   bundle,
   token,
+  isAdmin,
   onChanged,
   confirm,
 }: {
   bundle: Bundle;
   token: string;
+  isAdmin: boolean;
   onChanged: () => void;
   confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
@@ -212,7 +214,14 @@ function BundleCard({
         ) : (
           <button
             onClick={handleToggle}
-            disabled={!token || busy}
+            disabled={!isAdmin || busy}
+            title={
+              !isAdmin
+                ? token
+                  ? "Admin role required"
+                  : "Log in as an admin to enable or disable bundles"
+                : undefined
+            }
             className={bundle.enabled ? secondaryButtonClass : primaryButtonClass}
           >
             {bundle.enabled ? "Disable" : "Enable"}
@@ -225,7 +234,8 @@ function BundleCard({
 }
 
 export function BundleManagementPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
+  const isAdmin = role === "admin";
   const { confirm, dialog } = useConfirm();
   // The bundle list is a single read (bundles + orphaned in one payload) →
   // useAsyncResource (cancels on unmount, drops a stale response). Every
@@ -270,7 +280,8 @@ export function BundleManagementPage() {
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Turn optional feature bundles on or off — each claims a set of
         services shared with other bundles where needed. Browsing is open
-        for everyone; log in to enable, disable, or reconcile.
+        for everyone; enabling, disabling, or reconciling requires an admin
+        account.
       </p>
       <InfoCallout icon="ℹ️">
         Enabling/disabling only starts or stops containers that already
@@ -295,7 +306,14 @@ export function BundleManagementPage() {
 
       <button
         onClick={handleReconcile}
-        disabled={!token || reconciling}
+        disabled={!isAdmin || reconciling}
+        title={
+          !isAdmin
+            ? token
+              ? "Admin role required"
+              : "Log in as an admin to reconcile"
+            : undefined
+        }
         className={`${secondaryButtonClass} mb-4`}
       >
         {reconciling ? "Reconciling…" : "🔄 Reconcile"}
@@ -309,6 +327,7 @@ export function BundleManagementPage() {
           key={b.name}
           bundle={b}
           token={token}
+          isAdmin={isAdmin}
           onChanged={bundlesRes.reload}
           confirm={confirm}
         />

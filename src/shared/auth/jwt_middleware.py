@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Dict, Optional
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from jose import jwt
 
 # ============================================================================
@@ -146,6 +146,55 @@ async def get_current_user_or_service(request: Request) -> Dict:
             "role": "service",
         }
     return await get_current_user(request)
+
+
+# ============================================================================
+# Authorization (role checks)
+# ============================================================================
+#
+# #474: every write-protected endpoint previously checked only "is there a
+# valid JWT," never "does this JWT's role permit this action" -- `role` was
+# persisted, minted into every token, and displayed back to the user, but had
+# zero authorization effect anywhere. These two dependency FACTORIES add a
+# real enforcement point without touching the auth model itself: a JWT's
+# `role` claim already exists (set at registration -- always "user", #474 --
+# or via Authelia OIDC group membership for "admin").
+
+
+def require_role(*roles: str):
+    """FastAPI dependency factory: 401 if unauthenticated, 403 if the JWT's
+    ``role`` isn't one of ``roles``. Use in place of ``get_current_user`` on
+    routes that need real authorization, not just authentication.
+
+    Resolves the user via ``Depends(get_current_user)`` (a real nested FastAPI
+    dependency, not a plain function call) so ``app.dependency_overrides[
+    get_current_user]`` -- the pattern every existing test already uses --
+    keeps working unchanged for routes migrated to this."""
+
+    async def _dependency(user: Dict = Depends(get_current_user)) -> Dict:
+        if user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return user
+
+    return _dependency
+
+
+def require_role_or_service(*roles: str):
+    """Like ``require_role``, but also accepts the internal service token
+    unconditionally (matching ``get_current_user_or_service``'s existing
+    security model, #405) -- only the USER-JWT path is additionally
+    restricted to ``roles``. Use in place of ``get_current_user_or_service``
+    on internal-service-reachable routes that should also be admin-only for
+    real end users."""
+
+    async def _dependency(user: Dict = Depends(get_current_user_or_service)) -> Dict:
+        if user.get("role") == "service":
+            return user
+        if user.get("role") not in roles:
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return user
+
+    return _dependency
 
 
 # ============================================================================

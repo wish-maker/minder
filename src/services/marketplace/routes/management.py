@@ -4,7 +4,7 @@ from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.installation import InstallationResponse
 
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import get_current_user, require_role
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
@@ -212,8 +212,14 @@ async def get_plugin_installations(
     plugin_id: str = Depends(valid_plugin_id),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    current_user: dict = Depends(require_role("admin")),
 ):
-    """Get a plugin's installations (admin endpoint), paginated (#147/C6)."""
+    """Get a plugin's installations, paginated (#147/C6).
+
+    Admin-only (#474) -- this had NO authentication at all before: any caller
+    could list every user_id that installed a given plugin. The docstring
+    always called it "admin endpoint" but nothing enforced that.
+    """
     pool = await get_pool()
 
     async with pool.acquire() as conn:
