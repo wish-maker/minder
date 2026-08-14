@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { badgeTone, confidenceBadgeColor } from "./ui";
+import { badgeTone, confidenceBadgeColor, sectionLabelClass, statusClass } from "./ui";
 
 describe("confidenceBadgeColor", () => {
   it("maps high confidence (>= 0.8) to the success tone", () => {
@@ -26,5 +26,18 @@ describe("confidenceBadgeColor", () => {
       confidenceBadgeColor(0.1),
     ]);
     expect(tones.size).toBe(3);
+  });
+});
+
+describe("sectionLabelClass", () => {
+  it("does not use the gray-400/gray-500 pairing an axe-core audit found fails WCAG AA contrast (#509)", () => {
+    expect(sectionLabelClass).not.toContain("text-gray-400 dark:text-gray-500");
+    expect(sectionLabelClass).toContain("text-gray-500 dark:text-gray-400");
+  });
+});
+
+describe("statusClass", () => {
+  it("has a dark-mode-specific error color -- plain text-red-600 with no dark variant failed WCAG AA contrast in dark mode per an axe-core audit (#509)", () => {
+    expect(statusClass(true)).toContain("dark:text-red-400");
   });
 });

@@ -35,12 +35,12 @@ function ServiceRow({
         </code>
       )}
       {!service.image && (
-        <span className="text-gray-400 dark:text-gray-500" title="Built locally, no pulled image">
+        <span className="text-gray-500 dark:text-gray-400" title="Built locally, no pulled image">
           (custom build)
         </span>
       )}
       {others.length > 0 && (
-        <span className="text-gray-400 dark:text-gray-500">
+        <span className="text-gray-500 dark:text-gray-400">
           (also claimed by: {others.join(", ")} — disabling this bundle won't stop it)
         </span>
       )}

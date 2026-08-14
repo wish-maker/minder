@@ -1,5 +1,7 @@
 import { Link, NavLink } from "react-router-dom";
 
+import { sectionLabelClass } from "../lib/ui";
+
 interface NavItem {
   to: string;
   label: string;
@@ -100,7 +102,7 @@ export function Sidebar({
       <nav className="flex flex-col gap-5">
         {SECTIONS.map((section) => (
           <div key={section.label}>
-            <p className="mb-1.5 flex items-center gap-1.5 px-3 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            <p className={`mb-1.5 flex items-center gap-1.5 px-3 ${sectionLabelClass}`}>
               <span aria-hidden="true">{section.icon}</span> {section.label}
             </p>
             <div className="flex flex-col gap-0.5">

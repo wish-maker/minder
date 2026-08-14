@@ -47,7 +47,7 @@ function CatalogToolCard({ tool }: { tool: CatalogTool }) {
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
         {tool.description || "No description provided."}
       </p>
-      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {tool.method} {tool.endpoint}
       </p>
     </section>

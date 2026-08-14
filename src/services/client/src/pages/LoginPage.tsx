@@ -180,7 +180,7 @@ export function LoginPage() {
           >
             Sign in with SSO (Authelia)
           </a>
-          <p className="mt-2 text-center text-xs text-gray-400 dark:text-gray-500">
+          <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
             SSO requires reaching Minder through its Traefik hostname with a real
             domain + TLS.
           </p>

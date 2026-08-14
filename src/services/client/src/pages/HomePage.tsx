@@ -8,7 +8,7 @@ import { apiFetch, type Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { BundlesResponse } from "../lib/bundles";
 import { openWebUiUrl } from "../lib/links";
-import { cardClass } from "../lib/ui";
+import { cardClass, sectionLabelClass } from "../lib/ui";
 import { useAsyncResource } from "../lib/useAsyncResource";
 
 interface HomeStats {
@@ -133,7 +133,7 @@ const EXPLORE_LINKS: ExploreLink[] = [
 function ExploreSection() {
   return (
     <section className="mb-6">
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+      <h2 className={`mb-2 ${sectionLabelClass}`}>
         More to explore
       </h2>
       <div className="flex flex-wrap gap-2">
