@@ -212,3 +212,30 @@ def test_model_management_fine_tune_rejects_non_admin():
     client = _app_with_non_admin_user(router)
     resp = client.post("/v1/models/fine-tune", json={"model_id": "llama3.2:latest"})
     assert resp.status_code == 403
+
+
+# ── marketplace: DELETE .../tools deactivates a plugin's AI tools platform-wide,
+# for every user, not just the caller's own installation -- found reachable by
+# any plain authenticated user, with nothing internally even calling it (dead-
+# wired: not invoked from uninstall/disable anywhere in the codebase). Gated to
+# require_role_or_service("admin") to match the same posture already used for
+# other platform-wide destructive actions (model pull/delete, bundle disable).
+
+
+def test_marketplace_deactivate_plugin_tools_requires_auth():
+    # ai_tools.router already declares prefix="/v1/marketplace/ai" itself.
+    ai_tools = _fresh_import("marketplace", "routes.ai_tools")
+    client = _app_with_router(ai_tools.router)
+    resp = client.delete(
+        "/v1/marketplace/ai/plugins/11111111-1111-1111-1111-111111111111/tools"
+    )
+    assert resp.status_code == 401
+
+
+def test_marketplace_deactivate_plugin_tools_rejects_non_admin():
+    ai_tools = _fresh_import("marketplace", "routes.ai_tools")
+    client = _app_with_non_admin_user(ai_tools.router)
+    resp = client.delete(
+        "/v1/marketplace/ai/plugins/11111111-1111-1111-1111-111111111111/tools"
+    )
+    assert resp.status_code == 403

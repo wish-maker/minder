@@ -11,16 +11,27 @@ guarded by a test before this file.
 
 plugin-state-manager is a hyphenated service dir, so core.license is loaded by
 path, same isolated-import pattern as test_psm_state_transitions.py.
+
+core.license also does a bare `from config import settings` -- "config" is just
+as collision-prone across this shared pytest process as "core"/"models" (every
+service has its own config.py, all competing for the same bare module name),
+and unlike those it can't just be evicted-and-reimported generically: whichever
+service's directory happens to be first on sys.path at that moment wins, which
+may not be plugin-state-manager's own config.py (with CATALOG_HTTP_TIMEOUT).
+So this loads plugin-state-manager's own config.py fresh from its file and
+registers *that* under "config" for the duration of the fixture, instead of a
+bare `import config` left to ambient sys.path order.
 """
 
 import importlib
+import importlib.util
 import sys
 from pathlib import Path
 
 import pytest
 
 _PSM = Path(__file__).resolve().parents[2] / "src" / "services" / "plugin-state-manager"
-_COLLISION_PRONE = ("core", "core.license", "models", "models.plugin_state")
+_COLLISION_PRONE = ("core", "core.license", "models", "models.plugin_state", "config")
 
 
 @pytest.fixture
@@ -30,6 +41,10 @@ def license_mod():
     for k in _COLLISION_PRONE:
         sys.modules.pop(k, None)
     sys.path.insert(0, str(_PSM))
+    config_spec = importlib.util.spec_from_file_location("config", _PSM / "config.py")
+    config_mod = importlib.util.module_from_spec(config_spec)
+    sys.modules["config"] = config_mod
+    config_spec.loader.exec_module(config_mod)
     try:
         yield importlib.import_module("core.license")
     finally:

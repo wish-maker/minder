@@ -8,7 +8,10 @@ from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from shared.auth.jwt_middleware import get_current_user, get_current_user_or_service
+from shared.auth.jwt_middleware import (
+    get_current_user_or_service,
+    require_role_or_service,
+)
 from shared.errors import backend_http_error
 
 logger = logging.getLogger(__name__)
@@ -271,12 +274,16 @@ async def sync_ai_tools(
 @router.delete("/plugins/{plugin_id}/tools")
 async def deactivate_plugin_tools(
     plugin_id: str = Depends(valid_plugin_id),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_role_or_service("admin")),
 ):
     """
-    Deactivate all AI tools for a plugin
+    Deactivate all AI tools for a plugin, platform-wide, for every user.
 
-    Called when a plugin is disabled or uninstalled.
+    Called when a plugin is disabled or uninstalled. Admin/service-only (matches
+    the gate already used for other platform-wide destructive actions, e.g.
+    model pull/delete, bundle disable) -- this is not scoped to the caller's own
+    installation, so a plain authenticated user must not be able to kill a
+    popular plugin's tool availability for everyone.
     """
     from core.ai_tools_importer import deactivate_plugin_ai_tools
 
