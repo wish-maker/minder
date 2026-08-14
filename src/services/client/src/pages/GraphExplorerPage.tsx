@@ -220,8 +220,9 @@ function ExtractAndBuildCard({
       setStatus("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function handleBuild() {
@@ -255,8 +256,9 @@ function ExtractAndBuildCard({
       setStatus("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
@@ -379,8 +381,9 @@ function ExploreCard({ token }: { token: string }) {
       setStatus("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function handleEntityLookup() {
@@ -401,8 +404,9 @@ function ExploreCard({ token }: { token: string }) {
       setStatus("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
@@ -560,8 +564,9 @@ function DeleteDocumentCard({
       setDocumentId("");
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   return (
