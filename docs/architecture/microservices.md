@@ -67,7 +67,7 @@ Authelia portal. Full browser SSO still needs real DNS + TLS on the deploy.
 - `tefas_db`, `weather_db`, `news_db`, `crypto_db` — external data-source databases
 - `minder_schemaregistry` — isolated database backing the Apicurio schema registry
 
-#### Redis (`redis:8.8.0-alpine`)
+#### Redis (`redis:8.10.0-alpine`)
 **Purpose**: Caching, sessions, rate limiting, service-discovery records (internal port 6379)
 
 #### Qdrant (`qdrant/qdrant:v1.19`)
@@ -82,7 +82,7 @@ graph) and graph-rag (knowledge graph). The browser is routed via Traefik with a
 `tts-artifacts`, `fine-tuning-datasets`, `model-checkpoints`, `plugin-packages`,
 `backup-archives`. Console routed via Traefik.
 
-#### RabbitMQ (`rabbitmq:4.3.2-management`)
+#### RabbitMQ (`rabbitmq:4.3.4-management`)
 **Purpose**: Async message bus (internal 5672/15672). Management UI routed via Traefik with an
 IP whitelist.
 
@@ -92,13 +92,13 @@ PostgreSQL database.
 
 ### Inference
 
-#### Ollama (`ollama/ollama:0.32.1`)
+#### Ollama (`ollama/ollama:0.32.6`)
 **Purpose**: Local LLM inference (internal port 11434). Profile-gated `internal-ollama`: runs
 only when `OLLAMA_BASE_URL` is empty (local mode); when set, an external/native host is used and
 the container stays inactive. Models auto-pulled via `OLLAMA_PULL_MODELS` into the
 `/root/.ollama/models` volume.
 
-#### Ollama Router (`nginx:1.27-alpine`, mode-gated)
+#### Ollama Router (`nginx:1.31.3-alpine`, mode-gated)
 **Purpose**: Failover-mode-only reverse proxy (`minder-ollama-router`, internal port 11434,
 profile `ollama-router`) sitting in front of an external **primary** Ollama with the internal
 `minder-ollama` container as automatic backup. All services point `OLLAMA_BASE_URL` at it, so
@@ -205,17 +205,17 @@ schema). See `docs/api/reference.md` for the exact page-to-endpoint mapping.
 
 ### Monitoring
 
-#### Prometheus (`prom/prometheus:v3.13.1`, host 9090)
+#### Prometheus (`prom/prometheus:v3.13.2`, host 9090)
 Metrics storage and querying. Scrapes core services and the exporters below.
 
 #### Grafana (`grafana/grafana:13.1`, host 3000)
 Dashboards. Traefik route has an Authelia `forwardauth` middleware, and since Authelia is
 enabled that auth is enforced.
 
-#### InfluxDB (`influxdb:3.10.3-core`, host 8086)
+#### InfluxDB (`influxdb:3.11.0-core`, host 8086)
 Time-series storage (fed by Telegraf).
 
-#### Telegraf (`telegraf:1.39.1`, no host port)
+#### Telegraf (`telegraf:1.39.2`, no host port)
 Metrics collection agent.
 
 #### Alertmanager (`prom/alertmanager:v0.33.1`, host 9093)
@@ -226,7 +226,7 @@ Distributed tracing UI plus OTLP/thrift/zipkin ingest ports. The UI has no loopb
 port (#472) — unlike everything else on this page, the image ships with no authentication
 of its own, so it's reachable only via `jaeger.minder.local` (Traefik + Authelia).
 
-#### OpenTelemetry Collector (`otel/opentelemetry-collector:0.156.0`)
+#### OpenTelemetry Collector (`otel/opentelemetry-collector:0.158.0`)
 OTLP gRPC 14317 / HTTP 14318, metrics 18888. No healthcheck (image lacks the tooling).
 
 #### Exporters (internal, scraped by Prometheus)

@@ -411,4 +411,4 @@ docker stats minder-ollama
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-04

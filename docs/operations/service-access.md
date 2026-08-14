@@ -1,6 +1,6 @@
 # Service Access Guide - Minder Platform
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-14
 **Platform Version:** 1.0.0
 **Environment:** Development (Raspberry Pi 4)
 
@@ -184,4 +184,4 @@ healthcheck** by design, so they show as "no-healthcheck" (not "unhealthy").
 
 ---
 
-*Last Updated: 2026-07-10 · Development environment*
+*Last Updated: 2026-08-14 · Development environment*

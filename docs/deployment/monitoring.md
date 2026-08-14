@@ -17,20 +17,20 @@ not from other machines; everything else is internal-only. External access is vi
 
 | Component | Container | Image | Host Port | Role |
 |---|---|---|---|---|
-| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.1` | 9090 | Metrics collection + storage |
-| Grafana | `minder-grafana` | `grafana/grafana:13.1` | 3000 | Dashboards / visualization |
+| Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.2` | 9090 | Metrics collection + storage |
+| Grafana | `minder-grafana` | `grafana/grafana:13.1.3` | 3000 | Dashboards / visualization |
 | Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 | Alert routing |
 | Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | Traefik-only (no loopback UI port, #472) | Distributed tracing (all-in-one) |
-| OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.156.0` | 14317 / 14318 / 18888 | OpenTelemetry pipeline |
-| InfluxDB | `minder-influxdb` | `influxdb:3.10.3-core` | 8086 | Time-series data |
-| Telegraf | `minder-telegraf` | `telegraf:1.39.1` | — | Metrics collection agent |
+| OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.158.0` | 14317 / 14318 / 18888 | OpenTelemetry pipeline |
+| InfluxDB | `minder-influxdb` | `influxdb:3.11.0-core` | 8086 | Time-series data |
+| Telegraf | `minder-telegraf` | `telegraf:1.39.2` | — | Metrics collection agent |
 
 ### Exporters (all internal, scraped by Prometheus)
 
 | Exporter | Image | Internal Port |
 |---|---|---|
 | postgres-exporter | `v0.20.1` | 9187 |
-| redis-exporter | `v1.87.0` | 9121 |
+| redis-exporter | `v1.89.0` | 9121 |
 | rabbitmq-exporter | `v1.0.0-RC9` | 9090 (internal) |
 | node-exporter | `v1.12.1` | 9100 |
 | cadvisor | `gcr.io/cadvisor/cadvisor:v0.55.1` | 8080 |
@@ -325,4 +325,4 @@ docker logs minder-<service> --tail 100 -f
 
 ---
 
-**Last Updated:** 2026-08-08
+**Last Updated:** 2026-08-14

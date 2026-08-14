@@ -3,7 +3,7 @@
 **Version:** 2.0
 **Target:** Raspberry Pi 4 (RPi-4-01, ARM64)
 **Status:** Development environment — production hardening not yet applied
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-14
 
 ---
 
@@ -111,11 +111,11 @@ over the Docker network or via Traefik.
 
 ### Inference
 
-- `minder-ollama` — `ollama/ollama:0.32.1`, internal 11434 (not host-exposed). Profile
+- `minder-ollama` — `ollama/ollama:0.32.6`, internal 11434 (not host-exposed). Profile
   `internal-ollama`: runs only when `OLLAMA_BASE_URL` is empty (local mode). If
   `OLLAMA_BASE_URL` is set, inference is offloaded to an external/native host and the
   container is inactive. Switch with `bash setup.sh ollama-mode`.
-- `minder-openwebui` — `ghcr.io/open-webui/open-webui:v0.10.2`, internal 8080, reached via
+- `minder-openwebui` — `ghcr.io/open-webui/open-webui:v0.11.0`, internal 8080, reached via
   Traefik. **This is the chat UI.** Minder's own management frontend is a *separate*
   React/Vite SPA — the `minder-client` service (internal 8009, Traefik-routed at
   `client.minder.local`, forward-auth gated).
@@ -125,11 +125,11 @@ over the Docker network or via Traefik.
 | Service | Container | Image |
 |---|---|---|
 | PostgreSQL | `minder-postgres` | `postgres:18.4-trixie` |
-| Redis | `minder-redis` | `redis:8.8.0-alpine` |
+| Redis | `minder-redis` | `redis:8.10.0-alpine` |
 | Qdrant (vectors) | `minder-qdrant` | `qdrant/qdrant:v1.19` |
 | Neo4j (graph) | `minder-neo4j` | `neo4j:2026.06.0-community` |
 | MinIO (objects) | `minder-minio` | `minio/minio:RELEASE.2025-09-07T16-13-09Z` |
-| RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.2-management` |
+| RabbitMQ | `minder-rabbitmq` | `rabbitmq:4.3.4-management` |
 | Schema Registry | `minder-schema-registry` | `apicurio/apicurio-registry-sql:2.6.13.Final` |
 
 ### Observability
@@ -360,4 +360,4 @@ and a hardened one:
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-14

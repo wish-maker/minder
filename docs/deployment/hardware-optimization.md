@@ -137,7 +137,7 @@ environment:
 
 ### Redis
 
-Redis is `redis:8.8.0-alpine`. If memory pressure appears, cap it with `--maxmemory` and
+Redis is `redis:8.10.0-alpine`. If memory pressure appears, cap it with `--maxmemory` and
 an eviction policy in the service's `command:` (e.g. `--maxmemory 256mb
 --maxmemory-policy allkeys-lru`). Keep the cap well under the Pi's free RAM.
 
