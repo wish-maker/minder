@@ -168,6 +168,15 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_plugins_status ON marketplace_plugins
 CREATE INDEX IF NOT EXISTS idx_marketplace_plugins_pricing_model ON marketplace_plugins(pricing_model);
 CREATE INDEX IF NOT EXISTS idx_marketplace_licenses_user_id ON marketplace_licenses(user_id);
 CREATE INDEX IF NOT EXISTS idx_marketplace_licenses_plugin_id ON marketplace_licenses(plugin_id);
+-- At most one ACTIVE license per (user_id, plugin_id) -- a plain transaction around
+-- create_license()'s check-then-write only serializes against itself; under the
+-- default READ COMMITTED isolation, two concurrent activate calls can each pass the
+-- "no active license exists" check before either commits and both INSERT. This
+-- partial unique index makes the DB itself the source of truth, turning that race
+-- into a clean UniqueViolationError create_license() catches and recovers from,
+-- instead of two live "active" rows for the same user/plugin with different keys.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_marketplace_licenses_one_active_per_user_plugin
+    ON marketplace_licenses(user_id, plugin_id) WHERE active = TRUE;
 CREATE INDEX IF NOT EXISTS idx_marketplace_installations_user_id ON marketplace_installations(user_id);
 CREATE INDEX IF NOT EXISTS idx_marketplace_ai_tools_plugin_id ON marketplace_ai_tools(plugin_id);
 CREATE INDEX IF NOT EXISTS idx_marketplace_ai_tools_type ON marketplace_ai_tools(tool_type);

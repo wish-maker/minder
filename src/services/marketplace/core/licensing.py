@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
+import asyncpg
 from core.database import get_pool
 from core.security import LicenseGenerator
 
@@ -33,68 +34,81 @@ async def create_license(
             days=365
         )
 
-    async with pool.acquire() as conn:
-        # Check if active license exists
-        existing = await conn.fetchrow(
-            """
-            SELECT * FROM marketplace_licenses
-            WHERE user_id = $1 AND plugin_id = $2 AND active = TRUE
-            """,
-            user_id,
-            plugin_id,
-        )
+    # Check-then-write, so each attempt must run in its own transaction: without
+    # one, two concurrent activate calls for the same user+plugin (a retrying
+    # client, a double-click) could each pass the "no active license" SELECT
+    # before either commits its INSERT. The partial unique index on
+    # (user_id, plugin_id) WHERE active (schema.sql) is what actually closes the
+    # race -- the loser's INSERT raises UniqueViolationError, caught below, and
+    # the retry takes the UPDATE branch against the winner's now-visible row.
+    for attempt in range(2):
+        try:
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    existing = await conn.fetchrow(
+                        """
+                        SELECT * FROM marketplace_licenses
+                        WHERE user_id = $1 AND plugin_id = $2 AND active = TRUE
+                        """,
+                        user_id,
+                        plugin_id,
+                    )
 
-        if existing:
-            # Update existing license
-            await conn.execute(
-                """
-                UPDATE marketplace_licenses
-                SET tier = $3, license_key = $4, valid_until = $5, updated_at = NOW()
-                WHERE id = $6
-                """,
-                tier,
-                license_key,
-                valid_until,
-                existing["id"],
-            )
+                    if existing:
+                        await conn.execute(
+                            """
+                            UPDATE marketplace_licenses
+                            SET tier = $3, license_key = $4, valid_until = $5, updated_at = NOW()
+                            WHERE id = $6
+                            """,
+                            tier,
+                            license_key,
+                            valid_until,
+                            existing["id"],
+                        )
 
-            return {
-                "id": str(existing["id"]),
-                "user_id": existing["user_id"],
-                "plugin_id": existing["plugin_id"],
-                "tier": tier,
-                "license_key": license_key,
-                "valid_from": existing["valid_from"],
-                "valid_until": valid_until,
-                "active": True,
-            }
+                        return {
+                            "id": str(existing["id"]),
+                            "user_id": existing["user_id"],
+                            "plugin_id": existing["plugin_id"],
+                            "tier": tier,
+                            "license_key": license_key,
+                            "valid_from": existing["valid_from"],
+                            "valid_until": valid_until,
+                            "active": True,
+                        }
 
-        # Create new license
-        row = await conn.fetchrow(
-            """
-            INSERT INTO marketplace_licenses (
-                user_id, plugin_id, tier, license_key, valid_until, active
-            )
-            VALUES ($1, $2, $3, $4, $5, TRUE)
-            RETURNING id, user_id, plugin_id, tier, license_key, valid_from, valid_until, created_at
-            """,
-            user_id,
-            plugin_id,
-            tier,
-            license_key,
-            valid_until,
-        )
+                    row = await conn.fetchrow(
+                        """
+                        INSERT INTO marketplace_licenses (
+                            user_id, plugin_id, tier, license_key, valid_until, active
+                        )
+                        VALUES ($1, $2, $3, $4, $5, TRUE)
+                        RETURNING id, user_id, plugin_id, tier, license_key, valid_from, valid_until, created_at
+                        """,
+                        user_id,
+                        plugin_id,
+                        tier,
+                        license_key,
+                        valid_until,
+                    )
 
-        return {
-            "id": str(row["id"]),
-            "user_id": row["user_id"],
-            "plugin_id": row["plugin_id"],
-            "tier": row["tier"],
-            "license_key": row["license_key"],
-            "valid_from": row["valid_from"],
-            "valid_until": row["valid_until"],
-            "active": True,
-        }
+                    return {
+                        "id": str(row["id"]),
+                        "user_id": row["user_id"],
+                        "plugin_id": row["plugin_id"],
+                        "tier": row["tier"],
+                        "license_key": row["license_key"],
+                        "valid_from": row["valid_from"],
+                        "valid_until": row["valid_until"],
+                        "active": True,
+                    }
+        except asyncpg.UniqueViolationError:
+            if attempt == 1:
+                raise
+            continue
+
+    raise AssertionError("unreachable")  # loop always returns or raises
 
 
 async def validate_license(license_key: str, plugin_id: str) -> Dict:
