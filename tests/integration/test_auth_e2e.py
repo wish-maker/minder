@@ -262,6 +262,48 @@ class TestAuthFlowE2E:
         assert response.status_code == 422, f"Expected 422, got {response.status_code}"
         assert "password" in response.text.lower()
 
+    async def test_7_refresh_preserves_role_and_email_claims(self, api_client):
+        """POST /v1/auth/refresh must carry `role`/`email` forward from the
+        presented token, not just `sub`/`username`.
+
+        Before this fix, refresh minted a new token with only sub/username/iat,
+        silently dropping role. Since every authorization check does
+        `user.get("role") not in roles` (shared/auth/jwt_middleware.py), a
+        missing role is None -- never in any allowed-roles list -- so an admin
+        who refreshes before expiry (the intended, routine use of this
+        endpoint) got quietly downgraded to 403 on every admin-only route
+        until they logged out and back in.
+        """
+        await api_client.post(
+            "/v1/auth/register",
+            json={
+                "username": "refreshuser",
+                "email": "refresh@example.com",
+                "password": "RefreshPass123!",
+            },
+        )
+        login = await api_client.post(
+            "/v1/auth/login",
+            json={"username": "refreshuser", "password": "RefreshPass123!"},
+        )
+        assert login.status_code == 200, login.text
+        original_token = login.json()["access_token"]
+
+        from core.auth import verify_jwt_token
+
+        original_payload = verify_jwt_token(original_token)
+
+        refreshed = await api_client.post(
+            "/v1/auth/refresh",
+            headers={"Authorization": f"Bearer {original_token}"},
+        )
+        assert refreshed.status_code == 200, refreshed.text
+        refreshed_payload = verify_jwt_token(refreshed.json()["access_token"])
+
+        assert refreshed_payload["role"] == original_payload["role"]
+        assert refreshed_payload["email"] == original_payload["email"]
+        assert refreshed_payload["username"] == original_payload["username"]
+
 
 @pytest.mark.e2e
 @pytest.mark.asyncio
@@ -326,10 +368,63 @@ class TestAuthProtectedEndpoints:
         assert exc.value.status_code == 401
 
 
+@pytest.mark.e2e
+@pytest.mark.asyncio
+class TestOidcAccountLinking:
+    """get_or_create_oidc_user's "link an existing local account" branch.
+
+    First-time SSO login for a username that already exists locally
+    (authelia_subject IS NULL) must pick up the caller's current Authelia
+    group membership immediately, not only on a later login. Before this
+    fix, this branch linked authelia_subject but left `role` untouched, so a
+    user promoted to Authelia's admins group got a role="user" JWT for their
+    entire first SSO session -- only their *second* SSO login (hitting the
+    sibling "already linked" branch, which does sync role) picked it up.
+    """
+
+    async def test_first_time_link_picks_up_admin_group(self, clean_database):
+        from core.auth import create_user, get_or_create_oidc_user
+
+        local_user = await create_user(
+            username="localadmin",
+            email="localadmin@example.com",
+            password="LocalPass123!",
+        )
+        assert local_user["role"] == "user"
+
+        linked = await get_or_create_oidc_user(
+            authelia_subject="authelia-subject-localadmin",
+            username="localadmin",
+            email="localadmin@example.com",
+            groups=["admins"],
+        )
+
+        assert linked["role"] == "admin"
+
+    async def test_first_time_link_without_admin_group_stays_user(self, clean_database):
+        from core.auth import create_user, get_or_create_oidc_user
+
+        await create_user(
+            username="localuser",
+            email="localuser@example.com",
+            password="LocalPass123!",
+        )
+
+        linked = await get_or_create_oidc_user(
+            authelia_subject="authelia-subject-localuser",
+            username="localuser",
+            email="localuser@example.com",
+            groups=["everyone"],
+        )
+
+        assert linked["role"] == "user"
+
+
 # ============================================================================
 # Summary
 # ============================================================================
 
-# Total E2E tests: 9
-# TestAuthFlowE2E: 6 tests (register, login, duplicate checks, weak password)
+# Total E2E tests: 12
+# TestAuthFlowE2E: 7 tests (register, login, duplicate checks, weak password, refresh)
 # TestAuthProtectedEndpoints: 3 tests (token validation, expired, invalid)
+# TestOidcAccountLinking: 2 tests (first-time SSO link picks up current Authelia role)

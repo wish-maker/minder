@@ -232,6 +232,8 @@ async def refresh_token(request: Request):
         {
             "sub": payload.get("sub"),
             "username": payload.get("username"),
+            "email": payload.get("email"),
+            "role": payload.get("role"),
             "iat": datetime.now(timezone.utc),
         }
     )
