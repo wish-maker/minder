@@ -32,6 +32,11 @@ credentials/
 # template) with the real OIDC issuer key substituted in -- never committed.
 docker/services/authelia/configuration.rendered.yml
 
+# Generated from docker/services/authelia/users_database.yml (the tracked
+# template) with the real per-deployment admin password hash substituted in
+# (#473) -- never committed.
+docker/services/authelia/users_database.rendered.yml
+
 # Database Files
 *.db
 *.sqlite

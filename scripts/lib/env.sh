@@ -41,6 +41,11 @@ declare -A SECRET_SPEC=(
     # ($plaintext$ prefix) and api-gateway's token-exchange call.
     [AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET]=32
     [MINDER_OIDC_CLIENT_SECRET]=32
+    # Authelia `admin` account password, plaintext (#473) -- every clone of
+    # this repo used to ship the exact same hardcoded users_database.yml
+    # hash. _render_users_database() argon2id-hashes this value;
+    # _fill_env_secrets prints the plaintext once, the moment it's generated.
+    [MINDER_AUTHELIA_ADMIN_PASSWORD]=32
 )
 
 # prepare_env — self-healing environment provisioning. Runs on install/start/restart.
@@ -70,6 +75,7 @@ prepare_env() {
     _sync_compose_env               # mirror root .env → docker/.env (silent)
     _ensure_oidc_issuer_key         # generate Authelia's OIDC signing key once (silent)
     _render_authelia_config         # substitute it into configuration.rendered.yml (silent)
+    _render_users_database          # substitute admin password hash into users_database.rendered.yml (#473)
 }
 
 _ensure_oidc_issuer_key() {
@@ -170,6 +176,47 @@ _render_authelia_config() {
     ' "$src" > "$dst"
 }
 
+_hash_admin_password() {
+    # Argon2id-hash MINDER_AUTHELIA_ADMIN_PASSWORD via Authelia's own CLI --
+    # identical approach to _hash_oidc_client_secret (#473), same throwaway
+    # container, same reasoning: re-hashed fresh on every render since
+    # argon2's random salt makes each output different anyway, and hashing
+    # is cheap.
+    local secret; secret="$(_env_get MINDER_AUTHELIA_ADMIN_PASSWORD)"
+    [[ -z "$secret" ]] && return 0
+    local out
+    out="$(docker run --rm authelia/authelia:4.39.20 authelia crypto hash generate argon2 \
+        --password "$secret" --variant argon2id --memory 32768 --iterations 3 --parallelism 2 \
+        2>/dev/null)"
+    [[ "$out" == *": "* ]] && out="${out##*: }"
+    printf '%s' "$out"
+}
+
+_render_users_database() {
+    # Substitute the real admin password hash into Authelia's user database
+    # (#473). users_database.yml (git-tracked) holds a stable placeholder
+    # instead of a hash that's identical across every clone of this repo;
+    # this writes users_database.rendered.yml (gitignored) with the real
+    # per-deployment hash. Same self-heal-a-stray-directory handling as
+    # _render_authelia_config (Docker auto-creates a missing bind-mount
+    # SOURCE as a directory), and always writes a real file even when
+    # hashing fails (rendered = template, placeholder untouched) -- a
+    # missing rendered path here is exactly that same bug.
+    local src="${SCRIPT_DIR}/docker/services/authelia/users_database.yml"
+    local dst="${SCRIPT_DIR}/docker/services/authelia/users_database.rendered.yml"
+    [[ -f "$src" ]] || return 0
+    [[ -d "$dst" ]] && rm -rf "$dst"
+    local password_hash
+    password_hash="$(_hash_admin_password)"
+    if [[ -n "$password_hash" ]]; then
+        awk -v hash="$password_hash" '
+            { gsub(/__MINDER_AUTHELIA_ADMIN_PASSWORD_HASH__/, hash); print }
+        ' "$src" > "$dst"
+    else
+        cp "$src" "$dst"
+    fi
+}
+
 _ensure_docker_gid() {
     # Record the host 'docker' group gid in .env as DOCKER_GID (#11) so compose's
     # `group_add: ${DOCKER_GID:-0}` actually grants telegraf/plugin-registry read
@@ -235,6 +282,7 @@ AUTHELIA_SESSION_SECRET=$(gen_secret 32)
 AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=$(gen_secret 32)
 AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=$(gen_secret 32)
 MINDER_OIDC_CLIENT_SECRET=$(gen_secret 32)
+MINDER_AUTHELIA_ADMIN_PASSWORD=$(gen_secret 32)
 
 # ── Grafana ──────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin
@@ -343,6 +391,16 @@ _fill_env_secrets() {
             printf '%s=%s\n' "$key" "$new_secret" >> "$ENV_FILE"
         fi
         log_detail "✓ Generated secret for ${key}"
+        if [[ "$key" == "MINDER_AUTHELIA_ADMIN_PASSWORD" ]]; then
+            # The one secret a human actually has to type back in -- print it
+            # once, now, since it's never shown again. log_detail (unlike
+            # warn/success/error) never appends to the on-disk log file, so
+            # the plaintext itself never gets persisted anywhere but .env (#473).
+            section "🔑 Authelia Admin Password (generated)"
+            log_warn "Record this now -- it will not be shown again."
+            log_detail "Username: admin"
+            log_detail "Password: ${new_secret}"
+        fi
     done
 
     log_success "${#to_fill[@]} secret(s) generated/healed in .env"

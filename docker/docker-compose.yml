@@ -130,7 +130,12 @@ services:
     # gitignored, generated file on every run (see configuration.yml's
     # identity_providers.oidc.jwks comment for why).
     - ./services/authelia/configuration.rendered.yml:/config/configuration.yml:ro
-    - ./services/authelia/users_database.yml:/config/users_database.yml:ro
+    # users_database.rendered.yml, NOT users_database.yml: same substitution
+    # pattern as configuration.rendered.yml above -- the tracked source holds
+    # a placeholder for the admin password hash; scripts/setup/env.py's
+    # render_users_database() substitutes a fresh per-deployment hash into
+    # this gitignored, generated file on every run (#473).
+    - ./services/authelia/users_database.rendered.yml:/config/users_database.yml:ro
     # OIDC token-signing key, generated once by scripts/setup/env.py's
     # ensure_oidc_issuer_key() -- gitignored, never committed (docker/services/
     # authelia/secrets/ matches the repo's existing bare `secrets/` .gitignore rule).

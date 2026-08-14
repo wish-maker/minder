@@ -50,6 +50,12 @@ SECRET_SPEC = {
     # other's exact representation.
     "AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET": "32",
     "MINDER_OIDC_CLIENT_SECRET": "32",
+    # Authelia `admin` account password, plaintext (#473) -- every clone of this
+    # repo used to ship the exact same hardcoded users_database.yml hash.
+    # render_users_database() argon2id-hashes this value into
+    # users_database.rendered.yml; fill_env_secrets() below prints the
+    # plaintext once, the moment it's freshly generated.
+    "MINDER_AUTHELIA_ADMIN_PASSWORD": "32",
 }
 
 # Values matching this (case-sensitive substring) are treated as unset placeholders.
@@ -318,6 +324,87 @@ def render_authelia_config() -> None:
         log.warn(f"Could not write rendered Authelia config: {e}")
 
 
+_USERS_DB_SRC = _OIDC_ISSUER_KEY.parents[1] / "users_database.yml"
+_USERS_DB_RENDERED = _OIDC_ISSUER_KEY.parents[1] / "users_database.rendered.yml"
+_ADMIN_PASSWORD_PLACEHOLDER = "__MINDER_AUTHELIA_ADMIN_PASSWORD_HASH__"
+
+
+def _hash_admin_password() -> str:
+    """Argon2id-hash MINDER_AUTHELIA_ADMIN_PASSWORD via Authelia's own CLI --
+    identical approach to _hash_oidc_client_secret() (#473), same throwaway
+    container, same reasoning: re-hashed fresh on every render since argon2's
+    random salt makes each output different anyway, and hashing is cheap."""
+    secret = get("MINDER_AUTHELIA_ADMIN_PASSWORD")
+    if not secret:
+        return ""
+    try:
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                _AUTHELIA_IMAGE,
+                "authelia",
+                "crypto",
+                "hash",
+                "generate",
+                "argon2",
+                "--password",
+                secret,
+                "--variant",
+                "argon2id",
+                "--memory",
+                "32768",
+                "--iterations",
+                "3",
+                "--parallelism",
+                "2",
+            ],
+            check=True,
+            capture_output=True,
+            timeout=60,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        log.warn(f"Could not hash Authelia admin password: {e}")
+        return ""
+    line = result.stdout.strip()
+    return line.split(": ", 1)[-1].strip() if ": " in line else line
+
+
+def render_users_database() -> None:
+    """Substitute the real admin password hash into Authelia's user database
+    (#473). users_database.yml (git-tracked) holds a stable placeholder
+    instead of a hash that's identical across every clone of this repo; this
+    writes users_database.rendered.yml (gitignored) with the real
+    per-deployment hash. Same self-heal-a-stray-directory handling as
+    render_authelia_config() (Docker auto-creates a missing bind-mount SOURCE
+    as a directory) and the same reasoning for running on every prepare_env()
+    call rather than caching."""
+    try:
+        template = _USERS_DB_SRC.read_text(encoding="utf-8")
+    except OSError as e:
+        log.warn(f"Could not render Authelia users database: {e}")
+        return
+    # users_database.yml already wraps the placeholder in double quotes, so
+    # (unlike render_authelia_config()'s secret-hash substitution) no
+    # additional quoting is needed here. Written even when hashing fails
+    # (rendered = template, placeholder untouched) -- MUST always write a
+    # real file, never skip it: a missing rendered path here is exactly the
+    # Docker auto-creates-a-missing-bind-mount-as-a-directory bug already
+    # fixed for configuration.rendered.yml.
+    password_hash = _hash_admin_password()
+    rendered = template
+    if password_hash:
+        rendered = rendered.replace(_ADMIN_PASSWORD_PLACEHOLDER, password_hash)
+    try:
+        if _USERS_DB_RENDERED.is_dir():
+            shutil.rmtree(_USERS_DB_RENDERED)
+        _USERS_DB_RENDERED.write_text(rendered, encoding="utf-8")
+    except OSError as e:
+        log.warn(f"Could not write rendered Authelia users database: {e}")
+
+
 def _chmod_600(path: Path) -> None:
     try:
         path.chmod(0o600)
@@ -428,6 +515,17 @@ def fill_env_secrets() -> None:
             else:
                 raw += f"{key}={new_secret}\n"  # bash printf … >> .env (no separator)
             log.detail(f"✓ Generated secret for {key}")
+            if key == "MINDER_AUTHELIA_ADMIN_PASSWORD":
+                # The one secret a human actually has to type back in (every
+                # other SECRET_SPEC value is only ever read programmatically
+                # by a service) -- print it once, now, since it's never shown
+                # again. log.detail() (unlike warn/success/error) never
+                # appends to the on-disk log file, so the plaintext itself
+                # never gets persisted anywhere but .env (#473).
+                log.section("🔑 Authelia Admin Password (generated)")
+                log.warn("Record this now -- it will not be shown again.")
+                log.detail("Username: admin")
+                log.detail(f"Password: {new_secret}")
 
         with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
             fh.write(raw)
@@ -480,6 +578,7 @@ AUTHELIA_SESSION_SECRET=<GEN:32>
 AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=<GEN:32>
 AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET=<GEN:32>
 MINDER_OIDC_CLIENT_SECRET=<GEN:32>
+MINDER_AUTHELIA_ADMIN_PASSWORD=<GEN:32>
 
 # ── Grafana ──────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin
@@ -583,3 +682,4 @@ def prepare_env() -> None:
     ensure_bundles_state_file()
     ensure_oidc_issuer_key()
     render_authelia_config()
+    render_users_database()

@@ -58,11 +58,13 @@ placeholders above. Only set your own value if you specifically want a memorable
 one instead of a generated one — anything you put in `.env` wins over the
 auto-generated default.
 
-Separately, **Authelia's `admin` user password is NOT covered by this self-heal** —
-it's a fixed hash in the tracked `docker/services/authelia/users_database.yml`,
-identical across every clone of this repo. See
-`docs/guides/authentication.md#rotating-the-admin-password` to change it — do this
-before exposing the instance to any network beyond your own machine.
+Authelia's `admin` user password **is** covered by this self-heal too (#473):
+`MINDER_AUTHELIA_ADMIN_PASSWORD` follows the same `CHANGEME_*`/missing-secret
+pattern as everything else above, generated fresh per deployment and
+argon2id-hashed into `docker/services/authelia/users_database.rendered.yml`
+(gitignored — the tracked `users_database.yml` is a placeholder template).
+The plaintext is printed to the terminal once, when first generated — see
+`docs/guides/authentication.md#the-admin-password` to record or rotate it.
 
 **Risk Level:** CRITICAL
 - Default credentials allow unauthorized access
