@@ -80,6 +80,7 @@ def test_disabled_bundle_orphans_its_exclusive_service(tmp_path):
         "name": "tts-stt",
         "active": False,
         "claimants": [],
+        "image": None,  # fixture compose has no image: line for any service
     }
     assert body["orphaned"] == ["tts-stt"]
     # ollama stays active — still claimed by inference/rag/chat
@@ -107,3 +108,35 @@ def test_core_reported_as_core(tmp_path):
     core = next(b for b in body["bundles"] if b["name"] == "core")
     assert core["core"] is True
     assert core["enabled"] is True
+
+
+def test_service_image_included_when_pinned(tmp_path):
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        """\
+services:
+  ollama:
+    image: ollama/ollama:0.32.6
+    labels:
+    - minder.bundle=inference
+  custom-built:
+    labels:
+    - minder.bundle=inference
+  traefik:
+    labels: [minder.bundle=core]
+""",
+        encoding="utf-8",
+    )
+    settings = SimpleNamespace(
+        BUNDLES_COMPOSE_PATH=str(compose),
+        BUNDLES_STATE_PATH=str(tmp_path / "bundles.state.json"),
+    )
+    app = FastAPI()
+    app.include_router(
+        _load_route_module().build_bundles_router(settings=settings, logger=None)
+    )
+    body = TestClient(app).get("/v1/bundles").json()
+    services = {s["name"]: s for b in body["bundles"] for s in b["services"]}
+    assert services["ollama"]["image"] == "ollama/ollama:0.32.6"
+    # a locally-built service with no image: key reports None, not an error
+    assert services["custom-built"]["image"] is None

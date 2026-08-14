@@ -11,6 +11,7 @@ from shared.bundle_graph import (
     claims_from_plugin_manifests,
     parse_bundle_labels,
     parse_plugin_manifest,
+    parse_service_images,
     parse_state,
 )
 
@@ -45,6 +46,32 @@ def test_parse_bundle_labels_multi_and_sections():
     assert m["core"] == ("core-svc",)
     # a minder.bundle in the volumes: section must NOT leak into the map
     assert "should-be-ignored-outside-services" not in m
+
+
+def test_parse_service_images_extracts_tagged_images():
+    m = parse_service_images(_COMPOSE)
+    assert m["ollama"] == "ollama/ollama"
+    # qdrant/grafana/core-svc have no image: line in the fixture -- absent, not
+    # an error (e.g. a locally-built service has no pulled image to report).
+    assert "qdrant" not in m
+    assert "grafana" not in m
+    assert "core-svc" not in m
+
+
+def test_parse_service_images_keeps_the_full_repo_name_and_tag():
+    compose = """\
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    labels:
+    - minder.bundle=monitoring
+volumes:
+  data:
+    image: should-be-ignored-outside-services:1.0.0
+"""
+    m = parse_service_images(compose)
+    assert m["jaeger"] == "jaegertracing/all-in-one:1.76.0"
+    assert "should-be-ignored-outside-services" not in m.values()
 
 
 def test_parse_state_tolerates_corruption():

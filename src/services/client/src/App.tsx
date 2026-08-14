@@ -5,12 +5,14 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
 import { UserMenu } from "./components/UserMenu";
 import { AuthProvider } from "./lib/auth";
-import { AiToolsPage } from "./pages/AiToolsPage";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
+import { AvailableBundlesPage } from "./pages/AvailableBundlesPage";
 import { AvailablePluginsPage } from "./pages/AvailablePluginsPage";
-import { BundleManagementPage } from "./pages/BundleManagementPage";
+import { AvailableToolsPage } from "./pages/AvailableToolsPage";
 import { GraphExplorerPage } from "./pages/GraphExplorerPage";
+import { InstalledBundlesPage } from "./pages/InstalledBundlesPage";
 import { InstalledPluginsPage } from "./pages/InstalledPluginsPage";
+import { InstalledToolsPage } from "./pages/InstalledToolsPage";
 import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -66,37 +68,43 @@ export function App() {
                 <Route path="/rag/pipelines" element={<RagPipelinesPage />} />
                 <Route path="/rag/graph" element={<GraphExplorerPage />} />
 
-                {/* Plugins and Bundles are both "things you turn on for this
-                  installation" -- grouping them under one Marketplace
-                  section (sidebar-level now, not a page-level tab) keeps
-                  that relationship visible instead of accidental. */}
                 <Route
-                  path="/marketplace"
-                  element={
-                    <Navigate to="/marketplace/plugins/available" replace />
-                  }
+                  path="/plugins"
+                  element={<Navigate to="/plugins/available" replace />}
                 />
                 <Route
-                  path="/marketplace/plugins"
-                  element={
-                    <Navigate to="/marketplace/plugins/available" replace />
-                  }
-                />
-                <Route
-                  path="/marketplace/plugins/available"
+                  path="/plugins/available"
                   element={<AvailablePluginsPage />}
                 />
                 <Route
-                  path="/marketplace/plugins/installed"
+                  path="/plugins/installed"
                   element={<InstalledPluginsPage />}
                 />
+
                 <Route
-                  path="/marketplace/plugins/ai-tools"
-                  element={<AiToolsPage />}
+                  path="/ai-tools"
+                  element={<Navigate to="/ai-tools/available" replace />}
                 />
                 <Route
-                  path="/marketplace/bundles"
-                  element={<BundleManagementPage />}
+                  path="/ai-tools/available"
+                  element={<AvailableToolsPage />}
+                />
+                <Route
+                  path="/ai-tools/installed"
+                  element={<InstalledToolsPage />}
+                />
+
+                <Route
+                  path="/bundles"
+                  element={<Navigate to="/bundles/available" replace />}
+                />
+                <Route
+                  path="/bundles/available"
+                  element={<AvailableBundlesPage />}
+                />
+                <Route
+                  path="/bundles/installed"
+                  element={<InstalledBundlesPage />}
                 />
 
                 <Route path="/platform" element={<ModelManagementPage />} />
@@ -115,32 +123,44 @@ export function App() {
                   element={<Navigate to="/rag/pipelines" replace />}
                 />
                 <Route
-                  path="/plugins"
-                  element={
-                    <Navigate to="/marketplace/plugins/available" replace />
-                  }
-                />
-                <Route
-                  path="/plugins/config"
-                  element={
-                    <Navigate to="/marketplace/plugins/installed" replace />
-                  }
-                />
-                <Route
-                  path="/plugins/ai-tools"
-                  element={
-                    <Navigate to="/marketplace/plugins/ai-tools" replace />
-                  }
-                />
-                <Route
                   path="/plugin-config"
-                  element={
-                    <Navigate to="/marketplace/plugins/installed" replace />
-                  }
+                  element={<Navigate to="/plugins/installed" replace />}
+                />
+                <Route
+                  path="/marketplace"
+                  element={<Navigate to="/plugins/available" replace />}
+                />
+                <Route
+                  path="/marketplace/plugins"
+                  element={<Navigate to="/plugins/available" replace />}
+                />
+                <Route
+                  path="/marketplace/plugins/available"
+                  element={<Navigate to="/plugins/available" replace />}
+                />
+                <Route
+                  path="/marketplace/plugins/installed"
+                  element={<Navigate to="/plugins/installed" replace />}
+                />
+                <Route
+                  path="/marketplace/plugins/ai-tools"
+                  element={<Navigate to="/ai-tools/available" replace />}
+                />
+                <Route
+                  path="/marketplace/bundles"
+                  element={<Navigate to="/bundles/available" replace />}
                 />
                 <Route
                   path="/platform/bundles"
-                  element={<Navigate to="/marketplace/bundles" replace />}
+                  element={<Navigate to="/bundles/available" replace />}
+                />
+                <Route
+                  path="/plugins/ai-tools"
+                  element={<Navigate to="/ai-tools/available" replace />}
+                />
+                <Route
+                  path="/plugins/config"
+                  element={<Navigate to="/plugins/installed" replace />}
                 />
 
                 {/* Unmatched paths (including the removed /model-management, still

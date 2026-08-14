@@ -24,17 +24,27 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
-    icon: "🛒",
-    label: "Marketplace",
+    icon: "🧩",
+    label: "Plugins",
     items: [
-      { to: "/marketplace/plugins/available", label: "Available Plugins" },
-      { to: "/marketplace/plugins/installed", label: "Installed Plugins" },
-      { to: "/marketplace/plugins/ai-tools", label: "AI Tools" },
-      {
-        to: "/marketplace/bundles",
-        label: "Bundle Management",
-        dividerBefore: true,
-      },
+      { to: "/plugins/available", label: "Available Plugins" },
+      { to: "/plugins/installed", label: "Installed Plugins" },
+    ],
+  },
+  {
+    icon: "🧰",
+    label: "AI Tools",
+    items: [
+      { to: "/ai-tools/available", label: "Available Tools" },
+      { to: "/ai-tools/installed", label: "Installed Tools" },
+    ],
+  },
+  {
+    icon: "📦",
+    label: "Bundles",
+    items: [
+      { to: "/bundles/available", label: "Available Bundles" },
+      { to: "/bundles/installed", label: "Installed Bundles" },
     ],
   },
   {
@@ -55,15 +65,18 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
   }`;
 
-/** The platform's persistent nav (#<issue>) -- replaced the old flat
- * top-nav-plus-horizontal-tabs structure (4 links, each opening a second
- * row of tabs) with a single, always-visible tree, following the
- * instrument-panel convention of infra tools like Grafana rather than a
+/** The platform's persistent nav -- a single, always-visible tree, following
+ * the instrument-panel convention of infra tools like Grafana rather than a
  * chat app's sidebar (OpenWebUI's own layout is chat-history-first, which
- * isn't what Minder's content actually is). Section labels ("RAG",
- * "Marketplace", "Platform") are deliberately not links -- there is no
- * single destination "RAG" itself would mean beyond its first child, so
- * making it clickable would just be a confusing synonym for that child. */
+ * isn't what Minder's content actually is). Section labels are deliberately
+ * not links -- there is no single destination "RAG" itself would mean beyond
+ * its first child, so making it clickable would just be a confusing synonym
+ * for that child.
+ *
+ * Plugins / AI Tools / Bundles were previously flattened into one
+ * "Marketplace" section; split into their own top-level sections since each
+ * has grown its own real Available/Installed distinction rather than being
+ * one flat "things you turn on" list. */
 export function Sidebar({
   open,
   onNavigate,

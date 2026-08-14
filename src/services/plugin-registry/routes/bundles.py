@@ -28,6 +28,7 @@ from shared.bundle_graph import (
     ClaimGraph,
     claims_from_plugin_manifests,
     parse_bundle_labels,
+    parse_service_images,
     parse_state,
 )
 
@@ -150,11 +151,28 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
         if name not in claims:
             raise HTTPException(status_code=404, detail=f"unknown bundle: {name!r}")
 
+    def _load_images() -> dict:
+        """{service: image} for the read-only list endpoint's UI hint -- kept
+        separate from _load() (used by every mutating endpoint too) so a bad/
+        unreadable compose file here can't affect enable/disable/reconcile,
+        and so those endpoints don't pay for parsing image tags they never use."""
+        try:
+            compose_text = Path(settings.BUNDLES_COMPOSE_PATH).read_text(
+                encoding="utf-8"
+            )
+        except OSError:
+            return {}
+        return parse_service_images(compose_text)
+
     @router.get("/v1/bundles")
     async def list_bundles():
         """List every bundle with its enabled state, claimed services, and per-service
-        active/orphaned status. Read-only (#65 item 2)."""
+        active/orphaned status. Read-only (#65 item 2). Each service's Docker image
+        (repo/name:tag, statically pinned in the compose file -- no docker-socket-
+        proxy round trip needed) is included when known, ``None`` for a locally-built
+        service with no ``image:`` key."""
         claims, state = _load()
+        images = _load_images()
         graph = ClaimGraph(claims, state, CORE_BUNDLE)
         enabled = graph.enabled_bundles()
         bundles = [
@@ -168,6 +186,7 @@ def build_bundles_router(*, settings, logger, container_ops=None) -> APIRouter:
                         "name": svc,
                         "active": graph.service_active(svc),
                         "claimants": sorted(graph.claimants(svc, enabled)),
+                        "image": images.get(svc),
                     }
                     for svc in svcs
                 ],

@@ -24,6 +24,7 @@ import re
 _TOPLEVEL_RE = re.compile(r"^[A-Za-z0-9_-]+:\s*(#.*)?$")  # 0-indent section key
 _SERVICE_RE = re.compile(r"^  ([A-Za-z0-9._-]+):\s*(#.*)?$")  # 2-indent service key
 _BUNDLE_LABEL_RE = re.compile(r"minder\.bundle=([A-Za-z0-9,_-]+)")
+_IMAGE_RE = re.compile(r"^    image:\s*(\S+)\s*(#.*)?$")  # 4-indent image: key
 
 CORE_BUNDLE = "core"
 
@@ -155,6 +156,38 @@ def parse_bundle_labels(compose_text: str) -> dict[str, tuple[str, ...]]:
                 if current not in svcs:
                     svcs.append(current)
     return {bundle: tuple(svcs) for bundle, svcs in claims.items()}
+
+
+def parse_service_images(compose_text: str) -> dict[str, str]:
+    """Build ``{service: image}`` (the full ``repo/name:tag``, untouched) from a
+    compose file's per-service ``image:`` key -- lets bundle UIs show operators
+    which Docker image version each claimed service actually runs, without any
+    new docker-socket-proxy capability (the versions are static, pinned in this
+    same file already being read for ``minder.bundle=`` labels).
+
+    Same line-scan convention and section-tracking as ``parse_bundle_labels``. A
+    service with no ``image:`` key (e.g. one built from a local ``build:`` block
+    instead of a pulled image) is simply absent from the result -- callers should
+    treat a missing entry as "custom build", not an error.
+    """
+    images: dict[str, str] = {}
+    in_services = False
+    current: str | None = None
+    for line in compose_text.splitlines():
+        if _TOPLEVEL_RE.match(line):
+            in_services = line.split(":", 1)[0] == "services"
+            current = None
+            continue
+        if not in_services:
+            continue
+        svc = _SERVICE_RE.match(line)
+        if svc:
+            current = svc.group(1)
+            continue
+        m = _IMAGE_RE.match(line)
+        if current and m:
+            images[current] = m.group(1)
+    return images
 
 
 # ── Enable-state parsing ─────────────────────────────────────────────────────────
