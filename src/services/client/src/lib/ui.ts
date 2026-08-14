@@ -62,4 +62,13 @@ export function confidenceBadgeColor(confidence: number): string {
 }
 
 export const statusClass = (isError: boolean) =>
-  `mb-4 min-h-5 text-sm ${isError ? "text-red-600" : "text-gray-500 dark:text-gray-400"}`;
+  `mb-4 min-h-5 text-sm ${isError ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`;
+
+/** Small uppercase section-header label (Sidebar's nav group headings,
+ * HomePage's "More to explore"). Was `text-gray-400 dark:text-gray-500` at
+ * both sites -- an axe-core audit (#509) found that pairing fails WCAG AA
+ * color-contrast in both themes; swapped to the same gray-500/gray-400
+ * pairing already used everywhere else for muted text (mutedTextClass,
+ * fieldHintClass, statusClass), which does pass. */
+export const sectionLabelClass =
+  "text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400";

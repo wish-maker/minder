@@ -147,7 +147,7 @@ function LiveToolCard({ tool, token }: { tool: LiveTool; token: string }) {
       <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
         {tool.function.description || "No description provided."}
       </p>
-      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {tool.metadata.method} {tool.metadata.endpoint}
       </p>
       <TryItPanel tool={tool} token={token} />
