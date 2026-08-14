@@ -12,9 +12,36 @@ from core.clients import SERVICE_REGISTRY, http_client
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 
+from config import settings
+
 logger = logging.getLogger("minder.api-gateway")
 
 router = APIRouter()
+
+_MAX_PROXY_BODY_BYTES = settings.MAX_PROXY_BODY_SIZE_MB * 1024 * 1024
+
+
+async def _read_body_capped(request: Request, max_bytes: int) -> bytes:
+    """Read the request body without ever buffering more than max_bytes+1.
+
+    Reading via request.body() has no size limit, so a large upload gets
+    fully materialized in memory before we can reject it -- this reads via
+    request.stream() instead and bails the moment the cap is exceeded,
+    bounding worst-case memory regardless of what (or whether) the client's
+    Content-Length header claims.
+    """
+    chunks = []
+    total = 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Request body exceeds the {settings.MAX_PROXY_BODY_SIZE_MB}MB proxy limit",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
 
 # Downstream response headers that must NOT be copied onto our re-serialized
 # JSONResponse. We rebuild the body from response.json(), so the downstream's
@@ -53,8 +80,8 @@ async def proxy_request(service_url: str, path: str, request: Request):
     else:
         target_url = service_url
 
-    # Get request body
-    body = await request.body()
+    # Get request body (capped -- see _read_body_capped)
+    body = await _read_body_capped(request, _MAX_PROXY_BODY_BYTES)
 
     # Build headers (excluding hop-by-hop headers)
     headers = dict(request.headers)

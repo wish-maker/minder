@@ -95,15 +95,23 @@ class _FakeRequest:
     body()/headers/client.host/state.request_id/method/query_params, so a real
     ASGI Request isn't needed."""
 
-    def __init__(self, method="GET"):
+    def __init__(self, method="GET", body=b""):
         self.method = method
         self.headers = {"authorization": "Bearer x"}
         self.client = SimpleNamespace(host="127.0.0.1")
         self.state = SimpleNamespace(request_id="test-req-id")
         self.query_params = {}
+        self._body = body
 
     async def body(self):
-        return b""
+        return self._body
+
+    async def stream(self):
+        # A single chunk is enough for these tests; real ASGI streams split
+        # large bodies across many, but _read_body_capped only cares about
+        # the running total, not chunk boundaries.
+        if self._body:
+            yield self._body
 
 
 class _FakeHTTPClient:
@@ -138,6 +146,28 @@ def test_binary_response_passes_through_raw(proxy_mod):
     # (999, for the un-transformed body) -- Starlette computes its own from
     # the actual bytes when the Response is rendered.
     assert result.headers.get("content-length") != "999"
+
+
+def test_read_body_capped_passes_body_within_limit(proxy_mod):
+    body = asyncio.run(
+        proxy_mod._read_body_capped(_FakeRequest(body=b"hello"), max_bytes=10)
+    )
+    assert body == b"hello"
+
+
+def test_read_body_capped_rejects_body_over_limit(proxy_mod):
+    """The gateway must reject an oversized upload with 413 *before* the full
+    body is ever fully buffered -- an unbounded `request.body()` call would
+    exhaust gateway memory on a large/malicious upload regardless of what any
+    downstream service's own size limit enforces (that check only runs after
+    the gateway already buffered everything)."""
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            proxy_mod._read_body_capped(_FakeRequest(body=b"x" * 11), max_bytes=10)
+        )
+    assert exc.value.status_code == 413
 
 
 def test_json_response_still_decoded_and_rewrapped(proxy_mod):

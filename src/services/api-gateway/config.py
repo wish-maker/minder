@@ -55,6 +55,17 @@ class Settings(MinderBaseSettings):
     MINDER_OIDC_REDIRECT_URI: str = "https://api.minder.local/v1/auth/oidc/callback"
     MINDER_CLIENT_BASE_URL: str = "https://client.minder.local"
 
+    # Proxy request body cap (routes/proxy.py's proxy_request) -- every write
+    # to a proxied service (rag-pipeline ingestion, tts-stt audio, model pulls,
+    # ...) is fully buffered into memory here before the request even reaches
+    # the downstream service's own limit (e.g. rag-pipeline's own 50MB
+    # MAX_UPLOAD_SIZE_MB only runs *after* the gateway already buffered the
+    # whole thing). Without a cap here, a large/malicious upload can exhaust
+    # gateway memory regardless of what any downstream service enforces. Set
+    # above every real downstream limit (marketplace's own MAX_UPLOAD_SIZE_MB
+    # is the largest at 100MB) so legitimate traffic is never rejected here.
+    MAX_PROXY_BODY_SIZE_MB: int = 150
+
 
 # Global settings instance
 settings = Settings()
