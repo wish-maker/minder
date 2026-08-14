@@ -48,12 +48,20 @@ class KnowledgeGraphConstructor:
         """
         async with self.driver.session() as session:
             try:
+                # ON MATCH SET matters -- re-POSTing the same document_id (the
+                # route docstring calls this an "upsert") used to only ever hit
+                # ON CREATE, so a document's title/source/metadata were frozen
+                # forever after first ingest: renaming/retitling and re-ingesting
+                # had no effect, silently keeping stale values indefinitely.
                 query = """
                 MERGE (d:Document {id: $document_id})
                 ON CREATE SET d.created_at = datetime(),
                               d.title = $title,
                               d.source = $source,
                               d.metadata = $metadata
+                ON MATCH SET d.title = $title,
+                             d.source = $source,
+                             d.metadata = $metadata
                 RETURN d
                 """
 
