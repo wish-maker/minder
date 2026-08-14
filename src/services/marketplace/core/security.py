@@ -3,24 +3,31 @@ import hashlib
 import hmac
 import os
 import time
-from typing import Dict
 
 from config import settings
 
 
 class LicenseGenerator:
-    """Generate and validate secure license keys"""
+    """Generate secure license keys.
 
-    def __init__(self):
-        # In-memory store for license data (in production, use Redis/database)
-        self._license_store: Dict[str, Dict] = {}
+    Real validation lives in core/licensing.py's validate_license(), which
+    checks the key against the persistent marketplace_licenses Postgres table
+    (expiry, active flag, usage tracking). This class used to also carry a
+    validate_license_key() that looked keys up in a per-instance in-memory
+    dict populated by generate_license_key() -- dead code (nothing called it
+    outside its own test) and broken by construction even if it had been
+    called: the dict lives only as long as one process, so it would report
+    "license_not_found" for every key issued before the last restart, and
+    would never agree across horizontally-scaled replicas. Removed rather
+    than fixed, since the real, working validation path already exists.
+    """
 
     def generate_license_key(self, user_id: str, plugin_id: str, tier: str) -> str:
         """
         Generate a secure license key (format: XXXX-XXXX-XXXX-XXXX)
 
-        The key is a random token. License data is stored internally and
-        can be retrieved during validation.
+        The key is an HMAC-derived token; the caller (core/licensing.py) persists
+        it alongside user_id/plugin_id/tier for later lookup.
         """
         # 1. Create payload with timestamp and nonce
         timestamp = int(time.time())
@@ -36,51 +43,4 @@ class LicenseGenerator:
 
         # 3. Create license key from signature (take first 16 chars)
         key = signature[:16].upper()
-        formatted = "-".join([key[i : i + 4] for i in range(0, 16, 4)])
-
-        # 4. Store license data for later validation
-        self._license_store[formatted] = {
-            "user_id": user_id,
-            "plugin_id": plugin_id,
-            "tier": tier,
-            "issued_at": timestamp,
-        }
-
-        return formatted
-
-    def validate_license_key(self, license_key: str) -> Dict:
-        """
-        Validate a license key by looking it up in the license store.
-
-        Returns the actual license data from the key if valid.
-        """
-        try:
-            # 1. Basic format validation
-            if len(license_key) != 19 or license_key.count("-") != 3:
-                return {"valid": False, "reason": "invalid_format"}
-
-            parts = license_key.split("-")
-            if not all(len(p) == 4 for p in parts):
-                return {"valid": False, "reason": "invalid_format"}
-
-            # 2. Validate hex characters
-            combined = license_key.replace("-", "")
-            if not all(c in "0123456789ABCDEFabcdef" for c in combined):
-                return {"valid": False, "reason": "invalid_format"}
-
-            # 3. Look up license data from store
-            license_data = self._license_store.get(license_key)
-            if not license_data:
-                return {"valid": False, "reason": "license_not_found"}
-
-            # 4. Return actual license data
-            return {
-                "valid": True,
-                "user_id": license_data["user_id"],
-                "plugin_id": license_data["plugin_id"],
-                "tier": license_data["tier"],
-                "issued_at": license_data["issued_at"],
-            }
-
-        except Exception as e:
-            return {"valid": False, "reason": str(e)}
+        return "-".join([key[i : i + 4] for i in range(0, 16, 4)])
