@@ -38,8 +38,8 @@ them sits **Traefik v3** as the reverse proxy (TLS termination, routing via Dock
 > API surface documented below. It's the browser UI for the plugin-config
 > endpoints, the RAG Pipeline knowledge-base/pipeline/query endpoints (#401),
 > the marketplace catalog/install/dependency-graph endpoints (#402), and the
-> model-management/AI-tools endpoints below (under "Platform" and "Plugins"
-> nav sections, respectively). It doesn't duplicate OpenWebUI's own
+> model-management/AI-tools endpoints below (under the "Platform" and
+> "AI Tools" nav sections, respectively). It doesn't duplicate OpenWebUI's own
 > "Knowledge" feature — that's a separate, disconnected system with no access
 > to the actual `rag-pipeline` service documented below, which is exactly
 > what these pages give a UI to.
@@ -188,17 +188,21 @@ health loop, stores service-discovery data in Redis, and auto-syncs with the mar
 | GET | `/v1/plugins/ai/tools` | Aggregated AI-tool definitions across all plugins |
 
 A browser UI for the two config endpoints above is served by Minder's
-**separate `client` service** (`http://localhost:8009/plugins/config`, or via
-Traefik once reachable — see `docs/guides/remote-access.md`) — a form-based settings
-page for configurable plugins (news, weather, crypto, tefas today), instead
-of hand-crafting these requests. Nested under the "Plugins" nav section
-alongside Marketplace, not a standalone top-level page (#402).
+**separate `client` service**, on its **Installed Plugins** page
+(`http://localhost:8009/plugins/installed`, or via Traefik once reachable —
+see `docs/guides/remote-access.md`) — each installed plugin has a lazy
+"Configure" panel (form-based, secrets masked) instead of hand-crafting
+these requests directly.
 
-The `client` service also has a `/plugins/ai-tools` page (the "Plugins" nav
-section's 3rd tab) showing `GET /v1/plugins/ai/tools` above side-by-side with
-marketplace's `GET /v1/marketplace/ai/tools` catalog below — two genuinely
-different views (live/in-memory vs durable/DB-backed with tier info), kept
-visually distinct rather than merged into one list.
+The `client` service has its own **AI Tools** nav section with two pages:
+**Installed Tools** (`/ai-tools/installed`) showing `GET /v1/plugins/ai/tools`
+above — the tools actually callable right now, each with a runnable "Try it"
+example query generated from its own JSON-Schema parameters — and
+**Available Tools** (`/ai-tools/available`) showing marketplace's
+`GET /v1/marketplace/ai/tools` durable catalog. Two genuinely different views
+(live/in-memory vs durable/DB-backed with tier info), kept as separate pages
+rather than merged into one list; only Installed Tools' live entries carry a
+full parameter schema, so the runnable example only makes sense there.
 
 ### Webhooks
 
@@ -224,16 +228,20 @@ visually distinct rather than merged into one list.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/v1/bundles` | The bundle model: each capability bundle, whether it's enabled, its claimed services, and per-service active/orphaned status. Derived from the Compose `minder.bundle=` labels + the secret-free enable-state via the shared brain (`shared.bundle_graph`). `503` if the compose file isn't mounted |
-| POST | `/v1/bundles/{name}/enable` | Enable a bundle (JWT-gated). Persists intent to `bundles.state.json` (same file the host CLI writes) and starts already-materialised claimed containers via the least-privilege docker-socket-proxy — it cannot *create* new containers, so a never-materialised service comes back as `pending_create` until the next host `setup.sh start`/`restart` converge |
-| POST | `/v1/bundles/{name}/disable` | Disable a bundle (JWT-gated); stops its claimed containers via the docker-socket-proxy, same persistence model as enable |
-| POST | `/v1/bundles/reconcile` | Re-apply the persisted enable-state to running containers (JWT-gated) — start/stop drift correction without changing intent |
+| GET | `/v1/bundles` | The bundle model: each capability bundle, whether it's enabled, its claimed services (each with active/orphaned status and its pinned Docker `image` — `null` for a locally-built service), and the platform-wide orphaned-services list. Derived from the Compose `minder.bundle=` labels + the secret-free enable-state via the shared brain (`shared.bundle_graph`). `503` if the compose file isn't mounted |
+| POST | `/v1/bundles/{name}/enable` | Enable a bundle (admin-gated, #474). Persists intent to `bundles.state.json` (same file the host CLI writes) and starts already-materialised claimed containers via the least-privilege docker-socket-proxy — it cannot *create* new containers, so a never-materialised service comes back as `pending_create` until the next host `setup.sh start`/`restart` converge |
+| POST | `/v1/bundles/{name}/disable` | Disable a bundle (admin-gated); stops its claimed containers via the docker-socket-proxy, same persistence model as enable |
+| POST | `/v1/bundles/reconcile` | Re-apply the persisted enable-state to running containers (admin-gated) — start/stop drift correction without changing intent |
 
-The `client` service has a `/platform/bundles` page (the "Platform" nav
-section's 2nd tab, alongside Models and Status) covering the four endpoints
-above — per-bundle enable/disable toggles (disabled for `core`, which 409s), a
-per-service active/claimant list, an orphaned-services callout, and a
-page-level Reconcile button.
+The `client` service has its own **Bundles** nav section with two pages:
+**Available Bundles** (`/bundles/available`, bundles not currently enabled)
+and **Installed Bundles** (`/bundles/installed`, bundles currently enabled).
+Both cover the read/enable/disable endpoints above — per-bundle toggles
+(disabled for `core`, which 409s), a per-service active/claimant/image list.
+Installed Bundles additionally has the page-level Reconcile button and an
+Export/Import panel (client-side only, built on the same enable/disable
+endpoints — no dedicated export/import API) that reads/writes a JSON file in
+the same `{bundle: {enabled}}` shape as `bundles.state.json`.
 
 ### Containers
 
@@ -286,7 +294,7 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | DELETE | `/v1/marketplace/plugins/{plugin_id}/uninstall` | Uninstall |
 | POST | `/v1/marketplace/plugins/{plugin_id}/enable` | Enable |
 | POST | `/v1/marketplace/plugins/{plugin_id}/disable` | Disable |
-| GET | `/v1/marketplace/plugins/{plugin_id}/installations` | List installations for a plugin, all users (admin/debug-shaped — no auth) |
+| GET | `/v1/marketplace/plugins/{plugin_id}/installations` | List installations for a plugin, all users (admin-gated, #474 — was unauthenticated until then) |
 | GET | `/v1/marketplace/installations/me` | List the *authenticated user's* installed plugins, across the whole catalog, with plugin metadata inlined (#402) — deliberately a disjoint prefix, not nested under `/plugins/`, since `GET /plugins/{plugin_id}` is registered first and would swallow a literal segment like `installed` as `{plugin_id}` |
 
 > **Install used to 500 for every real user (#402, fixed)**: three independent bugs, found live on hantal, all in the install path. (1) `marketplace_installations.user_id` had a live FK to `marketplace_users`, a table nothing ever populated except one seed row (`user_id='admin'`) — any other user's install threw an unhandled `ForeignKeyViolationError`; fixed by dropping the constraint (`schema.sql`) — `user_id` here is just an opaque JWT-derived identifier, not a real relationship to a marketplace-specific user directory that was never wired up. (2) `InstallationResponse.user_id` had a UUID-only regex pattern rejecting real non-UUID ids. (3) `install_plugin` never `str()`-cast `plugin_id` before building the response — asyncpg returns UUID columns as `uuid.UUID` objects, and pydantic v2 doesn't coerce those into a `str` field. Each bug alone was enough to 500 the whole endpoint; all three had to be fixed before install actually worked.
@@ -448,13 +456,13 @@ Model lifecycle over the Ollama runtime.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/models` | List local models (live from Ollama) — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#519) |
-| POST | `/models` | Pull a model — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists |
+| POST | `/models` | Pull a model (admin-gated, #474) — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists |
 | GET | `/models/{model_id}` | Model details, including a `capabilities` list (e.g. `tools`) sourced from Ollama's own model metadata — **not** a guarantee the model reliably uses tools when offered them, see [testing.md](../development/testing.md#tool-calling-model-reliability-328) (**404** if unknown) |
-| DELETE | `/models/{model_id}` | Delete a local model (**404** if unknown) |
+| DELETE | `/models/{model_id}` | Delete a local model (admin-gated, #474; **404** if unknown) |
 | POST | `/models/{model_id}/test` | Quick test-prompt inference — body `{"prompt": "..."}` |
 | POST | `/models/{model_id}/constraints` | Set rate limits — **not implemented (501)** |
 | GET | `/models/{model_id}/metrics` | Usage metrics — **not implemented (501)** |
-| POST | `/models/fine-tune` | Fine-tune request — **not implemented (501)** |
+| POST | `/models/fine-tune` | Fine-tune request (admin-gated, #474) — **not implemented (501)** |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
 

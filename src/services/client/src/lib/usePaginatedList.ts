@@ -9,7 +9,7 @@ interface Page<T> {
 
 /** Shared "load a page, then Load More" pagination — the offset/total
  * bookkeeping (replace on filter change vs. append on Load More) was
- * hand-rolled identically in MarketplacePage and AiToolsPage. `fetchPage`
+ * hand-rolled identically in AvailablePluginsPage and AvailableToolsPage. `fetchPage`
  * receives the offset to fetch and must return that page plus the server's
  * total count; the hook owns the state transition.
  *
