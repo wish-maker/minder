@@ -124,8 +124,30 @@ container with no `/dev/net/tun`, so `tailscaled` runs in
 `--tun=userspace-networking` mode), set `HANTAL_SOCKS5=host:port` in `.env` to
 route through tailscaled's own SOCKS5 proxy (needs `socat` installed:
 `apt-get install -y socat`). Leave it blank when running from a real tailnet
-peer. See `docs/development/tailscale-bridge.md` for how to stand up that
-proxy from scratch on a fresh sandbox.
+peer. `tailscale_bootstrap.sh` automates standing up exactly that proxy from a
+fresh sandbox (installs `tailscale`+`socat`, brings up userspace-networking,
+wires the SOCKS5 listener) — idempotent, run as root:
+
+```bash
+bash scripts/dev/tailscale_bootstrap.sh
+```
+
+See `docs/development/tailscale-bridge.md` for the full explanation of why
+this is needed and what the script does step by step.
+
+## `remote_put.py` — transfer a real file to a dev host
+
+The base64-inline-through-a-shell-command trick the other scripts use for small
+config patches hits a hard argument-length limit on Windows/PowerShell ("The
+command line is too long.") for anything more than a few KB. Use this instead
+for a real file transfer — it goes over SFTP, no size limit:
+
+```bash
+python scripts/dev/remote_put.py <alias> <local_path> <remote_path>
+```
+
+`<remote_path>` is relative to the host's configured working directory
+(`<PREFIX>_DIR` in `.env`) unless it's absolute.
 
 ## `dev.py` — collapse the repetitive PR-loop commands
 

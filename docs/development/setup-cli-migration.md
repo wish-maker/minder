@@ -5,7 +5,7 @@
 > setup CLI, see [Installation](../getting-started/installation.md) and
 > [Development Guide](development.md).
 
-# Stage 2 — `setup.sh` bash → Python port (#7)
+## Stage 2 — `setup.sh` bash → Python port (#7)
 
 **Why.** `setup.sh` + `scripts/lib/*.sh` are Linux/Pi-centric (bash-isms, tty
 assumptions). To install cleanly across **Linux / macOS / Windows** we port the
@@ -57,9 +57,16 @@ scripts.setup`; unknown commands error + print help natively (no delegate).
 - [x] entrypoint (`python -m scripts.setup`; `setup.sh` shim execs it — inversion done)
 - [x] **`help` / `-h` / `--help`** — native (`help.py`); content byte-identical
       to `bash setup.sh --help`
-- [x] **`ollama-mode internal|external [url]`** — native (`ollama.py`); flips
+- [x] **`ollama-mode internal|external|failover [url]`** — native (`ollama.py`); flips
       `.env` only. Verified identical to the bash verb across 8 cases (success /
       append / no-change / invalid-url / usage) via `scripts/gate/ollama_verify.sh`
+- [x] **`tts-stt-mode internal|external|failover [url]`** — native (`tts_stt.py`);
+      mirrors `ollama.py` (#65 item 4) for the TTS/STT backend, same three modes
+- [x] **`bundle status|enable|disable|reconcile [name] [--stop-orphans]`** — native
+      (`bundles.py`); post-port verb with no bash equivalent — enable/disable a
+      capability bundle (start/stop its Compose services) or reconcile the running
+      stack to match the enabled set. Bundle map derives from Compose `minder.bundle=`
+      labels via the shared `shared.bundle_graph` claim-graph logic
 - [x] **`sync-postgres-password`** — native (`secrets.py`); reads `.env`, pushes
       POSTGRES_PASSWORD into the running container via `ALTER USER`. Verified
       identical to the bash verb (no-`.env` / unset-password / live-sync) via
