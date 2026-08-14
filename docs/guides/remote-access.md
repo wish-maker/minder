@@ -20,11 +20,11 @@ Nothing about this setup is currently hardened for direct internet exposure:
 - **No real DNS + TLS** — Traefik serves a self-signed certificate; browsers
   will warn on every visit, and nothing validates who you're actually
   connecting to over the open internet.
-- **Shared default Authelia password** — every clone of this repo ships the
-  same admin credential until you rotate it (see
-  [authentication.md#rotating-the-admin-password](authentication.md#rotating-the-admin-password)).
-  Exposing the login page to the internet before rotating it is a real risk,
-  not a theoretical one.
+- **Authelia admin password** — auto-generated per deployment and printed once at
+  first `setup.sh start` (#473, not a shared default anymore). Make sure you
+  actually recorded it before exposing the login page to the internet; if you
+  didn't, rotate it first (see [authentication.md → The admin
+  password](authentication.md#the-admin-password)).
 - **IP-whitelist middleware** on the Traefik dashboard, RabbitMQ management
   UI, and Neo4j browser routes assumes a trusted network — a public IP
   breaks that assumption entirely.

@@ -54,7 +54,9 @@ jaeger, client). Full browser SSO still needs real DNS + TLS on the deploy.
 **Not present / not implemented (do not expect these):**
 - Model fine-tuning service — **removed** (do not re-add)
 - Standalone `ai-service` — **removed**
-- RBAC — only JWT auth exists
+- Full RBAC — only a specific set of admin-only actions is role-gated today (model
+  pull/delete/fine-tune, bundle enable/disable/reconcile, listing a plugin's
+  installations, #474 done); most other write endpoints still only require a valid JWT
 - Default domain plugins (crypto/weather/network/news/tefas) — SHIPPED as first-party module plugins in `src/plugins/`, on the central plugin-config API (#34 done)
 
 ---
@@ -76,14 +78,15 @@ that broke on any host without the exact hardcoded name, so it was reverted in f
 existing migration mechanism.
 
 ### 2. RAG Enhancements
-HyDE, Self-RAG, auto (decision engine), corrective RAG, adaptive rerank/compress, and the
-hybrid (dense+BM25) + parent-child (small-to-big) retrieval strategies are all now **wired into
-the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45)); `GET /capabilities`
-reports what's active. Only RAPTOR remains unwired.
+HyDE, Self-RAG, auto (decision engine), corrective RAG, adaptive rerank/compress, the
+hybrid (dense+BM25) + parent-child (small-to-big) retrieval strategies, and now RAPTOR
+(hierarchical clustering + tree summarization, [#487](https://github.com/wish-maker/minder/issues/487))
+are all **wired into the live query endpoint** ([#45](https://github.com/wish-maker/minder/issues/45));
+`GET /capabilities` reports what's active.
 
 ### 3. Authelia
 Authelia is enabled and enforcing forward-auth on 6 Traefik routers (minio, api-gateway,
-grafana, openwebui, jaeger). The remaining work is completing real DNS + TLS on the deploy
+grafana, openwebui, jaeger, client). The remaining work is completing real DNS + TLS on the deploy
 so full browser SSO works end-to-end.
 
 ### 4. Setup / Tooling — Python port (DONE)

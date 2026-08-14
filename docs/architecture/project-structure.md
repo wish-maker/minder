@@ -197,7 +197,9 @@ Every service has:
 ### 5. Security
 
 - **Authentication**: JWT-based auth (bcrypt password hashing)
-- **Authorization**: JWT validation only — **RBAC is not implemented**
+- **Authorization**: JWT validation, plus role checks on a specific set of admin-only
+  actions (model pull/delete/fine-tune, bundle enable/disable/reconcile, listing a
+  plugin's installations, #474) — most other write endpoints still only need a valid JWT
 - **SSO / 2FA**: Authelia is **enabled** and enforcing forward-auth on 6 routers (minio, api-gateway, grafana, openwebui, jaeger, client); full browser SSO still needs real DNS + TLS on the deploy
 - **Rate limiting**: Redis-based rate limiter (fail-open)
 - **Input validation**: Pydantic validators

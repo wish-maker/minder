@@ -326,7 +326,9 @@ Services use `restart: on-failure`.
 ### Authentication
 - JWT for API authentication (bcrypt password hashing)
 - Authelia SSO is enabled, enforcing on six Traefik routers
-- **RBAC is not implemented**
+- **RBAC covers a specific set of admin-only actions** (model pull/delete/fine-tune,
+  bundle enable/disable/reconcile, listing a plugin's installations, #474) —
+  most other write endpoints still only require a valid JWT, not a role
 
 ## Monitoring
 

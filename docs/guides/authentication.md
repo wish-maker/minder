@@ -13,13 +13,15 @@ service trusts that JWT. Authelia also still gates several other web UIs (Grafan
 OpenWebUI, MinIO, Jaeger) directly at the reverse-proxy layer, independent of Minder's own
 login — see [Authelia](#authelia-sso--2fa--oidc-identity-provider) below.
 
-There is **no role-based access control (RBAC)** enforced yet; access is gated by
-holding a valid JWT, not by what role that JWT carries. See [Roles](#roles-not-yet-enforced)
-below. ([tracked as #474](https://github.com/wish-maker/minder/issues/474))
+Role checks (#474) cover a specific set of admin-only actions today (model pull/
+delete/fine-tune, bundle enable/disable/reconcile, listing a plugin's
+installations) — most other endpoints that require auth still only check
+"is there a valid JWT," not the role it carries. See [Roles](#roles-partially-enforced)
+below.
 
 > This is a development environment on a Raspberry Pi 4 / self-hosted deployment.
-> Production hardening (RBAC, TLS everywhere, rotating the shared default Authelia
-> credential) has not yet been fully applied.
+> Production hardening (RBAC across the rest of the write surface, TLS everywhere)
+> has not yet been fully applied.
 
 ## How authentication works (browser login)
 
@@ -112,14 +114,16 @@ sync-postgres-password` is an unrelated *operator* command for rotating the infr
 Postgres credential in `.env`, not an end-user account action.) If you need this, log in via
 Authelia instead — its own portal has real password management.
 
-### Roles (not yet enforced)
+### Roles (partially enforced)
 
 Logging in via Authelia sets your Minder `role` from Authelia's `groups` claim: membership
 in the `admins` group becomes `role: admin`, everyone else gets `role: user`. You can see
-your own role on the Settings page. **Nothing currently checks this role before permitting
-an action** — every endpoint that requires auth today only checks "is there a valid JWT," not
-"does this JWT's role allow it." Don't build workflows that assume per-role restrictions are
-enforced. Tracked as [#474](https://github.com/wish-maker/minder/issues/474).
+your own role on the Settings page. `require_role()`/`require_role_or_service()` (#474)
+check this role before permitting a specific set of admin-only actions: a model pull/
+delete/fine-tune, a bundle enable/disable/reconcile, and listing who installed a
+marketplace plugin. Everywhere else that requires auth still only checks "is there a
+valid JWT," not "does this JWT's role allow it" — don't build workflows that assume
+broader per-role restrictions are enforced than that.
 
 ### JWT secret
 

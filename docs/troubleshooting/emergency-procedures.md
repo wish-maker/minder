@@ -87,10 +87,13 @@ rollbacks.
 
 **Symptoms:** unauthorized access, compromised credentials, suspicious activity.
 
-> Note: this is a development environment; only JWT auth is implemented in api-gateway
-> (no RBAC). Authelia SSO is enabled and its forward-auth is enforced on the minio,
-> api-gateway, grafana, openwebui, and jaeger routes (full browser SSO still needs real
-> DNS + TLS on the deploy). Treat exposed credentials seriously regardless.
+> Note: this is a development environment; JWT auth gates every write, and role checks
+> additionally cover a specific set of admin-only actions (model pull/delete/fine-tune,
+> bundle enable/disable/reconcile, listing a plugin's installations, #474) — most other
+> write endpoints still only require a valid JWT, not a role. Authelia SSO is enabled and
+> its forward-auth is enforced on the minio, api-gateway, grafana, openwebui, jaeger, and
+> client routes (full browser SSO still needs real DNS + TLS on the deploy). Treat exposed
+> credentials seriously regardless.
 
 ```bash
 # 1. Stop all services immediately
@@ -113,6 +116,11 @@ sed -i "s/JWT_SECRET=.*/JWT_SECRET=$NEW_SECRET/" .env
 NEW_PASS=$(openssl rand -hex 32)
 sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$NEW_PASS/" .env
 bash setup.sh sync-postgres-password   # runs ALTER USER so the live DB matches ./.env
+
+# MINDER_AUTHELIA_ADMIN_PASSWORD (Authelia's admin login, #473) -- clear it and
+# re-run start to generate + print a new one (set MINDER_ALLOW_SECRET_REGEN=1
+# first if the stack is already running, see security-setup.md):
+sed -i '/^MINDER_AUTHELIA_ADMIN_PASSWORD=/d' .env
 
 # 4. Re-apply to all containers (start re-syncs ./.env -> docker/.env)
 bash setup.sh start
