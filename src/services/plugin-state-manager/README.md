@@ -15,8 +15,8 @@ licensing*. It reads the tool catalog from the marketplace.
 bash setup.sh start plugin-state-manager   # needs the marketplace DB + registry/marketplace reachable
 
 curl http://localhost:8003/health
-curl http://localhost:8003/v1/state                       # plugin enable/disable state
-curl http://localhost:8003/v1/tools                       # discoverable AI tools
+curl http://localhost:8003/v1/plugins/state                # plugin enable/disable state
+curl http://localhost:8003/v1/tools                        # discoverable AI tools
 
 python scripts/dev/dev.py mypy plugin-state-manager
 DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/test_plugin_state_manager_*.py
@@ -26,17 +26,20 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/v1/state` | List plugin enable/disable state |
-| GET | `/v1/state/{plugin_name}` | State of one plugin |
-| POST | `/v1/state/{plugin_name}/enable` / `/disable` | Toggle a plugin's enabled state |
+| GET | `/v1/plugins/state` | List plugin enable/disable state |
+| GET | `/v1/plugins/state/{plugin_name}` | State of one plugin |
+| POST | `/v1/plugins/state/{plugin_name}/enable` / `/disable` | Toggle a plugin's enabled state |
+| PATCH | `/v1/plugins/state/{plugin_name}` | Partial state update |
+| GET | `/v1/plugins/{plugin_name}/dependencies` | A plugin's declared dependencies |
+| POST | `/v1/plugins/{plugin_name}/dependencies/resolve` | Resolve/validate those dependencies |
 | GET | `/v1/tools` | Discover all AI tools exposed by enabled plugins |
 | GET | `/v1/tools/{tool_name}` | One tool's schema |
 | POST | `/v1/tools/{tool_name}/execute` | Execute a tool — **license-validated first** (fail-closed) |
 | GET | `/v1/tools/plugins/{plugin_id}/tools` | Tools for a specific plugin |
 | POST | `/v1/tools/validate` | Validate a license without executing |
-| GET/POST | `/v1/plugins/{plugin_name}/license[...]` | License tier get / validate |
-
-Every route is served at both `/v1/...` and the legacy unversioned path.
+| GET | `/v1/licensing/plugins/{plugin_name}/license/tier` | Get a plugin's required license tier |
+| POST | `/v1/licensing/plugins/{plugin_name}/license/validate` | Validate a license for a plugin |
+| PATCH | `/v1/licensing/plugins/{plugin_name}/license` | Update a plugin's required tier |
 
 ## Licensing (fail-closed)
 
@@ -73,8 +76,9 @@ plugin-state-manager/
 - Secrets (`DB_PASSWORD`/`REDIS_PASSWORD`/`JWT_SECRET`) from `MinderBaseSettings`.
 
 > `default_plugins.yml` stays an intentional empty stub — this service's separate
-> bootstrap, distinct from the registry's disk loader. Don't populate until real
-> plugin impls ship (#34).
+> bootstrap, distinct from the registry's disk loader (which already registers
+> the shipped crypto/weather/news/tefas/network/telegraf modules, #34 done).
+> Whether to populate this stub is independent of those modules existing.
 
 ## Error conventions
 

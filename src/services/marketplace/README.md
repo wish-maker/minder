@@ -24,7 +24,8 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x NEO4J_AUTH=neo4j/x \
 
 | Prefix | Purpose |
 |--------|---------|
-| `/v1/marketplace/plugins` | Catalog: list, `search`, `featured`, one plugin, its `tools` |
+| `/v1/marketplace/plugins` | Catalog: list, `search`, `featured`, one plugin, its `tools` (`routes/marketplace.py`) |
+| `/v1/marketplace/plugins/{id}` | Management: `install`, `uninstall`, `enable`, `disable`, `installations` (`routes/management.py`, same prefix as the catalog above, different route file) |
 | `/v1/marketplace/installations` | `activate` an install, `me` (my installs) |
 | `/v1/marketplace/licenses` | Issue / `validate` license keys (HMAC, tiered) |
 | `/v1/marketplace/ai` | AI-tool catalog: `tools`, `sync` (pull module `AI_TOOLS` from the registry) |
