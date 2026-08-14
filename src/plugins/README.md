@@ -109,5 +109,15 @@ separately, not wired here.
   `NETWORK_SCAN_TARGETS` (empty → scans nothing), `NETWORK_SCAN_PORTS`,
   `NETWORK_SCAN_MAX_HOSTS`, `NETWORK_SNMP_ENABLED`, `NETWORK_SNMP_COMMUNITY`.
   Needs `nmap` + `snmp` in the plugin-registry image (in the Dockerfile).
-- crypto / weather / news / tefas — aspirational (issue #34); not yet implemented.
-  Do not add them to `default_plugins.yml` until their modules exist here.
+- crypto / weather / news / tefas — **implemented and shipped** (#34 done). Each
+  declares a `CONFIG_SCHEMA` (centrally-managed config, reachable via
+  `GET/PUT /v1/plugins/{name}/config`) and `AI_TOOLS` (aggregated into
+  `GET /v1/plugins/ai/tools` and synced into the marketplace catalog, #87).
+  TEFAS's data fetch is blocked from non-TR egress (#120) — a network
+  limitation, not a missing implementation. See `docs/architecture/plugins.md`
+  for the full shipped-plugin catalog.
+
+`default_plugins.yml` (plugin-state-manager's own bootstrap, distinct from this
+loader) stays an intentionally empty stub regardless — it's a separate
+mechanism, not gated on whether these modules exist (see
+`docs/architecture/plugins.md` → "plugin-state-manager bootstrap").

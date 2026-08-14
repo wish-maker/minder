@@ -1,17 +1,29 @@
 # RabbitMQ Configuration - Minder Platform
 
-**Version:** 3.13-management
-**Purpose:** Message Queue for asynchronous inter-service communication
+**Image:** `rabbitmq:4.3.4-management` (`docker/docker-compose.yml`)
+**Purpose:** Message broker, provisioned and health-checked — **not currently used by any Minder service**
 
 ---
 
 ## Overview
 
-RabbitMQ provides reliable asynchronous messaging between Minder microservices:
+RabbitMQ runs as part of the `core` bundle (management UI reachable via Traefik,
+`rabbitmq-diagnostics -q ping` healthcheck) but **no application code in this
+repo currently publishes or consumes a message through it** — confirmed by
+`grep -rl "pika\|rabbitmq" src/services/ src/shared/` returning nothing. The
+exchanges/queues/producer-consumer code below (`docs/examples/rabbitmq_example.py`)
+are a worked *example* of how a service could integrate, not a description of
+live behavior — everything under "Exchanges", "Queues", "Policies", and
+"Integration with Minder Services" is a design sketch, not shipped
+infrastructure. If you're debugging why plugin tasks aren't flowing through
+RabbitMQ: they never have — plugins run in-process, invoked directly by
+plugin-registry/plugin-state-manager, not dispatched over a queue.
 
-- **Plugin Tasks**: API Gateway → Plugin Registry task distribution
-- **Event Broadcasting**: Pub/sub pattern for system-wide events
-- **Dead Letter Queues**: Error handling and failed message processing
+This file previously presented the exchanges/queues/policies below as if they
+were live, and cited `#34` ("plugins don't exist yet") as the reason no real
+definitions were loaded — that citation is now stale too: the crypto/network/
+news/tefas/weather plugins have shipped and run in production for months, they
+just don't use RabbitMQ.
 
 ---
 
@@ -19,91 +31,37 @@ RabbitMQ provides reliable asynchronous messaging between Minder microservices:
 
 ### rabbitmq.conf
 
-Main RabbitMQ configuration file with:
-- Memory and disk limits
-- Authentication settings
-- Management plugin configuration
-- Performance tuning
-- Default queue type (quorum for durability)
+The actual, applied config (`docker/services/rabbitmq/rabbitmq.conf`, mounted
+read-only): memory/disk limits, the management plugin's port, connection
+tuning, and a `default_queue_type = quorum` default — this last one only takes
+effect for a queue an application declares, which none currently do.
 
 ### definitions.json — not shipped
 
 There is **no** bundled `definitions.json`. RabbitMQ is provisioned via env
-(`RABBITMQ_DEFAULT_USER`/`PASS`) plus topology the services declare at runtime;
-`rabbitmq.conf` carries no `load_definitions` directive.
+(`RABBITMQ_DEFAULT_USER`/`PASS`) only; `rabbitmq.conf` carries no
+`load_definitions` directive, and nothing declares exchanges/queues at startup
+or at runtime.
 
 The previously-tracked export was removed under #27 — it was stale (v3.13, no
 `password_hash`, so loading it would clobber the default-user credential) and
-referenced plugin queues (`plugin.{crypto,network,news,tefas,weather}`) for
-plugins that don't exist yet (#34). If declarative definitions are ever needed,
-export a fresh one from a running broker (see [Export Definitions](#export-definitions)
-below) and wire a `load_definitions` directive.
+referenced plugin queues (`plugin.{crypto,network,news,tefas,weather}`) that,
+even today, no code publishes to or consumes from. If a real integration is
+ever built, export a fresh definitions set from a running broker (see
+[Export Definitions](#export-definitions) below) and wire a
+`load_definitions` directive.
 
 ---
 
-## Exchanges
+## A worked example, not live infrastructure
 
-### 1. plugin.tasks (Direct Exchange)
-- **Type**: direct
-- **Purpose**: Point-to-point plugin task distribution
-- **Routing keys**: plugin.{crypto,network,news,tefas,weather}
-
-**Usage:**
-```python
-producer.publish_message(
-    exchange_name="plugin.tasks",
-    routing_key="plugin.crypto",
-    message={"action": "collect"}
-)
-```
-
-### 2. minder.events (Topic Exchange)
-- **Type**: topic
-- **Purpose**: Pub/sub for system-wide events
-- **Routing patterns**: plugin.* (all plugin events)
-
-**Usage:**
-```python
-producer.publish_event(
-    event_type="plugin.status.changed",
-    event_data={"plugin": "crypto", "status": "healthy"}
-)
-```
-
----
-
-## Queues
-
-### Plugin Queues
-Each plugin has its own queue with Dead Letter Queue:
-
-| Queue | Type | Purpose | DLQ |
-|-------|------|---------|-----|
-| plugin.crypto | quorum | Crypto plugin tasks | plugin.crypto.dlq |
-| plugin.network | quorum | Network plugin tasks | plugin.network.dlq |
-| plugin.news | quorum | News plugin tasks | plugin.news.dlq |
-| plugin.tefas | quorum | TEFAS plugin tasks | plugin.tefas.dlq |
-| plugin.weather | quorum | Weather plugin tasks | plugin.weather.dlq |
-
-### Queue Features
-- **Durability**: True (survives broker restart)
-- **Queue Type**: Quorum (replicated, fault-tolerant)
-- **Dead Letter Exchange**: Failed messages route to DLQ
-- **Max Length**: 10,000 messages (policy)
-
----
-
-## Policies
-
-### queue-max-length
-- **Pattern**: `plugin\.`
-- **Limit**: 10,000 messages
-- **Action**: Messages rejected when queue is full
-
-### dlq-expiry
-- **Pattern**: `.*\.dlq`
-- **TTL**: 604,800,000ms (7 days)
-- **Action**: DLQ messages expire after 7 days
+`docs/examples/rabbitmq_example.py` sketches what a producer/consumer
+integration could look like — a `plugin.tasks` direct exchange +
+per-plugin quorum queues with DLQs, and a `minder.events` topic exchange for
+pub/sub. It is example code under `docs/`, not imported by any service
+(`RabbitMQProducer`/`RabbitMQConsumer` have zero real callers). Read it if
+you're designing an actual integration; don't assume any of its exchange/queue
+names exist on a running broker — they don't until something declares them.
 
 ---
 
@@ -111,20 +69,16 @@ Each plugin has its own queue with Dead Letter Queue:
 
 ### AMQP Port
 - **Port**: 5672
-- **Protocol**: AMQP 0-9-1
-- **Usage**: Application connections
+- **Protocol**: AMQP 0-9-1 (only matters once something actually connects)
 
 ### Management UI
-- **URL**: http://localhost:15672
+- **URL**: http://localhost:15672 (or `rabbitmq.minder.local` via Traefik)
 - **Username**: minder
-- **Password**: (RABBITMQ_PASSWORD from .env)
+- **Password**: `RABBITMQ_PASSWORD` from `.env`
 
-### Management Features
-- Queue monitoring (depth, rates)
-- Message browsing
-- Connection management
-- Policy configuration
-- User and permission management
+With no application-declared topology, the Management UI will show the
+built-in system exchanges and no queues — that's expected, not a sign
+something is broken.
 
 ---
 
@@ -146,135 +100,13 @@ curl -u minder:${RABBITMQ_PASSWORD} http://localhost:15672/api/overview
 curl -u minder:${RABBITMQ_PASSWORD} http://localhost:15672/api/queues
 ```
 
-### View Messages
-```bash
-# Get messages from plugin.crypto queue
-curl -u minder:${RABBITMQ_PASSWORD} \
-  http://localhost:15672/api/queues/%2F/plugin.crypto/get
-```
-
-### Purge Queue
-```bash
-# Delete all messages from plugin.crypto queue
-curl -u minder:${RABBITMQ_PASSWORD} \
-  -X DELETE \
-  http://localhost:15672/api/queues/%2F/plugin.crypto/contents
-```
-
----
-
-## Integration with Minder Services
-
-### API Gateway (Producer)
-```python
-from examples.rabbitmq_example import RabbitMQProducer, RabbitMQConfig
-
-config = RabbitMQConfig(
-    host="rabbitmq",
-    username="minder",
-    password=os.getenv("RABBITMQ_PASSWORD")
-)
-
-producer = RabbitMQProducer(config)
-producer.connect()
-
-# Publish plugin task
-producer.publish_plugin_task("crypto", {
-    "action": "collect",
-    "since": "2026-05-01T00:00:00Z"
-})
-```
-
-### Plugin Registry (Consumer)
-```python
-from examples.rabbitmq_example import RabbitMQConsumer, RabbitMQConfig
-
-config = RabbitMQConfig(
-    host="rabbitmq",
-    username="minder",
-    password=os.getenv("RABBITMQ_PASSWORD")
-)
-
-consumer = RabbitMQConsumer(config)
-consumer.connect()
-consumer.set_qos(prefetch_count=1)
-
-def process_task(ch, method, properties, data):
-    plugin_name = data.get("plugin")
-    task = data.get("task")
-    # Execute plugin task
-    logger.info(f"Processing task for plugin: {plugin_name}")
-
-consumer.consume_plugin_tasks("crypto", process_task)
-```
-
----
-
-## Monitoring
-
-### Prometheus Metrics (Future)
-RabbitMQ Prometheus plugin for metrics:
-- Queue depth
-- Message rates (publish/ack/deliver)
-- Connection count
-- Channel count
-
-### Grafana Dashboards (Future)
-- Queue depth trends
-- Message throughput
-- Consumer lag
-- DLQ message count
-
----
-
-## Troubleshooting
-
-### Queue Building Up
-```bash
-# Check queue depth
-curl -u minder:${RABBITMQ_PASSWORD} \
-  http://localhost:15672/api/queues/%2F/plugin.crypto
-
-# Check consumer count
-# If 0, consumers are not running or not connected properly
-```
-
-### Messages in DLQ
-```bash
-# Check DLQ messages
-curl -u minder:${RABBITMQ_PASSWORD} \
-  http://localhost:15672/api/queues/%2F/plugin.crypto.dlq
-
-# Analyze failure reason
-# Common causes:
-# - Plugin execution failed
-# - Database connection error
-# - Invalid message format
-```
-
-### Connection Refused
-```bash
-# Check RabbitMQ is running
-docker ps | grep rabbitmq
-
-# Check logs
-docker logs minder-rabbitmq
-
-# Verify password
-echo $RABBITMQ_PASSWORD
-```
-
 ---
 
 ## Security
 
-### Production Hardening
-- ✅ Strong password (RABBITMQ_PASSWORD in .env)
-- ✅ Default user (guest) disabled
-- ✅ Management UI accessible only via Traefik/Authelia
-- ⏳ TLS/SSL for AMQP connections (future)
-- ⏳ LDAP authentication integration (future)
-- ⏳ Network segmentation (future)
+- Strong password (`RABBITMQ_PASSWORD` in `.env`)
+- Default user (`guest`) disabled — only the configured `minder` user exists
+- Management UI reachable only via Traefik (+ `authelia-forwardauth` where configured)
 
 ### Password Generation
 ```bash
@@ -283,24 +115,21 @@ openssl rand -base64 32
 
 ---
 
-## Performance Tuning
+## Performance Tuning (`rabbitmq.conf`)
 
-### Current Settings
-- **Memory watermark**: 40% of RAM
-- **Disk limit**: 50MB minimum free space
+- **Memory watermark**: 40% of RAM (`vm_memory_high_watermark.relative`)
+- **Disk limit**: 50MB minimum free space (`disk_free_limit.absolute`)
 - **Heartbeat**: 60 seconds
 - **Channel max**: 2048
-- **Connection max**: Unlimited
-
-### Optimization Tips
-1. **Queue Type**: Quorum queues for durability, classic for performance
-2. **Prefetch Count**: Set to 1 for fair dispatch, higher for throughput
-3. **Message Size**: Keep messages under 128KB for optimal performance
-4. **Consumer Count**: Multiple consumers per queue for parallel processing
+- **Connection max**: unlimited
+- **Default queue type**: quorum (applies to any queue an application later declares)
 
 ---
 
 ## Backup and Restore
+
+Only meaningful once something has actually declared exchanges/queues/policies
+to export.
 
 ### Export Definitions
 ```bash
@@ -328,5 +157,5 @@ curl -u minder:${RABBITMQ_PASSWORD} \
 
 ---
 
-**Last Updated:** 2026-05-02
+**Last Updated:** 2026-08-14
 **Maintained by:** Minder Platform Team

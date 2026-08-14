@@ -7,9 +7,10 @@ disable capability groups → start/stop their containers via the socket-proxy).
 Interactive docs at `/docs`.
 
 Plugins are **manifest-based and run no arbitrary code by design** — a new action
-is a fixed handler in a first-party module, never uploaded code. Two module
-plugins ship in `src/plugins/` (`telegraf/`, `network/`); the registry's disk
-loader is what registers them on startup.
+is a fixed handler in a first-party module, never uploaded code. Six module
+plugins ship in `src/plugins/` (`telegraf/`, `network/`, `crypto/`, `weather/`,
+`news/`, `tefas/`, #34 done); the registry's disk loader is what registers them
+on startup. See `src/plugins/README.md` for the per-plugin status.
 
 ## Run / check
 
@@ -99,8 +100,9 @@ JWT verification (#223).
 - The `network` plugin needs `nmap` + `snmp` in the image; `telegraf` reloads via
   `--watch-config=poll` with a docker.sock restart fallback.
 - `default_plugins.yml` is an intentional empty stub (the plugin-state-manager's
-  separate bootstrap) — the registry's disk loader is what registers the shipped
-  modules. Don't populate it until real plugin impls ship (#34).
+  separate bootstrap) — the registry's own disk loader is what registers the
+  shipped modules (crypto/weather/news/tefas/network/telegraf, #34 done), and
+  that's unrelated to whether this stub is populated.
 - Plugin vs bundle are distinct: a plugin is a manifest/module; a bundle is a group
   of services. See `docs/architecture/bundles.md` and `src/plugins/README.md`.
 
