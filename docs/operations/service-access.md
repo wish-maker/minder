@@ -57,16 +57,23 @@ them through Traefik (Authelia-gated) where a route exists.
 | Prometheus | `minder-prometheus` | 9090 |
 | Alertmanager | `minder-alertmanager` | 9093 |
 | InfluxDB | `minder-influxdb` | 8086 |
-| Jaeger | `minder-jaeger` | 16686 (UI) |
-| OTel Collector | `minder-otel-collector` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) |
+| OTel Collector | `minder-otel-collector` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) — trace-ingestion ports, not a browsable UI |
 | Traefik | `minder-traefik` | 80, 443, 8081 (dashboard, IP-whitelisted) |
+
+Jaeger's UI has **no loopback port** (#472) — unlike everything else in this
+table, the `jaegertracing/all-in-one` image ships with no authentication of
+its own, so publishing it would give anyone with host/SSH access the full
+trace UI with zero credential check. Reach it via `jaeger.minder.local`
+(Traefik-routed, Authelia-gated) only — see below. Its OTLP/Thrift/Zipkin
+trace-ingestion ports above are unaffected: those aren't a browsable admin
+surface and were never Traefik-routed either.
 
 ```bash
 # Direct access examples
 curl http://localhost:8000/health          # API Gateway
 curl http://localhost:8001/plugins         # Plugin Registry
 curl http://localhost:8004/health          # RAG Pipeline
-# Open http://localhost:3000 for Grafana, http://localhost:16686 for Jaeger
+# Open http://localhost:3000 for Grafana
 ```
 
 ---

@@ -66,8 +66,12 @@ declare -A SERVICE_PORTS=(
     # RabbitMQ management UI port not exposed (Traefik only), skipping direct health check
     # authelia is Traefik-only (no host port) → not host-health-checked (like openwebui/rabbitmq)
     # [authelia]="9091/api/health"
-    [minio]="9000/minio/health/live"
-    [jaeger]="16686"
+    # minio was never host-published (Traefik only) -- this entry was already stale
+    # before #472. jaeger's UI host port was dropped in #472: unlike every other
+    # loopback-published service, jaegertracing/all-in-one ships with no
+    # authentication of its own, so publishing it gave anyone with host/SSH
+    # access the full trace UI with zero credential check, bypassing the
+    # Traefik+Authelia route entirely.
     [otel-collector]="18888/metrics"
 )
 

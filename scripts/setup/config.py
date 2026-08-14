@@ -172,7 +172,13 @@ THIRD_PARTY_IMAGE_META = {
 
 # Health endpoints "port[/path]" (config.sh SERVICE_PORTS). Only services with an
 # entry are health-checked. Path defaults to /health when the value is bare port.
-# (openwebui/rabbitmq/authelia are Traefik-only (no host port) → intentionally absent.)
+# (openwebui/rabbitmq/authelia/minio/jaeger are Traefik-only (no host port) →
+# intentionally absent -- jaeger's UI host port was dropped in #472: unlike
+# every other loopback-published service, jaegertracing/all-in-one ships with
+# no authentication of its own, so publishing it gave anyone with host/SSH
+# access the full trace UI with zero credential check, bypassing the
+# Traefik+Authelia route entirely. minio never had one to begin with; its
+# entry below was already stale before this change -- fixed while here.)
 SERVICE_PORTS = {
     "api-gateway": "8000/health",
     "plugin-registry": "8001/health",
@@ -187,8 +193,6 @@ SERVICE_PORTS = {
     "grafana": "3000/api/health",
     "influxdb": "8086",
     "traefik": "8081/dashboard/",
-    "minio": "9000/minio/health/live",
-    "jaeger": "16686",
     "otel-collector": "18888/metrics",
 }
 

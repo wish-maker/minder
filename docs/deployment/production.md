@@ -134,8 +134,9 @@ over the Docker network or via Traefik.
 
 ### Observability
 
-Prometheus (`:9090`), Grafana (`:3000`), Alertmanager (`:9093`), Jaeger (`:16686`),
-OTel Collector (`:14317/14318/18888`), InfluxDB (`:8086`), Telegraf, plus six exporters.
+Prometheus (`:9090`), Grafana (`:3000`), Alertmanager (`:9093`), Jaeger (Traefik-only,
+no loopback port — #472), OTel Collector (`:14317/14318/18888`), InfluxDB (`:8086`),
+Telegraf, plus six exporters.
 See `monitoring.md` for the full stack and instrumentation details.
 
 ### Reverse proxy & auth

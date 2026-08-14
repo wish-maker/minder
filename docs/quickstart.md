@@ -149,7 +149,7 @@ bash setup.sh uninstall --purge     # Stop AND DELETE all data volumes (irrevers
 3. **View monitoring**:
    - **Prometheus**: http://localhost:9090
    - **Grafana**: http://localhost:3000
-   - **Jaeger**: http://localhost:16686
+   - **Jaeger**: reached via Traefik at `https://jaeger.minder.local` (no loopback port, #472 — the image has no auth of its own)
 
 ### Common Issues
 

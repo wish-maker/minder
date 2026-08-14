@@ -93,10 +93,12 @@ original bash is preserved as `setup.bash.sh` for behavior-gate parity only).
 │                        OBSERVABILITY                            │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐          │
 │  │Prometheus│ │ Grafana  │ │ Jaeger   │ │ Alertmgr │          │
-│  │  :9090   │ │  :3000   │ │  :16686  │ │  :9093   │          │
+│  │  :9090   │ │  :3000   │ │ Traefik* │ │  :9093   │          │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────┘          │
 │  InfluxDB :8086 · Telegraf · OTel Collector · 6 exporters      │
 └─────────────────────────────────────────────────────────────────┘
+  * Jaeger's UI has no loopback host port (#472) — Traefik-routed only,
+    unlike everything else in this diagram.
 
 Total: 36 services defined across core APIs, inference, storage, and observability
 (includes Authelia and docker-socket-proxy, both enabled); 34 run in the common default
@@ -238,8 +240,9 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
   the schema registry are not published to host ports. Where a UI is needed (Neo4j browser, MinIO
   console, RabbitMQ management) it is routed through Traefik with an IP whitelist.
 - **External access**: only Traefik (80/443) plus the monitoring services that intentionally
-  expose host ports (Prometheus 9090, Grafana 3000, Alertmanager 9093, InfluxDB 8086, Jaeger
-  16686, OTel collector 14317/14318).
+  expose host ports (Prometheus 9090, Grafana 3000, Alertmanager 9093, InfluxDB 8086, OTel
+  collector 14317/14318). Jaeger's UI is Traefik-only, no loopback port (#472) — the image
+  ships with no authentication of its own, unlike the others in this list.
 - **Secrets**: environment variables only. Root `./.env` is the single source of truth; `setup.sh`
   mirrors it to `docker/.env` (auto-generated, do not edit).
 

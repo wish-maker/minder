@@ -570,6 +570,11 @@ services:
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
+    # #472: this bypasses Authelia's forward-auth gate for anyone with host/SSH
+    # access -- accepted, not an oversight. api-gateway's own JWT auth (#47)
+    # still gates every write; unauthenticated reads reachable this way are the
+    # same ones a browser sees on the Traefik path anyway, minus the SSO
+    # redirect. Loopback-only (not 0.0.0.0), so not reachable off-host.
     ports:
     - "127.0.0.1:8000:8000"
     depends_on:
@@ -661,6 +666,10 @@ services:
     # *.minder.local cert chain first, same convenience api-gateway's own
     # loopback port already gives -- Traefik-only would be a DX regression
     # for a page devs open as often as this one.
+    # #472: this bypasses Authelia's forward-auth gate for anyone with host/SSH
+    # access -- accepted, not an oversight. The SPA itself has no server-side
+    # secrets to leak; every API call it makes still goes through api-gateway's
+    # own JWT auth. Loopback-only (not 0.0.0.0), so not reachable off-host.
     ports:
     - "127.0.0.1:8009:8009"
     deploy:
@@ -1185,6 +1194,11 @@ services:
     - ./services/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
     - ./services/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     # PILLAR 4: Expose for LAN access (via Traefik with Authelia in production)
+    # #472: this bypasses Authelia's forward-auth gate for anyone with host/SSH
+    # access -- accepted, not an oversight, and lower-risk than a service with
+    # no auth of its own: Grafana still requires its own separate credential
+    # (GRAFANA_PASSWORD, a real per-deployment random secret, not a default).
+    # Loopback-only (not 0.0.0.0), so not reachable off-host.
     ports:
     - 127.0.0.1:3000:3000
     healthcheck:
@@ -1665,8 +1679,14 @@ services:
     # declaration would otherwise create (#274).
     volumes:
     - jaeger_tmp:/tmp
+    # No host port for the UI (16686, #472): unlike every other loopback-published
+    # service here, the jaegertracing/all-in-one image ships with NO authentication
+    # of its own -- it's designed to sit behind a reverse proxy. Publishing it would
+    # mean anyone with host/SSH access gets the full trace UI with zero credential
+    # check at all, bypassing the Traefik+Authelia route below entirely. The OTLP/
+    # Thrift/Zipkin ports ARE kept: those are machine-to-machine trace-ingestion
+    # endpoints, not a browsable admin surface, and aren't Traefik-routed at all.
     ports:
-    - "127.0.0.1:16686:16686"  # Jaeger UI
     - "127.0.0.1:14250:14250"  # OTLP gRPC
     - "127.0.0.1:14268:14268"  # HTTP Thrift
     - "127.0.0.1:9411:9411"    # Zipkin compact Thrift
