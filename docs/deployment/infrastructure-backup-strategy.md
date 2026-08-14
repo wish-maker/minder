@@ -104,6 +104,20 @@ If you need to script backups outside `setup.sh` (e.g. an external cron on the P
 building blocks are below. These are illustrative fallbacks — the built-in
 `setup.sh backup` is the supported path.
 
+**Already shipped, not illustrative:** `scripts/backup-test.sh --quick` (#430) is a real
+integrity check — for each of postgres/redis/neo4j/snapshots, it verifies the *latest*
+backup artifact exists, is recent enough (`BACKUP_MAX_AGE_HOURS`), is non-empty, and is
+a valid archive (`gzip -t`/`tar -tzf`). It catches the failure modes that silently rot
+backups: the cron stopped running, a dump got truncated, or an archive is corrupt. Wired
+into the Pi's crontab as a daily check:
+
+```cron
+0 2 * * * /root/minder/scripts/backup-test.sh --quick >> /root/minder/logs/backup-test.log 2>&1
+```
+
+Exit 0 = every latest backup present/recent/valid; exit 1 = at least one isn't. Unit
+tests: `tests/unit/test_backup_test_sh.py`.
+
 ### PostgreSQL
 
 ```bash

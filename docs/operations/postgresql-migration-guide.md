@@ -1,6 +1,6 @@
 # PostgreSQL Migration Guide
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-14
 
 This guide covers two related topics:
 1. Running Minder's own **schema migrations** (day-to-day).
@@ -37,9 +37,17 @@ Compose is always invoked with the explicit file path, e.g.:
 docker compose --file docker/docker-compose.yml <command>
 ```
 
-Migrations run against the databases listed above. Initialization SQL lives under
-`docker/services/postgres/` (the tracked `init.sql` is the canonical clean-install
-initializer).
+**How `migrate` actually decides what to touch** (`scripts/setup/migrate.py`): it runs
+`alembic upgrade <target>` (default `head`) inside a fixed list of API containers
+(api-gateway, marketplace, plugin-registry, rag-pipeline, model-management) — but only
+after probing each one (`docker exec <container> command -v alembic`) to confirm Alembic
+is actually installed there. A container without Alembic is skipped cleanly (not an
+error) — those services create their own schema on startup instead of migrating it. The
+per-domain plugin databases (`tefas_db`/`weather_db`/`news_db`/`crypto_db`) aren't in this
+list at all; they're initialized by their owning plugin, not by `migrate`.
+
+Initialization SQL lives under `docker/services/postgres/` (the tracked `init.sql` is the
+canonical clean-install initializer).
 
 ---
 
@@ -220,6 +228,6 @@ docker exec minder-postgres env | grep POSTGRES
 
 ---
 
-**Last Updated:** 2026-07-10
+**Last Updated:** 2026-08-14
 **Current version:** postgres:18.4-trixie
 **Routine migrations:** `bash setup.sh migrate`
