@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from core.tts_engine import TTS_AVAILABLE, synthesize
+from core.tts_engine import TTS_AVAILABLE, list_voices, synthesize
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from models import TTSRequest
@@ -65,7 +65,7 @@ async def text_to_speech(request: TTSRequest):
         # requests aren't stalled. media_type/ext depend on the engine (Piper=WAV,
         # gTTS=MP3), chosen inside synthesize().
         audio_bytes, media_type, ext = await asyncio.to_thread(
-            synthesize, request.text, request.language, request.slow
+            synthesize, request.text, request.language, request.slow, request.voice
         )
 
         # Count success only after synthesis actually succeeds — otherwise a failure
@@ -106,3 +106,13 @@ async def get_tts_languages():
         "default": settings.DEFAULT_TTS_LANG,
         "available": TTS_AVAILABLE,
     }
+
+
+@router.get("/v1/tts/voices", tags=["TTS"])
+async def get_tts_voices(language: str = settings.DEFAULT_TTS_LANG):
+    """Voice choices for `language` (#588) -- empty for a gTTS-only language
+    (no per-voice selection) or one with no bundled Piper voice at all. Not
+    gated on `language` being in SUPPORTED_LANGUAGES: an unrecognized code
+    just has no voices, same as a recognized-but-gTTS-only one, so there's
+    nothing to 422 over here."""
+    return {"language": language, "voices": list_voices(language)}
