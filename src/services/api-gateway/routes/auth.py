@@ -39,7 +39,6 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=1)
     email: str = Field(min_length=1)
     password: str = Field(min_length=8)
-    role: str = "user"
 
 
 class LoginRequest(BaseModel):
@@ -70,9 +69,13 @@ class TokenResponse(BaseModel):
 @router.post("/register", status_code=201, response_model=RegisterResponse)
 @enforce_rate_limit(max_requests=10, window_minutes=1)
 async def register(body: RegisterRequest, request: Request):
-    """Register a new user (username/email/password, min 8 chars). 201 on success."""
+    """Register a new user (username/email/password, min 8 chars). 201 on success.
+
+    Always creates a "user"-role account (#474) -- admin is only ever granted via
+    Authelia OIDC group membership, never self-assignable through this endpoint.
+    """
     try:
-        user = await create_user(body.username, body.email, body.password, body.role)
+        user = await create_user(body.username, body.email, body.password)
         return RegisterResponse(
             user=UserOut(
                 id=user["id"],

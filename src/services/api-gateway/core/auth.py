@@ -83,17 +83,17 @@ async def init_users_table():
     logger.info("Users table ready")
 
 
-async def create_user(
-    username: str, email: str, password: str, role: str = "user"
-) -> Dict[str, Any]:
+async def create_user(username: str, email: str, password: str) -> Dict[str, Any]:
     """
-    Create a new user with hashed password
+    Create a new locally-registered user with hashed password. Always role="user"
+    (#474) -- there is no caller-controlled way into this function to create an
+    admin account. Admin is only ever granted via Authelia OIDC group membership
+    (get_or_create_oidc_user), never via /v1/auth/register.
 
     Args:
         username: Unique username
         email: User email
         password: Plain text password (will be hashed)
-        role: User role (default: 'user')
 
     Returns:
         Created user data
@@ -112,13 +112,12 @@ async def create_user(
             user = await conn.fetchrow(
                 """
                 INSERT INTO users (username, email, password_hash, role)
-                VALUES ($1, $2, $3, $4)
+                VALUES ($1, $2, $3, 'user')
                 RETURNING id, username, email, role, is_active, created_at
                 """,
                 username,
                 email,
                 password_hash,
-                role,
             )
 
             logger.info(f"Created user: {username}")
