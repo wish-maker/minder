@@ -14,6 +14,7 @@ knowledge of Ollama, HTTP, or the app's global state, and is trivially
 testable with fakes.
 """
 
+import asyncio
 import logging
 import uuid
 from typing import Awaitable, Callable, Dict, List, Sequence
@@ -128,7 +129,14 @@ async def build_tree(
 
     level = 1
     while level <= max_levels and len(current_texts) > 1:
-        clusters = agglomerative_clusters(current_embeddings, target_cluster_size)
+        # Synchronous, CPU-bound (O(k^2) per merge) -- off the event loop via
+        # asyncio.to_thread so building a tree for one document can't stall
+        # every other in-flight request on this service, matching the same
+        # convention already used for every other blocking call in this
+        # codebase (Qdrant upsert/search, spaCy NER, TTS/STT synthesis).
+        clusters = await asyncio.to_thread(
+            agglomerative_clusters, current_embeddings, target_cluster_size
+        )
         if len(clusters) >= len(current_texts):
             break  # clustering didn't reduce anything further — nothing to gain
 

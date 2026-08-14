@@ -15,6 +15,7 @@ Loaded by-path (hyphenated service dir); pyproject sets asyncio_mode=auto.
 """
 
 import importlib.util
+import threading
 from pathlib import Path
 
 import pytest
@@ -138,6 +139,29 @@ async def test_threshold_met_on_first_pass():
     assert r["quality"]["iterations"] == 1
     assert r["quality"]["refined"] is False
     assert llm.calls == 1
+
+
+async def test_evaluate_answer_quality_runs_off_the_event_loop():
+    """evaluate_answer_quality does synchronous transformer encode/BERTScore work
+    (plus a multi-second model load on first use) -- it must run via
+    asyncio.to_thread so one Self-RAG query can't stall every other in-flight
+    request on the service."""
+    main_thread_id = threading.get_ident()
+    seen_thread_ids = []
+
+    class _ThreadSpyEvaluator(_FakeEvaluator):
+        def evaluate_answer_quality(self, **kwargs):
+            seen_thread_ids.append(threading.get_ident())
+            return super().evaluate_answer_quality(**kwargs)
+
+    pipe = _with_evaluator(
+        SelfRAGPipeline(max_iterations=1, quality_threshold=0.7),
+        _ThreadSpyEvaluator([{"overall_quality": 0.9}]),
+    )
+    await pipe.generate_with_self_refinement("q", "ctx", _SOURCES, _FakeLLM(["good"]))
+
+    assert seen_thread_ids  # the evaluator actually ran
+    assert all(tid != main_thread_id for tid in seen_thread_ids)
 
 
 async def test_low_quality_runs_to_max_iterations():
