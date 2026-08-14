@@ -13,7 +13,7 @@ from models import (
     ModelTestRequest,
 )
 
-from shared.auth.jwt_middleware import get_current_user_or_service
+from shared.auth.jwt_middleware import require_role_or_service
 from shared.errors import backend_http_error
 from shared.models import PaginatedList
 
@@ -78,7 +78,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     async def register_model(
         request: ModelPullRequest,
         response: Response,
-        current_user: dict = Depends(get_current_user_or_service),
+        current_user: dict = Depends(require_role_or_service("admin")),
     ):
         """Pull a model from the Ollama library (may download a lot).
 
@@ -88,6 +88,8 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
 
         Served at both /v1/models and the legacy /models directly — the old /models
         used a 301 redirect, which drops the method/body on non-GET clients (#147).
+        Admin-only for real users (#474); the internal service token still passes
+        unconditionally (#405).
         """
         model_id = request.model_id
         try:
@@ -161,13 +163,14 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     )  # deprecated unversioned alias
     async def delete_model(
         model_id: str,
-        current_user: dict = Depends(get_current_user_or_service),
+        current_user: dict = Depends(require_role_or_service("admin")),
     ):
         """Permanently delete a model from local Ollama storage.
 
         Served at both /v1/models/{model_id} and the legacy /models/{model_id}
         directly — the old path used a 301 redirect, which drops the method/body on
-        non-GET clients (#147).
+        non-GET clients (#147). Admin-only for real users (#474); the internal
+        service token still passes unconditionally (#405).
         """
         try:
             exists = any(
@@ -266,7 +269,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     )  # deprecated unversioned alias
     async def fine_tune_model(
         request: FineTuneRequest,
-        current_user: dict = Depends(get_current_user_or_service),
+        current_user: dict = Depends(require_role_or_service("admin")),
     ):
         """Fine-tune request. **Not implemented** — returns 501 (#145).
 

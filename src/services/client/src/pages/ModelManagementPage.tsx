@@ -162,11 +162,13 @@ function TestPromptWidget({ modelId, token }: { modelId: string; token: string }
 function ModelCard({
   model,
   token,
+  isAdmin,
   onDeleted,
   confirm,
 }: {
   model: ModelInfo;
   token: string;
+  isAdmin: boolean;
   onDeleted: (id: string) => void;
   confirm: ReturnType<typeof useConfirm>["confirm"];
 }) {
@@ -212,7 +214,14 @@ function ModelCard({
         </div>
         <button
           onClick={handleDelete}
-          disabled={!token || busy}
+          disabled={!isAdmin || busy}
+          title={
+            !isAdmin
+              ? token
+                ? "Admin role required"
+                : "Log in as an admin to delete models"
+              : undefined
+          }
           className={destructiveButtonClass}
         >
           🗑 Delete
@@ -226,9 +235,11 @@ function ModelCard({
 
 function PullModelForm({
   token,
+  isAdmin,
   onPulled,
 }: {
   token: string;
+  isAdmin: boolean;
   onPulled: () => void;
 }) {
   const [modelId, setModelId] = useState("");
@@ -268,7 +279,7 @@ function PullModelForm({
       <h2 className="mb-1 text-base font-semibold text-gray-900 dark:text-gray-100">
         <span aria-hidden="true">⬇️</span> Pull a model
       </h2>
-      <fieldset disabled={!token}>
+      <fieldset disabled={!isAdmin}>
         <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
           <input
             className={inputClass}
@@ -283,9 +294,9 @@ function PullModelForm({
           </button>
         </form>
       </fieldset>
-      {!token && (
+      {!isAdmin && (
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Log in to pull a model.
+          {token ? "Admin role required to pull a model." : "Log in as an admin to pull a model."}
         </p>
       )}
       {pulling && (
@@ -302,7 +313,8 @@ function PullModelForm({
 }
 
 export function ModelManagementPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
+  const isAdmin = role === "admin";
   const { confirm, dialog } = useConfirm();
   // Single list read → useAsyncResource (cancels on unmount, stale-guard). Pull
   // and delete refresh via reload() rather than local optimistic edits, so the
@@ -328,8 +340,8 @@ export function ModelManagementPage() {
       <PageHeader icon="🤖" title="Model Management" />
       <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
         Pull, delete, and test Ollama models on Minder's own model-management
-        service. Browsing is open for everyone; log in to pull, delete, or
-        test a prompt.
+        service. Browsing is open for everyone; log in to test a prompt.
+        Pulling and deleting require an admin account.
       </p>
       <InfoCallout icon="🤖">
         <a className="font-medium underline" href={openWebUiUrl}>
@@ -343,7 +355,7 @@ export function ModelManagementPage() {
       <StatusLine isError={!!modelsRes.error}>
         {modelsRes.error ?? (modelsRes.loading ? "Loading…" : "")}
       </StatusLine>
-      <PullModelForm token={token} onPulled={modelsRes.reload} />
+      <PullModelForm token={token} isAdmin={isAdmin} onPulled={modelsRes.reload} />
       {models !== null && models.length === 0 && (
         <EmptyState>No models pulled yet — use the form above.</EmptyState>
       )}
@@ -372,6 +384,7 @@ export function ModelManagementPage() {
           key={m.id}
           model={m}
           token={token}
+          isAdmin={isAdmin}
           onDeleted={modelsRes.reload}
           confirm={confirm}
         />
