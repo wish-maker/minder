@@ -319,28 +319,9 @@ jobs:
           JWT_SECRET: test_jwt_secret_for_ci
           NEO4J_AUTH: neo4j/test_password
         run: |
-          set -o pipefail
           pytest tests/integration/ -v \
             --tb=short \
-            --timeout=600 2>&1 | tee /tmp/integration-output.log
-
-      - name: Flag graph-rag functional tests skipped for lack of a live stack (#583)
-        # test_rag_pipeline_functional.py / test_marketplace_gateway_functional.py /
-        # test_model_management_functional.py moved to tests/e2e/ (#437) and now run
-        # for real against the live-process harness there. test_graph_rag_functional.py
-        # is the one remaining *_functional.py file that still hits a real running
-        # service over HTTP and skips if it's unreachable -- this job has no
-        # docker-composed stack, only in-process module loading, so it ALWAYS skips
-        # here. A skip doesn't fail the job, so without this step "Integration Tests:
-        # pass" silently reads as full coverage when this specific test never
-        # actually executed (this is exactly the gap that let a real bug ship once
-        # already -- see #436).
-        if: always()
-        run: |
-          skipped=$(grep -cE "test_graph_rag_functional\.py::.*SKIPPED" /tmp/integration-output.log || true)
-          if [ "$skipped" -gt 0 ]; then
-            echo "::warning::${skipped} graph-rag functional test(s) skipped -- no network-reachable service in this job (#583). These only run for real against a live stack (manual verification) until graph-rag joins tests/e2e/'s process harness."
-          fi
+            --timeout=600
 
   e2e-tests:
     name: E2E Tests
@@ -381,6 +362,19 @@ jobs:
         ports:
           - 6333:6333
 
+      # graph-rag's own dependency (#583) -- same image tag pinned in
+      # docker/docker-compose.yml for prod, so this exercises the same Neo4j
+      # version graph-rag actually runs against. No --health-cmd, same
+      # rationale as qdrant above: conftest.py's _wait_for_health polls
+      # graph-rag's own /health (which probes Neo4j via verify_connectivity),
+      # so Neo4j's own startup lag is already tolerated by that retry loop.
+      neo4j:
+        image: neo4j:2026.06.0-community
+        env:
+          NEO4J_AUTH: neo4j/test_password
+        ports:
+          - 7687:7687
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -404,6 +398,23 @@ jobs:
           pip install -r src/services/rag-pipeline/requirements.txt
           pip install -r src/services/marketplace/requirements.txt
           pip install -r src/services/model-management/requirements.txt
+          pip install -r src/services/graph-rag/requirements.txt
+
+      - name: Download spaCy model (retried, #583)
+        # `spacy download` fetches a wheel from github.com/explosion/spacy-models
+        # releases -- this exact host has caused real, repeated RemoteDisconnected
+        # failures elsewhere in this project's deploy pipeline. Accepting the flake
+        # risk explicitly (per #583) rather than trying to eliminate it outright,
+        # with the same retry discipline already used for hadolint's CI-image
+        # download, instead of letting one transient failure fail the whole job.
+        run: |
+          for attempt in 1 2 3; do
+            python -m spacy download en_core_web_sm && exit 0
+            echo "spaCy model download failed (attempt $attempt/3), retrying…"
+            sleep 5
+          done
+          echo "::error::spaCy model download failed after 3 attempts"
+          exit 1
 
       - name: Prepare /app (container-absolute-path symlinks, #318)
         # tests/e2e/conftest.py symlinks /app/{src,plugins,services/plugin-registry}
