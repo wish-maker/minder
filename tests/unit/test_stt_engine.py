@@ -110,15 +110,22 @@ def test_transcribe_unknown_value_returns_empty_zero_confidence(
     assert confidence == 0.0
 
 
-def test_transcribe_request_error_surfaces_api_error_message(monkeypatch, stub_to_wav):
+def test_transcribe_request_error_propagates_instead_of_faking_a_transcript(
+    monkeypatch, stub_to_wav
+):
+    # Used to swallow this and return ("[API Error: quota exceeded]", 0.0) -- a
+    # fake "successful" transcript embedding the raw exception string, which
+    # routes/stt.py would then return as a normal 200. Re-raising instead lets
+    # the route's existing `except Exception -> backend_http_error` path turn
+    # this into a proper sanitized 503, matching every other backend-outage
+    # path in this codebase.
     monkeypatch.setattr(
         _mod.sr,
         "Recognizer",
         lambda: _recognizer_returning(raises=_FakeRequestError("quota exceeded")),
     )
-    text, confidence = _mod.transcribe(b"fake-wav-bytes", "tr-TR")
-    assert text == "[API Error: quota exceeded]"
-    assert confidence == 0.0
+    with pytest.raises(_FakeRequestError, match="quota exceeded"):
+        _mod.transcribe(b"fake-wav-bytes", "tr-TR")
 
 
 def test_transcribe_bad_audio_raises_valueerror(monkeypatch, stub_to_wav):

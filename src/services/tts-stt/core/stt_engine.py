@@ -82,7 +82,15 @@ def transcribe(audio_bytes: bytes, language: str) -> tuple[str, float]:
         except sr.UnknownValueError:
             return "", 0.0
         except sr.RequestError as e:
+            # The recognition backend itself is unreachable/erroring -- this used to
+            # come back as a fake 200 success with the raw exception string embedded
+            # as if it were the transcript (e.g. a user seeing "[API Error:
+            # HTTPSConnectionPool(...): Read timed out]" quoted as their own speech).
+            # Re-raise so routes/stt.py's existing `except Exception ->
+            # backend_http_error` path handles it the same way every other backend
+            # outage in this codebase is handled: a sanitized 503, not a misleading
+            # "successful" transcription.
             logger.warning(f"Speech recognition API error: {e}")
-            return f"[API Error: {str(e)}]", 0.0
+            raise
     finally:
         os.unlink(wav_path)
