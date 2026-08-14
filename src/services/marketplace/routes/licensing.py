@@ -3,7 +3,7 @@ import logging
 
 from core.licensing import create_license, get_user_licenses, validate_license
 from core.validation import ensure_valid_plugin_id
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator
 
 from shared.auth.jwt_middleware import get_current_user
@@ -23,9 +23,17 @@ class LicenseValidateRequest(BaseModel):
 
 
 class LicenseActivateRequest(BaseModel):
-    """Request model for license activation"""
+    """Request model for license activation.
 
-    user_id: str
+    No user_id field -- identity comes from the JWT (`sub`), same as
+    installations.py's install/uninstall (#147/C7). A caller-supplied user_id
+    used to let any authenticated user activate (or silently overwrite) a
+    license for ANY other account; there is still no payment/entitlement
+    check behind this endpoint, so this closes the cross-account grant, not
+    the "is self-service tier activation free" question (see the issue
+    tracking that gap).
+    """
+
     plugin_id: str
     # Canonical tier; "professional" accepted as a deprecated alias for "pro" (#142).
     tier: str
@@ -56,25 +64,33 @@ async def validate_license_endpoint(
 async def activate_license(
     request: LicenseActivateRequest, current_user: dict = Depends(get_current_user)
 ):
-    """Activate a license for a user and plugin"""
+    """Activate a license for the authenticated user (identity from JWT, #147/C7)."""
     # Same UUID guard as validate (#574): a non-UUID plugin_id would otherwise hit
     # the UUID column and 500 (sanitized, via backend_http_error below) instead of a
     # clean 404.
     ensure_valid_plugin_id(request.plugin_id)
+    user_id = current_user["sub"]
     try:
         license_data = await create_license(
-            user_id=request.user_id, plugin_id=request.plugin_id, tier=request.tier
+            user_id=user_id, plugin_id=request.plugin_id, tier=request.tier
         )
 
         return {"status": "activated", "license": license_data}
     except Exception as e:
-        logger.error(f"Failed to activate license for {request.user_id}: {e}")
+        logger.error(f"Failed to activate license for {user_id}: {e}")
         raise backend_http_error(e, "License activation")
 
 
 @router.get("")
-async def list_licenses(user_id: str = Query(...)):
-    """Get all licenses for a user"""
-    licenses = await get_user_licenses(user_id)
+async def list_licenses(current_user: dict = Depends(get_current_user)):
+    """Get all licenses for the authenticated user (identity from JWT).
+
+    Previously took user_id as an unauthenticated query param -- any caller
+    could read any other user's license records, including the plaintext
+    license_key (the bearer secret validate_license accepts as proof of
+    entitlement). Scoped to the caller's own JWT identity instead, matching
+    installations.py's /me convention.
+    """
+    licenses = await get_user_licenses(current_user["sub"])
 
     return {"licenses": licenses, "count": len(licenses)}
