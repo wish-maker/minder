@@ -1,4 +1,4 @@
-"""Unit tests for graph-rag's core/graph_retriever.py.
+"""Unit tests for graph-rag's core/graph_retriever.py and core/graph_constructor.py.
 
 GraphRetriever had zero direct test coverage -- the existing knowledge-graph
 handler test explicitly fakes the whole class out (`GraphRetriever = object`)
@@ -15,7 +15,14 @@ traversal), plus the exception-swallowing contract every method documents
 
 Loaded via sys.path (graph-rag has no cross-service-name collision risk like
 plugin-registry/marketplace's `core`/`config`/`models`, so no stale-cache
-clearing needed beyond a straightforward fresh import).
+clearing needed beyond a straightforward fresh import). `_load()` is called
+FRESH inside each test (not once at module scope) specifically so a second
+independent module under the same service's `core` package -- graph_constructor,
+added below -- can share this one fresh-import site instead of each owning its
+own: this session's own precedent (documented in
+test_internal_write_endpoints_require_auth.py) is that a SECOND independent
+module-level fresh-import site for the same service crashes the whole pytest
+run -- confirmed live while adding the graph_constructor tests below.
 """
 
 import sys
@@ -33,6 +40,20 @@ def _load():
     import importlib
 
     return importlib.import_module("core.graph_retriever")
+
+
+def _load_constructor():
+    """Same fresh-import as _load(), for core.graph_constructor -- call sites
+    for both must each evict+reimport "core" themselves since either can run
+    in any order relative to the other across this file's tests."""
+    if str(_SERVICE_DIR) not in sys.path:
+        sys.path.insert(0, str(_SERVICE_DIR))
+    for stale in list(sys.modules):
+        if stale == "core" or stale.startswith("core."):
+            del sys.modules[stale]
+    import importlib
+
+    return importlib.import_module("core.graph_constructor")
 
 
 class _FakeRecord(dict):
@@ -241,3 +262,76 @@ async def test_close_closes_the_driver(monkeypatch):
     retriever = _make_retriever(monkeypatch, lambda q, p: _FakeResult([]))
     await retriever.close()
     assert retriever.driver.closed is True
+
+
+# --- core/graph_constructor.py: create_document_node -------------------------
+#
+# Found in a background audit: create_document_node's MERGE only had an
+# ON CREATE SET clause, never ON MATCH SET. The route docstring calls
+# re-POSTing the same document_id an "upsert," and entities/relationships
+# elsewhere in graph_constructor.py DO have ON MATCH SET -- but the Document
+# node itself didn't, so once created, its title/source/metadata were frozen
+# forever regardless of what a later re-ingest sent.
+
+
+class _FakeConstructorResult:
+    async def single(self):
+        return {"d": "unused"}  # any truthy value -- just checked for not-None
+
+
+class _FakeConstructorSession:
+    def __init__(self):
+        self.calls = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def run(self, query, **kwargs):
+        self.calls.append((query, kwargs))
+        return _FakeConstructorResult()
+
+
+class _FakeConstructorDriver:
+    def __init__(self):
+        self.fake_session = _FakeConstructorSession()
+
+    def session(self):
+        return self.fake_session
+
+
+def _make_constructor(monkeypatch):
+    module = _load_constructor()
+    monkeypatch.setattr(
+        module.AsyncGraphDatabase,
+        "driver",
+        lambda *a, **k: _FakeConstructorDriver(),
+    )
+    return module.KnowledgeGraphConstructor("bolt://fake:7687", "neo4j", "pw")
+
+
+async def test_create_document_node_query_includes_on_match_set(monkeypatch):
+    constructor = _make_constructor(monkeypatch)
+    ok = await constructor.create_document_node(
+        document_id="doc-1", title="Original Title", source="upload"
+    )
+    assert ok is True
+
+    query, kwargs = constructor.driver.fake_session.calls[0]
+    assert "ON MATCH SET" in query
+    assert "d.title = $title" in query.split("ON MATCH SET")[1]
+    assert kwargs["title"] == "Original Title"
+
+
+async def test_reingest_sends_the_new_title_as_the_on_match_value(monkeypatch):
+    """Two calls for the same document_id -- the second must carry the NEW
+    title as a bound parameter the ON MATCH SET clause can apply."""
+    constructor = _make_constructor(monkeypatch)
+    await constructor.create_document_node(document_id="doc-1", title="Draft")
+    await constructor.create_document_node(document_id="doc-1", title="Final Title")
+
+    calls = constructor.driver.fake_session.calls
+    assert len(calls) == 2
+    assert calls[1][1]["title"] == "Final Title"
