@@ -12,6 +12,7 @@ the async tests need no decorator.
 """
 
 import importlib.util
+import threading
 from pathlib import Path
 
 import pytest
@@ -177,3 +178,34 @@ async def test_build_tree_propagates_embedding_failure():
             _summarize_ok,
             embed_fails,
         )
+
+
+async def test_build_tree_runs_clustering_off_the_event_loop():
+    """agglomerative_clusters is synchronous, O(k^2)-per-merge CPU work -- it
+    must run via asyncio.to_thread so building a tree for one document can't
+    stall every other in-flight request on the service (matching the same
+    convention already used for every other blocking call in this codebase)."""
+    main_thread_id = threading.get_ident()
+    seen_thread_ids = []
+
+    orig_clusters = raptor.agglomerative_clusters
+
+    def spy_clusters(*args, **kwargs):
+        seen_thread_ids.append(threading.get_ident())
+        return orig_clusters(*args, **kwargs)
+
+    raptor.agglomerative_clusters = spy_clusters
+    try:
+        await raptor.build_tree(
+            [f"leaf-{i}" for i in range(12)],
+            [f"chunk {i}" for i in range(12)],
+            _synthetic_two_groups(),
+            _summarize_ok,
+            _embed_ok,
+            max_levels=1,
+        )
+    finally:
+        raptor.agglomerative_clusters = orig_clusters
+
+    assert seen_thread_ids  # clustering actually ran
+    assert all(tid != main_thread_id for tid in seen_thread_ids)

@@ -7,6 +7,7 @@ Generates answers, evaluates quality, and refines if needed.
 This is a domain component with NO external dependencies on infrastructure.
 """
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
@@ -163,9 +164,14 @@ class SelfRAGPipeline:
                 logger.info("ℹ️ Quality evaluator unavailable, using first iteration")
                 break
 
-            # Evaluate quality
+            # Evaluate quality. Synchronous transformer encode/BERTScore work (plus a
+            # multi-second model load on first use) -- off the event loop via
+            # asyncio.to_thread so one Self-RAG query can't stall every other
+            # in-flight request on this service, matching the same convention
+            # used for every other blocking call in this codebase.
             try:
-                quality_result = self.evaluator.evaluate_answer_quality(
+                quality_result = await asyncio.to_thread(
+                    self.evaluator.evaluate_answer_quality,
                     question=question,
                     answer=current_answer,
                     context=current_context,
