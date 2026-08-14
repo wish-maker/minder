@@ -4,6 +4,7 @@ from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.installation import InstallationResponse
 
+from config import settings
 from shared.auth.jwt_middleware import get_current_user, require_role
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
@@ -67,6 +68,27 @@ async def install_plugin(
                 config_json=existing["config_json"],
                 installed_at=existing["installed_at"],
                 last_updated_at=existing["last_updated_at"],
+            )
+
+        # Cap installs per user (MAX_PLUGINS_PER_USER) -- was defined in config but
+        # never enforced anywhere, so a single user could install every plugin in
+        # the catalog with no limit. Only counts toward a genuinely NEW
+        # installation (this branch); re-enabling an already-installed plugin
+        # (the `existing` branch above) doesn't add a new row.
+        install_count = await conn.fetchval(
+            """
+            SELECT COUNT(*) FROM marketplace_installations
+            WHERE user_id = $1 AND status = 'installed'
+            """,
+            user_id,
+        )
+        if install_count >= settings.MAX_PLUGINS_PER_USER:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Plugin install limit reached ({settings.MAX_PLUGINS_PER_USER} "
+                    "per user) -- uninstall an existing plugin before installing another."
+                ),
             )
 
         # Create new installation

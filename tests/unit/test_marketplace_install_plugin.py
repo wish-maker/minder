@@ -56,18 +56,24 @@ def _isolated_import(*module_paths: str):
 
 
 class _FakeConn:
-    def __init__(self, plugin_row, existing_row, insert_row):
+    def __init__(self, plugin_row, existing_row, insert_row, install_count=0):
         self._plugin_row = plugin_row
         self._existing_row = existing_row
         self._insert_row = insert_row
+        self._install_count = install_count
 
     async def fetchrow(self, query, *args):
         if "FROM marketplace_plugins" in query:
             return self._plugin_row
-        if "FROM marketplace_installations" in query and "SELECT" in query:
+        if "FROM marketplace_installations" in query and "SELECT *" in query:
             return self._existing_row
         if "INSERT INTO marketplace_installations" in query:
             return self._insert_row
+        return None
+
+    async def fetchval(self, query, *args):
+        if "COUNT(*) FROM marketplace_installations" in query:
+            return self._install_count
         return None
 
     async def execute(self, query, *args):
@@ -142,3 +148,61 @@ async def test_reinstall_existing_does_not_500_on_uuid_plugin_id(monkeypatch):
 
     assert result.plugin_id == plugin_id
     assert result.enabled is True
+
+
+@pytest.mark.asyncio
+async def test_install_rejected_once_user_hits_max_plugins_per_user(monkeypatch):
+    """MAX_PLUGINS_PER_USER was defined in config but never enforced anywhere --
+    a single user could install every plugin in the catalog with no limit."""
+    monkeypatch.setattr(management.settings, "MAX_PLUGINS_PER_USER", 2)
+    plugin_id = str(uuid.uuid4())
+    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    conn = _FakeConn(plugin_row, existing_row=None, insert_row=None, install_count=2)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        await management.install_plugin(plugin_id, current_user={"sub": "4"})
+
+    assert exc.value.status_code == 409
+    assert "limit" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_install_allowed_when_under_max_plugins_per_user(monkeypatch):
+    monkeypatch.setattr(management.settings, "MAX_PLUGINS_PER_USER", 2)
+    plugin_id = str(uuid.uuid4())
+    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    insert_row = _uuid_row(uuid.UUID(plugin_id))
+    conn = _FakeConn(
+        plugin_row, existing_row=None, insert_row=insert_row, install_count=1
+    )
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+
+    result = await management.install_plugin(plugin_id, current_user={"sub": "4"})
+
+    assert result.status == "installed"
+
+
+@pytest.mark.asyncio
+async def test_reinstall_of_existing_plugin_is_not_capped_by_max_plugins_per_user(
+    monkeypatch,
+):
+    """Re-enabling an already-installed plugin (the `existing` branch) must not
+    be blocked by the cap -- it doesn't add a new installation row."""
+    monkeypatch.setattr(management.settings, "MAX_PLUGINS_PER_USER", 1)
+    plugin_id = str(uuid.uuid4())
+    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    existing_row = _uuid_row(uuid.UUID(plugin_id))
+    # install_count would be over the (artificially low) cap if this path
+    # incorrectly re-checked it -- proves the existing-row branch returns
+    # before ever reaching the cap check.
+    conn = _FakeConn(
+        plugin_row, existing_row=existing_row, insert_row=None, install_count=5
+    )
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+
+    result = await management.install_plugin(plugin_id, current_user={"sub": "4"})
+
+    assert result.status == "installed"
