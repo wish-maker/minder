@@ -77,6 +77,14 @@ async def create_pg_pool(
         try:
             await admin_conn.execute(f"CREATE DATABASE {database}")
             logger.info(f"✅ Database {database} created")
+        except asyncpg.DuplicateDatabaseError:
+            # Some other process (a concurrent replica/instance, a restart racing
+            # a crash-looping previous attempt) created it between our
+            # InvalidCatalogNameError and this CREATE DATABASE -- an in-process
+            # asyncio.Lock around get_pool() (as callers already have) only
+            # protects concurrent coroutines in ONE process, not this
+            # cross-process race. The database exists either way, so proceed.
+            logger.info(f"Database {database} already created by another process")
         finally:
             await admin_conn.close()
 
