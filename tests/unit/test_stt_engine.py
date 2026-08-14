@@ -76,7 +76,19 @@ def _recognizer_returning(*, text=None, raises=None):
     return recognizer
 
 
-def test_transcribe_success_returns_text_and_confidence(monkeypatch):
+@pytest.fixture
+def stub_to_wav(monkeypatch, tmp_path):
+    """transcribe() now normalizes input audio via `_to_wav()` (real ffmpeg
+    subprocess, #583's STT fix) before ever touching `sr.AudioFile` -- stub it
+    for tests exercising transcribe()'s OWN logic (recognizer outcomes,
+    cleanup) so they don't need a real ffmpeg binary or real audio bytes.
+    `_to_wav`'s own conversion-failure behavior is tested directly, below."""
+    fake_wav = tmp_path / "fake.wav"
+    fake_wav.write_bytes(b"")
+    monkeypatch.setattr(_mod, "_to_wav", lambda audio_bytes: str(fake_wav))
+
+
+def test_transcribe_success_returns_text_and_confidence(monkeypatch, stub_to_wav):
     monkeypatch.setattr(
         _mod.sr, "Recognizer", lambda: _recognizer_returning(text="merhaba")
     )
@@ -85,7 +97,9 @@ def test_transcribe_success_returns_text_and_confidence(monkeypatch):
     assert confidence == 0.9
 
 
-def test_transcribe_unknown_value_returns_empty_zero_confidence(monkeypatch):
+def test_transcribe_unknown_value_returns_empty_zero_confidence(
+    monkeypatch, stub_to_wav
+):
     monkeypatch.setattr(
         _mod.sr,
         "Recognizer",
@@ -96,7 +110,7 @@ def test_transcribe_unknown_value_returns_empty_zero_confidence(monkeypatch):
     assert confidence == 0.0
 
 
-def test_transcribe_request_error_surfaces_api_error_message(monkeypatch):
+def test_transcribe_request_error_surfaces_api_error_message(monkeypatch, stub_to_wav):
     monkeypatch.setattr(
         _mod.sr,
         "Recognizer",
@@ -107,7 +121,7 @@ def test_transcribe_request_error_surfaces_api_error_message(monkeypatch):
     assert confidence == 0.0
 
 
-def test_transcribe_bad_audio_raises_valueerror(monkeypatch):
+def test_transcribe_bad_audio_raises_valueerror(monkeypatch, stub_to_wav):
     # #536: an empty / non-WAV / truncated upload fails to open as audio; that's
     # a client error → transcribe raises a ValueError the route maps to 400,
     # NOT a bare exception the route would 500 on.
@@ -130,8 +144,8 @@ def test_transcribe_bad_audio_raises_valueerror(monkeypatch):
     assert len(unlinked) == 1  # temp file still cleaned up on the error path
 
 
-def test_transcribe_cleans_up_temp_file(monkeypatch, tmp_path):
-    """The temp WAV file is written then unlinked even on success -- assert the
+def test_transcribe_cleans_up_temp_file(monkeypatch, stub_to_wav):
+    """The normalized WAV file is unlinked even on success -- assert the
     module's own os.unlink is actually invoked (no leaked temp files)."""
     calls = []
     monkeypatch.setattr(_mod.os, "unlink", lambda path: calls.append(path))
@@ -140,3 +154,74 @@ def test_transcribe_cleans_up_temp_file(monkeypatch, tmp_path):
     _mod.transcribe(b"fake-wav-bytes", "tr-TR")
 
     assert len(calls) == 1
+
+
+# ── _to_wav (#583: ffmpeg normalization, added so mic recordings --
+# always WebM/Opus from the browser's MediaRecorder, never WAV -- actually
+# decode instead of always 400ing) ──────────────────────────────────────────
+
+
+def test_to_wav_converts_via_ffmpeg_and_cleans_up_input(monkeypatch, tmp_path):
+    written = {}
+
+    class _FakeInputFile:
+        name = str(tmp_path / "input-tmp")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def write(self, data):
+            written["data"] = data
+
+    run_calls = []
+    unlinked = []
+    monkeypatch.setattr(
+        _mod.tempfile, "NamedTemporaryFile", lambda delete: _FakeInputFile()
+    )
+    monkeypatch.setattr(
+        _mod.subprocess,
+        "run",
+        lambda cmd, **kw: run_calls.append(cmd),
+    )
+    monkeypatch.setattr(_mod.os, "unlink", lambda p: unlinked.append(p))
+
+    result = _mod._to_wav(b"webm-bytes")
+
+    assert written["data"] == b"webm-bytes"
+    assert result == f"{_FakeInputFile.name}.wav"
+    assert run_calls[0][0] == "ffmpeg"
+    assert "-i" in run_calls[0]
+    assert unlinked == [_FakeInputFile.name]  # input cleaned up, NOT the output
+
+
+def test_to_wav_raises_valueerror_on_ffmpeg_failure(monkeypatch, tmp_path):
+    import subprocess
+
+    class _FakeInputFile:
+        name = str(tmp_path / "input-tmp")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def write(self, data):
+            pass
+
+    def _raise(cmd, **kw):
+        raise subprocess.CalledProcessError(1, cmd)
+
+    unlinked = []
+    monkeypatch.setattr(
+        _mod.tempfile, "NamedTemporaryFile", lambda delete: _FakeInputFile()
+    )
+    monkeypatch.setattr(_mod.subprocess, "run", _raise)
+    monkeypatch.setattr(_mod.os, "unlink", lambda p: unlinked.append(p))
+
+    with pytest.raises(ValueError, match="could not decode audio"):
+        _mod._to_wav(b"not-really-audio")
+    assert len(unlinked) == 1  # input temp file still cleaned up on failure
