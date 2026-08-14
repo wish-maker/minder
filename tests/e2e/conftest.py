@@ -1,32 +1,32 @@
 """Real multi-service E2E harness (#318).
 
 Starts real `uvicorn` subprocesses for api-gateway, plugin-registry,
-rag-pipeline, marketplace, and model-management bound to `127.0.0.1`, wired
-to each other via the same env vars `docker-compose.yml` uses (just
-`localhost` instead of `minder-<service>` hostnames), against real
-Postgres/Redis/Qdrant and a deterministic fake-Ollama stub (`fake_ollama.py`).
-No Docker, no image builds — just real sockets, real FastAPI apps, real
-routing code.
+rag-pipeline, marketplace, model-management, and graph-rag bound to
+`127.0.0.1`, wired to each other via the same env vars `docker-compose.yml`
+uses (just `localhost` instead of `minder-<service>` hostnames), against real
+Postgres/Redis/Qdrant/Neo4j and a deterministic fake-Ollama stub
+(`fake_ollama.py`). No Docker, no image builds — just real sockets, real
+FastAPI apps, real routing code.
 
-graph-rag is deliberately NOT part of this harness: it has a hard, critical-
-path dependency on a real Neo4j instance, plus a `python -m spacy download
-en_core_web_sm` fetch from `github.com/explosion/spacy-models` at
-build/install time — the exact same GitHub-release download that has shown
-real, repeated connectivity flakiness in this project's own deploy pipeline.
-Adding it here would import that flake into every CI run instead of just
-image builds. `tests/integration/test_graph_rag_functional.py` still covers
-it, still skip-gated, until that download can be made reliable (#583).
+graph-rag joined this harness in #583 (previously excluded: it has a hard,
+critical-path dependency on a real Neo4j instance, plus a `python -m spacy
+download en_core_web_sm` fetch from `github.com/explosion/spacy-models` at
+install time that has shown real connectivity flakiness in this project's own
+deploy pipeline). `ci.yml`'s `e2e-tests` job now runs a real `neo4j` service
+container and retries the spaCy download a few times before giving up,
+matching the re-run discipline already used for `hadolint`'s CI-image
+download rather than trying to eliminate the flake outright.
 
-marketplace normally uses its own `minder_marketplace` Postgres database and
-a real Neo4j graph store (#437) -- neither exists in this harness. `DB_NAME`
-is overridden to the shared `minder_test` database (its tables are all
-`marketplace_*`-prefixed, no collision with the other services' tables); its
-own `/health` only checks Postgres (confirmed in `main.py`), so the service
-starts and reports healthy without Neo4j. The `/v1/graph/*` routes that
-actually need Neo4j (`routes/graph_dependencies.py`) catch connection
-failures and return a real error response rather than crashing the process,
-so they're simply not exercised here -- only the install/uninstall/enable/
-disable/installations-listing paths (Postgres-only) get real e2e coverage.
+marketplace normally uses its own `minder_marketplace` Postgres database
+(#437); `DB_NAME` is overridden to the shared `minder_test` database instead
+(its tables are all `marketplace_*`-prefixed, no collision with the other
+services' tables). marketplace's own env here isn't pointed at the harness's
+Neo4j (only graph-rag's is, above) -- its `/health` only checks Postgres
+(confirmed in `main.py`), so the service starts and reports healthy
+regardless, and its `/v1/graph/*` routes (`routes/graph_dependencies.py`)
+would fail to connect and return a real error response rather than crashing
+the process. Only the install/uninstall/enable/disable/installations-listing
+paths (Postgres-only) get real e2e coverage for marketplace itself.
 
 Every service's `main.py`/`config.py` does `sys.path.insert(0, "/app/src")`
 (plugin-registry additionally `/app/plugins`, `/app/services/plugin-registry`)
@@ -60,6 +60,8 @@ REDIS_PORT = os.environ.get("E2E_REDIS_PORT", "6379")
 REDIS_PASSWORD = os.environ.get("E2E_REDIS_PASSWORD", "test_password")
 QDRANT_HOST = os.environ.get("E2E_QDRANT_HOST", "127.0.0.1")
 QDRANT_PORT = os.environ.get("E2E_QDRANT_PORT", "6333")
+NEO4J_HOST = os.environ.get("E2E_NEO4J_HOST", "127.0.0.1")
+NEO4J_PORT = os.environ.get("E2E_NEO4J_PORT", "7687")
 
 JWT_SECRET = "e2e-test-jwt-secret"
 
@@ -69,6 +71,7 @@ REGISTRY_PORT = 8001
 MARKETPLACE_PORT = 8002
 RAG_PORT = 8004
 MODEL_MGMT_PORT = 8005
+GRAPH_RAG_PORT = 8008
 
 STARTUP_TIMEOUT_S = 60
 
@@ -188,6 +191,7 @@ class LiveStack:
         rag_url,
         marketplace_url,
         model_mgmt_url,
+        graph_rag_url,
         ollama_url,
     ):
         self.gateway_url = gateway_url
@@ -195,6 +199,7 @@ class LiveStack:
         self.rag_url = rag_url
         self.marketplace_url = marketplace_url
         self.model_mgmt_url = model_mgmt_url
+        self.graph_rag_url = graph_rag_url
         self.ollama_url = ollama_url
 
     def reset_ollama(self):
@@ -299,6 +304,19 @@ def live_stack():
         model_mgmt_url = f"http://127.0.0.1:{MODEL_MGMT_PORT}"
         _wait_for_health(model_mgmt_url, STARTUP_TIMEOUT_S, model_mgmt_proc)
 
+        # graph-rag has no DB_HOST/REDIS_HOST/JWT_SECRET of its own (plain
+        # BaseSettings, not MinderBaseSettings -- see its config.py) -- only
+        # NEO4J_URI needs overriding here, NEO4J_AUTH is already inherited
+        # from the real environment via _common_env's os.environ.copy().
+        graph_rag_env = _common_env({"NEO4J_URI": f"bolt://{NEO4J_HOST}:{NEO4J_PORT}"})
+        graph_rag_proc = _spawn_uvicorn(
+            _SERVICES / "graph-rag", GRAPH_RAG_PORT, graph_rag_env
+        )
+        procs.append(("graph-rag", graph_rag_proc))
+
+        graph_rag_url = f"http://127.0.0.1:{GRAPH_RAG_PORT}"
+        _wait_for_health(graph_rag_url, STARTUP_TIMEOUT_S, graph_rag_proc)
+
         gateway_env = _common_env(
             {
                 "OLLAMA_BASE_URL": ollama_url,
@@ -306,6 +324,7 @@ def live_stack():
                 "RAG_PIPELINE_URL": rag_url,
                 "MARKETPLACE_URL": marketplace_url,
                 "MODEL_MANAGEMENT_URL": model_mgmt_url,
+                "GRAPH_RAG_URL": graph_rag_url,
             }
         )
         gateway_proc = _spawn_uvicorn(
@@ -322,6 +341,7 @@ def live_stack():
             rag_url,
             marketplace_url,
             model_mgmt_url,
+            graph_rag_url,
             ollama_url,
         )
     finally:
