@@ -118,7 +118,7 @@ docker exec -it minder-ollama ollama run mistral
 
 ### 📊 **"I need to monitor my AI system"**
 - Grafana: `http://localhost:3000` (user `admin`; password = `GRAFANA_PASSWORD` in `.env`)
-- Prometheus: `http://localhost:9090` · Jaeger: `http://localhost:16686`
+- Prometheus: `http://localhost:9090` · Jaeger: `https://jaeger.minder.local` (Traefik-routed, Authelia-gated — no loopback port, #472)
 
 ---
 

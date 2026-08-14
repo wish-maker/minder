@@ -20,7 +20,7 @@ not from other machines; everything else is internal-only. External access is vi
 | Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.1` | 9090 | Metrics collection + storage |
 | Grafana | `minder-grafana` | `grafana/grafana:13.1` | 3000 | Dashboards / visualization |
 | Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 | Alert routing |
-| Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | 16686 (UI) | Distributed tracing (all-in-one) |
+| Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | Traefik-only (no loopback UI port, #472) | Distributed tracing (all-in-one) |
 | OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.156.0` | 14317 / 14318 / 18888 | OpenTelemetry pipeline |
 | InfluxDB | `minder-influxdb` | `influxdb:3.10.3-core` | 8086 | Time-series data |
 | Telegraf | `minder-telegraf` | `telegraf:1.39.1` | — | Metrics collection agent |
@@ -91,8 +91,8 @@ curl http://localhost:9090/-/healthy
 curl http://localhost:3000/api/health
 curl http://localhost:9093/-/healthy
 
-# Jaeger UI
-# http://localhost:16686
+# Jaeger UI -- Traefik-only (no loopback port, #472):
+# https://jaeger.minder.local
 ```
 
 ### Grafana access
@@ -121,7 +121,7 @@ the app services and exporters directly.
 ```
 services ──OTLP──▶ otel-collector (:14317 gRPC / :14318 HTTP)
                        │
-                       ├──▶ Jaeger (traces, UI :16686)
+                       ├──▶ Jaeger (traces, UI via Traefik only)
                        └──▶ metrics pipeline (:18888)
 
 Prometheus (:9090) ──scrape──▶ app services + exporters

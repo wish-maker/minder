@@ -221,8 +221,10 @@ Metrics collection agent.
 #### Alertmanager (`prom/alertmanager:v0.33.1`, host 9093)
 Alert routing.
 
-#### Jaeger (`jaegertracing/all-in-one:1.76.0`, host 16686)
-Distributed tracing UI plus OTLP/thrift/zipkin ingest ports.
+#### Jaeger (`jaegertracing/all-in-one:1.76.0`, Traefik-only UI, host OTLP/thrift/zipkin ingest ports)
+Distributed tracing UI plus OTLP/thrift/zipkin ingest ports. The UI has no loopback host
+port (#472) — unlike everything else on this page, the image ships with no authentication
+of its own, so it's reachable only via `jaeger.minder.local` (Traefik + Authelia).
 
 #### OpenTelemetry Collector (`otel/opentelemetry-collector:0.156.0`)
 OTLP gRPC 14317 / HTTP 14318, metrics 18888. No healthcheck (image lacks the tooling).

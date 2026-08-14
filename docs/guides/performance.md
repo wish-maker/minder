@@ -121,7 +121,7 @@ your deployment instead of guessing.
 - **Prometheus** (`http://localhost:9090`) scrapes service `/metrics` endpoints
   and node/container exporters.
 - **Grafana** (`http://localhost:3000`) for dashboards.
-- **Jaeger** (`http://localhost:16686`) for distributed tracing.
+- **Jaeger** (`https://jaeger.minder.local`, Traefik-only — no loopback port, #472) for distributed tracing.
 - **cAdvisor / node-exporter** expose per-container CPU/memory so you can spot
   which service is under pressure.
 

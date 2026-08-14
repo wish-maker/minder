@@ -53,7 +53,7 @@ in some cases via a Traefik route).
 | Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 (host) | Alert routing |
 | InfluxDB | `minder-influxdb` | `influxdb:3.11.0-core` | 8086 (host) | Time-series |
 | Telegraf | `minder-telegraf` | `telegraf:1.39.2` | — | Metrics agent |
-| Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | 16686 (host, UI) + OTLP/thrift/zipkin | Distributed tracing |
+| Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | Traefik-only UI (no loopback port, #472) + OTLP/thrift/zipkin (host) | Distributed tracing |
 | OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.157.0` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) | No healthcheck by design |
 
 ### Exporters (internal, scraped by Prometheus)
