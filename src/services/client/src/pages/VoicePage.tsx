@@ -5,7 +5,12 @@ import { StatusLine } from "../components/StatusLine";
 import { apiFetch, apiFetchBlob, friendlyErrorMessage, type Paginated } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { matchingSttLanguage } from "../lib/stt";
-import { badgeClass, cardClass, confidenceBadgeColor, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
+import {
+  pickDefaultRewriteModel,
+  usableRewriteModels,
+  type RewriteModelInfo,
+} from "../lib/rewriteModel";
+import { badgeClass, cardClass, confidenceBadgeColor, fieldHintClass, inputClass, primaryButtonClass, secondaryButtonClass } from "../lib/ui";
 import { formatElapsed, useElapsedSeconds } from "../lib/useElapsedSeconds";
 
 interface LanguagesResponse {
@@ -64,11 +69,6 @@ const REGIONAL_STYLES: RegionalStyle[] = [
   { id: "guneydogu", label: "Güneydoğu" },
 ];
 
-interface ModelListItem {
-  id: string;
-  status: string;
-}
-
 interface ChatCompletionResponse {
   message?: { content?: string };
 }
@@ -84,6 +84,7 @@ function TextToSpeechCard({
   const languageId = useId();
   const voiceId = useId();
   const regionalStyleId = useId();
+  const rewriteModelId = useId();
   const [languages, setLanguages] = useState<Record<string, string>>({});
   const [sttLanguages, setSttLanguages] = useState<Record<string, string>>({});
   const [text, setText] = useState("");
@@ -98,6 +99,8 @@ function TextToSpeechCard({
   const [verifyResult, setVerifyResult] = useState<SttResponse | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [regionalStyle, setRegionalStyle] = useState("");
+  const [rewriteModels, setRewriteModels] = useState<RewriteModelInfo[]>([]);
+  const [rewriteModel, setRewriteModel] = useState("");
   const [rewriting, setRewriting] = useState(false);
   const [preRewriteText, setPreRewriteText] = useState<string | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -115,6 +118,15 @@ function TextToSpeechCard({
     // verify button just stays disabled via matchingSttLanguage's null).
     apiFetch<LanguagesResponse>("/v1/stt/languages")
       .then((res) => setSttLanguages(res.languages))
+      .catch(() => {});
+    // For the regional-style rewrite's model picker below -- fetched once
+    // (not per-click) and reused, since the pulled-model list rarely
+    // changes mid-session and re-fetching on every click was wasteful.
+    apiFetch<Paginated<RewriteModelInfo>>("/v1/models?limit=500")
+      .then((res) => {
+        setRewriteModels(res.items);
+        setRewriteModel(pickDefaultRewriteModel(res.items));
+      })
       .catch(() => {});
   }, []);
 
@@ -209,26 +221,22 @@ function TextToSpeechCard({
   async function handleRewrite() {
     const style = REGIONAL_STYLES.find((s) => s.id === regionalStyle);
     if (!text.trim() || !style) return;
+    if (!rewriteModel) {
+      setStatus(
+        "No ready model available to rewrite text — pull one on Model Management first.",
+      );
+      return;
+    }
     setRewriting(true);
     setStatus("");
+    // #597 bugfix: every early-return path used to skip setRewriting(false),
+    // leaving the button stuck on "Rewriting…" forever on either failure
+    // path below -- finally now guarantees it always clears.
     try {
-      const models = await apiFetch<Paginated<ModelListItem>>("/v1/models?limit=500");
-      // Skip embedding-only models (there's no capability flag to check here,
-      // but "embed" in the name is a near-universal Ollama naming convention --
-      // e.g. nomic-embed-text -- and those can't chat at all).
-      const model = models.items.find(
-        (m) => m.status === "ready" && !m.id.toLowerCase().includes("embed"),
-      )?.id;
-      if (!model) {
-        setStatus(
-          "No ready model available to rewrite text — pull one on Model Management first.",
-        );
-        return;
-      }
       const res = await apiFetch<ChatCompletionResponse>("/v1/ai/chat/completions", {
         method: "POST",
         body: {
-          model,
+          model: rewriteModel,
           messages: [
             {
               role: "system",
@@ -252,8 +260,9 @@ function TextToSpeechCard({
       setText(rewritten);
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setRewriting(false);
     }
-    setRewriting(false);
   }
 
   function handleUndoRewrite() {
@@ -384,10 +393,36 @@ function TextToSpeechCard({
                 ))}
               </select>
             </div>
+            {usableRewriteModels(rewriteModels).length > 0 && (
+              <div className="max-w-xs flex-1">
+                <label
+                  htmlFor={rewriteModelId}
+                  className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                >
+                  Rewrite model
+                </label>
+                <select
+                  id={rewriteModelId}
+                  className={inputClass}
+                  value={rewriteModel}
+                  onChange={(e) => setRewriteModel(e.target.value)}
+                >
+                  {usableRewriteModels(rewriteModels).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.id}
+                    </option>
+                  ))}
+                </select>
+                <p className={fieldHintClass}>
+                  Some models ignore the Turkish instructions entirely — switch
+                  models here if a rewrite comes back wrong or in English.
+                </p>
+              </div>
+            )}
             <button
               type="button"
               onClick={handleRewrite}
-              disabled={rewriting || !regionalStyle || !text.trim()}
+              disabled={rewriting || !regionalStyle || !text.trim() || !rewriteModel}
               className={secondaryButtonClass}
             >
               {rewriting ? "Rewriting…" : "🪄 Rewrite text in this style"}
