@@ -11,6 +11,7 @@ const MODELS: RewriteModelInfo[] = [
   { id: "nomic-embed-text:latest", status: "ready" },
   { id: "llama3.2-vision:latest", status: "ready" },
   { id: "llama3.2:latest", status: "ready" },
+  { id: "gemma4:26b", status: "ready" },
   { id: "dolphin-mistral:latest", status: "loading" },
 ];
 
@@ -31,6 +32,7 @@ describe("usableRewriteModels", () => {
       "granite3-moe:latest",
       "llama3.2-vision:latest",
       "llama3.2:latest",
+      "gemma4:26b",
     ]);
   });
 
@@ -42,11 +44,22 @@ describe("usableRewriteModels", () => {
 });
 
 describe("pickDefaultRewriteModel", () => {
-  it("prefers the llama3.2 family over whatever sorts first", () => {
-    // granite3-moe sorts first in MODELS, but must never win over llama3.2 --
-    // found live: granite3-moe ignored Turkish instructions and replied in
-    // English (#597 bugfix), this is the regression test for that.
-    expect(pickDefaultRewriteModel(MODELS)).toBe("llama3.2:latest");
+  it("prefers gemma4 over llama3.2 and whatever sorts first", () => {
+    // granite3-moe sorts first in MODELS but must never win (ignored Turkish
+    // instructions, replied in English -- #597); llama3.2 is a real model
+    // but must lose to gemma4 -- found live: llama3.2 often answered the
+    // input conversationally instead of rewriting it, and leaked English/
+    // German/Portuguese words, while gemma4:26b reliably rewrote correctly
+    // across all 4 regional styles (this fixup's regression test).
+    expect(pickDefaultRewriteModel(MODELS)).toBe("gemma4:26b");
+  });
+
+  it("falls back to llama3.2 when gemma4 isn't available", () => {
+    const models: RewriteModelInfo[] = [
+      { id: "granite3-moe:latest", status: "ready" },
+      { id: "llama3.2:latest", status: "ready" },
+    ];
+    expect(pickDefaultRewriteModel(models)).toBe("llama3.2:latest");
   });
 
   it("does not match a same-family variant like llama3.2-vision", () => {
@@ -60,7 +73,7 @@ describe("pickDefaultRewriteModel", () => {
     expect(pickDefaultRewriteModel(models)).toBe("some-other-model:latest");
   });
 
-  it("falls back to the first usable model when no llama3.2 is present", () => {
+  it("falls back to the first usable model when no preferred family is present", () => {
     const models: RewriteModelInfo[] = [
       { id: "mistral-nemo:12b", status: "ready" },
       { id: "qwen3:30b", status: "ready" },
