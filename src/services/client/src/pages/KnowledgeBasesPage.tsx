@@ -40,6 +40,7 @@ interface UploadResponse {
   vectors_created: number;
   filename: string;
   document_id: string;
+  tree_nodes_created?: number;
 }
 
 interface KbDocument {
@@ -67,6 +68,7 @@ function UploadWidget({
   const fileInputId = useId();
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [buildTree, setBuildTree] = useState(false);
 
   function handleSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -82,18 +84,22 @@ function UploadWidget({
       );
       const form = new FormData();
       form.append("file", queue[i].file);
+      if (buildTree) form.append("build_tree", "true");
       try {
         const res = await apiFetch<UploadResponse>(
           `/v1/rag/knowledge-bases/${kb.id}/upload`,
           { method: "POST", body: form, token },
         );
+        const treeNote = res.tree_nodes_created
+          ? `, ${res.tree_nodes_created} tree nodes`
+          : "";
         setQueue((q) =>
           q.map((item, idx) =>
             idx === i
               ? {
                   ...item,
                   status: "done",
-                  detail: `${res.chunks_processed} chunks, ${res.vectors_created} vectors`,
+                  detail: `${res.chunks_processed} chunks, ${res.vectors_created} vectors${treeNote}`,
                 }
               : item,
           ),
@@ -129,6 +135,18 @@ function UploadWidget({
         onChange={handleSelect}
         disabled={!token || uploading}
       />
+      <label className="mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-60"
+          checked={buildTree}
+          onChange={(e) => setBuildTree(e.target.checked)}
+          disabled={!token || uploading}
+        />
+        Build search tree (RAPTOR, experimental) — clusters and summarizes this
+        upload so the "raptor" query method can search summaries as well as raw
+        chunks; adds extra processing time per upload.
+      </label>
       {queue.length > 0 && (
         <>
           <ul className="mt-2 flex flex-col gap-1 text-sm text-gray-600 dark:text-gray-400">

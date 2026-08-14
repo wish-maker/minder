@@ -16,7 +16,7 @@ from core.retrieval import (
     retrieve_relevant_documents,
 )
 from domain.retrievers.hybrid import BM25_AVAILABLE
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from models import (
     DocumentInfo,
     DocumentUploadResponse,
@@ -312,13 +312,21 @@ async def delete_knowledge_base(
     response_model=DocumentUploadResponse,
     include_in_schema=False,
 )  # deprecated unversioned alias
-async def upload_document(kb_id: str, file: UploadFile = File(...)):
+async def upload_document(
+    kb_id: str,
+    file: UploadFile = File(...),
+    build_tree: bool = Form(False),
+):
     """Upload document to knowledge base.
 
     Served at both /v1/knowledge-bases/{kb_id}/upload and the legacy
     /knowledge-bases/{kb_id}/upload directly (and their deprecated singular
     /knowledge-base aliases) — not a redirect, which would drop the method/body on
     non-GET clients (#147).
+
+    `build_tree` opts into RAPTOR tree construction (#487, docs/architecture/
+    raptor-rag.md) on top of the normal flat chunks — off by default, since it
+    adds real ingest-time LLM-summarization cost that most uploads don't want.
     """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -330,7 +338,7 @@ async def upload_document(kb_id: str, file: UploadFile = File(...)):
     content = await file.read()
     filename = file.filename or "upload"
 
-    return await ingest_document(kb_id, kb, filename, content)
+    return await ingest_document(kb_id, kb, filename, content, build_tree=build_tree)
 
 
 @router.get(
@@ -635,10 +643,11 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
     pipeline = state.rag_pipelines[pipeline_id]
     # Retrieval strategy is chosen here as a drop-in retrieve variant (same signature)
     # so the runner/methods stay retrieval-agnostic (#45). parent_context > hybrid >
-    # dense. The runner can't see this choice, so record it (and any silent downgrade)
-    # here and fold it into method_details after the query runs (#138).
+    # raptor > dense. The runner can't see this choice, so record it (and any silent
+    # downgrade) here and fold it into method_details after the query runs (#138).
     want_parent = bool(getattr(request, "parent_context", False))
     want_hybrid = bool(getattr(request, "hybrid", False))
+    want_raptor = getattr(request, "method", None) == "raptor"
     retrieval_notes: list[str] = []
     if want_parent:
         retrieval_strategy = "parent_context"
@@ -647,9 +656,26 @@ async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
             retrieval_notes.append(
                 "parent_context takes precedence — hybrid flag ignored"
             )
+        if want_raptor:
+            retrieval_notes.append(
+                "parent_context takes precedence — method=raptor ignored"
+            )
     elif want_hybrid and BM25_AVAILABLE:
         retrieval_strategy = "hybrid"
         retrieve_fn = retrieve_hybrid
+        if want_raptor:
+            retrieval_notes.append("hybrid takes precedence — method=raptor ignored")
+    elif want_raptor:
+        # RAPTOR's "collapsed tree" retrieval (#487, docs/architecture/raptor-rag.md):
+        # the same dense retriever, just without the tree_level=0 guard every other
+        # method gets — every level (leaf chunk or LLM summary) is a plain top-k
+        # candidate. A KB whose documents never opted into build_tree behaves
+        # identically to standard dense retrieval here (every point is tree_level 0
+        # anyway) — not an error, just nothing extra to search across.
+        retrieval_strategy = "raptor"
+        retrieve_fn = functools.partial(
+            retrieve_relevant_documents, include_all_levels=True
+        )
     else:
         retrieval_strategy = "dense"
         retrieve_fn = retrieve_relevant_documents

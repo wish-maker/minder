@@ -453,9 +453,36 @@ def test_list_rag_pipelines_returns_envelope():
 # post-filter, not just the dense side's query_filter.
 
 
-def test_build_metadata_filter_returns_none_when_nothing_set():
-    assert retrieval.build_metadata_filter(None) is None
-    assert retrieval.build_metadata_filter(models.MetadataFilter()) is None
+def test_build_metadata_filter_returns_none_only_with_include_all_levels():
+    # #487: by default, "nothing set" still gets the RAPTOR tree_level must_not
+    # guard (excludes tree-summary nodes from every non-raptor method) -- None is
+    # only returned when there's truly nothing to filter on at all.
+    assert retrieval.build_metadata_filter(None) is not None
+    assert retrieval.build_metadata_filter(models.MetadataFilter()) is not None
+    assert retrieval.build_metadata_filter(None, include_all_levels=True) is None
+    assert (
+        retrieval.build_metadata_filter(
+            models.MetadataFilter(), include_all_levels=True
+        )
+        is None
+    )
+
+
+def test_build_metadata_filter_excludes_tree_level_above_zero_by_default():
+    flt = retrieval.build_metadata_filter(None)
+    assert flt.must is None
+    assert len(flt.must_not) == 1
+    condition = flt.must_not[0]
+    assert condition.key == "tree_level"
+    assert condition.range.gt == 0
+
+
+def test_build_metadata_filter_include_all_levels_skips_tree_guard():
+    flt = retrieval.build_metadata_filter(
+        models.MetadataFilter(source="doc.txt"), include_all_levels=True
+    )
+    assert flt.must_not is None
+    assert {c.key for c in flt.must} == {"source"}
 
 
 def test_build_metadata_filter_ands_both_fields_when_set():
@@ -510,7 +537,12 @@ async def test_retrieve_relevant_documents_passes_query_filter_to_qdrant(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_retrieve_relevant_documents_no_filter_passes_none(monkeypatch):
+async def test_retrieve_relevant_documents_no_filter_still_excludes_tree_nodes(
+    monkeypatch,
+):
+    # #487: with no metadata_filter and include_all_levels defaulting to False,
+    # the query_filter is no longer None -- it's the RAPTOR tree_level guard,
+    # so every other retrieval method never surfaces LLM-summary nodes.
     captured = {}
 
     class _QueryResult:
@@ -542,6 +574,17 @@ async def test_retrieve_relevant_documents_no_filter_passes_none(monkeypatch):
         {"knowledge_base_ids": ["kb-1"]}, "what does Acme make?", top_k=3
     )
 
+    assert captured["query_filter"] is not None
+    assert captured["query_filter"].must is None
+    assert captured["query_filter"].must_not[0].key == "tree_level"
+
+    captured.clear()
+    await rag_routes.retrieve_relevant_documents(
+        {"knowledge_base_ids": ["kb-1"]},
+        "what does Acme make?",
+        top_k=3,
+        include_all_levels=True,
+    )
     assert captured["query_filter"] is None
 
 

@@ -31,24 +31,43 @@ logger = logging.getLogger(__name__)
 
 def build_metadata_filter(
     metadata_filter: Optional[MetadataFilter],
+    include_all_levels: bool = False,
 ) -> Optional[Filter]:
     """Build a Qdrant `Filter` from a `MetadataFilter` (source/document_id exact
-    match, ANDed). Returns None when nothing is set, so every call site can pass
-    the result straight through as `query_filter`/`scroll_filter` unconditionally."""
-    if metadata_filter is None:
-        return None
+    match, ANDed) plus, by default, a RAPTOR tree-level guard (#487): excludes
+    any point with `tree_level` explicitly greater than 0, so a document that
+    opted into `build_tree` doesn't start leaking LLM-generated tree-summary
+    text into every OTHER retrieval method's results. Qdrant field conditions
+    never match a point missing that field, so this is a no-op — not an
+    accidental exclusion — for every point ingested before #487 shipped (no
+    `tree_level` at all). Pass `include_all_levels=True` (RAPTOR's own
+    collapsed-tree retrieval) to search every level instead.
+
+    Returns None only when there is truly nothing to filter on (no
+    metadata_filter AND include_all_levels=True), so a caller in that one case
+    can still pass the result straight through as `query_filter`/`scroll_filter`
+    unconditionally, same as before this parameter existed."""
     conditions = []
-    if metadata_filter.source is not None:
-        conditions.append(
-            FieldCondition(key="source", match=MatchValue(value=metadata_filter.source))
-        )
-    if metadata_filter.document_id is not None:
-        conditions.append(
-            FieldCondition(
-                key="document_id", match=MatchValue(value=metadata_filter.document_id)
+    if metadata_filter is not None:
+        if metadata_filter.source is not None:
+            conditions.append(
+                FieldCondition(
+                    key="source", match=MatchValue(value=metadata_filter.source)
+                )
             )
-        )
-    return Filter(must=conditions) if conditions else None
+        if metadata_filter.document_id is not None:
+            conditions.append(
+                FieldCondition(
+                    key="document_id",
+                    match=MatchValue(value=metadata_filter.document_id),
+                )
+            )
+    must_not = []
+    if not include_all_levels:
+        must_not.append(FieldCondition(key="tree_level", range=Range(gt=0)))
+    if not conditions and not must_not:
+        return None
+    return Filter(must=conditions or None, must_not=must_not or None)
 
 
 def _matches_metadata_filter(
@@ -87,14 +106,22 @@ def invalidate_hybrid_index(kb_id: str) -> None:
 
 
 def _ensure_bm25_index(client, kb_id: str) -> None:
-    """Build the BM25 index for `kb_id` from stored Qdrant chunks if not cached."""
+    """Build the BM25 index for `kb_id` from stored Qdrant chunks if not cached.
+
+    Excludes RAPTOR tree-summary nodes (#487) via the same tree_level guard as
+    the dense side (build_metadata_filter) — this scroll bypasses that helper
+    (no metadata_filter concept applies to a full-corpus scroll), so the guard
+    is inlined directly rather than leaving hybrid's sparse side as the one
+    path a tree-summary node could still leak through as a keyword match."""
     if kb_id in _hybrid.sparse_index:
         return
     docs = []
     offset = None
+    leaf_only = Filter(must_not=[FieldCondition(key="tree_level", range=Range(gt=0))])
     while True:
         points, offset = client.scroll(
             collection_name=kb_id,
+            scroll_filter=leaf_only,
             limit=256,
             offset=offset,
             with_payload=True,
@@ -120,10 +147,16 @@ async def retrieve_relevant_documents(
     question: str,
     top_k: int,
     metadata_filter: Optional[MetadataFilter] = None,
+    include_all_levels: bool = False,
 ) -> Dict:
-    """Retrieve relevant documents from knowledge bases (dense/standard strategy)."""
+    """Retrieve relevant documents from knowledge bases (dense/standard strategy).
+
+    `include_all_levels=True` is RAPTOR's collapsed-tree retrieval (#487): every
+    tree level is a candidate, not just leaf chunks — see build_metadata_filter."""
     client = state.get_qdrant_client()
-    qdrant_filter = build_metadata_filter(metadata_filter)
+    qdrant_filter = build_metadata_filter(
+        metadata_filter, include_all_levels=include_all_levels
+    )
 
     # Get embedding model from first KB
     first_kb_id = pipeline["knowledge_base_ids"][0]
