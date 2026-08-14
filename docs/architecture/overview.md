@@ -19,10 +19,11 @@ every non-failover-gated service). `start` then honours the recorded bundle stat
 **AI Runtime:** Ollama with local LLM support (profile-gated; disabled when using an external/native Ollama host)
 **Deploy Status:** Clean install proven from zero (`docker compose down -v` → `bash setup.sh start`)
 
-**Deferred / Disabled:**
-- ⏸️ Role-based access control — NOT implemented. Only JWT authentication exists today.
-
 **Enabled:**
+- ✅ Role-based access control — `require_role()`/`require_role_or_service()` gate a specific
+  set of admin-only actions (model pull/delete/fine-tune, bundle enable/disable/reconcile,
+  listing a plugin's installations), checking the `role` claim Authelia's groups already
+  populated on the JWT (#474). Most other write endpoints still only require a valid JWT.
 - ✅ Authelia SSO/2FA — enabled, enforcing forward-auth on 6 Traefik routers (minio, api-gateway, grafana, openwebui, jaeger, client).
 
 > Five services ship without an active healthcheck: `otel-collector`, `redis-exporter`, and
@@ -232,7 +233,13 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 3. Core APIs validate JWT tokens (issued by the API Gateway, bcrypt-hashed credentials).
 
 ### Authorization
-- JWT token validation only. **Role-based access control is not implemented.**
+- Role-based access control on a specific set of admin-only actions (#474):
+  `require_role()`/`require_role_or_service()` check the `role` claim on the
+  JWT (populated from Authelia's groups) before allowing a model pull/delete/
+  fine-tune (model-management), a bundle enable/disable/reconcile
+  (plugin-registry), or listing who installed a marketplace plugin. Most
+  other write endpoints (plugin install/uninstall/enable/disable, KB/pipeline
+  CRUD, etc.) remain gated on JWT validity alone, not role.
 
 ### Network Security
 - **Internal isolation**: services communicate on the `minder-network` Docker network.

@@ -218,7 +218,7 @@ cd docker/ && docker compose restart traefik
 ```
 
 Note: Authelia forward-auth is wired on 6 routers (minio, api-gateway, grafana, openwebui,
-jaeger) and **Authelia is enabled**, so unauthenticated requests to those routes get
+jaeger, client) and **Authelia is enabled**, so unauthenticated requests to those routes get
 redirected (302) to the Authelia login portal. Full browser SSO still requires real DNS +
 TLS on the deploy.
 

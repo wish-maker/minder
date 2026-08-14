@@ -31,9 +31,8 @@ minder/
 ├── setup.sh                       # single entry point for all lifecycle commands
 ├── pyproject.toml                 # Python tooling config (black, isort, pytest, mypy)
 ├── docker/
-│   └── compose/
-│       ├── docker-compose.yml     # hand-maintained source of truth for services
-│       └── docker-compose.test.yml # local integration/e2e test deps (CI uses GH Actions services)
+│   ├── docker-compose.yml         # hand-maintained source of truth for services
+│   └── docker-compose.test.yml    # local integration/e2e test deps (CI uses GH Actions services)
 ├── src/
 │   ├── services/                  # one FastAPI app per service (see below)
 │   ├── shared/                    # shared libs (config, log, metrics, auth, db, utils)

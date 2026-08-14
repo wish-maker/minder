@@ -88,14 +88,14 @@ docker compose -f docker/docker-compose.test.yml down -v
 ### 3. End-to-End Tests (`tests/e2e/`)
 
 Real cross-service workflows — no mocks, no Docker. A session-scoped fixture
-(`conftest.py`'s `live_stack`) starts api-gateway, plugin-registry, and
-rag-pipeline as real `uvicorn` subprocesses bound to `127.0.0.1`, wired
-together via the same env vars `docker-compose.yml` uses (just `localhost`
-instead of `minder-<service>` hostnames), against a real Postgres/Redis/Qdrant
-and a small deterministic fake-Ollama stub (`fake_ollama.py`) — real Ollama
-(model pull + inference) is the slow, non-deterministic part; Minder's own
-code only needs to be tested for correctly *calling* Ollama, not for model
-output quality.
+(`conftest.py`'s `live_stack`) starts api-gateway, plugin-registry,
+rag-pipeline, marketplace, model-management, and graph-rag as real `uvicorn`
+subprocesses bound to `127.0.0.1`, wired together via the same env vars
+`docker-compose.yml` uses (just `localhost` instead of `minder-<service>`
+hostnames), against a real Postgres/Redis/Qdrant/Neo4j and a small
+deterministic fake-Ollama stub (`fake_ollama.py`) — real Ollama (model pull +
+inference) is the slow, non-deterministic part; Minder's own code only needs
+to be tested for correctly *calling* Ollama, not for model output quality.
 
 Covers: harness/health smoke, plugin discovery + read-only action invocation
 (the #254 GET-unauthenticated/POST-JWT-gated split, direct and via the
@@ -109,8 +109,8 @@ proxy. Auth (register/login/JWT) is already covered for real in
 security fuzzing, circuit breakers, load balancing, message queues — see
 issue #318.
 
-Requires a real Postgres, Redis, and Qdrant reachable at
-`127.0.0.1:5432/6379/6333` (matching `ci.yml`'s `e2e-tests` job — locally,
+Requires a real Postgres, Redis, Qdrant, and Neo4j reachable at
+`127.0.0.1:5432/6379/6333/7687` (matching `ci.yml`'s `e2e-tests` job — locally,
 start them yourself with matching credentials; see the `E2E_*` env vars at
 the top of `conftest.py` to point elsewhere).
 

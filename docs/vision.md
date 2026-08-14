@@ -61,10 +61,10 @@ single-host bottleneck appears (#21, deliberately deferred until then).
 
 ### 2. Knowledge — RAG *and* graph
 Retrieval that goes beyond naive vector search: Standard / HyDE / Self-RAG / auto /
-corrective methods, plus hybrid and parent-child retrieval and optional
-rerank/compress — all capability-adaptive. A parallel **knowledge-graph** path
-(spaCy NER → Neo4j) for entity/relationship exploration over the same documents.
-*Direction:* RAPTOR hierarchical retrieval (#487); richer ingest-time indexing.
+corrective methods, plus hybrid and parent-child retrieval, RAPTOR hierarchical
+retrieval (#487, done), and optional rerank/compress — all capability-adaptive.
+A parallel **knowledge-graph** path (spaCy NER → Neo4j) for entity/relationship
+exploration over the same documents. *Direction:* richer ingest-time indexing.
 
 ### 3. Extensibility — plugins, tools, marketplace
 Manifest-based plugins that can write to any backend and register as **AI tools** for
@@ -86,10 +86,13 @@ Pi promoted from cron scripts to first-class tooling.
 
 ### 6. Security & multi-user
 JWT auth, license fail-closed, Authelia SSO/2FA enforced at the edge, loopback-bound
-host ports, no-arbitrary-code plugins.
-*Direction:* real RBAC that actually gates on the stored role (#474), per-deployment
-secrets instead of git-committed hashes (#473), closing the host-port forward-auth
-bypass (#472), and true browser SSO once a real domain + TLS exist.
+host ports, no-arbitrary-code plugins, a per-deployment-generated Authelia admin
+credential instead of a git-committed hash (#473, done), Jaeger's unauthenticated
+host port dropped (#472, partially done — api-gateway/client's host-port bypass is
+a deliberate, documented tradeoff, not closed), and role checks on a specific set of
+admin-only actions (#474, done — see [Security Architecture](operations/security-architecture.md)).
+*Direction:* extending role checks to the rest of the write surface, and true
+browser SSO once a real domain + TLS exist.
 
 ---
 
@@ -143,11 +146,13 @@ The tracker is the source of truth; this is the *shape* of the sequence.
    services and the client (ongoing); make every documented flow provably work.
 2. **Make it genuinely usable.** The modern control-plane UX; access-path parity;
    local login; task-oriented screens.
-3. **Deepen the intelligence.** RAPTOR and richer retrieval; a stronger RAG↔graph
-   story; better tool-calling ergonomics.
+3. **Deepen the intelligence.** Richer retrieval beyond what's already wired
+   (RAPTOR included, #487 done); a stronger RAG↔graph story; better
+   tool-calling ergonomics.
 4. **Open the ecosystem.** A real marketplace submission/trust flow; more plugins.
-5. **Real multi-user & production.** RBAC, per-deployment secrets, full browser SSO,
-   production hardening for a public deploy.
+5. **Real multi-user & production.** Role checks across the rest of the write
+   surface (today's RBAC only covers a specific admin-only subset, #474), full
+   browser SSO, production hardening for a public deploy.
 
 ---
 

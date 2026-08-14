@@ -64,9 +64,14 @@ Capabilities in use:
 > **Note:** Some services also publish their own host ports directly, bound to
 > `127.0.0.1` — reachable without going through Traefik (and therefore without Authelia's
 > forward-auth gate) by anything with a shell on the host, or an SSH port-forward to it, but
-> **not** from the wider network. This is acceptable for a development environment but is
-> not a locked-down production posture. Tracked as
-> [#472](https://github.com/wish-maker/minder/issues/472).
+> **not** from the wider network. Investigated per-service under
+> [#472](https://github.com/wish-maker/minder/issues/472): Jaeger's unauthenticated host
+> port was dropped entirely (no legitimate reason to bypass Authelia there); minio and
+> openwebui already had none; grafana has its own separate credential. api-gateway and
+> client keep theirs deliberately — real JWT auth still gates every write, the bypass is
+> only unauthenticated reads a browser would see anyway, and this session's own deploy/
+> verification workflow depends on this exact access path — documented inline in
+> `docker-compose.yml` as an accepted tradeoff, not a gap to close.
 
 ---
 
@@ -161,15 +166,23 @@ This is a development deployment. Before treating it as production-ready:
 
 1. ~~Complete Authelia's rollout so browser SSO works end-to-end~~ — **done**: real OIDC
    SSO now mints Minder's own JWT from a verified Authelia identity (see above).
-2. Lock down host-published ports; front everything through the proxy
-   ([#472](https://github.com/wish-maker/minder/issues/472)).
+2. ~~Lock down host-published ports~~ — **partially done**
+   ([#472](https://github.com/wish-maker/minder/issues/472)): Jaeger's unauthenticated
+   host port is gone; api-gateway/client keep theirs as a documented, accepted tradeoff
+   (real JWT auth still gates every write). Front those two through the proxy only if
+   that tradeoff is ever revisited.
 3. Replace self-signed `.local` certificates with a real CA / Let's Encrypt.
-4. Implement authorization (RBAC) beyond "is there a valid JWT" — `role` already exists and
-   is populated from Authelia's groups, it just isn't checked anywhere yet
-   ([#474](https://github.com/wish-maker/minder/issues/474)).
-5. Rotate credentials via `./.env` (and `sync-postgres-password` for stateful ones). Also
-   rotate Authelia's own admin credential, which currently ships identical across every
-   clone of this repo ([#473](https://github.com/wish-maker/minder/issues/473)).
+4. ~~Implement authorization (RBAC) beyond "is there a valid JWT"~~ — **partially done**
+   ([#474](https://github.com/wish-maker/minder/issues/474)): `role` is now checked on a
+   specific set of admin-only actions (model pull/delete/fine-tune, bundle enable/
+   disable/reconcile, listing a plugin's installations). Most other write endpoints
+   still only require a valid JWT, not a role.
+5. Rotate credentials via `./.env` (and `sync-postgres-password` for stateful ones).
+   ~~Also rotate Authelia's own admin credential, which currently ships identical
+   across every clone of this repo~~ — **done**
+   ([#473](https://github.com/wish-maker/minder/issues/473)): a random
+   `MINDER_AUTHELIA_ADMIN_PASSWORD` is now generated per deployment via the standard
+   secret self-heal mechanism, not git-committed.
 6. Keep Traefik and images updated.
 
 ---

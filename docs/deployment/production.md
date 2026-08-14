@@ -315,7 +315,7 @@ bash setup.sh doctor
   (`bash setup.sh ollama-mode`); see `hardware-optimization.md`.
 - **DB connection issues** — `docker exec minder-postgres pg_isready -U "$POSTGRES_USER"`;
   if passwords diverged, run `bash setup.sh sync-postgres-password`.
-- **Auth not enforced on a route** — check that the route is one of the five
+- **Auth not enforced on a route** — check that the route is one of the six
   Authelia-protected routers (minio, api-gateway, grafana, openwebui, jaeger, client); Authelia
   itself is enabled and enforcing by default.
 
