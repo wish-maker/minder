@@ -212,21 +212,55 @@ class KnowledgeGraphConstructor:
         document_id), the Document node and its MENTIONS edges, and any Entity left
         with no edges afterwards. Entities still shared with other documents are
         kept. Returns the deletion counts."""
-        async with self.driver.session() as session:
-            rels = await session.run(
+
+        async def _delete_in_one_transaction(tx):
+            # Capture which entities THIS document actually touches before deleting
+            # anything -- the orphan check below must only re-check these, not scan
+            # the whole graph (see the comment on that step for why).
+            mentioned = await tx.run(
+                "MATCH (:Document {id: $document_id})-[:MENTIONS]->(e:Entity) "
+                "RETURN e.text AS text, e.label AS label",
+                document_id=document_id,
+            )
+            touched_entities = [
+                (record["text"], record["label"]) async for record in mentioned
+            ]
+
+            rels = await tx.run(
                 "MATCH ()-[r:RELATES_TO {document_id: $document_id}]->() DELETE r",
                 document_id=document_id,
             )
             rels_deleted = (await rels.consume()).counters.relationships_deleted
 
-            doc = await session.run(
+            doc = await tx.run(
                 "MATCH (d:Document {id: $document_id}) DETACH DELETE d",
                 document_id=document_id,
             )
             docs_deleted = (await doc.consume()).counters.nodes_deleted
 
-            orphans = await session.run("MATCH (e:Entity) WHERE NOT (e)--() DELETE e")
-            orphans_deleted = (await orphans.consume()).counters.nodes_deleted
+            # Scoped to entities this document touched, not a global `MATCH (e:Entity)
+            # WHERE NOT (e)--() DELETE e` scan: that used to delete ANY currently-
+            # orphaned entity anywhere in the graph, including ones a concurrent
+            # construct-graph call had just MERGEd a fresh edge onto a moment earlier
+            # in an interleaved auto-commit statement (the TOCTOU this transaction
+            # closes) -- and it did needless work reprocessing entities untouched by
+            # this delete at all.
+            orphans_deleted = 0
+            for text, label in touched_entities:
+                result = await tx.run(
+                    "MATCH (e:Entity {text: $text, label: $label}) "
+                    "WHERE NOT (e)--() DELETE e",
+                    text=text,
+                    label=label,
+                )
+                orphans_deleted += (await result.consume()).counters.nodes_deleted
+
+            return rels_deleted, docs_deleted, orphans_deleted
+
+        async with self.driver.session() as session:
+            rels_deleted, docs_deleted, orphans_deleted = await session.execute_write(
+                _delete_in_one_transaction
+            )
 
         logger.info(
             f"✅ Deleted document graph {document_id}: {docs_deleted} document, "
