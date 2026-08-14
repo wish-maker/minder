@@ -226,11 +226,19 @@ User → API Gateway → Marketplace → license-tier check → Neo4j (dependenc
 ## Security Architecture
 
 ### Authentication Flow
-1. Requests enter through Traefik (TLS termination, routing).
-2. Traefik has an Authelia `forwardauth` middleware wired on six routers (minio, api-gateway,
-   grafana, openwebui, jaeger, client); Authelia is enabled, so unauthenticated requests are
-   302-redirected to the Authelia portal.
-3. Core APIs validate JWT tokens (issued by the API Gateway, bcrypt-hashed credentials).
+Two distinct mechanisms, both fronted by the same Authelia instance:
+
+1. **Traefik forward-auth** gates direct browser access to six routers (minio,
+   api-gateway, grafana, openwebui, jaeger, client) — unauthenticated requests get a
+   302 redirect to the Authelia portal. This is edge-level, independent of Minder's
+   own login.
+2. **Real OIDC login** is the client's own "Log in" flow: clicking it sends the
+   browser to Authelia's login page via OIDC; on return, the API Gateway
+   (`GET /v1/auth/oidc/callback`) verifies the identity and mints Minder's own JWT
+   (bcrypt-independent — this is the OIDC path, not the local username/password
+   form). Every other core API then validates that JWT. See
+   [Authentication guide](../guides/authentication.md) for the full sequence
+   diagram and the `role` claim it carries (populated from Authelia's `groups`).
 
 ### Authorization
 - Role-based access control on a specific set of admin-only actions (#474):
