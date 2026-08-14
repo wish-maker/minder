@@ -296,6 +296,13 @@ async def run_query(
         # Only claim "corrective" if grading actually ran (details recorded). If the
         # pipeline was unavailable the grade never happened → report standard (#138).
         effective_method = "corrective" if details.get("corrective") else "standard"
+    elif method == "raptor":
+        # RAPTOR's retrieval-strategy swap (routes/rag.py) already ran before the
+        # runner ever saw this query — report it honestly regardless of whether the
+        # KB's documents actually had a tree (#487); a treeless KB just means
+        # collapsed-tree search found nothing beyond the usual leaf chunks, which is
+        # a real (if uninteresting) outcome, not a fallback to standard.
+        effective_method = "raptor"
     else:
         effective_method = (
             "self_rag" if use_self_rag else "hyde" if use_hyde else "standard"

@@ -9,9 +9,13 @@ from config import settings
 # Canonical set of selectable generation/retrieval-rewrite strategies (the `method`
 # field). "conversational" is NOT here — it is activated by passing `conversation_id`,
 # not by `method`. Retrieval strategies (hybrid/parent_context) are separate boolean
-# flags, not methods. Kept here (not in rag/runner) so the request model can reject an
-# unknown method with a 422 at the API edge instead of silently coercing to standard.
-VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto", "corrective"}
+# flags, not methods — "raptor" (#487) is the exception: it's fundamentally a
+# retrieval-strategy toggle too (collapsed-tree vs. leaf-only search), but lands here
+# as a method value to match how docs/rag-methods.md already classifies it alongside
+# hyde/self_rag/corrective, and #487's own issue text asking for it this way. Kept
+# here (not in rag/runner) so the request model can reject an unknown method with a
+# 422 at the API edge instead of silently coercing to standard.
+VALID_RAG_METHODS = {"standard", "hyde", "self_rag", "auto", "corrective", "raptor"}
 
 
 class KnowledgeBaseCreate(BaseModel):
@@ -141,7 +145,9 @@ class QueryRequest(BaseModel):
     # (e.g. a coding/reasoning model on an external fleet) without reconfiguring the
     # KB. Does NOT affect embeddings — those must match the model used at ingest.
     llm_model: Optional[str] = None
-    # standard | hyde | self_rag | auto (decision engine) | corrective (CRAG)
+    # standard | hyde | self_rag | auto (decision engine) | corrective (CRAG) |
+    # raptor (collapsed-tree retrieval, #487 — needs build_tree=True at upload time
+    # to have anything beyond leaf chunks to search across; harmless no-op otherwise)
     method: str = "standard"
     # Orthogonal, capability-adaptive post-retrieval enhancers (apply to any method):
     rerank: bool = False  # re-rank sources (cross-encoder if available, else LLM)
@@ -164,8 +170,8 @@ class QueryRequest(BaseModel):
         """Reject unknown methods with a 422 instead of silently running standard.
 
         Normalises case so callers may send e.g. "Self_RAG". Unknown values
-        (typos, "raptor", "conversational", "parent_child", …) fail loudly with the
-        valid set — the caller learns what they actually asked for. (#138)
+        (typos, "conversational", "parent_child", …) fail loudly with the valid
+        set — the caller learns what they actually asked for. (#138)
         """
         normalized = (v or "standard").lower()
         if normalized not in VALID_RAG_METHODS:
@@ -199,6 +205,12 @@ class DocumentUploadResponse(BaseModel):
     vectors_created: int
     filename: str
     document_id: str
+    # RAPTOR (#487): >0 only when build_tree=True was requested and the document had
+    # enough chunks to cluster (domain.raptor.MIN_CHUNKS_FOR_TREE). chunks_processed/
+    # vectors_created above stay leaf-chunk-only (unchanged meaning) — this is reported
+    # separately so a caller can tell a tree was actually built, not guess from a
+    # vectors_created bump.
+    tree_nodes_created: int = 0
 
 
 class DocumentInfo(BaseModel):

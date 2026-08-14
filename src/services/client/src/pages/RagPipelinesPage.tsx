@@ -40,6 +40,7 @@ interface Capabilities {
     self_rag: boolean;
     auto: boolean;
     corrective: boolean;
+    raptor: boolean;
   };
   enhancers: {
     rerank: { available: boolean; backend?: string };
@@ -53,7 +54,7 @@ interface Capabilities {
   };
 }
 
-type Method = "standard" | "hyde" | "self_rag" | "auto" | "corrective";
+type Method = "standard" | "hyde" | "self_rag" | "auto" | "corrective" | "raptor";
 
 const METHOD_DESCRIPTIONS: Record<Method, string> = {
   standard: "Embeds your question and retrieves the closest matching chunks — fast, and the right default for most questions.",
@@ -61,6 +62,7 @@ const METHOD_DESCRIPTIONS: Record<Method, string> = {
   self_rag: "Retrieves, then critiques its own retrieval and answer, re-retrieving if the first pass looks weak — slower, but catches cases where the first search missed the point.",
   auto: "Asks a small decision step to pick standard vs. a more expensive method per-question, so you don't have to guess in advance.",
   corrective: "Grades retrieved chunks for relevance before generating, discarding anything off-topic — reduces answers that ramble off irrelevant context.",
+  raptor: "Searches across document summaries as well as raw chunks — better for broad \"summarize this\" questions no single chunk answers well. Only searches summaries for documents uploaded with \"Build search tree\" checked; otherwise behaves exactly like standard.",
 };
 
 // Same "single source of truth" pattern as METHOD_DESCRIPTIONS above -- these
@@ -492,6 +494,9 @@ function QueryPanel({
                 </option>
                 <option value="corrective" disabled={!methodAvailable("corrective")}>
                   corrective{!methodAvailable("corrective") && " (unavailable on this host)"}
+                </option>
+                <option value="raptor" disabled={!methodAvailable("raptor")}>
+                  raptor{!methodAvailable("raptor") && " (unavailable on this host)"}
                 </option>
               </select>
               <p className={fieldHintClass}>{METHOD_DESCRIPTIONS[method]}</p>

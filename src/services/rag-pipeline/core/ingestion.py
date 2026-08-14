@@ -26,6 +26,7 @@ from typing import Dict, List
 
 from core import state
 from core.retrieval import invalidate_hybrid_index
+from domain import raptor
 from fastapi import HTTPException
 from models import DocumentInfo, DocumentUploadResponse
 from qdrant_client.models import PointStruct
@@ -34,12 +35,87 @@ from rag.text_utils import chunk_text, extract_text_from_file
 logger = logging.getLogger("minder.rag-pipeline")
 
 
+async def _build_and_store_tree(
+    kb_id: str,
+    kb: Dict,
+    document_id: str,
+    filename: str,
+    uploaded_at: str,
+    leaf_ids: List[str],
+    leaf_texts: List[str],
+    leaf_embeddings: List[List[float]],
+) -> int:
+    """RAPTOR (#487): cluster+summarize the leaf chunks just upserted for this
+    upload into a tree, storing the new levels as more points in the SAME
+    collection with the same kb_id/document_id/source/uploaded_at (so
+    delete_document's existing document_id filter also cleans these up, no
+    code change needed there). Returns the number of tree nodes created (0 if
+    skipped or the tree-build step itself failed — a failure here degrades to
+    "document stored without a tree," it never fails the upload, since the
+    leaf chunks are already safely stored by the time this runs)."""
+
+    async def summarize(text: str) -> str:
+        result = await state.ollama_manager.generate_response(
+            prompt=(
+                "Summarize the following passages in a concise paragraph that "
+                "captures their combined meaning:\n\n" + text
+            ),
+            model=kb["llm_model"],
+        )
+        if result.get("error"):
+            return ""
+        return (result.get("text") or "").strip()
+
+    async def embed(texts: List[str]) -> List[List[float]]:
+        return await state.ollama_manager.generate_embeddings(
+            texts, model=kb["embedding_model"]
+        )
+
+    try:
+        nodes = await raptor.build_tree(
+            leaf_ids, leaf_texts, leaf_embeddings, summarize, embed
+        )
+    except Exception as e:
+        logger.warning(f"⚠️  RAPTOR tree build failed for document {document_id}: {e}")
+        return 0
+    if not nodes:
+        return 0
+
+    points = [
+        PointStruct(
+            id=node["id"],
+            vector=node["embedding"],
+            payload={
+                "text": node["text"],
+                "source": filename,
+                "kb_id": kb_id,
+                "document_id": document_id,
+                "uploaded_at": uploaded_at,
+                "tree_level": node["level"],
+                "children_ids": node["children_ids"],
+            },
+        )
+        for node in nodes
+    ]
+    client = state.get_qdrant_client()
+    await asyncio.to_thread(client.upsert, collection_name=kb_id, points=points)
+    logger.info(
+        f"🌳 Built RAPTOR tree for document {document_id}: {len(nodes)} summary nodes"
+    )
+    return len(nodes)
+
+
 async def ingest_document(
-    kb_id: str, kb: Dict, filename: str, content: bytes
+    kb_id: str, kb: Dict, filename: str, content: bytes, build_tree: bool = False
 ) -> DocumentUploadResponse:
     """Extract, chunk, embed, and store one uploaded document's content into
     `kb_id`'s Qdrant collection. Raises HTTPException(400) if no text could be
-    extracted, HTTPException(503) if the embedding backend is unreachable."""
+    extracted, HTTPException(503) if the embedding backend is unreachable.
+
+    `build_tree` opts into RAPTOR tree construction (#487) on top of the normal
+    flat chunks — see docs/architecture/raptor-rag.md. Skipped (not an error)
+    below domain.raptor.MIN_CHUNKS_FOR_TREE chunks; nothing meaningful to
+    cluster in a tiny document."""
     text = await extract_text_from_file(content, filename)
 
     chunks = chunk_text(
@@ -76,11 +152,12 @@ async def ingest_document(
     document_id = str(uuid.uuid4())
     uploaded_at = datetime.now(timezone.utc).isoformat()
 
+    leaf_ids = [str(uuid.uuid4()) for _ in chunks]
     points = []
-    for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+    for i, (leaf_id, chunk, embedding) in enumerate(zip(leaf_ids, chunks, embeddings)):
         points.append(
             PointStruct(
-                id=str(uuid.uuid4()),  # Generate proper UUID
+                id=leaf_id,
                 vector=embedding,
                 payload={
                     "text": chunk,
@@ -89,6 +166,12 @@ async def ingest_document(
                     "kb_id": kb_id,
                     "document_id": document_id,
                     "uploaded_at": uploaded_at,
+                    # RAPTOR (#487): stamped on EVERY leaf chunk, tree-building
+                    # requested or not — this is what lets every other retrieval
+                    # method exclude tree-summary nodes with a plain tree_level>0
+                    # filter (core/retrieval.py) without needing to special-case
+                    # "does this point even have a tree_level."
+                    "tree_level": 0,
                 },
             )
         )
@@ -104,6 +187,15 @@ async def ingest_document(
     # New chunks landed → drop any cached BM25 index so the next hybrid query
     # rebuilds it over the full, current set (#45).
     invalidate_hybrid_index(kb_id)
+
+    tree_nodes_created = 0
+    if (
+        build_tree
+        and raptor.MIN_CHUNKS_FOR_TREE <= len(chunks) <= raptor.MAX_CHUNKS_FOR_TREE
+    ):
+        tree_nodes_created = await _build_and_store_tree(
+            kb_id, kb, document_id, filename, uploaded_at, leaf_ids, chunks, embeddings
+        )
 
     # Update knowledge base stats
     kb["document_count"] += 1
@@ -127,6 +219,7 @@ async def ingest_document(
         vectors_created=len(chunks),
         filename=filename,
         document_id=document_id,
+        tree_nodes_created=tree_nodes_created,
     )
 
 
@@ -134,10 +227,18 @@ def group_documents(records: List) -> List[DocumentInfo]:
     """Aggregate a KB's Qdrant points into one entry per uploaded document
     (#427). Points from before `document_id` existed are grouped by `source`
     (filename) instead, with a synthetic `legacy:<filename>` id -- the finest
-    granularity available for that older data (see DocumentInfo's docstring)."""
+    granularity available for that older data (see DocumentInfo's docstring).
+
+    RAPTOR (#487) tree-summary nodes (`tree_level` > 0) share a document's
+    `document_id` but aren't "a chunk" from the caller's point of view --
+    excluded from `chunk_count` so a document with a tree doesn't report an
+    inflated count. A point with no `tree_level` at all (pre-#487 data) is
+    treated as level 0, same as `core/retrieval.py`'s filter."""
     groups: Dict[str, Dict] = {}
     for record in records:
         payload = record.payload or {}
+        if payload.get("tree_level", 0) != 0:
+            continue
         source = payload.get("source", "")
         doc_id = payload.get("document_id") or f"legacy:{source}"
         entry = groups.setdefault(

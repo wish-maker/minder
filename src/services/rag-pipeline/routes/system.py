@@ -95,6 +95,9 @@ async def capabilities():
             "self_rag": state.self_rag_pipeline is not None,
             "auto": state.decision_engine is not None,
             "corrective": state.corrective_pipeline is not None,
+            # RAPTOR (#487) has no optional-dependency gate (pure numpy, always
+            # importable) — always on, same as "standard".
+            "raptor": True,
         },
         "enhancers": {
             "rerank": {
