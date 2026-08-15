@@ -28,6 +28,11 @@ function ServiceRow({
         }`}
         aria-hidden="true"
       />
+      {/* The dot above is color-only and aria-hidden -- a screen-reader user
+        needs this text to tell an active service from an inactive one. */}
+      <span className="sr-only">
+        {service.active ? "Active" : "Inactive"}
+      </span>
       {service.name}
       {service.image && (
         <code className="rounded bg-gray-100 px-1 py-0.5 text-[11px] text-gray-500 dark:bg-gray-800 dark:text-gray-400">

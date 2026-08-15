@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { StatusLine } from "../components/StatusLine";
 import { friendlyErrorMessage, oidcLoginUrl } from "../lib/api";
@@ -23,13 +23,19 @@ import {
 export function LoginPage() {
   const { isAuthenticated, login, register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [mode, setMode] = useState<"login" | "register">("login");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  // A failed OIDC/SSO redirect (denied consent, expired code, ...) lands here
+  // via AuthCallbackPage's navigate("/login", {state: {oidcError}}) -- surface
+  // it instead of silently landing on a blank login form.
+  const [error, setError] = useState(
+    (location.state as { oidcError?: string } | null)?.oidcError ?? "",
+  );
 
   if (isAuthenticated) return <Navigate to="/" replace />;
 

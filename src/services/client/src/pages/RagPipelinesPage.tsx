@@ -223,6 +223,7 @@ function CreatePipelineForm({
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState("");
+  const [creating, setCreating] = useState(false);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -235,6 +236,7 @@ function CreatePipelineForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (creating) return; // already in flight -- ignore a double-click/tap
     if (!name.trim()) {
       setStatus("Name is required.");
       return;
@@ -243,6 +245,7 @@ function CreatePipelineForm({
       setStatus("Pick at least one knowledge base.");
       return;
     }
+    setCreating(true);
     setStatus("Creating…");
     try {
       const res = await apiFetch<{
@@ -267,6 +270,8 @@ function CreatePipelineForm({
       setTimeout(() => setStatus(""), 2000);
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -282,7 +287,7 @@ function CreatePipelineForm({
         </EmptyState>
       ) : (
         <form onSubmit={handleSubmit}>
-          <fieldset disabled={!token} className="mt-2 flex flex-col gap-3">
+          <fieldset disabled={!token || creating} className="mt-2 flex flex-col gap-3">
             <div>
               <label
                 htmlFor={nameId}
@@ -396,9 +401,14 @@ function QueryPanel({
     setStatus("Querying…");
     setResult(null);
     try {
+      const parsedTopK = parseInt(topK, 10);
       const body: Record<string, unknown> = {
         question,
-        top_k: parseInt(topK, 10) || 5,
+        // The backend requires top_k >= 1 (models/__init__.py's Field(5, ge=1,
+        // le=100)) -- `parseInt(topK, 10) || 5` looked equivalent but treated
+        // only 0 as invalid (JS falsy coercion), silently sending negative
+        // values straight through to a 422. Explicit bounds check catches both.
+        top_k: Number.isNaN(parsedTopK) || parsedTopK < 1 ? 5 : parsedTopK,
         method,
         rerank,
         compress,
@@ -464,6 +474,8 @@ function QueryPanel({
                 id={topKId}
                 className={inputClass}
                 type="number"
+                min={1}
+                max={100}
                 value={topK}
                 onChange={(e) => setTopK(e.target.value)}
               />
