@@ -11,7 +11,6 @@ ENV PYTHONPATH=/app:$PYTHONPATH
 #       root needed). snmp: net-snmp CLI (snmpget) for SNMP OID lookup.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    postgresql-client \
     gcc \
     python3-dev \
     nmap \
