@@ -48,9 +48,11 @@ class OllamaManager(OllamaClientBase):
             return models
         except Exception as e:
             logger.error(f"❌ Failed to list models: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to list models: {str(e)}"
-            )
+            # Re-raise as-is (not an HTTPException) so the route's own
+            # `except Exception as e: raise backend_http_error(...)` sanitizes it
+            # instead of leaking the raw Ollama error string -- e.g. a connection
+            # error naming the internal OLLAMA_HOST (#680).
+            raise
 
     async def pull_model(self, model_id: str) -> Dict[str, Any]:
         """Pull/download a model from Ollama library"""
@@ -63,9 +65,9 @@ class OllamaManager(OllamaClientBase):
             return {"model": model_id, "status": "pulled", "details": response}
         except Exception as e:
             logger.error(f"❌ Failed to pull model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to pull model: {str(e)}"
-            )
+            # See list_models: re-raise as-is so backend_http_error sanitizes it
+            # at the route layer instead of leaking the raw Ollama error (#680).
+            raise
 
     async def show_model(self, model_id: str) -> Dict[str, Any]:
         """Show detailed information about a model"""
@@ -88,9 +90,9 @@ class OllamaManager(OllamaClientBase):
                 raise HTTPException(
                     status_code=404, detail=f"Model not found: {model_id}"
                 )
-            raise HTTPException(
-                status_code=503, detail=f"Failed to show model: {str(e)}"
-            )
+            # Anything else: re-raise as-is so backend_http_error sanitizes it at
+            # the route layer instead of leaking the raw Ollama error (#680).
+            raise
 
     async def delete_model(self, model_id: str) -> Dict[str, Any]:
         """Delete a model from local storage"""
@@ -103,9 +105,9 @@ class OllamaManager(OllamaClientBase):
             return {"model": model_id, "status": "deleted", "details": response}
         except Exception as e:
             logger.error(f"❌ Failed to delete model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to delete model: {str(e)}"
-            )
+            # See list_models: re-raise as-is so backend_http_error sanitizes it
+            # at the route layer instead of leaking the raw Ollama error (#680).
+            raise
 
     async def test_model(
         self, model_id: str, prompt: str = "Hello, test."
@@ -124,6 +126,6 @@ class OllamaManager(OllamaClientBase):
             }
         except Exception as e:
             logger.error(f"❌ Failed to test model {model_id}: {e}")
-            raise HTTPException(
-                status_code=503, detail=f"Failed to test model: {str(e)}"
-            )
+            # See list_models: re-raise as-is so backend_http_error sanitizes it
+            # at the route layer instead of leaking the raw Ollama error (#680).
+            raise
