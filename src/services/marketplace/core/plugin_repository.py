@@ -138,11 +138,19 @@ async def search_plugins_page(
             WHERE (name ILIKE $1 OR display_name ILIKE $1 OR description ILIKE $1)
               AND status = 'approved'
             ORDER BY
-                CASE WHEN name ILIKE $1 THEN 0 ELSE 1 END,
+                CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END,
                 download_count DESC
-            LIMIT $2 OFFSET $3
+            LIMIT $3 OFFSET $4
             """,
+            # $1 is a substring pattern (for the WHERE filter -- any partial match
+            # counts); $2 is the bare query, case-insensitive but no wildcards, so
+            # the ranking actually tests for an EXACT name match rather than "the
+            # query appears anywhere in name" -- the original CASE reused $1 here,
+            # so a more-downloaded partial match (e.g. "supernetwork") could
+            # outrank a plugin literally named the search term ("network"),
+            # contradicting the documented "exact match first" ranking.
             search_pattern,
+            q,
             limit,
             offset,
         )

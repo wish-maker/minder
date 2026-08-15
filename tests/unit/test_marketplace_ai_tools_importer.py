@@ -88,3 +88,73 @@ async def test_success_true_when_manifest_has_no_ai_tools_section():
     result = await import_ai_tools_from_manifest(conn, "plugin-1", {})
     assert result["success"] is True
     assert result["tools_imported"] == 0
+
+
+class _StatefulConn:
+    """Models one plugin's existing marketplace_ai_tools rows (name -> active)
+    so the stale-tool-deactivation UPDATE has real rows to act against."""
+
+    def __init__(self, existing_active_tool_names):
+        self.active = {name: True for name in existing_active_tool_names}
+        self.deactivate_calls = 0
+
+    async def fetchrow(self, *a, **k):
+        return None  # every synced tool takes the INSERT branch
+
+    async def execute(self, query, *args):
+        if "NOT (tool_name = ANY" in query:
+            self.deactivate_calls += 1
+            _plugin_id, synced_names = args
+            stale = [n for n, on in self.active.items() if on and n not in synced_names]
+            for n in stale:
+                self.active[n] = False
+            return f"UPDATE {len(stale)}"
+        return "INSERT 0 1"
+
+
+@pytest.mark.asyncio
+async def test_tool_dropped_from_manifest_is_deactivated_not_left_active_forever():
+    """A plugin author renaming/removing a tool must not leave the old row
+    active=TRUE forever -- sync was previously purely additive, so a stale
+    tool kept being served as live by GET /v1/marketplace/ai/tools."""
+    conn = _StatefulConn(existing_active_tool_names=["get_price", "old_forecast_tool"])
+    manifest = {"ai_tools": [{"name": "get_price"}]}  # old_forecast_tool dropped
+
+    result = await import_ai_tools_from_manifest(conn, "plugin-1", manifest)
+
+    assert result["success"] is True
+    assert result["tools_deactivated"] == 1
+    assert conn.active["old_forecast_tool"] is False
+    assert conn.active["get_price"] is True
+    assert conn.deactivate_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_deactivation_skipped_when_sync_had_errors():
+    """A tool that merely FAILED to sync this round (still present in the
+    manifest, just a transient error) must not be mistaken for one removed
+    from it and deactivated alongside genuinely-stale tools."""
+    conn = _StatefulConn(existing_active_tool_names=["get_price", "flaky_tool"])
+
+    class _FlakyOnSecond(_StatefulConn):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._n = 0
+
+        async def execute(self, query, *args):
+            if "NOT (tool_name = ANY" in query:
+                return await super().execute(query, *args)
+            self._n += 1
+            if self._n == 2:
+                raise RuntimeError("db write failed")
+            return "INSERT 0 1"
+
+    conn = _FlakyOnSecond(existing_active_tool_names=["get_price", "flaky_tool"])
+    manifest = {"ai_tools": [{"name": "get_price"}, {"name": "flaky_tool"}]}
+
+    result = await import_ai_tools_from_manifest(conn, "plugin-1", manifest)
+
+    assert result["success"] is False
+    assert result["tools_deactivated"] == 0
+    assert conn.deactivate_calls == 0
+    assert conn.active["flaky_tool"] is True  # never touched, sync just errored

@@ -188,8 +188,15 @@ async def test_search_plugins_page_wraps_query_in_wildcards_and_ranks_exact_firs
     assert "status = 'approved'" in count_query
 
     fetch_query, fetch_params = conn.fetch_calls[0]
-    assert "CASE WHEN name ILIKE $1 THEN 0 ELSE 1 END" in fetch_query
-    assert fetch_params == ("%weather%", 10, 0)
+    # The ranking CASE must test against the BARE query ($2), not the
+    # wildcarded substring pattern ($1) -- reusing $1 here meant a plugin
+    # named e.g. "supernetwork" (a substring match) and one literally named
+    # "network" (an exact match) both ranked 0 for q="network", so a
+    # more-downloaded partial match could outrank the exact-name plugin,
+    # contradicting this function's own documented "exact match first"
+    # ranking (found in a background audit).
+    assert "CASE WHEN name ILIKE $2 THEN 0 ELSE 1 END" in fetch_query
+    assert fetch_params == ("%weather%", "weather", 10, 0)
 
 
 @pytest.mark.asyncio
