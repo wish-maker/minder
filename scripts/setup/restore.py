@@ -69,12 +69,10 @@ _OWN_ROLE_STMT_RE = re.compile(
 )
 
 
-def _strip_own_role_statements(sql_bytes: bytes) -> bytes:
-    return b"".join(
-        ln
-        for ln in sql_bytes.splitlines(keepends=True)
-        if not _OWN_ROLE_STMT_RE.match(ln)
-    )
+def _is_own_role_statement(line: bytes) -> bool:
+    """True for a dump line that must be filtered out before psql (see
+    _OWN_ROLE_STMT_RE). Applied per-line while streaming (#644)."""
+    return bool(_OWN_ROLE_STMT_RE.match(line))
 
 
 def _restore_postgres(sql_file: Path) -> bool:
@@ -101,34 +99,61 @@ def _restore_postgres(sql_file: Path) -> bool:
     instead of a false success. #289: this ALSO means the dump's own-role
     statements (see above) must be filtered out first — they always error
     ("current user cannot be dropped") and would otherwise hard-abort the
-    restore before any real data is touched."""
+    restore before any real data is touched.
+
+    #644: the dump is STREAMED line-by-line to psql's stdin (Popen) rather than
+    read whole into memory, filtered into a second whole copy, and buffered a
+    third time by `input=`. A production dump can be many GB; on the Pi-class
+    hardware this deploys to, holding 2–3× of it resident risked the OOM killer.
+    Line iteration can't split a role statement across a read boundary, so the
+    filter matches exactly as the previous read-whole-file version did.
+    stdout/stderr → DEVNULL, so psql's output never fills a pipe we'd have to
+    drain concurrently — no deadlock despite writing stdin from this thread."""
     try:
-        sql_bytes = _strip_own_role_statements(sql_file.read_bytes())
-        return (
-            subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    "-i",
-                    docker.container_name("postgres"),
-                    "psql",
-                    "-U",
-                    "minder",
-                    "-d",
-                    "postgres",
-                    "-v",
-                    "ON_ERROR_STOP=1",
-                    "-f",
-                    "-",
-                ],
-                input=sql_bytes,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            ).returncode
-            == 0
-        )
+        src = sql_file.open("rb")
     except OSError:
         return False
+    try:
+        proc = subprocess.Popen(
+            [
+                "docker",
+                "exec",
+                "-i",
+                docker.container_name("postgres"),
+                "psql",
+                "-U",
+                "minder",
+                "-d",
+                "postgres",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-f",
+                "-",
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        src.close()
+        return False
+
+    assert proc.stdin is not None
+    try:
+        with src:
+            for line in src:
+                if not _is_own_role_statement(line):
+                    proc.stdin.write(line)
+    except OSError:
+        # psql exited early (e.g. ON_ERROR_STOP tripped) → its stdin pipe broke
+        # mid-write. Not a crash; the non-zero returncode below reports it.
+        pass
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+    return proc.wait() == 0
 
 
 def _ensure_running(service: str) -> None:

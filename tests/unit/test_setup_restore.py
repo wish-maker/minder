@@ -374,40 +374,58 @@ def test_safe_extractall_rejects_path_escaping_members(monkeypatch, tmp_path):
     assert (dest / "safe.txt").read_bytes() == b"safe"
 
 
-def test_strip_own_role_statements_removes_only_bootstrap_role_lines():
+def test_own_role_statement_filter_matches_only_bootstrap_role_lines():
     """#289: found live on hantal — pg_dumpall --clean's `DROP/CREATE/ALTER
     ROLE minder` can never succeed (minder is both the only role and the one
     the restore connects as), so ON_ERROR_STOP would hard-abort the restore
-    before any real data is touched. Other roles/statements must survive."""
-    dump = (
-        b"-- Drop roles\n"
-        b"DROP ROLE IF EXISTS minder;\n"
-        b"DROP ROLE IF EXISTS readonly_reporter;\n"
-        b"CREATE ROLE minder;\n"
-        b"ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n"
-        b"CREATE ROLE readonly_reporter;\n"
-        b"DROP DATABASE IF EXISTS minder;\n"
-        b"CREATE DATABASE minder;\n"
-    )
-    filtered = restore._strip_own_role_statements(dump)
-    assert b"minder;\n" not in filtered.replace(
-        b"DROP DATABASE IF EXISTS minder;\n", b""
-    ).replace(b"CREATE DATABASE minder;\n", b"")
-    assert b"DROP ROLE IF EXISTS readonly_reporter;\n" in filtered
-    assert b"CREATE ROLE readonly_reporter;\n" in filtered
-    assert b"DROP DATABASE IF EXISTS minder;\n" in filtered
-    assert b"CREATE DATABASE minder;\n" in filtered
-    assert b"DROP ROLE IF EXISTS minder;\n" not in filtered
-    assert b"CREATE ROLE minder;\n" not in filtered
-    assert b"ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n" not in filtered
+    before any real data is touched. Other roles/statements must survive.
+    #644: this is now the per-line predicate applied while streaming."""
+    keep = [
+        b"-- Drop roles\n",
+        b"DROP ROLE IF EXISTS readonly_reporter;\n",
+        b"CREATE ROLE readonly_reporter;\n",
+        b"DROP DATABASE IF EXISTS minder;\n",
+        b"CREATE DATABASE minder;\n",
+    ]
+    strip = [
+        b"DROP ROLE IF EXISTS minder;\n",
+        b"CREATE ROLE minder;\n",
+        b"ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n",
+    ]
+    for line in keep:
+        assert restore._is_own_role_statement(line) is False, line
+    for line in strip:
+        assert restore._is_own_role_statement(line) is True, line
 
 
-def test_postgres_restore_strips_own_role_statements_before_psql(
-    monkeypatch, stubbed, tmp_path
-):
+class _FakeStdin:
+    def __init__(self):
+        self.buf = bytearray()
+
+    def write(self, b):
+        self.buf.extend(b)
+
+    def close(self):
+        pass
+
+
+class _FakeProc:
+    """Captures what _restore_postgres streams to psql's stdin; `code` is the
+    exit status returned from wait()."""
+
+    def __init__(self, code=0):
+        self.stdin = _FakeStdin()
+        self._code = code
+
+    def wait(self):
+        return self._code
+
+
+def test_postgres_restore_streams_filtered_dump_to_psql(monkeypatch, stubbed, tmp_path):
     """#289: `_restore_postgres` must feed the FILTERED dump to psql, not the
     raw file — otherwise ON_ERROR_STOP aborts on the bootstrap role's own
-    always-failing DROP/CREATE/ALTER ROLE statements."""
+    always-failing DROP/CREATE/ALTER ROLE statements. #644: it now STREAMS the
+    dump to psql's stdin via Popen (never a whole in-memory copy)."""
     archive = _make_archive(
         tmp_path,
         files={
@@ -416,28 +434,44 @@ def test_postgres_restore_strips_own_role_statements_before_psql(
                 "CREATE ROLE minder;\n"
                 "ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n"
                 "DROP DATABASE IF EXISTS minder;\n"
+                "CREATE DATABASE minder;\n"
             )
         },
     )
     warns, succs, errors = stubbed
     monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
     monkeypatch.setattr(restore, "_restore_postgres", _REAL_RESTORE_POSTGRES)
-    captured: dict = {}
-
-    def fake_run(argv, input=None, **kwargs):
-        captured["input"] = input
-
-        class _Result:
-            returncode = 0
-
-        return _Result()
-
-    monkeypatch.setattr(restore.subprocess, "run", fake_run)
+    proc = _FakeProc(code=0)
+    monkeypatch.setattr(restore.subprocess, "Popen", lambda *a, **k: proc)
 
     rc = restore.run(str(archive))
 
     assert rc == 0
-    assert b"minder;\n" not in captured["input"].replace(
-        b"DROP DATABASE IF EXISTS minder;\n", b""
+    out = bytes(proc.stdin.buf)
+    # Bootstrap-role statements filtered out...
+    assert b"DROP ROLE IF EXISTS minder;\n" not in out
+    assert b"CREATE ROLE minder;\n" not in out
+    assert b"ALTER ROLE minder WITH SUPERUSER LOGIN PASSWORD 'x';\n" not in out
+    # ...real DB statements streamed through.
+    assert b"DROP DATABASE IF EXISTS minder;\n" in out
+    assert b"CREATE DATABASE minder;\n" in out
+
+
+def test_restore_postgres_returns_false_on_nonzero_psql_exit(monkeypatch, tmp_path):
+    """A psql failure (ON_ERROR_STOP) → non-zero wait() → False, so run()'s warn
+    branch fires instead of a false success (#281)."""
+    sql = tmp_path / "postgres.sql"
+    sql.write_bytes(b"SELECT 1;\n")
+    monkeypatch.setattr(restore.docker, "container_name", lambda s: "minder-postgres")
+    monkeypatch.setattr(restore.subprocess, "Popen", lambda *a, **k: _FakeProc(code=1))
+    assert restore._restore_postgres(sql) is False
+
+
+def test_restore_postgres_missing_file_returns_false(monkeypatch, tmp_path):
+    """An unreadable dump path returns False before psql is ever started."""
+    started = []
+    monkeypatch.setattr(
+        restore.subprocess, "Popen", lambda *a, **k: started.append(1) or _FakeProc()
     )
-    assert b"DROP DATABASE IF EXISTS minder;\n" in captured["input"]
+    assert restore._restore_postgres(tmp_path / "does-not-exist.sql") is False
+    assert started == []  # never launched psql
