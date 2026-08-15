@@ -206,6 +206,19 @@ def require_role_or_service(*roles: str):
 _rate_limit_store: Dict[str, list] = {}
 _rate_limit_window_seconds = 60
 
+# #634: a key is only pruned by _prune_rate_limit_key when that SAME key is
+# looked up again -- a key hit exactly once (a one-off request, or an
+# attacker's scan-then-vanish IP) is never revisited and stays in the store
+# forever, growing it unboundedly on a long-running process. This periodic
+# sweep bounds that by dropping any key whose newest timestamp is older than
+# _SWEEP_STALE_AFTER_SECONDS, independent of whether it's ever looked up
+# again. Every enforce_rate_limit(...) call site in this codebase uses
+# window_minutes=1 today, so 1 hour leaves 60x headroom over any real window
+# in use; revisit this constant if a much larger window is ever introduced.
+_SWEEP_STALE_AFTER_SECONDS = 3600
+_SWEEP_EVERY_N_CALLS = 500
+_calls_since_sweep = 0
+
 
 def _prune_rate_limit_key(
     store: Dict[str, list], key: str, window_start: float
@@ -222,6 +235,22 @@ def _prune_rate_limit_key(
     if fresh:
         store[key] = fresh
     else:
+        del store[key]
+
+
+def _sweep_stale_keys(store: Dict[str, list], now: float) -> None:
+    """Drop any key untouched for longer than _SWEEP_STALE_AFTER_SECONDS.
+
+    Complements _prune_rate_limit_key, which only ever prunes a key when that
+    same key is looked up again -- this catches keys that never are.
+    """
+    cutoff = now - _SWEEP_STALE_AFTER_SECONDS
+    stale = [
+        key
+        for key, timestamps in store.items()
+        if not timestamps or max(timestamps) < cutoff
+    ]
+    for key in stale:
         del store[key]
 
 
@@ -268,6 +297,12 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
             # Check rate limit
             key = f"{user_id}:{request.url.path}"
             now = datetime.now(timezone.utc).timestamp()
+
+            global _calls_since_sweep
+            _calls_since_sweep += 1
+            if _calls_since_sweep >= _SWEEP_EVERY_N_CALLS:
+                _calls_since_sweep = 0
+                _sweep_stale_keys(_rate_limit_store, now)
 
             # Clean old entries (and drop the key entirely if it empties)
             window_start = now - (window_minutes * 60)
