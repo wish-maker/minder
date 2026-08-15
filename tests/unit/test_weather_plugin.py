@@ -186,6 +186,20 @@ def test_geocode_empty_results_returns_none(monkeypatch):
     assert asyncio.run(pl._geocode("Nowhereville")) is None
 
 
+def test_geocode_non_dict_result_returns_none(monkeypatch):
+    """An ambiguous/administrative-only match (or any future API change) could
+    return a results[0] that isn't a dict -- results[0].get(...) with no shape
+    check would raise OUTSIDE the try/except above instead of the graceful
+    None this fail-soft function is meant to return."""
+    monkeypatch.setattr(
+        weathermod.httpx,
+        "AsyncClient",
+        lambda **kw: _FakeAsyncClient(data={"results": ["not-a-dict"]}),
+    )
+    pl = WeatherPlugin()
+    assert asyncio.run(pl._geocode("Ambiguous Place")) is None
+
+
 def test_geocode_returns_none_on_exception(monkeypatch):
     monkeypatch.setattr(
         weathermod.httpx,

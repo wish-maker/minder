@@ -286,7 +286,23 @@ def test_latest_influx_date_parses_iso_date(monkeypatch, t_value, expected):
     assert asyncio.run(pl._latest_influx_date("BTC-USD")) == expected
 
 
-@pytest.mark.parametrize("rows", [[], [{"t": None}], [{"t": ""}], [{}]])
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [],
+        [{"t": None}],
+        [{"t": ""}],
+        [{}],
+        # Malformed shapes InfluxDB v3's query_sql could plausibly return on a
+        # 200 (an error/status object instead of a bare row array, or rows
+        # encoded as arrays not objects) -- rows[0].get(...) with no shape
+        # check would raise OUTSIDE this function's own try/except, aborting
+        # every remaining symbol in the caller's collection loop instead of
+        # just returning "no resume point" for this one.
+        {"error": "query failed"},
+        [["2024-01-15T00:00:00"]],
+    ],
+)
 def test_latest_influx_date_none_when_rows_empty_or_t_falsy(monkeypatch, rows):
     monkeypatch.setattr(
         cryptomod.httpx, "AsyncClient", lambda **kw: _FakeAsyncClient(json_data=rows)

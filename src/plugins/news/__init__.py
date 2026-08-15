@@ -42,6 +42,25 @@ __all__ = ["NewsPlugin"]
 logger = logging.getLogger("minder.plugin.news")
 
 
+async def _reject_unsafe_redirect(response: httpx.Response) -> None:
+    """httpx `response` event hook, fired on EVERY response including intermediate
+    redirects when follow_redirects=True -- _is_safe_feed_url below only ever
+    checked the ORIGINAL feed URL, not where a redirect actually leads. Without
+    this, a feed URL that itself passes the check (a public https host) could
+    302 to a private/loopback/link-local/metadata address and httpx would
+    transparently follow it -- reopening the exact SSRF primitive #370 closed,
+    just one hop later. Raises to abort the request the same way a connection
+    error would; the caller's existing try/except already handles that.
+    """
+    if response.is_redirect:
+        location = response.headers.get("location")
+        if not location:
+            return
+        next_url = str(httpx.URL(response.request.url).join(location))
+        if not await _is_safe_feed_url(next_url):
+            raise httpx.HTTPError(f"redirect to unsafe URL rejected: {next_url}")
+
+
 async def _is_safe_feed_url(url: str) -> bool:
     """https-only + reject hosts that resolve to a private/loopback/link-local/
     reserved/multicast address (RFC1918, 127.0.0.0/8, 169.254.0.0/16 incl. cloud
@@ -235,7 +254,9 @@ class NewsPlugin:
             return []
         try:
             async with httpx.AsyncClient(
-                timeout=self.http_timeout, follow_redirects=True
+                timeout=self.http_timeout,
+                follow_redirects=True,
+                event_hooks={"response": [_reject_unsafe_redirect]},
             ) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()

@@ -269,7 +269,16 @@ class CryptoPlugin:
                 f"⚠️ InfluxDB resume query failed for {symbol}: {type(e).__name__}"
             )
             return None
-        t = rows[0].get("t") if rows else None
+        # rows is assumed to be a bare JSON array of row-objects -- InfluxDB v3's
+        # query_sql returning a 200 with a differently-shaped body (an error/status
+        # object, or rows encoded as arrays) would otherwise raise OUTSIDE the
+        # try/except above (AttributeError/KeyError), aborting collection for every
+        # remaining symbol in the caller's loop instead of just this one lookup.
+        t = (
+            rows[0].get("t")
+            if isinstance(rows, list) and rows and isinstance(rows[0], dict)
+            else None
+        )
         if not t:
             return None
         try:
