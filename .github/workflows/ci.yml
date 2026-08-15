@@ -453,15 +453,21 @@ jobs:
           # Several e2e test files each register+login their own throwaway user
           # (test_auth_regression/test_marketplace_flow/test_marketplace_gateway_
           # functional/test_rag_pipeline_functional/test_graph_rag_functional, plus
-          # test_chat_tools.py) sharing api-gateway's default RATE_LIMIT_PER_MINUTE=60
-          # budget across the WHOLE e2e run from one CI runner IP -- confirmed live:
-          # a run tipped over that limit (register got a genuine 429), leaving several
-          # later tests' setup fixtures unable to log in at all. This isn't the
-          # scenario RATE_LIMIT_PER_MINUTE exists to guard (a single real client
-          # abusing the gateway); it's CI's own test traffic across many files sharing
-          # one IP. tests/integration/test_api_gateway.py's own rate-limit-blocking
-          # tests run in a separate job (integration-tests) unaffected by this.
+          # test_chat_tools.py) sharing one CI runner IP's rate-limit budget across
+          # the WHOLE e2e run -- confirmed live: a run tipped over the limit
+          # (register got a genuine 429), leaving several later tests' setup
+          # fixtures unable to log in at all. RATE_LIMIT_PER_MINUTE alone (the
+          # general gateway middleware) turned out NOT to be the actual bottleneck
+          # -- routes/auth.py's register/login carry their OWN, separate, stricter
+          # per-IP limit (enforce_rate_limit, keyed on IP+path), previously a
+          # hardcoded decorator literal with no env override at all; now reads
+          # AUTH_RATE_LIMIT_PER_MINUTE. Neither of these is the scenario either
+          # limit exists to guard (a single real client abusing the gateway); it's
+          # CI's own test traffic across many files sharing one IP.
+          # tests/integration/test_api_gateway.py's own rate-limit-blocking tests
+          # run in a separate job (integration-tests) unaffected by either override.
           RATE_LIMIT_PER_MINUTE: "1000"
+          AUTH_RATE_LIMIT_PER_MINUTE: "1000"
         run: |
           pytest tests/e2e/ -v \
             --tb=short \
