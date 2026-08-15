@@ -33,12 +33,18 @@ CorrectiveRAGPipeline = _load().CorrectiveRAGPipeline
 
 
 class _FakeLLM:
-    def __init__(self, text):
+    def __init__(self, text, error=False):
         self._text = text
         self.calls = 0
+        self._error = error
 
     async def generate_response(self, **kwargs):
         self.calls += 1
+        if self._error:
+            # Mirrors OllamaManager.generate_response's real failure shape: never
+            # raises, returns {"text": "Error generating response: ...", "error":
+            # True} instead.
+            return {"text": self._text, "error": True}
         return {"text": self._text}
 
 
@@ -102,4 +108,15 @@ async def test_rewrite_empty_result_returns_empty():
 
 async def test_rewrite_overlong_result_rejected():
     r = await CorrectiveRAGPipeline().rewrite_query("q", _FakeLLM("x" * 501), "m")
+    assert r == ""
+
+
+async def test_rewrite_returns_empty_not_error_text_on_llm_error_flag():
+    """generate_response's error dict shape ({"text": "...", "error": True}) is
+    short enough to pass the len<=500 guard -- without checking the flag, it
+    would be returned as the "refined query" and get re-embedded/re-retrieved
+    against verbatim instead of degrading to no rewrite."""
+    r = await CorrectiveRAGPipeline().rewrite_query(
+        "q", _FakeLLM("connection refused", error=True), "m"
+    )
     assert r == ""

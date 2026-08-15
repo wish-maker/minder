@@ -38,14 +38,22 @@ HyDEQueryExpander = _load().HyDEQueryExpander
 class _FakeLLM:
     """Injected llm_manager double: canned text + embedding, or raise on demand."""
 
-    def __init__(self, text="a hypothetical answer", embedding=None, raise_on=None):
+    def __init__(
+        self, text="a hypothetical answer", embedding=None, raise_on=None, error=False
+    ):
         self._text = text
         self._embedding = embedding if embedding is not None else [0.1, 0.2, 0.3]
         self._raise_on = raise_on or set()
+        self._error = error
 
     async def generate_response(self, prompt, model, temperature=0.7):
         if "generate_response" in self._raise_on:
             raise RuntimeError("llm down")
+        if self._error:
+            # Mirrors OllamaManager.generate_response's real failure shape: never
+            # raises, returns {"text": "Error generating response: ...", "error":
+            # True} instead.
+            return {"text": f"Error generating response: {self._text}", "error": True}
         return {"text": self._text}
 
     async def generate_embeddings(self, texts, model):
@@ -72,6 +80,18 @@ async def test_generate_answer_returns_llm_text():
 async def test_generate_answer_swallows_llm_error_to_empty():
     out = await HyDEQueryExpander().generate_hypothetical_answer(
         "q", _FakeLLM(raise_on={"generate_response"})
+    )
+    assert out == ""
+
+
+async def test_generate_answer_returns_empty_not_error_text_on_llm_error_flag():
+    """generate_response's OTHER failure mode: it doesn't always raise -- it can
+    return an "error": True dict with the failure message in "text" instead.
+    Without checking that flag, the error string would flow through as a
+    truthy "hypothetical answer" and get embedded/searched against verbatim
+    instead of falling back to the raw question, silently poisoning retrieval."""
+    out = await HyDEQueryExpander().generate_hypothetical_answer(
+        "q", _FakeLLM(text="connection refused", error=True)
     )
     assert out == ""
 

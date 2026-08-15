@@ -56,6 +56,14 @@ class _FakeLLM:
         return {"text": a}
 
 
+class _ErroringLLM:
+    """Mirrors OllamaManager.generate_response's real failure shape: never raises,
+    returns {"text": "Error generating response: ...", "error": True} instead."""
+
+    async def generate_response(self, **kwargs):
+        return {"text": "Error generating response: connection refused", "error": True}
+
+
 class _FakeEvaluator:
     """Returns a canned quality dict per evaluate call (cycles through `qualities`)."""
 
@@ -104,6 +112,18 @@ async def test_empty_context_raises():
         await SelfRAGPipeline().generate_with_self_refinement(
             "q", "", _SOURCES, _FakeLLM()
         )
+
+
+async def test_llm_error_raises_instead_of_returning_error_text_as_answer():
+    """generate_response never raises on an LLM failure -- it returns an
+    "error": True dict with the failure message in "text" instead. Without
+    checking that flag, the error string would flow through as a truthy
+    "answer", bypassing rag/methods/self_rag.py's own try/except fallback to
+    standard generation (which correctly 503s per #232) and returning the
+    error text as a confident 200 answer instead."""
+    pipe = _with_evaluator(SelfRAGPipeline(max_iterations=3), None)
+    with pytest.raises(Exception):
+        await pipe.generate_with_self_refinement("q", "ctx", _SOURCES, _ErroringLLM())
 
 
 # --- evaluator-absent single pass (common Pi path, #138) --------------------

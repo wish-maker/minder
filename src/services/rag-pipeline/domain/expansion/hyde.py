@@ -82,6 +82,19 @@ class HyDEQueryExpander:
                 prompt=prompt, model=model, temperature=0.7
             )
 
+            if result.get("error"):
+                # generate_response never raises on an LLM failure -- it returns
+                # {"text": "Error generating response: ...", "error": True}
+                # instead. Without this check that error string flows through as
+                # a truthy "hypothetical answer" and gets embedded/searched
+                # against verbatim instead of falling back to the raw question
+                # (the caller's own fallback-to-"") -- silently poisoning
+                # retrieval instead of degrading gracefully.
+                logger.warning(
+                    f"⚠️ Failed to generate hypothetical answer: {result.get('text')}"
+                )
+                return ""
+
             hypothetical_answer = result.get("text", "")
 
             logger.info(
