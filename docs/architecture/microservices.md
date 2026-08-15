@@ -255,15 +255,13 @@ traefik
   │   ├── ollama (optional; external if OLLAMA_BASE_URL set)
   │   └── postgres
   ├── model-management
-  │   ├── postgres
-  │   └── ollama
+  │   └── ollama (talks only to Ollama -- no DB/Redis/JWT)
   ├── tts-stt
   ├── graph-rag
   │   └── neo4j
   ├── openwebui
   │   ├── postgres
-  │   ├── rag-pipeline
-  │   └── ollama (optional)
+  │   └── ollama (optional; NOT rag-pipeline -- no functional link)
   └── monitoring (prometheus, grafana, influxdb, jaeger, alertmanager, exporters)
 ```
 
