@@ -1270,8 +1270,13 @@ services:
       ollama:
         condition: service_healthy
         required: false   # internal-ollama profile only; external mode omits ollama
-      rag-pipeline:
-        condition: service_healthy
+    # rag-pipeline is NOT a dependency: Open WebUI's own code never calls it (see
+    # the RAG_PIPELINE_URL/RAG_ENABLED comment above) -- its Knowledge feature uses
+    # a separate, internal ChromaDB store. A `depends_on: rag-pipeline: condition:
+    # service_healthy` here used to mean any rag-pipeline health dip (e.g. Qdrant,
+    # a `critical=True` dependency of rag-pipeline's own /health) blocked Open WebUI
+    # -- and with it, the entire chat UI -- from starting, despite no real
+    # functional link between the two.
     healthcheck:
       test:
       - CMD
