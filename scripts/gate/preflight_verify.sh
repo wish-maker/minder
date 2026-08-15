@@ -18,14 +18,20 @@ trap restore EXIT
 
 # bash side: source config+log+env+preflight (IFS mirrors setup.sh). log.sh's EXIT
 # trap fires spinner_stop (\r\033[K) + the epilogue on non-zero exit — normalized away.
-bsh() { SCRIPT_DIR="$PWD" bash -c '
+# `timeout 60` (run-gate.sh's own precedent for every verb it runs) guards
+# validate_gpu_environment's `docker run --gpus` call below: this file's own
+# comment assumes it "fails fast (image not found, no pull)" on a host with no
+# NVIDIA toolkit, but that depends on Docker resolving the --gpus device request
+# before or after attempting to pull the image -- unverified here (no live
+# Docker in this sandbox), so bound the worst case instead of trusting it.
+bsh() { SCRIPT_DIR="$PWD" timeout 60 bash -c '
   SCRIPT_DIR="$PWD"; IFS=$'"'"'\n\t'"'"'
   source scripts/lib/config.sh    >/dev/null 2>&1
   source scripts/lib/log.sh       >/dev/null 2>&1
   source scripts/lib/env.sh       >/dev/null 2>&1
   source scripts/lib/preflight.sh >/dev/null 2>&1
   '"$1"; }
-pyi() { "$PY" -c "
+pyi() { timeout 60 "$PY" -c "
 import os
 from scripts.setup import preflight
 $1"; }

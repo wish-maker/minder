@@ -49,9 +49,16 @@ cmpout "wait_healthy postgres" \
 cmpout "wait_postgres_ready" \
   'wait_postgres_ready 60' \
   'sys.exit(0 if docker.wait_postgres_ready(60) else 1)'
-cmpout "wait_port open (8000)" \
-  'wait_port 127.0.0.1 8000 30 && echo OK || echo NO' \
-  'print("OK" if docker.wait_port("127.0.0.1", 8000, 30) else "NO")'
+# Derived from SERVICE_PORTS (not a hardcoded "8000" literal): both sides already
+# track this in config.sh/config.py as the single source of truth, so a future
+# port renumbering can't leave this test silently checking the wrong port -- a
+# stale hardcoded number here would degrade to a vacuous pass (both sides return
+# NO identically) instead of failing loudly, since nothing else asserts the port
+# was actually open at least once.
+cmpout "wait_port open (api-gateway port)" \
+  'wait_port 127.0.0.1 "${SERVICE_PORTS[api-gateway]%%/*}" 30 && echo OK || echo NO' \
+  'p = config.SERVICE_PORTS["api-gateway"].split("/")[0]
+print("OK" if docker.wait_port("127.0.0.1", p, 30) else "NO")'
 cmpout "wait_port closed (59999)" \
   'wait_port 127.0.0.1 59999 2 && echo OK || echo NO' \
   'print("OK" if docker.wait_port("127.0.0.1", 59999, 2) else "NO")'

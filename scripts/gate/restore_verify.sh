@@ -23,6 +23,18 @@ set -u
 PY="${PY:-python}"                     # override e.g. PY=python3 on boxes without `python`
 cd "$(dirname "$0")/../.." || exit 2   # repo root (script lives in scripts/gate/)
 
+# Fixed, predictable path -- NOT `mktemp -d` -- so a run killed between stashing
+# and restoring (SIGKILL/OOM-killer/CI hard timeout: the EXIT/INT/TERM trap below
+# can't catch these) leaves the user's real backups/ at a location a SUBSEQUENT
+# invocation can find and self-heal, instead of stranded under an unrecoverable
+# random /tmp path forever.
+STASH_DIR="$PWD/.gate-backup-stash"
+if [[ -d "$STASH_DIR" ]]; then
+    echo "gate: found a backup stash left by an interrupted prior run -- restoring it" >&2
+    rm -rf backups
+    mv "$STASH_DIR" backups
+fi
+
 STASH=""; TMPD=".verify-restore-tmp"
 cleanup() {
     rm -rf "$TMPD"
@@ -30,7 +42,7 @@ cleanup() {
     [[ -n "$STASH" && -d "$STASH" ]] && { mv "$STASH" backups; STASH=""; }
 }
 trap cleanup EXIT INT TERM
-if [[ -e backups ]]; then STASH="$(mktemp -d)/backups"; mv backups "$STASH"; fi
+if [[ -e backups ]]; then STASH="$STASH_DIR"; mv backups "$STASH"; fi
 
 FAIL=0
 
