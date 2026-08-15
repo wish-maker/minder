@@ -25,6 +25,19 @@ class TTSRequest(BaseModel):
     # it. Ignored entirely for gTTS-only languages (no per-voice selection).
     voice: str | None = None
 
+    @field_validator("text")
+    @classmethod
+    def _validate_text_not_blank(cls, v: str) -> str:
+        # min_length=1 above only rejects "" -- a whitespace-only string ("   ",
+        # "\n") still passes it, then reaches gTTS with nothing real to speak.
+        # gTTS raises its own internal "no text to send" error there, caught only
+        # by the route's generic `except Exception` and turned into a sanitized
+        # 500 -- exactly the "clean 422, not a 500" outcome #534 already fixed
+        # for a plain empty string, just missed for whitespace-only input.
+        if not v.strip():
+            raise ValueError("text must not be blank")
+        return v
+
     @field_validator("language")
     @classmethod
     def _validate_language(cls, v: str) -> str:

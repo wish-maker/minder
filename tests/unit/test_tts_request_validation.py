@@ -36,6 +36,20 @@ def test_empty_text_rejected():
         models.TTSRequest(text="")
 
 
+def test_whitespace_only_text_rejected():
+    """Found in a background audit: min_length=1 rejects "" but a whitespace-
+    only string ("   ", "\\n") still passed it, then reached gTTS with nothing
+    real to speak -- gTTS raises its own "no text to send" error there, caught
+    only by the route's generic `except Exception` and turned into a
+    sanitized 500 instead of the clean 422 #534 already established for a
+    plain empty string."""
+    models = _load_models()
+    with pytest.raises(ValidationError):
+        models.TTSRequest(text="   ")
+    with pytest.raises(ValidationError):
+        models.TTSRequest(text="\n\t")
+
+
 def test_nonempty_text_accepted_with_default_language():
     models = _load_models()
     req = models.TTSRequest(text="Merhaba")
