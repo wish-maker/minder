@@ -121,6 +121,46 @@ async def load_plugin_from_module(plugin_dir: Path):
                 registered_at=metadata.registered_at.isoformat(),
             )
 
+            # Persist BEFORE mutating in-memory state (same fix shape as #351's
+            # auto_enable_plugins): update_plugin_in_database re-raises on
+            # failure, so a DB hiccup here must not leave the plugin instance
+            # live in plugin_instances/plugins_db (reachable by health checks,
+            # data collection, /actions) with nothing to show for it in the
+            # database -- the two would stay out of sync until the next
+            # restart's load_plugins_from_database silently drops it. Shut the
+            # already-register()ed/initialize()d instance back down before
+            # propagating, so it doesn't leak as an untracked live object.
+            try:
+                await update_plugin_in_database(
+                    plugin_name,
+                    version=plugin_info.version,
+                    description=plugin_info.description,
+                    author=plugin_info.author,
+                    dependencies=(
+                        json.dumps(plugin_info.dependencies)
+                        if plugin_info.dependencies
+                        else None
+                    ),
+                    capabilities=(
+                        json.dumps(plugin_info.capabilities)
+                        if plugin_info.capabilities
+                        else None
+                    ),
+                    data_sources=(
+                        json.dumps(plugin_info.data_sources)
+                        if plugin_info.data_sources
+                        else None
+                    ),
+                    databases=(
+                        json.dumps(plugin_info.databases)
+                        if plugin_info.databases
+                        else None
+                    ),
+                )
+            except Exception:
+                await plugin_instance.shutdown()
+                raise
+
             plugins_db[plugin_name] = plugin_info
             plugin_instances[plugin_name] = plugin_instance
 
@@ -134,32 +174,6 @@ async def load_plugin_from_module(plugin_dir: Path):
 
             logger.info(
                 f"Loaded and registered plugin: {plugin_name} (version {plugin_info.version})"
-            )
-
-            # Persist to database
-            await update_plugin_in_database(
-                plugin_name,
-                version=plugin_info.version,
-                description=plugin_info.description,
-                author=plugin_info.author,
-                dependencies=(
-                    json.dumps(plugin_info.dependencies)
-                    if plugin_info.dependencies
-                    else None
-                ),
-                capabilities=(
-                    json.dumps(plugin_info.capabilities)
-                    if plugin_info.capabilities
-                    else None
-                ),
-                data_sources=(
-                    json.dumps(plugin_info.data_sources)
-                    if plugin_info.data_sources
-                    else None
-                ),
-                databases=(
-                    json.dumps(plugin_info.databases) if plugin_info.databases else None
-                ),
             )
 
             # Auto-sync AI tools with marketplace. Module plugins have no manifest, so
