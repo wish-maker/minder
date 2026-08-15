@@ -8,6 +8,7 @@ resolution), and the registry-driven read/action surface.
 import asyncio
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 
 import plugins.news as newsmod
@@ -215,6 +216,43 @@ def test_fetch_feed_rejects_unsafe_url_without_making_http_call(monkeypatch):
     items = asyncio.run(pl._fetch_feed("http://internal.example/rss"))
     assert items == []
     assert called["n"] == 0
+
+
+def test_fetch_feed_rejects_a_redirect_to_an_unsafe_url(monkeypatch):
+    """A feed URL that itself passes _is_safe_feed_url (public https host) must
+    not be allowed to 302 its way to a private/internal/non-https address --
+    that would reopen the exact SSRF primitive #370 closed, one hop later.
+    Uses the REAL httpx.AsyncClient (via a MockTransport swapped in through a
+    subclass) so the actual follow_redirects + event_hooks machinery runs, not
+    a stand-in that would silently no-op on both. DNS is faked to a public
+    address so the ORIGINAL url's check passes; the redirect target is
+    rejected on scheme alone (http, not https), so it never needs DNS."""
+    _patch_public_dns(monkeypatch)
+    requested_paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path == "/start":
+            return httpx.Response(
+                302, headers={"location": "http://169.254.169.254/secret"}
+            )
+        # Would prove the SSRF hole if ever reached: valid RSS the plugin
+        # would happily parse and return, exactly like a real internal
+        # endpoint's response would look no different from a real feed.
+        return httpx.Response(200, text=_RSS_XML)
+
+    class _MockTransportClient(httpx.AsyncClient):
+        def __init__(self, *a, **kw):
+            kw["transport"] = httpx.MockTransport(handler)
+            super().__init__(*a, **kw)
+
+    monkeypatch.setattr(newsmod.httpx, "AsyncClient", _MockTransportClient)
+    pl = NewsPlugin()
+    items = asyncio.run(pl._fetch_feed("https://example.com/start"))
+    # The redirect target must never actually be requested -- if it were,
+    # items would come back populated from the fake "internal" RSS response.
+    assert requested_paths == ["/start"]
+    assert items == []
 
 
 def test_fetch_feed_parses_rss_items(monkeypatch):

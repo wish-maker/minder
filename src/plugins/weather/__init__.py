@@ -191,9 +191,16 @@ class WeatherPlugin:
         except Exception as e:
             logger.warning(f"⚠️ geocode failed: {type(e).__name__}: {e}")
             return None
-        if not results:
+        # Same unvalidated-shape risk as elsewhere: an ambiguous/administrative-only
+        # match (or any future API change) could return a results[0] that isn't a
+        # dict, or is missing lat/lon -- raise OUTSIDE the try/except above instead
+        # of the graceful None this fail-soft function is meant to return.
+        if not results or not isinstance(results[0], dict):
             return None
-        return results[0].get("latitude"), results[0].get("longitude")
+        lat, lon = results[0].get("latitude"), results[0].get("longitude")
+        if lat is None or lon is None:
+            return None
+        return float(lat), float(lon)
 
     async def _write_influxdb(self, readings: Dict[str, Dict]) -> bool:
         """Write readings to InfluxDB via the HTTP /api/v2/write API (line protocol)."""

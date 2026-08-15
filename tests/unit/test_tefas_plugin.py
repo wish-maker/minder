@@ -16,6 +16,8 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
+import pytest
+
 import plugins.tefas as tefasmod
 from plugins.tefas import _DEFAULT_START, TefasPlugin
 
@@ -334,6 +336,29 @@ def test_latest_influx_date_none_when_t_falsy(monkeypatch):
         tefasmod.httpx,
         "AsyncClient",
         lambda **kw: _FakeAsyncClient(data=[{"t": None}]),
+    )
+    assert asyncio.run(pl._latest_influx_date("AFA")) is None
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        {"error": "query failed"},
+        [["2024-01-15T00:00:00"]],
+    ],
+)
+def test_latest_influx_date_none_on_malformed_response_shape(monkeypatch, rows):
+    """Malformed shapes InfluxDB v3's query_sql could plausibly return on a
+    200 (an error/status object instead of a bare row array, or rows encoded
+    as arrays not objects) -- rows[0].get(...) with no shape check would raise
+    OUTSIDE this function's own try/except, aborting every remaining fund in
+    the caller's collection loop instead of just returning "no resume point"
+    for this one."""
+    pl = TefasPlugin()
+    pl.sink_influxdb = True
+    pl.config = dict(_ENABLED_CFG)
+    monkeypatch.setattr(
+        tefasmod.httpx, "AsyncClient", lambda **kw: _FakeAsyncClient(data=rows)
     )
     assert asyncio.run(pl._latest_influx_date("AFA")) is None
 
