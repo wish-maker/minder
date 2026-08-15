@@ -243,6 +243,14 @@ docker/services/telegraf/telegraf.runtime.conf
 # durable artifact (a committed golden trace would go stale + is machine-sensitive).
 scripts/gate/*.trace
 
+# Gate harness fixture/scratch dirs (repo-root-relative by design — cache_verify.sh's
+# own comment: an MSYS /tmp path would be opaque to a native-Windows python). A run
+# killed mid-way (SIGKILL/CI hard timeout) can leave these behind between
+# invocations; each script also self-heals by removing it at the top of its next run.
+.verify-cache-tmp/
+.verify-restore-tmp/
+.gate-backup-stash/
+
 # Configuration Backups
 *.backup.*
 *.backup-*
