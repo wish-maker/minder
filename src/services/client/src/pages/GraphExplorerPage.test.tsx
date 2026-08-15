@@ -5,7 +5,12 @@ import { GraphExplorerPage } from "./GraphExplorerPage";
 
 // apiFetch is dispatched by request path: stats/documents fire on mount (via
 // useAsyncResource), and /graph/search is the new "Find entities" endpoint (#701).
-const apiFetch = vi.fn(async (path: string, _opts?: unknown) => {
+let lastSearchOpts: { body?: { query?: string } } | undefined;
+
+const apiFetch = vi.fn(async (path: string, opts?: unknown) => {
+  if (path.includes("/graph/search")) {
+    lastSearchOpts = opts as { body?: { query?: string } };
+  }
   if (path.includes("/graph/stats")) {
     return {
       success: true,
@@ -48,6 +53,7 @@ describe("GraphExplorerPage — Find entities (graph search)", () => {
   afterEach(() => {
     cleanup();
     apiFetch.mockClear();
+    lastSearchOpts = undefined;
   });
 
   it("searches the graph for entities and renders the matches", async () => {
@@ -67,13 +73,7 @@ describe("GraphExplorerPage — Find entities (graph search)", () => {
 
     // The new /v1/graph/search endpoint was hit with the typed query.
     await waitFor(() => {
-      const call = apiFetch.mock.calls.find((c) =>
-        String(c[0]).includes("/graph/search"),
-      );
-      expect(call).toBeTruthy();
-      expect((call?.[1] as { body?: { query?: string } })?.body?.query).toBe(
-        "tesla",
-      );
+      expect(lastSearchOpts?.body?.query).toBe("tesla");
     });
   });
 
