@@ -195,6 +195,14 @@ async def run_query(
         )
         if corr_details:
             details["corrective"] = corr_details
+            if corr_details.get("still_insufficient"):
+                # Grade was poor and re-retrieval found nothing better -- the answer
+                # is generated from context Corrective RAG judged insufficient, so
+                # say so rather than letting it read as authoritative (#661).
+                degraded.append(
+                    "corrective: retrieved context graded insufficient and "
+                    "re-retrieval found nothing better — answer may be low-confidence"
+                )
         else:
             # Empty details = pipeline unavailable or it raised → nothing corrective ran.
             degraded.append(

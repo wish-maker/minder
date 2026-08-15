@@ -47,6 +47,11 @@ async def correct(
                     details["corrected"] = True
                     details["refined_query_chars"] = len(refined)
                     return new_result, details
+            # Grade was poor AND correction couldn't find anything better (no rewrite,
+            # or the re-retrieval also came back empty). Signal this so the runner can
+            # surface it as a degraded note (#661) instead of silently generating an
+            # answer from context Corrective RAG itself judged insufficient.
+            details["still_insufficient"] = True
         return context_result, details
     except Exception as e:  # pragma: no cover - defensive
         logger.warning(f"⚠️ Corrective RAG failed, using original retrieval: {e}")
