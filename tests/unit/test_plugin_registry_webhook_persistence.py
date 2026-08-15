@@ -29,6 +29,13 @@ _SERVICE_DIR = (
 
 def _fresh_import(module_path: str):
     sys.path.insert(0, str(_SERVICE_DIR))
+    # webhooks.py imports `from config import settings` (#640), which instantiates
+    # Settings() -> MinderBaseSettings requires these secrets from the env.
+    import os
+
+    os.environ.setdefault("DB_PASSWORD", "test")
+    os.environ.setdefault("REDIS_PASSWORD", "test")
+    os.environ.setdefault("JWT_SECRET", "test")
     for stale in list(sys.modules):
         if (
             stale == "core"
@@ -250,3 +257,58 @@ async def test_register_all_webhooks_on_startup_survives_one_plugin_failing(
         "/webhook/broken": "broken",
         "/webhook/weather": "weather",
     }
+
+
+# ── Webhook body-size bound (#640) ──────────────────────────────────────────
+# handle_webhook_request triggers embedding generation + Qdrant writes, so an
+# unbounded body is a resource-exhaustion vector. It now reads the raw body and
+# rejects an oversized one with 413 BEFORE parsing (the sibling rate limit is
+# applied at the route decorator, exercised separately).
+
+
+class _FakeRequest:
+    def __init__(self, body: bytes, content_type="application/json", json_data=None):
+        self._body = body
+        self._json = json_data if json_data is not None else {}
+        self.headers = {"content-type": content_type}
+
+    async def body(self):
+        return self._body
+
+    async def json(self):
+        return self._json
+
+    async def form(self):
+        return {}
+
+
+@pytest.mark.asyncio
+async def test_handle_webhook_request_rejects_oversized_body(monkeypatch):
+    monkeypatch.setattr(webhooks, "webhook_routes", {"/webhook/w": "p1"})
+    monkeypatch.setattr(webhooks, "plugin_manifests", {"p1": {"spec": {}}})
+
+    limit_mb = webhooks.settings.MAX_WEBHOOK_BODY_SIZE_MB
+    oversized = b"x" * (limit_mb * 1024 * 1024 + 1)
+
+    with pytest.raises(webhooks.HTTPException) as exc:
+        await webhooks.handle_webhook_request("/webhook/w", _FakeRequest(oversized))
+    assert exc.value.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_handle_webhook_request_allows_body_within_limit(monkeypatch):
+    """A body within the limit passes the size guard and flows on -- proven by
+    reaching the secretRef fail-closed 501 (not a 413)."""
+    monkeypatch.setattr(webhooks, "webhook_routes", {"/webhook/w": "p1"})
+    monkeypatch.setattr(
+        webhooks,
+        "plugin_manifests",
+        {"p1": {"spec": {"trigger": {"webhook": {"secretRef": "some-secret"}}}}},
+    )
+
+    small = b'{"event": "ping"}'
+    with pytest.raises(webhooks.HTTPException) as exc:
+        await webhooks.handle_webhook_request(
+            "/webhook/w", _FakeRequest(small, json_data={"event": "ping"})
+        )
+    assert exc.value.status_code == 501  # passed the size guard, hit secret check
