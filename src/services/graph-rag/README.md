@@ -62,7 +62,11 @@ graph-rag/
 
 - **Neo4j** — the knowledge graph (shared with marketplace's dependency graph, but
   different node labels). REQUIRED. Graph writes use `MERGE` so re-ingesting a
-  document is idempotent.
+  document is idempotent. The graph is a single global Neo4j space — there is no
+  per-knowledge-base or per-user partitioning of entities/documents. Entities
+  merge across documents by `(text, label)` regardless of who/what ingested
+  them, and any authenticated caller can list/delete any document (tracked:
+  [#628](https://github.com/wish-maker/minder/issues/628)).
 - **spaCy** — the NER model; excluded from CI mypy (heavy lib false-positives).
 
 ## Error conventions

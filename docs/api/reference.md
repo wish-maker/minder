@@ -290,7 +290,7 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/marketplace/plugins/{plugin_id}/install` | Install from the catalog |
+| POST | `/v1/marketplace/plugins/{plugin_id}/install` | Install from the catalog. 409 once the caller hits `MAX_PLUGINS_PER_USER` (default 100) currently-installed plugins — re-enabling an already-installed plugin doesn't count toward the cap |
 | DELETE | `/v1/marketplace/plugins/{plugin_id}/uninstall` | Uninstall |
 | POST | `/v1/marketplace/plugins/{plugin_id}/enable` | Enable |
 | POST | `/v1/marketplace/plugins/{plugin_id}/disable` | Disable |
@@ -406,7 +406,7 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
 | PATCH | `/knowledge-bases/{kb_id}` | Update a KB's **mutable metadata** — `name` / `description` / `llm_model` — in place, WITHOUT touching its documents or vectors (JWT-gated; 404 if unknown). `embedding_model` and the chunk params are immutable (changing them would invalidate the stored vectors). Previously renaming meant delete + recreate, which drops every document |
 | DELETE | `/knowledge-bases/{kb_id}` | Delete a KB — drops its Qdrant collection + PostgreSQL row (404 if unknown) |
-| POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector). Response includes a `document_id`, one per upload call (#427) |
+| POST | `/knowledge-bases/{kb_id}/upload` | Upload a document (PDF / TXT / MD) into a KB. **413** over `MAX_UPLOAD_SIZE_MB` (default 50MB) — also capped a level up by the gateway's own `MAX_PROXY_BODY_SIZE_MB` (150MB, see api-gateway). Returns **503** if the embedding backend is unreachable — the doc is NOT indexed (no silent zero-vector). Response includes a `document_id`, one per upload call (#427) |
 | GET | `/knowledge-bases/{kb_id}/documents` | List documents in a KB, one entry per upload — not per chunk (404 if the KB is unknown, #427). Returns the shared `{items, total, limit, offset}` envelope (#501; all docs in one page) |
 | DELETE | `/knowledge-bases/{kb_id}/documents/{document_id}` | Delete a single document's chunks/vectors, leaving the rest of the KB intact (404 if the KB or document is unknown, #427) |
 | POST | `/pipeline` | Create a RAG pipeline over one or more knowledge bases |
@@ -477,7 +477,7 @@ should use the `/v1/` path.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers. Optional `voice` field (e.g. `"male"`/`"female"`) picks among that language's bundled Piper voices — silently falls back to the language's default on an unknown/unsupported value rather than erroring; ignored entirely for gTTS-only languages |
+| POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers. `text` capped at `TTS_MAX_TEXT_LENGTH` (default 5000 chars, 422 past that — neither engine enforces its own ceiling). Optional `voice` field (e.g. `"male"`/`"female"`) picks among that language's bundled Piper voices — silently falls back to the language's default on an unknown/unsupported value rather than erroring; ignored entirely for gTTS-only languages |
 | GET | `/v1/tts/languages` | Supported TTS languages |
 | GET | `/v1/tts/voices?language=` | Voice choices for `language` — only ones whose `.onnx` is actually bundled on this deployment. Empty for a gTTS-only language (no per-voice selection) or a language with no bundled Piper voice. English currently offers `default`/`female`/`male`; every other bundled language has just `default` |
 | POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field. **Locale-qualified codes** (`tr-TR`, `en-US`, …) — Google's `recognize_google()` requires them; a bare `tr` is rejected |
