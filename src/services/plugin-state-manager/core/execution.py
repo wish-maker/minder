@@ -47,6 +47,113 @@ def _row_to_tool_schema(tool_data: Dict[str, Any]) -> ToolSchema:
     )
 
 
+# JSON-Schema primitive type -> the Python type(s) a validated value must be.
+# `bool` is intentionally NOT accepted for integer/number: Python makes `bool` a
+# subclass of `int`, so `True` would otherwise satisfy an `integer` parameter.
+_JSON_TYPE_PY = {
+    "string": (str,),
+    "integer": (int,),
+    "number": (int, float),
+    "boolean": (bool,),
+    "array": (list,),
+    "object": (dict,),
+}
+
+
+def _coerce_scalar(value: Any, declared_type: str) -> Any:
+    """Best-effort coerce a string value to its declared scalar JSON type.
+
+    Callers (and, downstream, GET query strings) often send everything as strings,
+    e.g. ``"5"`` for a declared ``integer``. Only string inputs are coerced; a value
+    already of a non-string type is returned untouched for the isinstance check to
+    judge. Raises ``ValueError`` if the string can't represent the declared type."""
+    if not isinstance(value, str):
+        return value
+    if declared_type == "integer":
+        return int(value)
+    if declared_type == "number":
+        return float(value)
+    if declared_type == "boolean":
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes"):
+            return True
+        if lowered in ("false", "0", "no"):
+            return False
+        raise ValueError(f"{value!r} is not a valid boolean")
+    if declared_type in ("array", "object"):
+        parsed = json.loads(value)
+        return parsed
+    return value
+
+
+def _validate_parameters(
+    param_schema: Dict[str, Any], parameters: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Validate caller ``parameters`` against a tool's declared parameter schema.
+
+    ``param_schema`` is the marketplace-stored ``{param_name: {type, enum?, required?,
+    ...}}`` map (see marketplace ai_tools_importer). This is defense-in-depth (#676):
+    plugin-state-manager owns the schema and sits between the caller and every plugin
+    action, so it rejects a malformed call before it ever reaches a plugin.
+
+    Policy: required-presence, declared ``type`` (with lenient string->scalar
+    coercion), and ``enum`` membership are enforced; undeclared/extra keys are left
+    alone (some plugin actions accept optional untyped kwargs). Returns the
+    (possibly type-coerced) parameters. Raises ``HTTPException(422)`` with per-field
+    detail -- matching this codebase's Pydantic-style validation contract -- listing
+    every violation, not just the first."""
+    if not param_schema:
+        # No declared schema (e.g. an empty ``{}``) -> nothing to enforce; forward
+        # verbatim, preserving today's permissive behaviour for schemaless tools.
+        return parameters
+
+    errors = []
+    coerced = dict(parameters)
+
+    # Required-presence.
+    for name, spec in param_schema.items():
+        if not isinstance(spec, dict):
+            continue
+        if spec.get("required", False) and name not in parameters:
+            errors.append({"field": name, "error": "field required"})
+
+    # Type + enum for every provided, declared parameter.
+    for name, value in parameters.items():
+        spec = param_schema.get(name)
+        if not isinstance(spec, dict):
+            continue  # undeclared/extra key -> permissive, forwarded as-is
+
+        declared_type = spec.get("type")
+        if declared_type in _JSON_TYPE_PY:
+            try:
+                value = _coerce_scalar(value, declared_type)
+            except (ValueError, TypeError, json.JSONDecodeError):
+                errors.append(
+                    {"field": name, "error": f"expected type '{declared_type}'"}
+                )
+                continue
+            expected = _JSON_TYPE_PY[declared_type]
+            # Exclude bool from int/number even after coercion (bool<:int).
+            is_ok = isinstance(value, expected) and not (
+                declared_type in ("integer", "number") and isinstance(value, bool)
+            )
+            if not is_ok:
+                errors.append(
+                    {"field": name, "error": f"expected type '{declared_type}'"}
+                )
+                continue
+            coerced[name] = value
+
+        allowed = spec.get("enum")
+        if isinstance(allowed, list) and value not in allowed:
+            errors.append({"field": name, "error": f"must be one of {allowed}"})
+
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
+
+    return coerced
+
+
 def _build_execution_url(
     registry_url: str, plugin_name: str, tool_endpoint: str
 ) -> str:
@@ -148,6 +255,14 @@ async def execute_tool(
         http_method = tool_data.get("method", "POST")
 
         execution_url = _build_execution_url(registry_url, plugin_name, tool_endpoint)
+
+        # Reject a malformed call against the tool's own declared schema before it
+        # ever reaches the plugin action (#676). parameters_schema is JSONB, which
+        # the marketplace serializer may hand back as a dict or a JSON string.
+        param_schema = tool_data.get("parameters", {})
+        if isinstance(param_schema, str):
+            param_schema = json.loads(param_schema)
+        parameters = _validate_parameters(param_schema, parameters)
 
         # Execute request
         try:
