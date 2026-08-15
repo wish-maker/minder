@@ -354,3 +354,26 @@ async def get_current_user(request: Request) -> Optional[Dict]:
         User payload if a valid token is present, None otherwise
     """
     return await jwt_middleware.get_current_user_optional(request)
+
+
+async def get_current_user_required(request: Request) -> Dict:
+    """
+    Get current user from the JWT token, raising 401 if missing/invalid (#613).
+
+    Unlike ``get_current_user`` above, this is for the rare api-gateway-native route
+    (not a ``routes/proxy.py`` passthrough, which gates writes itself via
+    ``_require_jwt_for_writes``) that needs a real auth requirement of its own -- e.g.
+    ``routes/ai.py``'s ``chat/completions``, which calls Ollama directly rather than
+    proxying to a JWT-gated downstream service, so nothing else in the request path
+    would otherwise reject an unauthenticated caller.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        User payload (keys: sub, username, role)
+
+    Raises:
+        HTTPException: 401 if no token or an invalid/expired one
+    """
+    return await jwt_middleware.get_current_user(request)

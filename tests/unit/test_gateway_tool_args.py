@@ -6,7 +6,8 @@ Passing that envelope to a plugin action makes the call fail. `_normalize_tool_a
 unwraps it so those models' tool calls actually execute.
 
 api-gateway is a hyphenated service dir; ai.py imports ``from config import settings``
-at module top — a fake config is injected and restored.
+and ``from core.auth import get_current_user_required`` (#613) at module top — fakes
+for both are injected and restored.
 """
 
 import importlib.util
@@ -28,20 +29,30 @@ _ROUTE = (
 
 @pytest.fixture
 def ai_mod():
-    saved = sys.modules.get("config")
+    names = ("config", "core", "core.auth")
+    saved = {n: sys.modules.get(n) for n in names}
     cfg = ModuleType("config")
     cfg.settings = SimpleNamespace(PLUGIN_REGISTRY_URL="http://reg:8001")
     sys.modules["config"] = cfg
+    sys.modules["core"] = ModuleType("core")
+    fake_core_auth = ModuleType("core.auth")
+
+    async def _fake_get_current_user_required(request):
+        return {"sub": "test-user"}
+
+    fake_core_auth.get_current_user_required = _fake_get_current_user_required
+    sys.modules["core.auth"] = fake_core_auth
     try:
         spec = importlib.util.spec_from_file_location("ai_under_test", _ROUTE)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         yield mod
     finally:
-        if saved is not None:
-            sys.modules["config"] = saved
-        else:
-            sys.modules.pop("config", None)
+        for n, m in saved.items():
+            if m is not None:
+                sys.modules[n] = m
+            else:
+                sys.modules.pop(n, None)
 
 
 def test_unwraps_parameters_envelope(ai_mod):
