@@ -194,3 +194,74 @@ def test_install_plugin_succeeds_when_webhook_registration_succeeds():
 
     assert r.status_code == 200
     assert "weather" in plugins_db
+
+
+# --- install/reload-webhook auth gate -----------------------------------------
+#
+# Found in a background audit: install_plugin and reload_plugin_webhook were the
+# only two mutating routes in this file with no Depends(get_current_user) at
+# all -- every sibling (uninstall/enable/disable/collect/actions/config PUT)
+# already requires it. plugin-registry is reachable directly by any container
+# on the docker network (the same #405 class of gap already fixed for
+# plugin-state-manager/model-management/marketplace this session), not just
+# through api-gateway's own _require_jwt_for_writes gate on the proxied path.
+# These build the client WITHOUT the dependency_overrides bypass the other
+# tests in this file use, so the real auth gate is what's under test.
+
+
+def _build_client_no_auth_override(
+    *, plugins_db, update_plugin_in_database, register_plugin_webhook=None
+):
+    routes_plugins = _fresh_import("routes.plugins")
+    app = FastAPI()
+    app.include_router(
+        routes_plugins.build_plugins_router(
+            plugins_db=plugins_db,
+            plugin_instances={},
+            plugin_manifests={},
+            webhook_routes={},
+            redis_client=None,
+            update_plugin_in_database=update_plugin_in_database,
+            load_plugin_config=lambda *a, **k: {},
+            save_plugin_config=lambda *a, **k: None,
+            register_plugin_webhook=register_plugin_webhook or (lambda *a, **k: None),
+            handle_webhook_request=lambda *a, **k: None,
+            logger=_NoopLogger(),
+        )
+    )
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_install_plugin_requires_auth():
+    plugins_db = {}
+    client = _build_client_no_auth_override(
+        plugins_db=plugins_db, update_plugin_in_database=lambda *a, **k: None
+    )
+    manifest = {
+        "metadata": {"name": "weather", "version": "1.0.0"},
+        "spec": {"trigger": {"type": "webhook", "webhook": {"path": "/weather"}}},
+    }
+    r = client.post(
+        "/v1/plugins/install",
+        content=json.dumps(manifest),
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 401
+    assert "weather" not in plugins_db  # request never reached the handler body
+
+
+def test_reload_plugin_webhook_requires_auth():
+    plugins_db = {"weather": _Plugin("enabled")}
+    client = _build_client_no_auth_override(
+        plugins_db=plugins_db, update_plugin_in_database=lambda *a, **k: None
+    )
+    manifest = {
+        "metadata": {"name": "weather", "version": "1.0.0"},
+        "spec": {"trigger": {"type": "webhook", "webhook": {"path": "/weather"}}},
+    }
+    r = client.post(
+        "/v1/plugins/reload-webhook",
+        content=json.dumps(manifest),
+        headers={"content-type": "application/json"},
+    )
+    assert r.status_code == 401

@@ -80,7 +80,11 @@ def build_plugins_router(
             )
 
     @router.post("/v1/plugins/install")
-    async def install_plugin(request: Request, background_tasks: BackgroundTasks):
+    async def install_plugin(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        current_user: dict = Depends(get_current_user),
+    ):
         """Install a plugin from a manifest (manifest-based, no code execution)."""
         manifest = _parse_manifest(
             await request.body(), request.headers.get("content-type", "")
@@ -210,7 +214,9 @@ def build_plugins_router(
         return {"message": f"Plugin {plugin_name} disabled"}
 
     @router.post("/v1/plugins/reload-webhook")
-    async def reload_plugin_webhook(request: Request):
+    async def reload_plugin_webhook(
+        request: Request, current_user: dict = Depends(get_current_user)
+    ):
         """Re-register a plugin's webhook route from an uploaded manifest."""
         manifest = _parse_manifest(
             await request.body(), request.headers.get("content-type", "")
