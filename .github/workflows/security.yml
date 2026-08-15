@@ -18,6 +18,14 @@ on:
     - cron: '0 9 * * 3'
   workflow_dispatch:  # Manuel tetikleme
 
+# Least-privilege default: most jobs here only scan, they don't need to write
+# to the repo. Without this, every job ran with the repo's `write` default
+# GITHUB_TOKEN permission (found in a background CI-workflow audit). The two
+# jobs that upload SARIF results declare their own `security-events: write`
+# override below (required by github/codeql-action/upload-sarif).
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: '3.12'
 
@@ -26,6 +34,9 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
 
     steps:
       - name: Checkout code
@@ -44,6 +55,9 @@ jobs:
   trivy:
     name: Trivy Container Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -71,7 +85,15 @@ jobs:
           docker compose -f docker/docker-compose.yml build ${{ matrix.service }}
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        # Pinned to v0.36.0 (not @master): aquasecurity/trivy-action had 75 of
+        # 76 version tags force-pushed with malicious code in a real 2026-03
+        # supply-chain compromise (CVE-2026-33634) -- a mutable branch ref is
+        # exactly this class of risk, and this repo's default GITHUB_TOKEN is
+        # write-scoped. v0.36.0 postdates that incident and GitHub's immutable
+        # releases protection (enabled 2026-03-04, before the only tag
+        # confirmed unaffected, v0.35.0). Found in a background CI-workflow
+        # audit.
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: 'minder/${{ matrix.service }}:1.0.0'
           format: 'sarif'
