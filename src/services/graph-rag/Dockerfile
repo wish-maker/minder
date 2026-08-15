@@ -25,6 +25,12 @@ COPY src/services/graph-rag/models ./models
 # Shared library (imported as shared.* via /app/src on sys.path)
 COPY src/shared /app/src/shared
 
+# Create non-root user -- this service was the sole exception among the
+# platform's Python services, running as root with no privilege drop at all
+# (found in a background Dockerfile audit).
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
 # Expose port
 EXPOSE 8008
 
