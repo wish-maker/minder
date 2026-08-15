@@ -151,6 +151,16 @@ async def register_all_webhooks_on_startup():
             )
             continue
         plugin_manifests[plugin_name] = manifest
-        await register_plugin_webhook(plugin_name, manifest)
+        try:
+            await register_plugin_webhook(plugin_name, manifest)
+        except Exception as e:
+            # register_plugin_webhook re-persists the manifest it just loaded
+            # (save_plugin_manifest now correctly raises on failure, #351-class
+            # fix) -- that's a redundant re-write of data already known-good in
+            # this exact table, so one transient DB hiccup here must not abort
+            # restoring every OTHER plugin's webhook route on startup.
+            logger.error(
+                f"Failed to restore webhook route for {plugin_name} on startup: {e}"
+            )
 
     logger.info(f"Restored {len(webhook_routes)} webhook routes on startup")
