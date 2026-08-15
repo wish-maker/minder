@@ -46,6 +46,14 @@ class Settings(MinderBaseSettings):
     # Application
     API_VERSION: str = "v1"
 
+    # Max incoming webhook body size (#640). The webhook handler triggers real work
+    # (embedding generation + Qdrant writes via _handle_store_vector), so an
+    # unbounded body is a resource-exhaustion vector. Webhook payloads are small JSON
+    # events (a Discord message, a scheduler tick), so 1MB is generous while still
+    # bounding worst-case memory. Rejected with 413, matching rag-pipeline's own
+    # MAX_UPLOAD_SIZE_MB convention.
+    MAX_WEBHOOK_BODY_SIZE_MB: int = 1
+
 
 # Global settings instance
 settings = Settings()

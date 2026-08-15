@@ -177,8 +177,16 @@ def build_plugins_router(
         return {"message": f"Plugin {plugin_name} uninstalled"}
 
     @router.post("/webhook/{path:path}")
+    @enforce_rate_limit(max_requests=10, window_minutes=1)
     async def handle_webhook(path: str, request: Request):
-        """Generic webhook handler; routes to the plugin registered for the path."""
+        """Generic webhook handler; routes to the plugin registered for the path.
+
+        Rate-limited (#640): every other action-invoking endpoint in this file
+        carries @enforce_rate_limit, but this one -- which actually drives embedding
+        generation + Qdrant writes -- had none. Uses the same 10/min bucket as the
+        equally-expensive trigger_plugin_collection sibling (the limit is keyed on
+        user/IP + path, so each plugin's webhook path gets its own budget). The body
+        size is bounded separately in handle_webhook_request."""
         return await handle_webhook_request(f"/webhook/{path}", request)
 
     @router.post("/v1/plugins/{plugin_name}/enable")
