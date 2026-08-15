@@ -95,13 +95,24 @@ async def test_save_plugin_manifest_upserts(fake_pool):
 
 
 @pytest.mark.asyncio
-async def test_save_plugin_manifest_swallows_db_errors(monkeypatch):
+async def test_save_plugin_manifest_reraises_db_errors(monkeypatch):
+    """Found in a background audit: this used to swallow the exception
+    entirely (matching #351's already-fixed sibling bug in
+    update_plugin_in_database, which this one never got the same treatment
+    for) -- register_plugin_webhook's own await of this call meant a DB
+    failure here was invisible to install_plugin's try/except, which returned
+    a 200 "installed successfully" even though the manifest was never
+    persisted. On the next restart, the webhook silently never came back.
+    Must now raise so callers can convert it into an honest error."""
+
     async def _boom():
         raise ConnectionError("db down")
 
     monkeypatch.setattr(database, "get_postgres_connection", _boom)
-    # Must not raise -- a save failure shouldn't break plugin registration.
-    await database.save_plugin_manifest("weather", {"metadata": {"name": "weather"}})
+    with pytest.raises(ConnectionError):
+        await database.save_plugin_manifest(
+            "weather", {"metadata": {"name": "weather"}}
+        )
 
 
 @pytest.mark.asyncio
@@ -193,3 +204,49 @@ async def test_register_all_webhooks_on_startup_restores_only_known_plugins(
 
     assert webhooks.webhook_routes == {"/webhook/weather": "weather"}
     assert "removed-plugin" not in webhooks.plugin_manifests
+
+
+@pytest.mark.asyncio
+async def test_register_all_webhooks_on_startup_survives_one_plugin_failing(
+    monkeypatch,
+):
+    """save_plugin_manifest now correctly raises on a DB failure (the #351-class
+    fix above) -- register_plugin_webhook re-persists the manifest it just
+    loaded from that same table, a redundant re-write of already-known-good
+    data, so ONE plugin's transient failure here must not abort restoring
+    every OTHER plugin's webhook route on startup."""
+    persisted = {
+        "broken": {
+            "metadata": {"name": "broken"},
+            "spec": {"trigger": {"type": "webhook", "webhook": {"path": "/broken"}}},
+        },
+        "weather": {
+            "metadata": {"name": "weather"},
+            "spec": {"trigger": {"type": "webhook", "webhook": {"path": "/weather"}}},
+        },
+    }
+    monkeypatch.setattr(
+        webhooks, "load_all_plugin_manifests", AsyncMock(return_value=persisted)
+    )
+    monkeypatch.setattr(
+        webhooks, "plugins_db", {"broken": object(), "weather": object()}
+    )
+    monkeypatch.setattr(webhooks, "plugin_manifests", {})
+    monkeypatch.setattr(webhooks, "webhook_routes", {})
+
+    async def _save(plugin_name, manifest):
+        if plugin_name == "broken":
+            raise ConnectionError("db down")
+
+    monkeypatch.setattr(webhooks, "save_plugin_manifest", _save)
+
+    await webhooks.register_all_webhooks_on_startup()
+
+    # "broken"'s in-memory route still registers (set before the DB re-persist
+    # attempt inside register_plugin_webhook, so it's live for this session
+    # regardless of the redundant re-write failing) -- what matters is that its
+    # failure didn't ABORT the loop before "weather" got its turn.
+    assert webhooks.webhook_routes == {
+        "/webhook/broken": "broken",
+        "/webhook/weather": "weather",
+    }
