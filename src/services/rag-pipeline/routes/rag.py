@@ -34,7 +34,9 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    IsEmptyCondition,
     MatchValue,
+    PayloadField,
     VectorParams,
 )
 from rag.model_selection import resolve_llm_model
@@ -413,7 +415,15 @@ async def delete_document(
     document is unknown.
 
     A `legacy:<filename>` id (see DocumentInfo) deletes every chunk with that
-    filename -- the same granularity available before this endpoint existed.
+    filename AND no `document_id` -- the same granularity available before
+    this endpoint existed, for chunks from before #427 added `document_id`
+    tagging. Excluding `document_id`-tagged chunks matters once a KB has
+    mixed-generation data: `group_documents` (core/ingestion.py) already
+    treats a `legacy:<filename>` entry as strictly the no-`document_id`
+    chunks for that filename, distinct from any later re-upload of the same
+    filename (which gets its own fresh `document_id`) -- without this
+    exclusion, deleting the legacy entry matched on `source` alone silently
+    swept up a newer, still-wanted re-upload's chunks too.
     """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -423,7 +433,8 @@ async def delete_document(
             must=[
                 FieldCondition(
                     key="source", match=MatchValue(value=document_id[len("legacy:") :])
-                )
+                ),
+                IsEmptyCondition(is_empty=PayloadField(key="document_id")),
             ]
         )
     else:

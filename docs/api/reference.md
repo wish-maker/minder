@@ -1,7 +1,7 @@
 # Minder Platform — API Reference
 
 **Version:** 1.0.0
-**Last Updated:** 2026-08-09
+**Last Updated:** 2026-08-15
 **Base URL (via API Gateway):** `http://localhost:8000`
 
 ---
@@ -87,7 +87,12 @@ function-calling bridge.
 
 ### Proxy routes
 
-Forwarded over the internal Docker network via httpx to the backing service.
+Forwarded over the internal Docker network via httpx to the backing service. Most routes
+use the shared proxy client's 30s default timeout; model-management, rag-pipeline, tts-stt,
+and graph-rag (marked **long-timeout** below) get a 300s ceiling instead — their backend
+work (Ollama model pulls, document ingestion/embedding, audio synthesis/transcription,
+NER + Neo4j writes) can legitimately run well past 30s, which used to surface as a
+misleading 504 well before the backend actually finished.
 
 | Method | Path | Target |
 |--------|------|--------|
@@ -95,14 +100,14 @@ Forwarded over the internal Docker network via httpx to the backing service.
 | ANY | `/v1/plugins/{path:path}` | plugin-registry |
 | GET | `/v1/bundles` | plugin-registry (list, mirrors the `/v1/plugins` GET/wildcard split) |
 | GET/POST | `/v1/bundles/{path:path}` | plugin-registry's bundle control-plane (enable/disable/reconcile) — writes require JWT |
-| ANY | `/v1/rag/{path:path}` | rag-pipeline (prefix maps to the service root) |
-| GET/POST | `/v1/models` | model-management `/models` (list / pull) |
-| ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) |
+| ANY | `/v1/rag/{path:path}` | rag-pipeline (prefix maps to the service root) — **long-timeout** |
+| GET/POST | `/v1/models` | model-management `/models` (list / pull) — **long-timeout** |
+| ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) — **long-timeout** |
 | ANY | `/v1/marketplace/{path:path}` | marketplace (prefix forwarded as-is, matching plugin-registry) — no proxy route existed here at all until #402 |
 | ANY | `/v1/graph/{path:path}` | marketplace's plugin dependency/conflict/recommendation graph — a second, disjoint route namespace the same service exposes (#402) |
-| GET/POST | `/v1/tts`, `/v1/tts/{path:path}` | tts-stt (writes require JWT). `POST /v1/tts` returns binary WAV/MP3 audio, not JSON — the proxy passes non-JSON bodies through raw instead of force-decoding them |
-| GET/POST | `/v1/stt`, `/v1/stt/{path:path}` | tts-stt (writes require JWT) — `POST /v1/stt` is a multipart audio upload |
-| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/stats`, `graph/documents`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT) |
+| GET/POST | `/v1/tts`, `/v1/tts/{path:path}` | tts-stt (writes require JWT). `POST /v1/tts` returns binary WAV/MP3 audio, not JSON — the proxy passes non-JSON bodies through raw instead of force-decoding them. **long-timeout** |
+| GET/POST | `/v1/stt`, `/v1/stt/{path:path}` | tts-stt (writes require JWT) — `POST /v1/stt` is a multipart audio upload. **long-timeout** |
+| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/stats`, `graph/documents`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT). **long-timeout** |
 | GET | `/v1/tools` | plugin-state-manager (tool discovery, list) |
 | GET/POST | `/v1/tools/{path:path}` | plugin-state-manager (tool detail, `.../execute`, license `validate`) — a deliberately separate prefix from `/v1/plugins/{path:path}` above so the two services' plugin-adjacent APIs don't collide at the gateway (writes require JWT; `execute` is also independently JWT-gated inside plugin-state-manager itself) |
 
@@ -119,9 +124,10 @@ yet (#145) — no UI for those.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/v1/ai/functions/definitions` | Aggregated AI-tool (function) definitions from all plugins, in OpenAI function schema |
-| POST | `/v1/ai/functions/{function_name}` | Execute a named AI tool; proxied to the plugin's endpoint (forwards the caller's JWT), returned in OpenAI function-result format |
-| POST | `/v1/ai/chat/completions` | Chat via Ollama. Plugin function-calling is **opt-in** via `"minder_tools": true` (the gateway offers plugin tools, executes the model's `tool_calls` against plugin actions forwarding the caller's JWT, and feeds results back). Without the flag it's a plain Ollama `/api/chat` passthrough |
+| GET | `/v1/ai/functions/definitions` | Aggregated AI-tool (function) definitions from all plugins, in OpenAI function schema. Deliberately open (no auth) — OpenWebUI's Tool Server integration has no way to attach a Minder JWT |
+| GET | `/v1/ai/tools/openapi.json` | OpenAPI 3.x spec of Minder's read-only (GET-only, #254) plugin tools, consumable directly as an OpenWebUI "Tool Server." Deliberately open, same reason as above — only ever includes GET-method tools, never mutating/admin ones |
+| POST | `/v1/ai/functions/{function_name}` | Execute a named AI tool; proxied to the plugin's endpoint (forwards the caller's JWT, if any), returned in OpenAI function-result format. Not independently auth-gated at this route — the downstream plugin endpoint enforces its own auth, so a mutating tool call without a valid JWT is rejected there |
+| POST | `/v1/ai/chat/completions` | Chat via Ollama. **Requires a valid Minder JWT** ([#613](https://github.com/wish-maker/minder/issues/613) — this endpoint calls Ollama directly with nothing else in the request path to gate it, unlike the tool-discovery/execution routes above). Plugin function-calling is **opt-in** via `"minder_tools": true` (the gateway offers plugin tools, executes the model's `tool_calls` against plugin actions forwarding the caller's JWT, and feeds results back). Without the flag it's a plain Ollama `/api/chat` passthrough |
 
 ### Ops
 
@@ -319,6 +325,14 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | POST | `/v1/marketplace/licenses/validate` | Validate a license against a tier |
 | POST | `/v1/marketplace/licenses/activate` | Activate a license |
 
+> **Activation used to 500 for every real user (same #402 bug class, found in a later
+> audit, fixed)**: `marketplace_licenses.user_id` and
+> `marketplace_ai_tools_configurations.user_id` both still carried the identical dead FK
+> onto `marketplace_users` described above — missed when the `marketplace_installations`
+> copy was dropped. `POST /v1/marketplace/licenses/activate` threw the same unhandled
+> `ForeignKeyViolationError` for any real user. Fixed the same way: the constraint is
+> dropped in `schema.sql` for both tables too.
+
 ### Dependency graph (`/v1/graph`, Neo4j-backed)
 
 | Method | Path | Description |
@@ -480,7 +494,7 @@ should use the `/v1/` path.
 | POST | `/v1/tts` | Text-to-speech — Piper offline (WAV) by default, gTTS fallback (MP3) for non-bundled languages. Binary body (no `response_model`); language/duration reported via `X-Language`/`X-Duration` headers. `text` capped at `TTS_MAX_TEXT_LENGTH` (default 5000 chars, 422 past that — neither engine enforces its own ceiling). Optional `voice` field (e.g. `"male"`/`"female"`) picks among that language's bundled Piper voices — silently falls back to the language's default on an unknown/unsupported value rather than erroring; ignored entirely for gTTS-only languages |
 | GET | `/v1/tts/languages` | Supported TTS languages |
 | GET | `/v1/tts/voices?language=` | Voice choices for `language` — only ones whose `.onnx` is actually bundled on this deployment. Empty for a gTTS-only language (no per-voice selection) or a language with no bundled Piper voice. English currently offers `default`/`female`/`male`; every other bundled language has just `default` |
-| POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field. **Locale-qualified codes** (`tr-TR`, `en-US`, …) — Google's `recognize_google()` requires them; a bare `tr` is rejected |
+| POST | `/v1/stt` | Speech-to-text via `speech_recognition` (Google backend) — multipart `file` upload + `language` form field. **Locale-qualified codes** (`tr-TR`, `en-US`, …) — Google's `recognize_google()` requires them; a bare `tr` is rejected. Audio capped at `STT_MAX_AUDIO_SIZE_MB` (default 25MB, 413 past that — mirrors rag-pipeline's own upload cap) |
 | GET | `/v1/stt/languages` | Supported STT languages — a **different code set than TTS above** (`tr-TR` not `tr`); don't reuse a TTS language code here or vice versa |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |

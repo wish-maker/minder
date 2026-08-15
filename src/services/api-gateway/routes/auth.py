@@ -67,7 +67,7 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", status_code=201, response_model=RegisterResponse)
-@enforce_rate_limit(max_requests=10, window_minutes=1)
+@enforce_rate_limit(max_requests=settings.AUTH_RATE_LIMIT_PER_MINUTE, window_minutes=1)
 async def register(body: RegisterRequest, request: Request):
     """Register a new user (username/email/password, min 8 chars). 201 on success.
 
@@ -95,7 +95,7 @@ async def register(body: RegisterRequest, request: Request):
 
 
 @router.post("/login", response_model=TokenResponse)
-@enforce_rate_limit(max_requests=10, window_minutes=1)
+@enforce_rate_limit(max_requests=settings.AUTH_RATE_LIMIT_PER_MINUTE, window_minutes=1)
 async def login(body: LoginRequest, request: Request):
     """Verify credentials (bcrypt) against PostgreSQL and return a JWT."""
     try:

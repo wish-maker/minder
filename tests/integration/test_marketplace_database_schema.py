@@ -114,14 +114,18 @@ async def test_database_schema_created(marketplace_schema_ready):
     assert columns_dict.get("author") == "YES"
     assert columns_dict.get("author_email") == "YES"
 
-    # Check CASCADE delete on user_id foreign keys. marketplace_licenses still
-    # references marketplace_users(user_id) ON DELETE CASCADE.
-    # marketplace_installations USED to as well, but that FK was live-breaking
-    # (#402): marketplace_users is never populated except one seed "admin" row,
-    # so any real user's install hit an unhandled ForeignKeyViolationError.
-    # Dropped in schema.sql -- user_id there is just an opaque JWT-derived
-    # identifier now, not a real relationship to a user directory that was
-    # never wired up. This assertion locked in the bug; updated to match.
+    # Check CASCADE delete on user_id foreign keys. marketplace_installations,
+    # marketplace_licenses, and marketplace_ai_tools_configurations all USED to
+    # reference marketplace_users(user_id) ON DELETE CASCADE -- every one of
+    # those FKs was live-breaking (installations: #402/#434; licenses/
+    # ai_tools_configurations: found in a later background audit, same class):
+    # marketplace_users is never populated except one seed "admin" row, so any
+    # real user's install/license-activation/ai-tool-configuration hit an
+    # unhandled ForeignKeyViolationError. All three are now dropped in
+    # schema.sql -- user_id everywhere here is just an opaque JWT-derived
+    # identifier, not a real relationship to a user directory that was never
+    # wired up. This assertion used to lock in the bug for licenses; updated
+    # to match none of the three having it anymore.
     cascade_fks = await conn.fetch(
         """
         SELECT
@@ -141,7 +145,8 @@ async def test_database_schema_created(marketplace_schema_ready):
 
     cascade_tables = [row["table_name"] for row in cascade_fks]
 
-    assert "marketplace_licenses" in cascade_tables
     assert "marketplace_installations" not in cascade_tables
+    assert "marketplace_licenses" not in cascade_tables
+    assert "marketplace_ai_tools_configurations" not in cascade_tables
 
     await conn.close()

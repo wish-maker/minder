@@ -131,6 +131,46 @@ def test_plugin_state_manager_tool_execute_requires_auth():
     assert resp.status_code == 401
 
 
+def test_plugin_state_manager_tool_execute_uses_verified_identity_not_body(
+    monkeypatch,
+):
+    """Found in a background audit: execute_tool_endpoint used to pass the
+    client-supplied request.user_id straight to the license/tier check instead
+    of the JWT identity FastAPI's own auth dependency already verified --
+    inert today only because the tier lookup is hardcoded to "community"
+    regardless of user_id (core/license.py's #47 stub), but a real per-user
+    tier lookup keyed on this would let any authenticated caller evaluate the
+    check as anyone else. Confirm the verified `sub` is what actually reaches
+    execute_tool, even if a request body tries to smuggle a different
+    identity in (ToolExecutionRequest no longer even has a user_id field, so
+    this also confirms that extra key is silently ignored, not honored)."""
+    tools = _fresh_import("plugin-state-manager", "routes.tools")
+    captured = {}
+
+    async def fake_execute_tool(tool_name, parameters, user_id):
+        captured["user_id"] = user_id
+        captured["tool_name"] = tool_name
+        return {
+            "tool_name": tool_name,
+            "plugin_name": "news",
+            "result": {},
+            "execution_time": 0.01,
+            "tier_required": "community",
+        }
+
+    monkeypatch.setattr(tools, "execute_tool", fake_execute_tool)
+    client = _app_with_router(tools.router, prefix="/tools")
+
+    resp = client.post(
+        "/tools/get_news/execute",
+        json={"parameters": {}, "user_id": "someone-else"},
+        headers={"X-Service-Token": _SERVICE_TOKEN},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert captured["user_id"] == "internal-service"  # the verified sub, not the body
+
+
 # ── model-management ─────────────────────────────────────────────────────────
 
 

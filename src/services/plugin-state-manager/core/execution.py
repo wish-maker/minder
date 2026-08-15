@@ -264,35 +264,35 @@ async def execute_tool(
             param_schema = json.loads(param_schema)
         parameters = _validate_parameters(param_schema, parameters)
 
-        # Execute request
-        try:
-            if http_method.upper() == "GET":
-                response = await client.get(execution_url, params=parameters)
-            else:  # POST
-                response = await client.post(execution_url, json=parameters)
+        # Execute request. A dispatch failure (httpx.HTTPStatusError from
+        # raise_for_status(), a connection error, anything) is deliberately left
+        # to propagate uncaught here -- every OTHER handler in this module (and
+        # in routes/tools.py, which already wraps this call in
+        # `except Exception as e: raise backend_http_error(e, "Tool execution")`)
+        # sanitizes failures the same way. This function used to catch these two
+        # cases itself and raise a raw HTTPException carrying the downstream
+        # plugin's full, untouched response body (e.response.text) or a bare
+        # str(exc) -- bypassing that convention and leaking whatever a plugin
+        # action's error response/traceback happened to contain, plus turning a
+        # connectivity failure into a plain 500 instead of the platform's
+        # retryable 503.
+        if http_method.upper() == "GET":
+            response = await client.get(execution_url, params=parameters)
+        else:  # POST
+            response = await client.post(execution_url, json=parameters)
 
-            response.raise_for_status()
+        response.raise_for_status()
 
-            result = response.json()
-            execution_time = time.time() - start_time
+        result = response.json()
+        execution_time = time.time() - start_time
 
-            return ToolExecutionResponse(
-                tool_name=tool_name,
-                plugin_name=plugin_name,
-                result=result,
-                execution_time=execution_time,
-                tier_required=tool_data.get("required_tier", "community"),
-            )
-
-        except httpx.HTTPStatusError as e:
-            raise HTTPException(
-                status_code=e.response.status_code,
-                detail=f"Tool execution failed: {e.response.text}",
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Tool execution error: {str(e)}"
-            )
+        return ToolExecutionResponse(
+            tool_name=tool_name,
+            plugin_name=plugin_name,
+            result=result,
+            execution_time=execution_time,
+            tier_required=tool_data.get("required_tier", "community"),
+        )
 
 
 async def discover_tools(
