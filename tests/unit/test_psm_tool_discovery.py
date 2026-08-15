@@ -175,6 +175,109 @@ def test_build_execution_url_adds_v1_prefix(execution_mod):
     )
 
 
+# ── _validate_parameters (#676) ─────────────────────────────────────────────
+# execute_tool forwarded every caller-supplied parameter to the downstream
+# plugin action verbatim, never checking it against the tool's own declared
+# schema (already fetched from marketplace but unused for this). These test
+# the pure validator directly -- no need to go through execute_tool's
+# DB/license-gated lazy imports (see this file's own docstring on why that's
+# excluded from this harness).
+
+
+def _schema(execution_mod, **param_overrides):
+    row = _tool_row(parameters={"symbol": {"type": "string", "description": "x"}})
+    row["parameters"].update(param_overrides)
+    return execution_mod._row_to_tool_schema(row)
+
+
+def test_validate_parameters_passes_when_all_required_present_and_typed(
+    execution_mod,
+):
+    schema = _schema(
+        execution_mod,
+        symbol={"type": "string", "description": "x", "required": True},
+    )
+    execution_mod._validate_parameters(schema, {"symbol": "BTC"})  # no raise
+
+
+def test_validate_parameters_rejects_missing_required_field(execution_mod):
+    schema = _schema(
+        execution_mod,
+        symbol={"type": "string", "description": "x", "required": True},
+    )
+    with pytest.raises(Exception) as exc_info:
+        execution_mod._validate_parameters(schema, {})
+    assert exc_info.value.status_code == 422
+    assert any("'symbol' is required" in e for e in exc_info.value.detail)
+
+
+def test_validate_parameters_permissive_on_missing_optional_field(execution_mod):
+    schema = _schema(
+        execution_mod,
+        symbol={"type": "string", "description": "x", "required": False},
+    )
+    execution_mod._validate_parameters(schema, {})  # no raise
+
+
+def test_validate_parameters_rejects_wrong_type(execution_mod):
+    schema = _schema(execution_mod, count={"type": "integer", "description": "x"})
+    with pytest.raises(Exception) as exc_info:
+        execution_mod._validate_parameters(schema, {"count": "not-a-number"})
+    assert exc_info.value.status_code == 422
+    assert any("must be of type integer" in e for e in exc_info.value.detail)
+
+
+def test_validate_parameters_bool_does_not_satisfy_integer_type(execution_mod):
+    """bool is a subclass of int in Python -- must not be silently accepted for
+    a declared "integer"/"number" parameter."""
+    schema = _schema(execution_mod, count={"type": "integer", "description": "x"})
+    with pytest.raises(Exception) as exc_info:
+        execution_mod._validate_parameters(schema, {"count": True})
+    assert exc_info.value.status_code == 422
+    assert any("got boolean" in e for e in exc_info.value.detail)
+
+
+def test_validate_parameters_rejects_enum_violation(execution_mod):
+    schema = _schema(
+        execution_mod,
+        unit={"type": "string", "description": "x", "enum": ["celsius", "fahrenheit"]},
+    )
+    with pytest.raises(Exception) as exc_info:
+        execution_mod._validate_parameters(schema, {"unit": "kelvin"})
+    assert exc_info.value.status_code == 422
+    assert any("must be one of" in e for e in exc_info.value.detail)
+
+
+def test_validate_parameters_permissive_on_undeclared_extra_keys(execution_mod):
+    """Some plugin actions accept optional untyped kwargs -- a schema isn't
+    necessarily exhaustive, so an undeclared key must not be rejected."""
+    schema = _schema(execution_mod, symbol={"type": "string", "description": "x"})
+    execution_mod._validate_parameters(
+        schema, {"symbol": "BTC", "extra_untyped_kwarg": "anything"}
+    )  # no raise
+
+
+def test_validate_parameters_skips_type_check_for_unrecognised_type(execution_mod):
+    """Schemas are marketplace-authored, not a fixed enum of `type` strings --
+    an unrecognised type must not crash or block the call, just skip the type
+    check for that field."""
+    schema = _schema(
+        execution_mod, thing={"type": "some-custom-type", "description": "x"}
+    )
+    execution_mod._validate_parameters(schema, {"thing": object()})  # no raise
+
+
+def test_validate_parameters_collects_multiple_violations_at_once(execution_mod):
+    schema = _schema(
+        execution_mod,
+        symbol={"type": "string", "description": "x", "required": True},
+        count={"type": "integer", "description": "x"},
+    )
+    with pytest.raises(Exception) as exc_info:
+        execution_mod._validate_parameters(schema, {"count": "nope"})
+    assert len(exc_info.value.detail) == 2
+
+
 @pytest.mark.asyncio
 async def test_discover_plugin_tools_parses_json_string_parameters(
     monkeypatch, execution_mod

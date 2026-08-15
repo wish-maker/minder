@@ -47,6 +47,55 @@ def _row_to_tool_schema(tool_data: Dict[str, Any]) -> ToolSchema:
     )
 
 
+_PARAMETER_TYPE_MAP: Dict[str, Any] = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+    "array": list,
+    "object": dict,
+}
+
+
+def _validate_parameters(tool_schema: ToolSchema, parameters: Dict[str, Any]) -> None:
+    """Reject a call against the tool's own declared schema before it's ever
+    forwarded to a plugin action (#676) -- today nothing here does, so a
+    missing required field, wrong type, or enum-violating value is forwarded
+    verbatim. Collects every violation (matching plugin-registry's
+    validate_manifest/#147 "detail": [...] convention) rather than stopping at
+    the first, and stays permissive on extra/undeclared keys -- some plugin
+    actions accept optional untyped kwargs, and this schema isn't necessarily
+    exhaustive.
+
+    An undeclared/unrecognised `type` string (schemas are marketplace-authored,
+    not a fixed enum) skips the type check for that parameter rather than
+    rejecting the call -- the required/enum checks still apply."""
+    errors = []
+    for name, param in tool_schema.parameters.items():
+        if name not in parameters:
+            if param.required:
+                errors.append(f"'{name}' is required")
+            continue
+
+        value = parameters[name]
+        expected_type = _PARAMETER_TYPE_MAP.get(param.type)
+        if expected_type is not None:
+            # bool is a subclass of int in Python -- a JSON boolean must not
+            # satisfy an "integer"/"number" parameter.
+            if param.type in ("integer", "number") and isinstance(value, bool):
+                errors.append(f"'{name}' must be of type {param.type}, got boolean")
+            elif not isinstance(value, expected_type):
+                errors.append(
+                    f"'{name}' must be of type {param.type}, got {type(value).__name__}"
+                )
+
+        if param.enum and value not in param.enum:
+            errors.append(f"'{name}' must be one of {param.enum}, got {value!r}")
+
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
+
+
 def _build_execution_url(
     registry_url: str, plugin_name: str, tool_endpoint: str
 ) -> str:
@@ -99,6 +148,11 @@ async def execute_tool(
             raise HTTPException(
                 status_code=400, detail=f"Tool {tool_name} is not active"
             )
+
+        # Reject a malformed call against the tool's own declared schema before
+        # any of the (more expensive) license/state checks or the actual
+        # downstream dispatch (#676).
+        _validate_parameters(_row_to_tool_schema(tool_data), parameters)
 
         # Get plugin name
         plugin_name = tool_data.get("plugin_name")
