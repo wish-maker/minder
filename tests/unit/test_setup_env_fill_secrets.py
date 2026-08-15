@@ -23,7 +23,7 @@ def _env_paths(tmp_path, monkeypatch):
     env_file = tmp_path / ".env"
     env_file.write_text("", encoding="utf-8")
     monkeypatch.setattr(env, "ENV_FILE", env_file)
-    monkeypatch.setattr(env, "_ENV_LOCK", tmp_path / ".env.lock")
+    monkeypatch.setattr(env, "ENV_LOCK", tmp_path / ".env.lock")
     # Isolate to just the one key under test -- fill_env_secrets() would
     # otherwise also try to fill every other real SECRET_SPEC key.
     monkeypatch.setattr(env, "SECRET_SPEC", {"MINDER_AUTHELIA_ADMIN_PASSWORD": "32"})

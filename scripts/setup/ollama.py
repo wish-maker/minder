@@ -13,7 +13,7 @@ Flips `.env` only; prints a "run restart to apply" hint. No docker, no restart.
 
 import re
 
-from . import config, env, log
+from . import config, env, filelock, log
 
 ENV_FILE = config.ENV_FILE
 SCRIPT_NAME = config.SCRIPT_NAME
@@ -80,13 +80,18 @@ def run(mode: str = "", url: str = "") -> int:
 
     before = env.get(_BASE_KEY)
 
-    # newline="" so we never translate \n<->\r\n and mangle the file (cross-OS).
-    with ENV_FILE.open("r", encoding="utf-8", newline="") as fh:
-        raw = fh.read()
-    raw = _set_key(raw, _BASE_KEY, base_url)
-    raw = _set_key(raw, _PRIMARY_KEY, primary)
-    with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(raw)
+    # Locked (#374) -- fill_env_secrets()/_upsert_env_key() also read-modify-write
+    # this same .env; without sharing their lock, a concurrent setup.sh invocation
+    # (e.g. `start`/`install` regenerating secrets while this runs) could
+    # interleave writes and silently discard whichever wrote second.
+    with filelock.locked(env.ENV_LOCK):
+        # newline="" so we never translate \n<->\r\n and mangle the file (cross-OS).
+        with ENV_FILE.open("r", encoding="utf-8", newline="") as fh:
+            raw = fh.read()
+        raw = _set_key(raw, _BASE_KEY, base_url)
+        raw = _set_key(raw, _PRIMARY_KEY, primary)
+        with ENV_FILE.open("w", encoding="utf-8", newline="") as fh:
+            fh.write(raw)
 
     after = env.get(_BASE_KEY)
 

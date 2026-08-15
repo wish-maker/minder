@@ -9,6 +9,9 @@ start_services reads to pick the compose profiles + consumer OLLAMA_BASE_URL:
 Pure file edit: point both module-level ENV_FILE bindings at a temp .env.
 """
 
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 import pytest
 
 from scripts.setup import env, ollama
@@ -23,6 +26,9 @@ def envfile(tmp_path, monkeypatch):
     # ollama.py and env.py each bind ENV_FILE at import → patch both.
     monkeypatch.setattr(ollama, "ENV_FILE", p)
     monkeypatch.setattr(env, "ENV_FILE", p)
+    # ollama.run() locks env.ENV_LOCK (#374) -- keep it tmp-isolated too, same as
+    # ENV_FILE, so tests never touch the real project's .env.lock.
+    monkeypatch.setattr(env, "ENV_LOCK", tmp_path / ".env.lock")
     return p
 
 
@@ -87,3 +93,24 @@ def test_invalid_url_rejected(envfile):
 
 def test_unknown_mode_usage_error(envfile):
     assert ollama.run("bogus") == 1
+
+
+def test_run_holds_the_shared_env_lock(envfile, monkeypatch):
+    """Regression guard: this used to read-modify-write .env with no lock at
+    all, bypassing the advisory lock fill_env_secrets()/_upsert_env_key() hold
+    for the exact same file (#374) -- a concurrent setup.sh invocation could
+    silently discard whichever process wrote .env second."""
+    from scripts.setup import filelock as filelock_mod
+
+    calls = []
+    real_locked = filelock_mod.locked
+
+    @contextmanager
+    def spy_locked(path):
+        calls.append(path)
+        with real_locked(path):
+            yield
+
+    monkeypatch.setattr(ollama, "filelock", SimpleNamespace(locked=spy_locked))
+    assert ollama.run("internal") == 0
+    assert calls == [env.ENV_LOCK]
