@@ -88,13 +88,16 @@ async def execute_tool_endpoint(
     """
     Execute an AI tool
 
-    Validates license tier, checks plugin state, and executes tool
+    Validates license tier, checks plugin state, and executes tool. The
+    license/tier check runs against the VERIFIED caller identity (the JWT's
+    `sub`), not a client-suppliable field -- see ToolExecutionRequest's own
+    docstring for why a caller-supplied user_id was removed.
     """
     try:
         return await execute_tool(
             tool_name=tool_name,
             parameters=request.parameters,
-            user_id=request.user_id,
+            user_id=current_user["sub"],
         )
     except HTTPException:
         raise

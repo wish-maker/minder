@@ -167,6 +167,42 @@ def test_uninstall_removes_it_from_my_installations(live_stack, plugin_id, auth_
     assert plugin_id not in [i["plugin_id"] for i in r.json()["installations"]]
 
 
+def test_activate_license_succeeds_for_a_real_user(live_stack, plugin_id, auth_token):
+    """Regression test for the identical #434 dead-FK bug, missed on
+    marketplace_licenses when it was fixed for marketplace_installations:
+    POST /v1/marketplace/licenses/activate 500'd for every real user_id
+    (only the seeded "admin" row satisfied the now-dropped FK to the dead
+    marketplace_users table). Only manifests with a real asyncpg round-trip,
+    which this E2E test (unlike a mocked unit test) actually performs."""
+    r = httpx.post(
+        f"{live_stack.gateway_url}/v1/marketplace/licenses/activate",
+        headers={"Authorization": f"Bearer {auth_token}"},
+        json={"plugin_id": plugin_id, "tier": "pro"},
+        timeout=15.0,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "activated"
+    assert r.json()["license"]["plugin_id"] == plugin_id
+
+
+def test_activated_license_is_listed_for_the_user(live_stack, plugin_id, auth_token):
+    headers = {"Authorization": f"Bearer {auth_token}"}
+    httpx.post(
+        f"{live_stack.gateway_url}/v1/marketplace/licenses/activate",
+        headers=headers,
+        json={"plugin_id": plugin_id, "tier": "pro"},
+        timeout=15.0,
+    )
+    r = httpx.get(
+        f"{live_stack.gateway_url}/v1/marketplace/licenses",
+        headers=headers,
+        timeout=10.0,
+    )
+    assert r.status_code == 200, r.text
+    matches = [lic for lic in r.json()["licenses"] if lic["plugin_id"] == plugin_id]
+    assert len(matches) == 1, r.json()
+
+
 def test_my_installations_requires_auth(live_stack):
     r = httpx.get(
         f"{live_stack.gateway_url}/v1/marketplace/installations/me", timeout=10.0

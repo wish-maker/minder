@@ -152,6 +152,66 @@ async def test_tool_failure_still_falls_back_to_working_plain_chat(monkeypatch):
     monkeypatch.setattr(ai, "_ollama_chat", plain_ok)
 
     result = await ai.chat_completions(
-        _FakeRequest({"model": "llama3.2", "messages": [], "minder_tools": True})
+        _FakeRequest({"model": "llama3.2", "messages": [], "minder_tools": True}),
+        current_user={"sub": "u1"},
     )
     assert result == {"message": {"content": "hello from plain chat"}}
+
+
+# ── #613: chat/completions must require a valid JWT — every other route in this
+# module either serves pure read-only tool-discovery metadata (deliberately public
+# for OpenWebUI's Tool Server integration, which has no way to attach a Minder JWT)
+# or proxies to a downstream endpoint that enforces its own auth; this one calls
+# Ollama directly with nothing else in the request path to gate it. Exercised
+# through a REAL FastAPI TestClient (not a direct function call, which would bypass
+# dependency injection entirely) so the Depends(...) wiring itself is proven, not
+# just the handler body.
+
+
+def _ai_router_client():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app = FastAPI()
+    app.include_router(ai.router)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_chat_completions_requires_auth():
+    client = _ai_router_client()
+    resp = client.post("/v1/ai/chat/completions", json={"messages": []})
+    assert resp.status_code == 401
+
+
+def test_chat_completions_succeeds_with_a_valid_token(monkeypatch):
+    async def plain_ok(body):
+        return {"message": {"content": "hi"}}
+
+    monkeypatch.setattr(ai, "_ollama_chat", plain_ok)
+    client = _ai_router_client()
+    client.app.dependency_overrides[ai.get_current_user_required] = lambda: {
+        "sub": "u1"
+    }
+
+    resp = client.post(
+        "/v1/ai/chat/completions",
+        json={"messages": []},
+        headers={"Authorization": "Bearer whatever"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"message": {"content": "hi"}}
+
+
+def test_functions_definitions_stays_open_for_openwebui_tool_server(monkeypatch):
+    """Deliberately NOT gated (#613) -- OpenWebUI's Tool Server integration has no
+    way to attach a Minder JWT, so this read-only discovery endpoint must stay
+    reachable without one."""
+
+    async def fake_defs():
+        return {"tools": []}
+
+    monkeypatch.setattr(ai, "get_tool_definitions", fake_defs)
+    client = _ai_router_client()
+
+    resp = client.get("/v1/ai/functions/definitions")
+    assert resp.status_code == 200

@@ -51,6 +51,14 @@ def _to_wav(audio_bytes: bytes) -> str:
             check=True,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        # ffmpeg writes its output incrementally, so a timeout or a failure after
+        # it has already created the file leaves a real, partially-written
+        # output_path on disk -- the caller never receives this path to clean up
+        # since we raise here instead of returning it, so nothing else will ever
+        # unlink it. Repeated bad/slow uploads would otherwise accumulate
+        # unboundedly and exhaust disk.
+        if os.path.exists(output_path):
+            os.unlink(output_path)
         raise ValueError("could not decode audio; unsupported or corrupt format") from e
     finally:
         os.unlink(input_path)
