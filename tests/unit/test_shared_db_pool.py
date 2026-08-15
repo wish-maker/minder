@@ -111,3 +111,40 @@ async def test_missing_database_propagates_without_auto_create(monkeypatch):
             database="minder",
             auto_create=False,
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "unsafe_name",
+    [
+        "minder; DROP DATABASE postgres --",
+        "minder-prod",  # hyphen: needs quoting, not just "is it SQL-safe"
+        "",
+        "123minder",  # can't start with a digit
+    ],
+)
+async def test_auto_create_refuses_unsafe_database_name(monkeypatch, unsafe_name):
+    """CREATE DATABASE {database} is unparameterized DDL (asyncpg has no
+    identifier placeholder) -- every current caller passes a trusted,
+    service-config-derived name, but create_pg_pool is a shared helper with
+    no documented constraint on `database`. Found in a background audit:
+    validate against a strict allow-list before it ever reaches raw SQL."""
+    admin_connect = AsyncMock()
+
+    async def fake_create_pool(**kwargs):
+        raise asyncpg.InvalidCatalogNameError("database does not exist")
+
+    monkeypatch.setattr(asyncpg, "create_pool", fake_create_pool)
+    monkeypatch.setattr(asyncpg, "connect", admin_connect)
+
+    with pytest.raises(ValueError, match="unsafe name"):
+        await db_pool.create_pg_pool(
+            host="db",
+            port=5432,
+            user="u",
+            password="p",
+            database=unsafe_name,
+            auto_create=True,
+        )
+    # Must reject BEFORE ever connecting to the postgres maintenance DB.
+    admin_connect.assert_not_awaited()

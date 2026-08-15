@@ -8,11 +8,24 @@ identical to the previous inline implementations.
 """
 
 import logging
+import re
 from typing import Optional
 
 import asyncpg
 
 logger = logging.getLogger(__name__)
+
+# Every current caller passes a trusted, service-config-derived name (#49's own
+# callers: marketplace/plugin-state-manager's settings.DB_NAME), so this isn't
+# attacker-reachable today -- but create_pg_pool is a SHARED helper with no
+# documented constraint on `database`, and CREATE DATABASE below is unparameterized
+# DDL (asyncpg has no placeholder for identifiers). Found in a background audit:
+# validate against a strict allow-list before it ever reaches raw SQL, so a future
+# caller that derives this from something less trusted doesn't inherit an injection
+# primitive silently. Also rejects names that are technically legal Postgres
+# identifiers but would need "quoting" (hyphens, mixed case, reserved words) --
+# rather than partially support them, require the safe subset explicitly.
+_SAFE_DATABASE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 async def create_pg_pool(
@@ -65,6 +78,10 @@ async def create_pg_pool(
     except asyncpg.InvalidCatalogNameError:
         if not auto_create:
             raise
+        if not _SAFE_DATABASE_NAME.match(database):
+            raise ValueError(
+                f"Refusing to auto-create database with unsafe name: {database!r}"
+            )
         logger.warning(f"Database {database} does not exist, creating...")
 
         admin_conn = await asyncpg.connect(

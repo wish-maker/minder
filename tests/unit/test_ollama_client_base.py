@@ -128,3 +128,35 @@ def test_ensure_initialized_noop_when_already_initialized(monkeypatch):
 
     monkeypatch.setattr(mgr, "initialize", _boom)
     asyncio.run(mgr._ensure_initialized())  # must not raise
+
+
+def test_ensure_initialized_serializes_concurrent_callers_after_a_failed_startup_init(
+    monkeypatch,
+):
+    """If Ollama is unreachable at FastAPI-lifespan startup, that failure is only
+    logged (never fatal), so _initialized stays False -- the next wave of
+    concurrent requests must not each independently race to call initialize()
+    and overwrite self.client. Without the lock, both `calls["n"]` would hit 2
+    and both concurrent callers would briefly observe a half-built self.client
+    from the OTHER caller's in-flight initialize()."""
+    monkeypatch.setattr(base_mod, "OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr(base_mod, "AsyncClient", _FakeAsyncClient)
+    calls = {"n": 0}
+
+    class _Sub(OllamaClientBase):
+        async def initialize(self):
+            calls["n"] += 1
+            # Yield control mid-init so a second concurrent caller's
+            # _ensure_initialized() actually overlaps with this one, instead of
+            # running to completion before the second call even starts.
+            await asyncio.sleep(0)
+            await super().initialize()
+
+    mgr = _Sub(host="http://ollama:11434")
+
+    async def _run_concurrently():
+        await asyncio.gather(mgr._ensure_initialized(), mgr._ensure_initialized())
+
+    asyncio.run(_run_concurrently())
+    assert calls["n"] == 1
+    assert mgr._initialized is True
