@@ -69,7 +69,6 @@ async def import_ai_tools_from_manifest(
             # Build parameters schema
             parameters = tool_def.get("parameters", {})
             parameters_schema = {}
-            required_params = []
 
             for param_name, param_def in parameters.items():
                 if not isinstance(param_def, dict):
@@ -86,10 +85,15 @@ async def import_ai_tools_from_manifest(
                 if "default" in param_def:
                     param_info["default"] = param_def["default"]
 
-                parameters_schema[param_name] = param_info
-
+                # Persist `required` into the stored per-param schema. It used to be
+                # collected into `required_params` and then silently dropped (no such
+                # column in the INSERT/UPDATE), so downstream consumers -- notably
+                # plugin-state-manager's execute_tool parameter validation (#676) --
+                # had no way to know which parameters a tool actually requires.
                 if param_def.get("required", False):
-                    required_params.append(param_name)
+                    param_info["required"] = True
+
+                parameters_schema[param_name] = param_info
 
             # Build response schema
             response_schema = tool_def.get("response_format", {})
