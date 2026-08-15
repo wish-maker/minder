@@ -20,7 +20,11 @@ from . import config, docker, filelock, log
 ENV_FILE = config.ENV_FILE
 ENV_EXAMPLE = config.ENV_EXAMPLE
 COMPOSE_ENV_FILE = config.COMPOSE_ENV_FILE
-_ENV_LOCK = ENV_FILE.parent / ".env.lock"
+# Public (not _ENV_LOCK) -- ollama.py/tts_stt.py also read-modify-write .env and
+# need this exact same lock file to get real mutual exclusion with fill_env_secrets
+# below and with each other (#374's whole point: two concurrent setup.sh
+# invocations must not interleave writes to the same file).
+ENV_LOCK = ENV_FILE.parent / ".env.lock"
 
 # Authoritative secret-key set → "length[:format]" (env.sh SECRET_SPEC). Smart-fill
 # touches ONLY these keys; every other .env line is left exactly as written.
@@ -452,7 +456,7 @@ def fill_env_secrets() -> None:
 
     Holds an advisory lock (#374) for the whole read-modify-write so two concurrent
     setup.sh invocations can't interleave writes and corrupt .env."""
-    with filelock.locked(_ENV_LOCK):
+    with filelock.locked(ENV_LOCK):
         try:
             raw = ENV_FILE.read_text(encoding="utf-8")
         except OSError:
@@ -628,21 +632,26 @@ def write_default_env() -> None:
 
 
 def _upsert_env_key(key: str, value: str) -> None:
-    """Set KEY=value in .env — replace the line if present, else append. Silent."""
-    try:
-        lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return
-    out, found = [], False
-    for ln in lines:
-        if ln.split("=", 1)[0] == key:
+    """Set KEY=value in .env — replace the line if present, else append. Silent.
+
+    Locked (#374) -- this is a read-modify-write of the same .env fill_env_secrets
+    above writes; without the lock, a concurrent setup.sh invocation's write here
+    could interleave with (and silently discard half of) that one."""
+    with filelock.locked(ENV_LOCK):
+        try:
+            lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+        out, found = [], False
+        for ln in lines:
+            if ln.split("=", 1)[0] == key:
+                out.append(f"{key}={value}")
+                found = True
+            else:
+                out.append(ln)
+        if not found:
             out.append(f"{key}={value}")
-            found = True
-        else:
-            out.append(ln)
-    if not found:
-        out.append(f"{key}={value}")
-    ENV_FILE.write_text("\n".join(out) + "\n", encoding="utf-8")
+        ENV_FILE.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
 def ensure_docker_gid() -> None:
