@@ -66,6 +66,13 @@ interface EntityContextResponse {
   context_window: number;
 }
 
+interface GraphSearchResponse {
+  success: boolean;
+  query: string;
+  entities: Entity[];
+  entity_count: number;
+}
+
 function EntityBadge({ entity }: { entity: Entity | RelatedEntity }) {
   const label = "label" in entity ? String(entity.label) : undefined;
   return (
@@ -355,13 +362,38 @@ function ExtractAndBuildCard({
 }
 
 function ExploreCard({ token }: { token: string }) {
-  const [mode, setMode] = useState<"search" | "entity">("search");
+  const [mode, setMode] = useState<"search" | "find" | "entity">("search");
   const [query, setQuery] = useState("");
+  const [findQuery, setFindQuery] = useState("");
   const [entityText, setEntityText] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [retrieveResult, setRetrieveResult] = useState<RetrieveResponse | null>(null);
+  const [findResult, setFindResult] = useState<GraphSearchResponse | null>(null);
   const [contextResult, setContextResult] = useState<EntityContextResponse | null>(null);
+
+  async function handleFind() {
+    if (!findQuery.trim()) {
+      setStatus("Search text is required.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Finding entities…");
+    setFindResult(null);
+    try {
+      const res = await apiFetch<GraphSearchResponse>("/v1/graph-rag/graph/search", {
+        method: "POST",
+        body: { query: findQuery, limit: 20 },
+        token,
+      });
+      setFindResult(res);
+      setStatus("");
+    } catch (e) {
+      setStatus(friendlyErrorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function handleSearch() {
     if (!query.trim()) {
@@ -415,9 +447,9 @@ function ExploreCard({ token }: { token: string }) {
         <span aria-hidden="true">🔍</span> Explore
       </h2>
       <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">
-        Search the graph by meaning, or look up a specific entity's neighbors
-        and source documents — this is a different retrieval path from RAG
-        Pipelines' vector search, over the same underlying knowledge.
+        Search the graph by meaning, find entities by name, or look up a specific
+        entity's neighbors and source documents — a different retrieval path from
+        RAG Pipelines' vector search, over the same underlying knowledge.
       </p>
       <div className="mb-3 flex gap-2 border-b border-gray-100 dark:border-gray-800">
         <button
@@ -433,6 +465,17 @@ function ExploreCard({ token }: { token: string }) {
         </button>
         <button
           type="button"
+          onClick={() => setMode("find")}
+          className={`border-b-2 pb-1.5 text-sm font-medium ${
+            mode === "find"
+              ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
+              : "border-transparent text-gray-500 dark:text-gray-400"
+          }`}
+        >
+          Find entities
+        </button>
+        <button
+          type="button"
           onClick={() => setMode("entity")}
           className={`border-b-2 pb-1.5 text-sm font-medium ${
             mode === "entity"
@@ -445,7 +488,7 @@ function ExploreCard({ token }: { token: string }) {
       </div>
 
       <fieldset disabled={!token}>
-        {mode === "search" ? (
+        {mode === "search" && (
           <div className="flex gap-2">
             <input
               className={inputClass}
@@ -458,7 +501,22 @@ function ExploreCard({ token }: { token: string }) {
               Search
             </button>
           </div>
-        ) : (
+        )}
+        {mode === "find" && (
+          <div className="flex gap-2">
+            <input
+              className={inputClass}
+              value={findQuery}
+              onChange={(e) => setFindQuery(e.target.value)}
+              placeholder="Match entity name or type (e.g. 'tesla', 'PERSON')"
+              aria-label="Find entities by name or label"
+            />
+            <button type="button" onClick={handleFind} disabled={busy} className={primaryButtonClass}>
+              Find
+            </button>
+          </div>
+        )}
+        {mode === "entity" && (
           <div className="flex gap-2">
             <input
               className={inputClass}
@@ -487,6 +545,27 @@ function ExploreCard({ token }: { token: string }) {
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {retrieveResult.related_entities.map((e, i) => (
+                <EntityBadge key={i} entity={e} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "find" && findResult && (
+        <div className="rounded-lg bg-gray-50 p-3 text-sm dark:bg-gray-800">
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            {findResult.entity_count} matching{" "}
+            {findResult.entity_count === 1 ? "entity" : "entities"}
+          </p>
+          {findResult.entities.length === 0 ? (
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              No entities match — try a shorter term, or build a document first
+              (see Extract &amp; Build above).
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {findResult.entities.map((e, i) => (
                 <EntityBadge key={i} entity={e} />
               ))}
             </div>
