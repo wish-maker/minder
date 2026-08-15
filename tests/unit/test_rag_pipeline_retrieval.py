@@ -1099,3 +1099,83 @@ async def test_upload_document_passes_within_limit_file_through(monkeypatch):
         "content": b"small document",
         "build_tree": False,
     }
+
+
+# ── delete_document: legacy delete must not sweep up a document_id-tagged
+# re-upload sharing the same filename ────────────────────────────────────────
+
+
+class _FakeCountResult:
+    def __init__(self, count):
+        self.count = count
+
+
+class _FakeDeleteQdrantClient:
+    """Captures the Filter passed to count()/delete() so the test can assert
+    on its exact structure (must include an IsEmptyCondition on document_id
+    for a legacy: delete, not just a bare source match)."""
+
+    def __init__(self, count=1):
+        self._count = count
+        self.count_filters = []
+        self.delete_filters = []
+
+    def count(self, collection_name, count_filter):
+        self.count_filters.append(count_filter)
+        return _FakeCountResult(self._count)
+
+    def delete(self, collection_name, points_selector):
+        self.delete_filters.append(points_selector)
+
+
+@pytest.mark.asyncio
+async def test_legacy_delete_filter_excludes_document_id_tagged_chunks(monkeypatch):
+    """Found in a background audit: a legacy:<filename> delete used to filter
+    on `source` alone, with no exclusion for chunks that DO carry a
+    document_id -- so deleting an old pre-#427 upload's legacy entry would
+    silently also delete a LATER, still-wanted re-upload of the same filename
+    (which gets its own fresh document_id, per #427's whole point). The fix
+    adds an IsEmptyCondition on document_id to both the count and delete
+    filters, scoping a legacy delete to strictly the no-document_id chunks."""
+    from qdrant_client.models import IsEmptyCondition
+
+    fake_client = _FakeDeleteQdrantClient(count=3)
+    kb = _fake_kb()
+    monkeypatch.setattr(rag_routes.state, "knowledge_bases", {"kb-1": kb})
+    monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+    monkeypatch.setattr(rag_routes.state, "PG_AVAILABLE", False)
+    monkeypatch.setattr(rag_routes, "invalidate_hybrid_index", lambda kb_id: None)
+
+    await rag_routes.delete_document(
+        kb_id="kb-1", document_id="legacy:notes.txt", current_user={"sub": "u1"}
+    )
+
+    for filter_ in (fake_client.count_filters[0], fake_client.delete_filters[0]):
+        assert any(
+            isinstance(cond, IsEmptyCondition) and cond.is_empty.key == "document_id"
+            for cond in filter_.must
+        ), filter_
+
+
+@pytest.mark.asyncio
+async def test_non_legacy_delete_filter_is_unaffected(monkeypatch):
+    """A normal (non-legacy) delete-by-document_id must NOT gain the
+    IsEmptyCondition -- it's already precise (document_id is a fresh UUID per
+    upload), the fix is scoped to the legacy: branch only."""
+    from qdrant_client.models import IsEmptyCondition
+
+    fake_client = _FakeDeleteQdrantClient(count=1)
+    kb = _fake_kb()
+    monkeypatch.setattr(rag_routes.state, "knowledge_bases", {"kb-1": kb})
+    monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+    monkeypatch.setattr(rag_routes.state, "PG_AVAILABLE", False)
+    monkeypatch.setattr(rag_routes, "invalidate_hybrid_index", lambda kb_id: None)
+
+    await rag_routes.delete_document(
+        kb_id="kb-1", document_id="doc-uuid-123", current_user={"sub": "u1"}
+    )
+
+    filter_ = fake_client.delete_filters[0]
+    assert not any(isinstance(cond, IsEmptyCondition) for cond in filter_.must)
+    assert filter_.must[0].key == "document_id"
+    assert filter_.must[0].match.value == "doc-uuid-123"
