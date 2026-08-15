@@ -129,3 +129,93 @@ def test_reads_stay_open(client):
     # Pure reads are not gated (GET-open policy, #47).
     assert client.get("/v1/services").status_code == 200
     assert client.get("/v1/proxy").status_code == 200
+
+
+# --- persist-before-mutate ordering -------------------------------------------
+#
+# Found in a background audit: register_service/unregister_service mutated
+# services_db BEFORE the Redis call, with no try/except around Redis at all --
+# load_services_from_redis() is what repopulates services_db on restart, so a
+# Redis failure used to leave services_db (and a 200 response) claiming a
+# registration/unregistration that never actually landed in Redis.
+
+
+@pytest.fixture
+def _redis_client_pair(monkeypatch):
+    """Same models-module fake/restore dance as the `client` fixture above --
+    needed here too since this helper does its own fresh module exec rather
+    than reusing that fixture (it needs per-test hset/delete behavior)."""
+    import shared.auth.jwt_middleware as jm
+
+    saved_models = sys.modules.get("models")
+    saved_token = jm.SERVICE_SYNC_TOKEN
+    fake_models = ModuleType("models")
+    fake_models.ServiceRegistration = _FakeServiceRegistration
+    sys.modules["models"] = fake_models
+    jm.SERVICE_SYNC_TOKEN = _TOKEN
+    try:
+        yield
+    finally:
+        jm.SERVICE_SYNC_TOKEN = saved_token
+        if saved_models is not None:
+            sys.modules["models"] = saved_models
+        else:
+            sys.modules.pop("models", None)
+
+
+def _client_with_failing_redis(*, fail_hset=False, fail_delete=False):
+    def _hset(*a, **k):
+        if fail_hset:
+            raise ConnectionError("redis down")
+
+    def _delete(*a, **k):
+        if fail_delete:
+            raise ConnectionError("redis down")
+
+    spec = importlib.util.spec_from_file_location("reg_services_route2", _ROUTE)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    services_db = {}
+    redis = SimpleNamespace(hset=_hset, delete=_delete, hget=lambda *a, **k: None)
+    app = FastAPI()
+    app.include_router(
+        mod.build_services_router(
+            services_db=services_db,
+            redis_client=redis,
+            proxy_router=_FakeProxy(),
+            logger=SimpleNamespace(
+                info=lambda *a, **k: None, error=lambda *a, **k: None
+            ),
+        )
+    )
+    return TestClient(app, raise_server_exceptions=False), services_db
+
+
+def test_register_service_not_added_when_redis_fails(_redis_client_pair):
+    client, services_db = _client_with_failing_redis(fail_hset=True)
+    r = client.post(
+        "/v1/services/register",
+        json={"service_name": "x"},
+        headers=_svc_headers(),
+    )
+    assert r.status_code == 503
+    assert "x" not in services_db
+
+
+def test_register_service_added_when_redis_succeeds(_redis_client_pair):
+    client, services_db = _client_with_failing_redis(fail_hset=False)
+    r = client.post(
+        "/v1/services/register",
+        json={"service_name": "x"},
+        headers=_svc_headers(),
+    )
+    assert r.status_code == 200
+    assert "x" in services_db
+
+
+def test_unregister_service_kept_when_redis_fails(_redis_client_pair):
+    client, services_db = _client_with_failing_redis(fail_delete=True)
+    services_db["x"] = SimpleNamespace(service_name="x")
+    r = client.delete("/v1/services/x", headers=_svc_headers())
+    assert r.status_code == 503
+    assert "x" in services_db  # must NOT have been removed while Redis delete failed

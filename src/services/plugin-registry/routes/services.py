@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from models import ServiceRegistration
 
 from shared.auth.jwt_middleware import get_current_user_or_service
+from shared.errors import backend_http_error
 from shared.pagination import paginate
 
 
@@ -26,18 +27,26 @@ def build_services_router(
         current_user: dict = Depends(get_current_user_or_service),
     ):
         """Register a service for service discovery (JWT or service token)."""
+        # Persist BEFORE mutating in-memory state -- load_services_from_redis()
+        # is what repopulates services_db on restart, so a Redis failure here
+        # must not leave services_db (and this 200 response) claiming a
+        # registration that never actually landed in the durable store.
+        try:
+            redis_client.hset(
+                f"service:{service.service_name}",
+                mapping={
+                    "service_type": service.service_type,
+                    "host": service.host,
+                    "port": service.port,
+                    "health_check_url": service.health_check_url,
+                    "registered_at": datetime.now(timezone.utc).isoformat(),
+                    "metadata": json.dumps(service.metadata),
+                },
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist service {service.service_name}: {e}")
+            raise backend_http_error(e, "Service registration")
         services_db[service.service_name] = service
-        redis_client.hset(
-            f"service:{service.service_name}",
-            mapping={
-                "service_type": service.service_type,
-                "host": service.host,
-                "port": service.port,
-                "health_check_url": service.health_check_url,
-                "registered_at": datetime.now(timezone.utc).isoformat(),
-                "metadata": json.dumps(service.metadata),
-            },
-        )
         logger.info(f"Service registered: {service.service_name}")
         return {
             "message": f"Service {service.service_name} registered",
@@ -75,8 +84,13 @@ def build_services_router(
         """Unregister a service (JWT or service token)."""
         if service_name not in services_db:
             raise HTTPException(status_code=404, detail="Service not found")
+        # Same persist-before-mutate ordering as register_service above.
+        try:
+            redis_client.delete(f"service:{service_name}")
+        except Exception as e:
+            logger.error(f"Failed to unregister service {service_name} in Redis: {e}")
+            raise backend_http_error(e, "Service unregistration")
         del services_db[service_name]
-        redis_client.delete(f"service:{service_name}")
         return {"message": f"Service {service_name} unregistered"}
 
     @router.get("/v1/services/{service_name}/health")
