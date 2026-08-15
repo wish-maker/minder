@@ -992,6 +992,95 @@ async def test_ingest_document_invalidates_hybrid_cache(monkeypatch):
     assert "kb-1" not in retrieval._hybrid.documents
 
 
+@pytest.mark.asyncio
+async def test_ingest_document_upserts_in_batches_above_the_batch_size(monkeypatch):
+    """#683: a document with more chunks than QDRANT_UPSERT_BATCH_SIZE must be
+    upserted across multiple requests, not one giant one -- mirrors the
+    embedding phase's own EMBED_BATCH_SIZE batching."""
+    chunk_count = ingestion.QDRANT_UPSERT_BATCH_SIZE + 10
+    monkeypatch.setattr(
+        ingestion,
+        "chunk_text",
+        lambda *a, **k: [f"chunk {i}" for i in range(chunk_count)],
+    )
+
+    calls = []
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            calls.append(kwargs)
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    result = await ingestion.ingest_document(
+        "kb-1", _fake_kb(), "big.txt", b"doesn't matter, chunk_text is stubbed"
+    )
+
+    assert len(calls) == 2  # 96 + 10, split across two batches
+    assert len(calls[0]["points"]) == ingestion.QDRANT_UPSERT_BATCH_SIZE
+    assert len(calls[1]["points"]) == 10
+    assert result.chunks_processed == chunk_count
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_cleans_up_partial_write_on_upsert_failure(monkeypatch):
+    """#683: if a later batch fails, delete whatever THIS upload already wrote
+    (by document_id) so the upload still fails atomically overall instead of
+    leaving a half-indexed document behind."""
+    chunk_count = ingestion.QDRANT_UPSERT_BATCH_SIZE + 10
+    monkeypatch.setattr(
+        ingestion,
+        "chunk_text",
+        lambda *a, **k: [f"chunk {i}" for i in range(chunk_count)],
+    )
+
+    upsert_calls = []
+    delete_calls = []
+
+    class _FlakyQdrantClient:
+        def upsert(self, **kwargs):
+            upsert_calls.append(kwargs)
+            if len(upsert_calls) == 2:
+                raise ConnectionError("qdrant unreachable")
+
+        def delete(self, **kwargs):
+            delete_calls.append(kwargs)
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FlakyQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    with pytest.raises(Exception) as exc_info:
+        await ingestion.ingest_document(
+            "kb-1", _fake_kb(), "big.txt", b"doesn't matter, chunk_text is stubbed"
+        )
+    assert exc_info.value.status_code == 503
+
+    assert len(upsert_calls) == 2  # first batch succeeded, second raised
+    assert len(delete_calls) == 1
+    condition = delete_calls[0]["points_selector"].must[0]
+    assert condition.key == "document_id"
+    assert condition.match.value  # a document_id was generated and used
+
+
 def test_group_documents_groups_by_document_id():
     class _Record:
         def __init__(self, payload):
