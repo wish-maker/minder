@@ -49,6 +49,17 @@ async def lifespan(app: FastAPI):
             state.knowledge_bases.update(loaded_kbs)
             logger.info(f"✅ Loaded {len(loaded_kbs)} knowledge bases from PostgreSQL")
 
+            # Heal any document/vector-count drift vs Qdrant (the real index) that a
+            # best-effort Postgres save may have left behind before this restart (#629).
+            try:
+                from core.ingestion import reconcile_kb_counts_from_qdrant
+
+                fixed = await reconcile_kb_counts_from_qdrant(state.knowledge_bases)
+                if fixed:
+                    logger.info(f"🔧 Reconciled KB counts from Qdrant for {fixed} KB(s)")
+            except Exception as e:
+                logger.warning(f"⚠️  KB count reconciliation skipped: {e}")
+
             loaded_pipelines = await state.load_pipelines_from_postgres()
             state.rag_pipelines.update(loaded_pipelines)
             logger.info(
