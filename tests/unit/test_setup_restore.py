@@ -66,6 +66,7 @@ def stubbed(monkeypatch):
     monkeypatch.setattr(restore.docker, "run", lambda *a, **k: 0)
     monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: 0)
     monkeypatch.setattr(restore.docker, "wait_postgres_ready", lambda *a, **k: True)
+    monkeypatch.setattr(restore.docker, "wait_healthy", lambda *a, **k: True)
     monkeypatch.setattr(restore, "_restore_postgres", lambda *a, **k: True)
     monkeypatch.setattr(restore, "_run_bare", lambda *a, **k: 0)
     warns: list[str] = []
@@ -149,7 +150,11 @@ def test_extract_falls_back_when_filter_kwarg_unsupported(
 
 def test_not_running_store_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):
     """#282: archived data exists but its container isn't running — must be
-    surfaced in the final summary, not silently dropped."""
+    surfaced in the final summary, not silently dropped. Also confirms the
+    background-audit fix: bringing qdrant up is actually ATTEMPTED first
+    (_ensure_running) -- it only stays skipped here because the test's own
+    container_running mock is unconditionally False for qdrant, standing in
+    for a real environment where `compose up` didn't actually succeed."""
     archive = _make_archive(
         tmp_path,
         files={
@@ -164,17 +169,21 @@ def test_not_running_store_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path)
         return service != "qdrant"
 
     monkeypatch.setattr(restore.docker, "container_running", container_running)
+    calls: list[tuple] = []
+    monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: calls.append(a) or 0)
 
     rc = restore.run(str(archive))
 
     assert rc == 0
+    assert ("up", "-d", "qdrant") in calls
     assert any("Qdrant not running — restore skipped" in w for w in warns)
     assert any("Restore complete — NOT restored: Qdrant" in w for w in warns)
 
 
 def test_minio_not_running_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path):
     """Mirrors the Qdrant #282 test above -- archived MinIO data exists but its
-    container isn't running."""
+    container isn't running. Also confirms bringing it up is attempted first
+    (_ensure_running), same background-audit fix as the Qdrant test above."""
     archive = _make_archive(
         tmp_path,
         files={
@@ -189,10 +198,13 @@ def test_minio_not_running_is_tracked_as_skipped(monkeypatch, stubbed, tmp_path)
         return service != "minio"
 
     monkeypatch.setattr(restore.docker, "container_running", container_running)
+    calls: list[tuple] = []
+    monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: calls.append(a) or 0)
 
     rc = restore.run(str(archive))
 
     assert rc == 0
+    assert ("up", "-d", "minio") in calls
     assert any("MinIO not running — restore skipped" in w for w in warns)
     assert any("Restore complete — NOT restored: MinIO" in w for w in warns)
 
@@ -266,6 +278,100 @@ def test_postgres_not_running_recreates_network_first(monkeypatch, stubbed, tmp_
     assert rc == 0
     assert calls[0] == "create_networks"
     assert ("up", "-d", "postgres") in calls[1:]
+
+
+def test_ensure_running_noop_when_already_running(monkeypatch):
+    """_ensure_running must not touch the network/compose at all when the
+    container is already up -- only the "not running" path should act."""
+    monkeypatch.setattr(restore.docker, "container_running", lambda s: True)
+    calls: list[str] = []
+    monkeypatch.setattr(
+        restore.infra, "create_networks", lambda: calls.append("create_networks")
+    )
+    monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: calls.append(a) or 0)
+
+    restore._ensure_running("qdrant")
+
+    assert calls == []
+
+
+def test_ensure_running_brings_up_a_stopped_store(monkeypatch):
+    """Found in a background audit: only postgres (#288) got this treatment --
+    every other datastore's restore step silently found its container not
+    running and gave up, which is the DEFAULT outcome of the documented
+    stop-then-restore recovery procedure, not an edge case. _ensure_running
+    generalizes the fix: recreate the network (idempotent) + compose up the
+    service + wait for it to become healthy."""
+    monkeypatch.setattr(restore.config, "DRY_RUN", False)
+    monkeypatch.setattr(restore.docker, "container_running", lambda s: False)
+    calls: list = []
+    monkeypatch.setattr(
+        restore.infra, "create_networks", lambda: calls.append("create_networks")
+    )
+    monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: calls.append(a) or 0)
+    monkeypatch.setattr(
+        restore.docker, "wait_healthy", lambda s, **k: calls.append(("wait", s)) or True
+    )
+
+    restore._ensure_running("neo4j")
+
+    assert calls == ["create_networks", ("up", "-d", "neo4j"), ("wait", "neo4j")]
+
+
+def test_ensure_running_skips_health_wait_under_dry_run(monkeypatch):
+    """DRY_RUN must preview (compose up echoed via docker.run's own seam) but
+    never block on a real health wait -- mirrors the postgres block's own
+    DRY_RUN gating."""
+    monkeypatch.setattr(restore.config, "DRY_RUN", True)
+    monkeypatch.setattr(restore.docker, "container_running", lambda s: False)
+    monkeypatch.setattr(restore.infra, "create_networks", lambda: None)
+    monkeypatch.setattr(restore.docker, "compose", lambda *a, **k: 0)
+
+    def boom(*a, **k):
+        raise AssertionError("wait_healthy must not run under DRY_RUN")
+
+    monkeypatch.setattr(restore.docker, "wait_healthy", boom)
+
+    restore._ensure_running("minio")  # must not raise
+
+
+def test_safe_extractall_rejects_path_escaping_members(monkeypatch, tmp_path):
+    """Found in a background audit: the pre-3.12 fallback (Python's `filter`
+    kwarg needs >=3.12, missing on the Pi's actual 3.11.2) used to be a fully
+    unfiltered extractall() -- a crafted member with a `../`-escaping path
+    could write outside the destination directory entirely. The archive being
+    restored is read from a caller-supplied path, not guaranteed to be an
+    untampered backup.py artifact (the docs' own off-site rsync copy could be
+    tampered with), so this must be rejected on every Python version, not
+    just >=3.12."""
+    real_extractall = tarfile.TarFile.extractall
+
+    def fake_extractall(self, path=".", *args, **kwargs):
+        if "filter" in kwargs:
+            raise TypeError("extractall() got an unexpected keyword argument 'filter'")
+        return real_extractall(self, path, *args, **kwargs)
+
+    monkeypatch.setattr(tarfile.TarFile, "extractall", fake_extractall)
+
+    dest = tmp_path / "dest"
+    escape_target = tmp_path / "escaped.txt"
+    archive = tmp_path / "evil.tar.gz"
+    with tarfile.open(archive, "w:gz") as tf:
+        info = tarfile.TarInfo("../escaped.txt")
+        data = b"pwned"
+        info.size = len(data)
+        import io
+
+        tf.addfile(info, io.BytesIO(data))
+        safe_info = tarfile.TarInfo("safe.txt")
+        safe_info.size = 4
+        tf.addfile(safe_info, io.BytesIO(b"safe"))
+
+    with tarfile.open(archive, "r:gz") as tf:
+        restore._safe_extractall(tf, dest)
+
+    assert not escape_target.exists()
+    assert (dest / "safe.txt").read_bytes() == b"safe"
 
 
 def test_strip_own_role_statements_removes_only_bootstrap_role_lines():

@@ -247,6 +247,21 @@ async def save_plugin_manifest(plugin_name: str, manifest: dict) -> None:
         logger.debug(f"Saved manifest for plugin {plugin_name}")
     except Exception as e:
         logger.error(f"Failed to save manifest for {plugin_name}: {e}")
+        # Same #351 bug class as update_plugin_in_database above, missed here: a
+        # swallowed exception meant install_plugin's own try/except around
+        # register_plugin_webhook (routes/plugins.py) could never actually fire
+        # for THIS failure mode -- the in-memory webhook_routes/plugin_manifests
+        # dicts were already updated (core/webhooks.py, before this call), so
+        # the webhook worked immediately and the client got a 200 "installed
+        # successfully" response, but nothing was persisted. On the next
+        # registry restart, register_all_webhooks_on_startup() only restores
+        # from what's actually in this table -- the webhook silently never came
+        # back, indistinguishable from a healthy install via the API. Re-raise
+        # so callers can convert it into an honest error (register_all_webhooks_
+        # on_startup wraps its own per-plugin call in a try/except specifically
+        # so this doesn't turn one transient DB hiccup during a REDUNDANT
+        # restore-time re-write into the whole registry failing to start).
+        raise
 
 
 async def load_all_plugin_manifests() -> dict:

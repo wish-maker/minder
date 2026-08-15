@@ -48,6 +48,15 @@ class Settings(MinderBaseSettings):
     # assistant-response read-aloud while bounding worst-case resource use.
     TTS_MAX_TEXT_LENGTH: int = 5000
 
+    # Audio upload — enforced in routes/stt.py's speech_to_text. Was previously
+    # unenforced: `await file.read()` (no size arg) buffers the WHOLE upload into
+    # memory regardless of size, then hands it to ffmpeg with only a 30s wall-clock
+    # timeout as a backstop (core/stt_engine.py's _FFMPEG_TIMEOUT_S) -- no cap on
+    # the memory spike itself. Matches rag-pipeline/marketplace's own
+    # MAX_UPLOAD_SIZE_MB naming/pattern; 25MB comfortably covers a real voice
+    # recording or uploaded clip while bounding worst-case memory use.
+    STT_MAX_AUDIO_SIZE_MB: int = 25
+
 
 settings = Settings()
 
