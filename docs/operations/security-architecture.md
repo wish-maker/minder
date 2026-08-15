@@ -1,6 +1,6 @@
 # Security Architecture
 
-**Last Updated:** 2026-08-11
+**Last Updated:** 2026-08-15
 **Platform Version:** 1.0.0
 **Environment:** Development (Raspberry Pi 4)
 
@@ -72,6 +72,13 @@ Capabilities in use:
 > only unauthenticated reads a browser would see anyway, and this session's own deploy/
 > verification workflow depends on this exact access path — documented inline in
 > `docker-compose.yml` as an accepted tradeoff, not a gap to close.
+>
+> That "every write" claim briefly had one real exception: `POST /v1/ai/chat/completions`
+> had no auth dependency at all until
+> [#613](https://github.com/wish-maker/minder/issues/613) fixed it — it called Ollama
+> directly rather than proxying to a JWT-gated downstream service, so nothing else in the
+> request path would have rejected an unauthenticated caller. Fixed; the invariant holds
+> again.
 
 ---
 
@@ -195,4 +202,4 @@ This is a development deployment. Before treating it as production-ready:
 
 ---
 
-*Last Updated: 2026-08-11 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled, real OIDC (Authelia) · RBAC: not enforced*
+*Last Updated: 2026-08-15 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled, real OIDC (Authelia) · RBAC: not enforced*
