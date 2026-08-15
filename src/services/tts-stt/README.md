@@ -24,7 +24,7 @@ python -m pytest tests/unit/test_tts_stt_*.py
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/v1/tts` | Synthesize speech from `text` (+ `language`). Piper → **WAV**; gTTS fallback → **MP3** |
+| POST | `/v1/tts` | Synthesize speech from `text` (+ `language`). Piper → **WAV**; gTTS fallback → **MP3**. `text` capped at `TTS_MAX_TEXT_LENGTH` (default 5000 chars) — a 422 past that, since neither engine enforces its own ceiling |
 | GET | `/v1/tts/languages` | Languages available for TTS |
 | POST | `/v1/stt` | Transcribe an uploaded audio file → text |
 | GET | `/v1/stt/languages` | Languages available for STT |

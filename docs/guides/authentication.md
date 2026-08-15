@@ -52,8 +52,10 @@ below.
 3. Authelia redirects back with an authorization code. api-gateway exchanges it for a
    verified identity (`core/oidc.py`), then looks up or provisions a matching Minder user
    (`core/auth.py`'s `get_or_create_oidc_user` — first login creates the account, or links
-   it to a pre-existing local account with the same username; later logins keep
-   username/email/role in sync with Authelia automatically).
+   it to a pre-existing local account with the same username. Every login syncs
+   username/email/role from Authelia's `groups` claim, including the very first one that
+   links a pre-existing local account — a user promoted to Authelia's `admins` group gets
+   `role: admin` starting with that first SSO login, not just from the second one onward).
 4. api-gateway mints a normal Minder JWT and redirects your browser to
    `/auth/callback#token=...`. The client reads the token from the URL fragment (never sent
    to any server, so it never lands in an access log) and you're logged in.

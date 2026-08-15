@@ -40,7 +40,7 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
 | GET | `/v1/knowledge-bases/{id}` | Get one KB |
 | PATCH | `/v1/knowledge-bases/{id}` | Edit metadata in place — name / description / llm_model (embedding_model + chunk params immutable) (#544). JWT-gated |
 | DELETE | `/v1/knowledge-bases/{id}` | Delete a KB (drops its Qdrant collection + PG row). JWT-gated |
-| POST | `/v1/knowledge-bases/{id}/upload` | Upload a PDF / TXT / MD. **503** if the embedding backend is unreachable (no silent zero-vector, #77). One `document_id` per upload |
+| POST | `/v1/knowledge-bases/{id}/upload` | Upload a PDF / TXT / MD. **413** over `MAX_UPLOAD_SIZE_MB` (default 50MB). **503** if the embedding backend is unreachable (no silent zero-vector, #77). One `document_id` per upload |
 | GET | `/v1/knowledge-bases/{id}/documents` | List documents (one per upload, not per chunk) — envelope shape |
 | DELETE | `/v1/knowledge-bases/{id}/documents/{doc_id}` | Delete one document's chunks. JWT-gated |
 | POST | `/v1/pipeline` | Create a pipeline over ≥1 KB (`knowledge_base_ids` min_length 1) |

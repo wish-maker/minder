@@ -76,8 +76,10 @@ test-harness `sys.path` collision — don't "standardize" these away.
 - `NEO4J_URI` + `NEO4J_AUTH` (`user/password`, **required**, `field_validator`
   fail-fast) — the dependency graph (shares the Neo4j instance with graph-rag,
   different node labels).
-- `PLUGIN_REGISTRY_URL`, `MAX_PLUGINS_PER_USER`, `MAX_UPLOAD_SIZE_MB`,
-  `RATE_LIMIT_PER_MINUTE`.
+- `PLUGIN_REGISTRY_URL`, `MAX_PLUGINS_PER_USER` (default 100 — enforced on
+  `POST .../install`, 409 once a user's *currently-installed* count hits it;
+  re-enabling an already-installed plugin doesn't count toward the cap),
+  `MAX_UPLOAD_SIZE_MB`, `RATE_LIMIT_PER_MINUTE`.
 
 ## Error conventions
 

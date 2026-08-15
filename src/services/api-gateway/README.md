@@ -37,7 +37,12 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
   model-management, `/v1/marketplace/*` → marketplace, `/v1/tools/*` →
   plugin-state-manager, `/v1/bundles/*` + `/v1/containers/*` → plugin-registry,
   `/v1/tts|stt` → tts-stt, `/v1/graph-rag/*` → graph-rag. A malformed downstream
-  path 404s cleanly; an unreachable downstream → 503 (never a hang).
+  path 404s cleanly; an unreachable downstream → 503 (never a hang). Every
+  proxied request body is capped at `MAX_PROXY_BODY_SIZE_MB` (default 150MB,
+  **413** once exceeded) — a gateway-level ceiling above every real downstream
+  limit (e.g. rag-pipeline's own 50MB upload cap), read via `request.stream()`
+  so a large/malicious upload can't exhaust gateway memory before any
+  downstream check is ever consulted.
 - **AI / OpenWebUI bridge** (`routes/ai.py`): `POST /v1/ai/chat/completions`
   (Ollama chat; plugin function-calling is opt-in via `"minder_tools": true` —
   the gateway offers plugin tools, executes the model's `tool_calls` forwarding
@@ -68,7 +73,12 @@ api-gateway/
 ## Configuration (`config.py`, env-overridable)
 
 - `RATE_LIMIT_ENABLED` (default true), `RATE_LIMIT_PER_MINUTE` (60), `RATE_LIMIT_BURST` (100).
-- `CORS_ALLOWED_ORIGINS` (default `*` — the gateway is the public surface).
+- `CORS_ALLOWED_ORIGINS` (default `*` — the gateway is the public surface). Pairing a
+  wildcard origin with `allow_credentials=True` is refused: the shared CORS helper
+  (`shared/utils/cors.py`) forces `allow_credentials=False` whenever origins include `*`,
+  so a cross-origin credentialed request (cookies attached/read back) is never possible
+  even with this wildcard default. Auth here is Bearer-token in the `Authorization`
+  header, not cookies, so this has no effect on normal client usage.
 - `AUTHELIA_ISSUER_URL` / `AUTHELIA_INTERNAL_URL` (OIDC), `MINDER_CLIENT_BASE_URL` (post-login redirect target).
 - Downstream URLs (`MODEL_MANAGEMENT_URL`, …) — the internal service hostnames.
 - Secrets (`DB_PASSWORD` / `REDIS_PASSWORD` / `JWT_SECRET`) from `MinderBaseSettings`, required.
