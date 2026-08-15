@@ -450,6 +450,18 @@ jobs:
           REDIS_PASSWORD: test_password
           JWT_SECRET: test_jwt_secret_for_ci
           NEO4J_AUTH: neo4j/test_password
+          # Several e2e test files each register+login their own throwaway user
+          # (test_auth_regression/test_marketplace_flow/test_marketplace_gateway_
+          # functional/test_rag_pipeline_functional/test_graph_rag_functional, plus
+          # test_chat_tools.py) sharing api-gateway's default RATE_LIMIT_PER_MINUTE=60
+          # budget across the WHOLE e2e run from one CI runner IP -- confirmed live:
+          # a run tipped over that limit (register got a genuine 429), leaving several
+          # later tests' setup fixtures unable to log in at all. This isn't the
+          # scenario RATE_LIMIT_PER_MINUTE exists to guard (a single real client
+          # abusing the gateway); it's CI's own test traffic across many files sharing
+          # one IP. tests/integration/test_api_gateway.py's own rate-limit-blocking
+          # tests run in a separate job (integration-tests) unaffected by this.
+          RATE_LIMIT_PER_MINUTE: "1000"
         run: |
           pytest tests/e2e/ -v \
             --tb=short \
