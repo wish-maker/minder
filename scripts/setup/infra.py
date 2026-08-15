@@ -148,6 +148,21 @@ def _migrate_one_volume(old_name: str, new_name: str, label: str) -> "bool | Non
     log.error(
         f"Failed to migrate volume: {label} — '{old_name}' was NOT copied, do not delete it"
     )
+    # If `create_ok`, `new_name` now exists but is empty/partial. Left alone, the
+    # `docker.volume_exists(new_name)` check at the top of this function would
+    # treat a RETRY of this same migration as "already migrated" and silently
+    # skip it forever -- `compose up` then runs against that empty volume with
+    # no further error, which for real data is operationally equivalent to data
+    # loss (the real data sits untouched in `old_name`, but nothing ever uses it
+    # again and nothing flags this a second time). Clean it up so a retry after
+    # fixing the underlying issue (disk space, alpine pull, permissions) can
+    # actually attempt the copy again.
+    if create_ok:
+        if docker.run("docker", "volume", "rm", new_name) != 0:
+            log.warn(
+                f"Could not remove the empty/partial volume '{new_name}' after the "
+                "failed copy -- remove it manually before retrying this migration."
+            )
     return False
 
 

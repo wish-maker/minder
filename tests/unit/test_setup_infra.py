@@ -98,6 +98,45 @@ def test_migrate_volume_names_aborts_on_failed_copy(monkeypatch, _quiet_log):
     assert errored
 
 
+def test_migrate_one_volume_removes_empty_partial_volume_after_failed_copy(
+    monkeypatch, _quiet_log
+):
+    """Found in a background audit: on a failed copy, the just-created
+    `new_name` volume (empty/partial) used to be left behind. On any later
+    retry, `docker.volume_exists(new_name)` would then report True, so the
+    function's own early-out ("nothing to migrate, or already migrated")
+    would silently skip the migration forever -- `compose up` runs against
+    that empty volume with no further error, operationally equivalent to
+    data loss since the real data sits untouched in `old_name` but nothing
+    ever uses it again."""
+    existing = {"old"}  # old_name exists; new_name does not yet
+    rm_calls = []
+
+    def fake_volume_exists(name):
+        return name in existing
+
+    def fake_run(*cmd, **kwargs):
+        argv = [str(c) for c in cmd]
+        if argv[:3] == ["docker", "volume", "create"]:
+            existing.add(argv[3])
+            return 0
+        if argv[:3] == ["docker", "volume", "rm"]:
+            rm_calls.append(argv[3])
+            existing.discard(argv[3])
+            return 0
+        # the alpine cp step -- force it to fail
+        return 1
+
+    monkeypatch.setattr(infra.docker, "volume_exists", fake_volume_exists)
+    monkeypatch.setattr(infra.docker, "run", fake_run)
+
+    result = infra._migrate_one_volume("old", "new", "old -> new")
+
+    assert result is False
+    assert rm_calls == ["new"]  # cleaned up so a retry can actually re-attempt
+    assert "new" not in existing
+
+
 def test_migrate_volume_names_reports_success_on_real_copy(monkeypatch, _quiet_log):
     monkeypatch.setattr(
         infra.docker,
