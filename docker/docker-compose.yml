@@ -470,6 +470,17 @@ services:
     image: qdrant/qdrant:v1.19
     container_name: minder-qdrant
     restart: on-failure
+    # PILLAR 5 (#379/#649): sized from live hantal profiling -- idle ~725MiB, a
+    # small real upload (8 chunks/vectors) only ~732MiB. This is a LIGHT-load
+    # sample (a live-host command-transport size limit kept the test document
+    # small, ~3KB) -- not a worst-case measurement for a large real collection.
+    # Generous headroom given that uncertainty; revisit if real usage ever
+    # approaches this ceiling (watch for OOM kills, not just this sample).
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2'
     volumes:
     - qdrant_data:/qdrant/storage
     # PILLAR 1: NO exposed ports - Internal network only
@@ -929,6 +940,16 @@ services:
     image: minder/rag-pipeline:1.0.0
     container_name: minder-rag-pipeline
     restart: on-failure
+    # PILLAR 5 (#379/#649): sized from live hantal profiling -- idle ~141MiB, a
+    # small real upload (8 chunks + RAPTOR clustering into 3 tree nodes) only
+    # ~152MiB. Light-load sample (see qdrant's identical caveat above, same
+    # profiling run) -- generous headroom for larger documents/more concurrent
+    # requests than this small test exercised.
+    deploy:
+      resources:
+        limits:
+          memory: 1.5G
+          cpus: '1.5'
     environment:
     - QDRANT_HOST=qdrant
     - QDRANT_PORT=6333
@@ -987,6 +1008,15 @@ services:
     image: minder/model-management:1.0.0
     container_name: minder-model-management
     restart: on-failure
+    # PILLAR 5 (#379/#649): sized from live hantal profiling -- idle ~69MiB.
+    # Idle-only measurement is enough here: this service proxies to Ollama
+    # rather than doing heavy local compute itself (network I/O bound, no
+    # model weights loaded in-process).
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
     environment:
     # POSTGRES_HOST/PORT/USER/PASSWORD/DB removed: model-management's own
     # config.py explicitly documents "talks only to Ollama (no DB/Redis/JWT)"
@@ -1481,6 +1511,17 @@ services:
     image: minder/graph-rag:1.0.0
     container_name: minder-graph-rag
     restart: on-failure
+    # PILLAR 5 (#379/#649): sized from live hantal profiling -- idle ~235MiB
+    # (spaCy's NER model already resident), a real construct-graph call (86
+    # entities/3513 relationships extracted + written to Neo4j from a small
+    # test document) only ~249MiB. Light-load sample (see qdrant's identical
+    # caveat above, same profiling run) -- generous headroom for larger
+    # documents than this small test exercised.
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
     environment:
     - NEO4J_URI=bolt://neo4j:7687
     # NEO4J_USER was here but is dead config: config.py's _neo4j_credentials() only
