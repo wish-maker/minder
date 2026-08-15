@@ -1190,6 +1190,107 @@ async def test_upload_document_passes_within_limit_file_through(monkeypatch):
     }
 
 
+# ── KB count reconciliation vs Qdrant (#629) ───────────────────────────────
+# On a best-effort Postgres save failure the in-memory counts still bumped but
+# Postgres kept the old value; after a restart the stale Postgres row won, so a
+# KB's reported document_count/vector_count silently reverted below what's really
+# in Qdrant. reconcile_kb_counts_from_qdrant heals that on startup, counting leaf
+# chunks only (RAPTOR tree-summary nodes excluded, matching vector_count's meaning).
+
+
+class _FakeScrollClient:
+    """Returns all records in one scroll batch (next_offset -> None). `raises`
+    simulates a KB whose Qdrant collection was never created (nothing uploaded)."""
+
+    def __init__(self, records, raises=False):
+        self._records = records
+        self._raises = raises
+
+    def scroll(self, **kwargs):
+        if self._raises:
+            raise RuntimeError("collection not found")
+        return list(self._records), None
+
+
+def _pt(document_id, tree_level=0, source="doc.txt"):
+    return SimpleNamespace(
+        payload={
+            "document_id": document_id,
+            "tree_level": tree_level,
+            "source": source,
+        }
+    )
+
+
+def _fake_state(records, saves, pg_available=True, raises=False):
+    async def save_kb_to_postgres(kb_id, kb):
+        saves.append((kb_id, dict(kb)))
+
+    return SimpleNamespace(
+        get_qdrant_client=lambda: _FakeScrollClient(records, raises=raises),
+        PG_AVAILABLE=pg_available,
+        save_kb_to_postgres=save_kb_to_postgres,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_corrects_drift_and_persists(monkeypatch):
+    # Qdrant has 3 leaf chunks for one document (+1 tree node that must NOT count).
+    records = [_pt("d1"), _pt("d1"), _pt("d1"), _pt("d1", tree_level=1)]
+    saves = []
+    monkeypatch.setattr(ingestion, "state", _fake_state(records, saves))
+
+    kbs = {"kb-1": {"document_count": 0, "vector_count": 0}}
+    fixed = await ingestion.reconcile_kb_counts_from_qdrant(kbs)
+
+    assert fixed == 1
+    assert kbs["kb-1"]["document_count"] == 1
+    assert kbs["kb-1"]["vector_count"] == 3  # tree node excluded
+    assert saves == [("kb-1", {"document_count": 1, "vector_count": 3})]
+
+
+@pytest.mark.asyncio
+async def test_reconcile_noop_when_counts_already_match(monkeypatch):
+    records = [_pt("d1"), _pt("d1"), _pt("d1")]
+    saves = []
+    monkeypatch.setattr(ingestion, "state", _fake_state(records, saves))
+
+    kbs = {"kb-1": {"document_count": 1, "vector_count": 3}}
+    fixed = await ingestion.reconcile_kb_counts_from_qdrant(kbs)
+
+    assert fixed == 0
+    assert saves == []  # no write when nothing drifted
+
+
+@pytest.mark.asyncio
+async def test_reconcile_skips_kb_with_missing_collection(monkeypatch):
+    saves = []
+    monkeypatch.setattr(ingestion, "state", _fake_state([], saves, raises=True))
+
+    kbs = {"kb-1": {"document_count": 5, "vector_count": 42}}
+    fixed = await ingestion.reconcile_kb_counts_from_qdrant(kbs)
+
+    assert fixed == 0
+    assert kbs["kb-1"] == {"document_count": 5, "vector_count": 42}  # untouched
+    assert saves == []
+
+
+@pytest.mark.asyncio
+async def test_reconcile_does_not_persist_when_pg_unavailable(monkeypatch):
+    records = [_pt("d1"), _pt("d1")]
+    saves = []
+    monkeypatch.setattr(
+        ingestion, "state", _fake_state(records, saves, pg_available=False)
+    )
+
+    kbs = {"kb-1": {"document_count": 0, "vector_count": 0}}
+    fixed = await ingestion.reconcile_kb_counts_from_qdrant(kbs)
+
+    assert fixed == 1  # in-memory corrected...
+    assert kbs["kb-1"]["vector_count"] == 2
+    assert saves == []  # ...but no Postgres write attempted
+
+
 # ── delete_document: legacy delete must not sweep up a document_id-tagged
 # re-upload sharing the same filename ────────────────────────────────────────
 
