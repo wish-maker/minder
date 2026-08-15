@@ -992,6 +992,28 @@ async def test_ingest_document_invalidates_hybrid_cache(monkeypatch):
     assert "kb-1" not in retrieval._hybrid.documents
 
 
+@pytest.mark.asyncio
+async def test_list_documents_requests_tree_level_in_payload(monkeypatch):
+    """list_documents must scroll WITH tree_level so group_documents can exclude
+    RAPTOR tree-summary nodes; without it tree nodes inflate chunk_count (#694)."""
+    captured = {}
+
+    class _FakeQdrantClient:
+        def scroll(self, **kwargs):
+            captured.update(kwargs)
+            return [], None
+
+    fake_state = SimpleNamespace(
+        knowledge_bases={"kb-1": {}},
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+    )
+    monkeypatch.setattr(rag_routes, "state", fake_state)
+
+    await rag_routes.list_documents("kb-1")
+
+    assert "tree_level" in captured["with_payload"]
+
+
 def test_group_documents_groups_by_document_id():
     class _Record:
         def __init__(self, payload):
