@@ -26,6 +26,25 @@ to "Restore complete" having restored nothing; and every per-store step now
 tracks into a `skipped` list (container not running, or the restore itself
 failed) that is surfaced in the final summary line — mirroring backup.py's own
 `skipped` list for the same "silent partial success" failure mode (#177).
+
+Every store now brought up if needed (fixed, background audit): #288's fix
+above only ever recreated the network + `compose up`'d postgres specifically.
+`restore`'s own documented precondition is "services must be stopped" (and the
+documented recovery runbook does exactly `stop` then `restore`) -- so every
+OTHER store's container was never running either, and each was silently added
+to the `skipped` list every single time, not as an edge case but as the
+default outcome of following the documented procedure. `_ensure_running()`
+generalizes the postgres fix to Neo4j/InfluxDB/Qdrant/MinIO/RabbitMQ.
+
+Archive extraction is now traversal-safe on every Python version (fixed,
+background audit): the pre-3.12 fallback (`filter="data"` needs Python >=3.12,
+missing on the Pi's actual 3.11.2) used to be a fully unfiltered
+`tf.extractall()` -- but the archive being restored is read from a
+caller-supplied path, not guaranteed to be an untampered backup.py-produced
+artifact (the docs' own recommended off-site rsync copy could be tampered
+with or corrupted in transit). `_safe_extractall()` manually rejects any
+member (or symlink/hardlink target) that would land outside the destination
+directory, on every Python version, not just >=3.12.
 """
 
 import re
@@ -112,6 +131,62 @@ def _restore_postgres(sql_file: Path) -> bool:
         return False
 
 
+def _ensure_running(service: str) -> None:
+    """Bring `service` up if a restore step needs it but it isn't running --
+    generalizes the postgres-only "recreate the network + compose up" fix
+    below (#288) to every other datastore. Without this, restore's own
+    documented precondition ("services must be stopped") means EVERY other
+    store's restore step always finds its container not running and reports
+    itself skipped -- not an edge case, the default outcome of the documented
+    recovery procedure (`stop` then `restore`). DRY_RUN skips the health wait
+    the same way the postgres block already does, keeping a dry run
+    non-blocking."""
+    if docker.container_running(service):
+        return
+    infra.create_networks()
+    docker.compose("up", "-d", service)
+    if not config.DRY_RUN:
+        docker.wait_healthy(service)
+
+
+def _safe_extract_members(tf: tarfile.TarFile, dest: Path) -> list:
+    """Manual equivalent of PEP 706's `filter="data"` traversal protection,
+    for Python <3.12 where the `filter` kwarg doesn't exist at all (found
+    live on the Pi's actual 3.11.2, no backport) -- rejects any member whose
+    extracted path (or, for a symlink/hardlink, whose link target) would land
+    outside `dest`. The archive being restored isn't guaranteed to be a
+    backup.py-produced artifact -- it's read from a caller-supplied path, and
+    the docs' own recommended off-site rsync copy could be tampered with or
+    corrupted in transit -- so falling back to a fully unfiltered extractall()
+    here would let a crafted member write anywhere this process (root, via
+    cron) has permission to."""
+    safe_root = dest.resolve()
+    safe_members = []
+    for member in tf.getmembers():
+        member_path = (dest / member.name).resolve()
+        if member_path != safe_root and safe_root not in member_path.parents:
+            log.warn(f"Skipping unsafe archive member (path escape): {member.name}")
+            continue
+        if member.issym() or member.islnk():
+            link_target = (member_path.parent / member.linkname).resolve()
+            if link_target != safe_root and safe_root not in link_target.parents:
+                log.warn(f"Skipping unsafe archive member (link escape): {member.name}")
+                continue
+        safe_members.append(member)
+    return safe_members
+
+
+def _safe_extractall(tf: tarfile.TarFile, dest: Path) -> None:
+    """extractall() that always applies traversal protection, on every
+    supported Python version -- see _safe_extract_members for why the
+    pre-3.12 fallback can't just be an unfiltered extractall()."""
+    try:
+        tf.extractall(dest, filter="data")
+    except TypeError:
+        dest.mkdir(parents=True, exist_ok=True)
+        tf.extractall(dest, members=_safe_extract_members(tf, dest))
+
+
 def _run_bare(argv: list[str], *, stderr_null: bool = False) -> int:
     """A bare `docker …` call whose RESULT is checked (so it can't go through the
     echo-only seam) — only invoked on the real (non-DRY_RUN) path. `stderr_null`
@@ -194,16 +269,7 @@ def run(archive: str = "") -> int:
     log.spinner_start("Extracting archive…")
     try:
         with tarfile.open(archive, "r:gz") as tf:
-            try:
-                tf.extractall(tmp_dir, filter="data")
-            except TypeError:
-                # PEP 706's `filter` kwarg needs Python >=3.12 (or a backported
-                # patch release) -- found live on the Pi (3.11.2, no backport),
-                # which crashed every restore with an unhandled TypeError
-                # instead of ever reaching the corrupt-archive handling below.
-                # These are our own backup archives, not untrusted uploads, so
-                # falling back to the pre-3.12 unfiltered extract is fine.
-                tf.extractall(tmp_dir)
+            _safe_extractall(tf, tmp_dir)
     except (OSError, tarfile.TarError):
         pass  # bash's `tar xzf` is unguarded too; a bad archive leaves restore_dir empty
     log.spinner_stop()
@@ -289,6 +355,8 @@ def run(archive: str = "") -> int:
     # container from its own $NEO4J_AUTH (never on the host cmdline). Assumes a
     # fresh/empty graph (the export uses CREATE, not MERGE) — matches the
     # "OVERWRITE current data" contract above.
+    if restore_dir and (restore_dir / "neo4j.cypher").is_file():
+        _ensure_running("neo4j")
     if (
         restore_dir
         and (restore_dir / "neo4j.cypher").is_file()
@@ -330,6 +398,8 @@ def run(archive: str = "") -> int:
     # Symmetric to the backup snapshot: copy the tar in and extract to / so
     # /var/lib/influxdb3 is repopulated. Restart influxdb afterwards (the start
     # step the final message points to) so it re-opens the restored data dir.
+    if restore_dir and (restore_dir / "influxdb.tar.gz").is_file():
+        _ensure_running("influxdb")
     if (
         restore_dir
         and (restore_dir / "influxdb.tar.gz").is_file()
@@ -368,6 +438,8 @@ def run(archive: str = "") -> int:
         skipped.append("InfluxDB")
 
     # ── Qdrant (#56: copy in AND extract the same /tmp/qdrant.tar.gz) ──────
+    if restore_dir and (restore_dir / "qdrant.tar.gz").is_file():
+        _ensure_running("qdrant")
     if (
         restore_dir
         and (restore_dir / "qdrant.tar.gz").is_file()
@@ -404,6 +476,8 @@ def run(archive: str = "") -> int:
     # for restore either. Extraction happens host-side via Python tarfile
     # (binary-free), then the extracted tree is pushed INTO the container with
     # `docker cp`, which needs no binary inside the target container) ────────
+    if restore_dir and (restore_dir / "minio.tar.gz").is_file():
+        _ensure_running("minio")
     if (
         restore_dir
         and (restore_dir / "minio.tar.gz").is_file()
@@ -415,10 +489,7 @@ def run(archive: str = "") -> int:
         ok = False
         try:
             with tarfile.open(restore_dir / "minio.tar.gz", "r:gz") as tf:
-                try:
-                    tf.extractall(minio_extract, filter="data")
-                except TypeError:
-                    tf.extractall(minio_extract)
+                _safe_extractall(tf, minio_extract)
             minio_raw = minio_extract / "minio_data_raw"
             # Trailing "/." tells `docker cp` to copy the source dir's
             # CONTENTS into /data, not nest a "minio_data_raw" subdirectory.
@@ -440,6 +511,8 @@ def run(archive: str = "") -> int:
         skipped.append("MinIO")
 
     # ── RabbitMQ definitions ──────────────────────────────────────────────
+    if restore_dir and (restore_dir / "rabbitmq-definitions.json").is_file():
+        _ensure_running("rabbitmq")
     if (
         restore_dir
         and (restore_dir / "rabbitmq-definitions.json").is_file()
