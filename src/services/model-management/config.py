@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     # Ollama runtime host. Empty/remote handling matches the platform's
     # OLLAMA_HOST convention (see docs); default targets the internal container.
     OLLAMA_HOST: str = "http://ollama:11434"
+    # Caps concurrent `POST /v1/models` pulls (#679): each pull can be many GB
+    # with zero disk-space check, so unbounded concurrent pulls race to fill
+    # the shared Ollama volume and can take down inference for everyone. 1
+    # serializes pulls entirely -- the simplest safe default when custom
+    # registries/multi-pull throughput aren't an established need.
+    MAX_CONCURRENT_MODEL_PULLS: int = 1
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

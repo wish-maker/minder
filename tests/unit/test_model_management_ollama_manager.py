@@ -18,6 +18,7 @@ process). shared.ai.ollama_client_base is patched directly -- that's where
 OllamaManager's inherited initialize() actually looks up AsyncClient/OLLAMA_AVAILABLE.
 """
 
+import asyncio
 import importlib
 import sys
 from pathlib import Path
@@ -132,6 +133,50 @@ async def test_pull_model_reraises_the_original_failure(patched_client):
     mgr.client.pull = AsyncMock(side_effect=RuntimeError("registry down"))
     with pytest.raises(RuntimeError, match="registry down"):
         await mgr.pull_model("llama3.2:latest")
+
+
+async def _concurrency_tracking_pull(concurrency, model, stream=False):
+    concurrency["current"] += 1
+    concurrency["max"] = max(concurrency["max"], concurrency["current"])
+    await asyncio.sleep(0)  # yield so overlapping calls actually interleave
+    concurrency["current"] -= 1
+    return {"status": "success"}
+
+
+@pytest.mark.asyncio
+async def test_pull_model_serializes_concurrent_calls_by_default(patched_client):
+    """#679: MAX_CONCURRENT_MODEL_PULLS defaults to 1 -- concurrent pulls must
+    never actually overlap, so N parallel large downloads can't race to fill
+    the shared Ollama volume."""
+    mgr = _manager()
+    await mgr._ensure_initialized()
+    concurrency = {"current": 0, "max": 0}
+    mgr.client.pull = lambda model, stream=False: _concurrency_tracking_pull(
+        concurrency, model, stream
+    )
+
+    await asyncio.gather(mgr.pull_model("a"), mgr.pull_model("b"), mgr.pull_model("c"))
+
+    assert concurrency["max"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pull_model_semaphore_allows_up_to_the_configured_limit(
+    patched_client,
+):
+    """The cap is a real concurrency limit, not accidental full serialization
+    -- raising it allows that many pulls to genuinely overlap."""
+    mgr = _manager()
+    await mgr._ensure_initialized()
+    mgr._pull_semaphore = asyncio.Semaphore(2)
+    concurrency = {"current": 0, "max": 0}
+    mgr.client.pull = lambda model, stream=False: _concurrency_tracking_pull(
+        concurrency, model, stream
+    )
+
+    await asyncio.gather(mgr.pull_model("a"), mgr.pull_model("b"), mgr.pull_model("c"))
+
+    assert concurrency["max"] == 2
 
 
 @pytest.mark.asyncio
