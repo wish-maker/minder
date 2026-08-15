@@ -46,3 +46,19 @@ def test_unsupported_language_still_rejected():
     models = _load_models()
     with pytest.raises(ValidationError):
         models.TTSRequest(text="hi", language="zz")
+
+
+def test_text_over_max_length_rejected():
+    """Neither Piper nor gTTS has a size ceiling of its own -- without this,
+    an unbounded `text` field is synthesized in full regardless of size,
+    consuming a to_thread worker and unbounded memory for as long as that
+    takes."""
+    models = _load_models()
+    with pytest.raises(ValidationError):
+        models.TTSRequest(text="x" * (models.settings.TTS_MAX_TEXT_LENGTH + 1))
+
+
+def test_text_at_max_length_accepted():
+    models = _load_models()
+    req = models.TTSRequest(text="x" * models.settings.TTS_MAX_TEXT_LENGTH)
+    assert len(req.text) == models.settings.TTS_MAX_TEXT_LENGTH

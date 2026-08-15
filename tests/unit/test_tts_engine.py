@@ -232,3 +232,51 @@ def test_load_piper_caches_separately_per_voice(monkeypatch):
         female = _mod._load_piper("en", "female")
     assert male is not female
     assert fake_load.call_count == 2
+
+
+def test_synthesize_gtts_cleans_up_temp_file_even_when_save_fails(
+    monkeypatch, tmp_path
+):
+    """Regression guard: tts.save() is a network call to Google Translate that
+    can raise (DNS failure, rate-limiting, any outage) -- the temp file is
+    created (delete=False) BEFORE that call, so cleanup must be in a
+    try/finally around the whole lifecycle, not just the read. It used to
+    only wrap the read, leaking one file into /tmp per failed gTTS call."""
+    created_path = {}
+
+    class _FakeTempFile:
+        def __init__(self, path):
+            self.name = path
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_named_temp_file(delete, suffix):
+        path = str(tmp_path / f"fake{suffix}")
+        # Simulate NamedTemporaryFile actually creating the file on disk.
+        open(path, "wb").close()
+        created_path["path"] = path
+        return _FakeTempFile(path)
+
+    monkeypatch.setattr(_mod.tempfile, "NamedTemporaryFile", fake_named_temp_file)
+
+    class _FakeGTTSRaises:
+        def __init__(self, **kwargs):
+            pass
+
+        def save(self, path):
+            raise RuntimeError("Google Translate unreachable")
+
+    # gtts isn't installed in every environment this test suite runs in
+    # (GTTS_AVAILABLE gates real use, same pattern as OLLAMA_AVAILABLE
+    # elsewhere) -- raising=False allows setting an attribute that may not
+    # exist on the module yet.
+    monkeypatch.setattr(_mod, "gTTS", _FakeGTTSRaises, raising=False)
+
+    with pytest.raises(RuntimeError, match="Google Translate unreachable"):
+        _mod._synthesize_gtts("hello", "en", False)
+
+    assert not Path(created_path["path"]).exists()  # cleaned up despite the failure
