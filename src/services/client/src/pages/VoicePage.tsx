@@ -134,12 +134,23 @@ function TextToSpeechCard({
   // refetch whenever the selected language changes, and reset the current
   // pick so a voice id from the PREVIOUS language never gets sent silently
   // alongside a new one.
+  //
+  // Stale-response guard: rapidly switching languages before an earlier
+  // request resolves could otherwise let an out-of-order response overwrite
+  // `voices` with the wrong language's list, letting the user pick a voice ID
+  // that gets sent alongside a mismatched `language` in the POST /v1/tts body.
+  const voicesRequestRef = useRef(0);
   useEffect(() => {
     if (!language) return;
     setVoice("");
+    const requestId = ++voicesRequestRef.current;
     apiFetch<VoicesResponse>(`/v1/tts/voices?language=${encodeURIComponent(language)}`)
-      .then((res) => setVoices(res.voices))
-      .catch(() => setVoices([]));
+      .then((res) => {
+        if (voicesRequestRef.current === requestId) setVoices(res.voices);
+      })
+      .catch(() => {
+        if (voicesRequestRef.current === requestId) setVoices([]);
+      });
   }, [language]);
 
   useEffect(() => {

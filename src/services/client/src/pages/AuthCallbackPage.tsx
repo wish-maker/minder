@@ -14,11 +14,24 @@ export function AuthCallbackPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const match = window.location.hash.match(/token=([^&]+)/);
-    if (match) {
-      loginWithToken(decodeURIComponent(match[1]));
+    const hash = window.location.hash;
+    const tokenMatch = hash.match(/token=([^&]+)/);
+    if (tokenMatch) {
+      loginWithToken(decodeURIComponent(tokenMatch[1]));
+      navigate("/", { replace: true });
+      return;
     }
-    navigate("/", { replace: true });
+    // A real OIDC failure (denied consent, expired auth code, misconfigured
+    // client, ...) redirects back with `#error=...&error_description=...`
+    // instead of a token -- this used to fall straight through to
+    // navigate("/") with zero indication anything went wrong. Surface it on
+    // the login page instead of silently landing logged-out.
+    const errorMatch =
+      hash.match(/error_description=([^&]+)/) || hash.match(/error=([^&]+)/);
+    const message = errorMatch
+      ? decodeURIComponent(errorMatch[1].replace(/\+/g, " "))
+      : "Sign-in did not complete — please try again.";
+    navigate("/login", { replace: true, state: { oidcError: message } });
     // Runs once on mount -- loginWithToken/navigate are stable (useCallback/
     // react-router), and re-running this on their identity would re-read a
     // hash that's already been consumed.

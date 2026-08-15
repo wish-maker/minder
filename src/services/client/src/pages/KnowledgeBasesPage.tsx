@@ -464,6 +464,7 @@ function CreateKbForm({
   const [chunkOverlap, setChunkOverlap] = useState("");
   const [status, setStatus] = useState("");
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     // Free-text model-name inputs made a user guess/copy-paste an exact
@@ -482,6 +483,7 @@ function CreateKbForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (creating) return; // already in flight -- ignore a double-click/tap
     if (!name.trim()) {
       setStatus("Name is required.");
       return;
@@ -493,6 +495,7 @@ function CreateKbForm({
     if (chunkSize) body.chunk_size = parseInt(chunkSize, 10);
     if (chunkOverlap) body.chunk_overlap = parseInt(chunkOverlap, 10);
 
+    setCreating(true);
     setStatus("Creating…");
     try {
       const kb = await apiFetch<KnowledgeBase>("/v1/rag/knowledge-bases", {
@@ -511,6 +514,8 @@ function CreateKbForm({
       setTimeout(() => setStatus(""), 2000);
     } catch (e) {
       setStatus(friendlyErrorMessage(e));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -521,7 +526,7 @@ function CreateKbForm({
       </h2>
       <form onSubmit={handleSubmit}>
         <fieldset
-          disabled={!token}
+          disabled={!token || creating}
           className="grid grid-cols-1 gap-3 sm:grid-cols-2"
         >
           <div className="sm:col-span-2">
