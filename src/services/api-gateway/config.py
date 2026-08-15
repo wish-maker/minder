@@ -26,6 +26,16 @@ class Settings(MinderBaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     RATE_LIMIT_BURST: int = 100
 
+    # register/login's own per-IP rate limit (routes/auth.py's enforce_rate_limit
+    # decorator) is separate from RATE_LIMIT_PER_MINUTE above (a different,
+    # stricter, anti-brute-force limit keyed on IP+path, not the general gateway
+    # middleware) -- was a hardcoded decorator literal with no env override at
+    # all. Confirmed live: raising RATE_LIMIT_PER_MINUTE alone did nothing for
+    # e2e CI's many test files each registering their own throwaway user from
+    # the same runner IP, since this is the limiter that actually 429'd. Default
+    # unchanged from the prior hardcoded value; CI overrides it, production doesn't.
+    AUTH_RATE_LIMIT_PER_MINUTE: int = 10
+
     # Application
     API_VERSION: str = "v1"
     APP_VERSION: str = "1.0.0"

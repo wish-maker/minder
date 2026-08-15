@@ -19,9 +19,35 @@ plugin-registry actually advertised it, not because the test faked it up.
 """
 
 import httpx
+import pytest
 
 
-def test_plain_chat_without_tools_is_single_passthrough(live_stack):
+@pytest.fixture(scope="module")
+def auth_token(live_stack):
+    """Register + log in a throwaway user through the REAL gateway (#613:
+    chat/completions now requires a valid JWT, same auth_token pattern as
+    test_marketplace_flow.py)."""
+    username = "e2e-chat-tools-user"
+    password = "TestPass123!"
+    httpx.post(
+        f"{live_stack.gateway_url}/v1/auth/register",
+        json={
+            "username": username,
+            "email": f"{username}@example.com",
+            "password": password,
+        },
+        timeout=15.0,
+    )
+    r = httpx.post(
+        f"{live_stack.gateway_url}/v1/auth/login",
+        json={"username": username, "password": password},
+        timeout=15.0,
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["access_token"]
+
+
+def test_plain_chat_without_tools_is_single_passthrough(live_stack, auth_token):
     """minder_tools omitted (default False) -- exactly one real /api/chat
     round-trip, byte-identical passthrough, no tool dispatch at all."""
     live_stack.queue_chat_responses(
@@ -33,6 +59,7 @@ def test_plain_chat_without_tools_is_single_passthrough(live_stack):
             "model": "llama3.2:latest",
             "messages": [{"role": "user", "content": "hi"}],
         },
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=15.0,
     )
     assert resp.status_code == 200
@@ -45,7 +72,7 @@ def test_plain_chat_without_tools_is_single_passthrough(live_stack):
     assert "minder_tool_calls_made" not in body
 
 
-def test_native_tool_calls_dispatches_to_real_plugin_registry(live_stack):
+def test_native_tool_calls_dispatches_to_real_plugin_registry(live_stack, auth_token):
     """First scripted response carries a native `tool_calls` entry naming a
     REAL tool (get_crypto_price, backed by the real crypto plugin's real
     get_price action). The loop must: fetch real tool defs from
@@ -76,6 +103,7 @@ def test_native_tool_calls_dispatches_to_real_plugin_registry(live_stack):
             "messages": [{"role": "user", "content": "price of bitcoin?"}],
             "minder_tools": True,
         },
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=20.0,
     )
     assert resp.status_code == 200
@@ -85,7 +113,9 @@ def test_native_tool_calls_dispatches_to_real_plugin_registry(live_stack):
     assert body["minder_tool_calls_made"] == 1
 
 
-def test_content_embedded_tool_call_fallback_dispatches_real_tool(live_stack):
+def test_content_embedded_tool_call_fallback_dispatches_real_tool(
+    live_stack, auth_token
+):
     """#250: no native tool_calls, but message.content IS a bare JSON object
     naming a real tool. Only resolves to a tool call because meta_by_name was
     populated from a REAL plugin-registry response -- a strong structural
@@ -110,6 +140,7 @@ def test_content_embedded_tool_call_fallback_dispatches_real_tool(live_stack):
             "messages": [{"role": "user", "content": "price of bitcoin?"}],
             "minder_tools": True,
         },
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=20.0,
     )
     assert resp.status_code == 200
@@ -119,7 +150,9 @@ def test_content_embedded_tool_call_fallback_dispatches_real_tool(live_stack):
     assert body["minder_tool_calls_made"] == 1
 
 
-def test_content_that_only_looks_like_a_tool_call_is_not_dispatched(live_stack):
+def test_content_that_only_looks_like_a_tool_call_is_not_dispatched(
+    live_stack, auth_token
+):
     """JSON-shaped content naming a tool that plugin-registry never actually
     advertised must NOT be treated as a tool call -- only one real /api/chat
     round-trip happens, and the (single) queued response is returned as-is.
@@ -135,6 +168,7 @@ def test_content_that_only_looks_like_a_tool_call_is_not_dispatched(live_stack):
             "messages": [{"role": "user", "content": "do something"}],
             "minder_tools": True,
         },
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=15.0,
     )
     assert resp.status_code == 200
