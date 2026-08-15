@@ -6,6 +6,7 @@ model list/pull/show/delete/test operations; main.py wires it into the FastAPI a
 and injects it into routes/models_api.py.
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List
 
@@ -35,6 +36,10 @@ class OllamaManager(OllamaClientBase):
 
     def __init__(self):
         super().__init__(host=OLLAMA_HOST)
+        # Bounds concurrent pulls (#679): each pull can be many GB with zero
+        # disk-space check -- unbounded concurrent pulls race to fill the
+        # shared Ollama volume, which can take down inference for everyone.
+        self._pull_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_MODEL_PULLS)
 
     async def list_models(self) -> List[Dict[str, Any]]:
         """List all models from Ollama"""
@@ -58,16 +63,21 @@ class OllamaManager(OllamaClientBase):
         """Pull/download a model from Ollama library"""
         await self._ensure_initialized()
 
-        try:
-            logger.info(f"Pulling model: {model_id}")
-            assert self.client is not None
-            response = await self.client.pull(model=model_id, stream=False)
-            return {"model": model_id, "status": "pulled", "details": response}
-        except Exception as e:
-            logger.error(f"❌ Failed to pull model {model_id}: {e}")
-            # See list_models: re-raise as-is so backend_http_error sanitizes it
-            # at the route layer instead of leaking the raw Ollama error (#680).
-            raise
+        # Serializes pulls per MAX_CONCURRENT_MODEL_PULLS (#679) -- callers
+        # queue here instead of racing straight into the Ollama client, which
+        # had no concurrency limit at all.
+        async with self._pull_semaphore:
+            try:
+                logger.info(f"Pulling model: {model_id}")
+                assert self.client is not None
+                response = await self.client.pull(model=model_id, stream=False)
+                return {"model": model_id, "status": "pulled", "details": response}
+            except Exception as e:
+                logger.error(f"❌ Failed to pull model {model_id}: {e}")
+                # See list_models: re-raise as-is so backend_http_error sanitizes
+                # it at the route layer instead of leaking the raw Ollama error
+                # (#680).
+                raise
 
     async def show_model(self, model_id: str) -> Dict[str, Any]:
         """Show detailed information about a model"""
