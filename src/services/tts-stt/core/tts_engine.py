@@ -16,6 +16,7 @@ import io
 import logging
 import os
 import tempfile
+import threading
 import wave
 from typing import Any, Dict, Optional, Tuple
 
@@ -45,7 +46,14 @@ except ImportError:
 TTS_AVAILABLE = GTTS_AVAILABLE or PIPER_AVAILABLE
 
 # Loaded PiperVoice instances, cached per language (loading the ONNX is expensive).
+# `synthesize()` runs via asyncio.to_thread, so concurrent requests can call
+# _load_piper from separate real OS threads -- a bare check-then-set on a plain
+# dict lets two concurrent first-use requests for the same voice both miss the
+# cache and both pay for a full PiperVoice.load(), wasting CPU/RAM on a Pi-class
+# host. threading.Lock (not asyncio.Lock, which isn't meaningful across threads)
+# guards the check-and-populate below.
 _piper_cache: Dict[str, Any] = {}
+_piper_cache_lock = threading.Lock()
 
 
 def _resolve_voice_id(language: str, voice: Optional[str]) -> Optional[str]:
@@ -78,12 +86,17 @@ def _piper_voice_path(language: str, voice: Optional[str]) -> Optional[str]:
 
 def _load_piper(language: str, voice: Optional[str]) -> Optional[Any]:
     cache_key = f"{language}:{_resolve_voice_id(language, voice)}"
-    if cache_key not in _piper_cache:
-        path = _piper_voice_path(language, voice)
-        if not path:
-            return None
-        _piper_cache[cache_key] = PiperVoice.load(path)
-    return _piper_cache[cache_key]
+    if cache_key in _piper_cache:
+        return _piper_cache[cache_key]
+    with _piper_cache_lock:
+        # Re-check inside the lock: another thread may have already finished
+        # loading this exact voice while we were waiting to acquire it.
+        if cache_key not in _piper_cache:
+            path = _piper_voice_path(language, voice)
+            if not path:
+                return None
+            _piper_cache[cache_key] = PiperVoice.load(path)
+        return _piper_cache[cache_key]
 
 
 def list_voices(language: str) -> list:
