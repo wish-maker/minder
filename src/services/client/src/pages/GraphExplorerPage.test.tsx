@@ -5,7 +5,7 @@ import { GraphExplorerPage } from "./GraphExplorerPage";
 
 // apiFetch is dispatched by request path: stats/documents fire on mount (via
 // useAsyncResource), and /graph/search is the new "Find entities" endpoint (#701).
-const apiFetch = vi.fn(async (path: string) => {
+const apiFetch = vi.fn(async (path: string, _opts?: unknown) => {
   if (path.includes("/graph/stats")) {
     return {
       success: true,
