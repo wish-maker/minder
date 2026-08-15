@@ -67,6 +67,29 @@ class EntityContextRequest(BaseModel):
     )
 
 
+class GraphSearchRequest(BaseModel):
+    """Request model for free-text entity search over the knowledge graph."""
+
+    query: str = Field(
+        ..., min_length=1, description="Text matched against entity text and label"
+    )
+    limit: int = Field(
+        default=5, ge=1, le=50, description="Maximum number of entities to return"
+    )
+
+
+class GraphSearchResponse(BaseModel):
+    """Response model for graph entity search."""
+
+    success: bool
+    query: str
+    entities: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Matching entities (text/label/description)",
+    )
+    entity_count: int
+
+
 class EntityExtractionResponse(BaseModel):
     """Response model for entity extraction"""
 

@@ -107,7 +107,7 @@ misleading 504 well before the backend actually finished.
 | ANY | `/v1/graph/{path:path}` | marketplace's plugin dependency/conflict/recommendation graph — a second, disjoint route namespace the same service exposes (#402) |
 | GET/POST | `/v1/tts`, `/v1/tts/{path:path}` | tts-stt (writes require JWT). `POST /v1/tts` returns binary WAV/MP3 audio, not JSON — the proxy passes non-JSON bodies through raw instead of force-decoding them. **long-timeout** |
 | GET/POST | `/v1/stt`, `/v1/stt/{path:path}` | tts-stt (writes require JWT) — `POST /v1/stt` is a multipart audio upload. **long-timeout** |
-| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/stats`, `graph/documents`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT). **long-timeout** |
+| ANY | `/v1/graph-rag/{path:path}` | graph-rag's own `/v1/*` routes (`extract`, `construct-graph`, `retrieve`, `entity-context`, `graph/search`, `graph/stats`, `graph/documents`, `graph/document/{id}`), which are unprefixed at the service — the gateway adds the `graph-rag/` segment so this doesn't collide with marketplace's own `/v1/graph/*` proxy above (writes require JWT). **long-timeout** |
 | GET | `/v1/tools` | plugin-state-manager (tool discovery, list) |
 | GET/POST | `/v1/tools/{path:path}` | plugin-state-manager (tool detail, `.../execute`, license `validate`) — a deliberately separate prefix from `/v1/plugins/{path:path}` above so the two services' plugin-adjacent APIs don't collide at the gateway (writes require JWT; `execute` is also independently JWT-gated inside plugin-state-manager itself) |
 
@@ -528,6 +528,7 @@ Every route below also has a legacy unversioned alias kept for compatibility
 | POST | `/v1/construct-graph` | Build a Neo4j knowledge graph from documents/entities (idempotent — Cypher `MERGE`, so re-posting the same `document_id` upserts rather than duplicating) |
 | POST | `/v1/retrieve` | Graph-based retrieval over entity relationships |
 | POST | `/v1/entity-context` | Retrieve context / neighbors around an entity |
+| POST | `/v1/graph/search` | Free-text search the graph for entities whose `text` or `label` matches `query` (case-insensitive `CONTAINS`); returns `{text, label, description}` per hit, `limit` 1–50 (default 5) |
 | GET | `/v1/graph/stats` | Graph overview — total node / relationship / document / entity counts + the per-NER-label entity distribution (`entity_types`); confirms a `construct-graph` populated the graph. Open read |
 | GET | `/v1/graph/documents` | List the Document nodes (id / title / source / created_at / entity_count), newest first — browse what's built. Open read |
 | DELETE | `/v1/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |

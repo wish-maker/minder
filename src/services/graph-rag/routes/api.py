@@ -19,6 +19,8 @@ from models.schemas import (
     GraphDocumentsResponse,
     GraphRetrievalRequest,
     GraphRetrievalResponse,
+    GraphSearchRequest,
+    GraphSearchResponse,
     GraphStatsResponse,
     KnowledgeGraphRequest,
     KnowledgeGraphResponse,
@@ -278,6 +280,29 @@ async def get_entity_context_handler(
         raise backend_http_error(e, "Entity context retrieval")
 
 
+async def graph_search_handler(
+    request: GraphSearchRequest, graph_retriever: GraphRetriever
+) -> GraphSearchResponse:
+    """Handle free-text entity search over the knowledge graph.
+
+    Exposes GraphRetriever.graph_search, which was implemented but wired to no route
+    — a ready capability for "search the graph for entities matching X" (matches on
+    entity text OR label, case-insensitive)."""
+    try:
+        entities = await graph_retriever.graph_search(
+            request.query, limit=request.limit
+        )
+        return GraphSearchResponse(
+            success=True,
+            query=request.query,
+            entities=entities,
+            entity_count=len(entities),
+        )
+    except Exception as e:  # graph_search itself swallows errors → []; defensive
+        logger.error(f"❌ Graph search failed: {e}")
+        raise backend_http_error(e, "Graph search")
+
+
 def build_graph_router(
     *,
     entity_extractor: EntityExtractor,
@@ -432,5 +457,22 @@ def build_graph_router(
         non-GET clients (#147).
         """
         return await get_entity_context_handler(request, graph_retriever)
+
+    @router.post(
+        "/v1/graph/search",
+        response_model=GraphSearchResponse,
+        tags=["Knowledge Graph"],
+    )
+    @router.post(
+        "/graph/search",
+        response_model=GraphSearchResponse,
+        tags=["Knowledge Graph"],
+        include_in_schema=False,  # deprecated unversioned alias
+    )
+    async def graph_search(request: GraphSearchRequest):
+        """Free-text search the knowledge graph for entities whose text or label
+        matches the query (case-insensitive). Exposes the previously-unwired
+        GraphRetriever.graph_search capability."""
+        return await graph_search_handler(request, graph_retriever)
 
     return router
