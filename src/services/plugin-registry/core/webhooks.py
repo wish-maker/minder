@@ -12,6 +12,8 @@ from core.database import load_all_plugin_manifests, save_plugin_manifest
 from core.state import logger, plugin_manifests, plugins_db, webhook_routes
 from fastapi import HTTPException, Request
 
+from config import settings
+
 
 async def register_plugin_webhook(plugin_name: str, manifest: Dict):
     """
@@ -74,6 +76,21 @@ async def handle_webhook_request(webhook_path: str, request: Request) -> Dict:
     if not manifest:
         raise HTTPException(
             status_code=500, detail=f"Plugin {plugin_name} manifest not loaded"
+        )
+
+    # Bound the request body before parsing it (#640): this endpoint triggers real
+    # work (embedding generation + Qdrant writes), so an unbounded body is a
+    # resource-exhaustion vector. Read the raw body first (Starlette caches it, so
+    # the .json()/.form() calls below reuse it) and reject an oversized one rather
+    # than trusting a possibly-absent/dishonest Content-Length header.
+    max_bytes = settings.MAX_WEBHOOK_BODY_SIZE_MB * 1024 * 1024
+    raw_body = await request.body()
+    if len(raw_body) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Webhook body exceeds the {settings.MAX_WEBHOOK_BODY_SIZE_MB}MB limit"
+            ),
         )
 
     # Get webhook data

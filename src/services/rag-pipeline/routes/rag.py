@@ -384,7 +384,11 @@ async def list_documents(kb_id: str):
             collection_name=kb_id,
             limit=256,
             offset=next_offset,
-            with_payload=["source", "document_id", "uploaded_at"],
+            # tree_level is REQUIRED so group_documents can exclude RAPTOR
+            # tree-summary nodes (tree_level > 0); without it every record arrives
+            # without the field, is treated as level 0, and tree nodes inflate a
+            # document's chunk_count when a tree exists (#694).
+            with_payload=["source", "document_id", "uploaded_at", "tree_level"],
             with_vectors=False,
         )
         records.extend(batch)

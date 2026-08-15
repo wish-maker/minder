@@ -59,8 +59,11 @@ def _isolated_import(*module_paths: str):
 
 
 class _FakeResult:
+    def __init__(self, single_value=None):
+        self._single_value = single_value
+
     async def single(self):
-        return {"true": True}
+        return self._single_value
 
 
 class _FakeSession:
@@ -68,9 +71,14 @@ class _FakeSession:
         self._capture = capture
 
     async def run(self, query, **kwargs):
+        # The cycle-probe query (#673) runs BEFORE the write; return "no path found"
+        # (single() -> None) so an empty graph is treated as cycle-free and the write
+        # proceeds. Capture the write query (the one that MERGEs the edge).
+        if "RETURN path LIMIT 1" in query:
+            return _FakeResult(single_value=None)
         self._capture["query"] = query
         self._capture["kwargs"] = kwargs
-        return _FakeResult()
+        return _FakeResult(single_value={"true": True})
 
     async def __aenter__(self):
         return self
@@ -138,4 +146,63 @@ async def test_get_plugin_dependencies_and_get_dependency_chain_query_depends_on
     assert "[r:DEPENDS_ON]" in capture["query"]
 
     await client.get_dependency_chain("plugin-a")
-    assert "[:DEPENDS_ON*]" in capture["query"]
+    # Depth-capped `*1..N` (#673), not the old unbounded `*`.
+    assert "[:DEPENDS_ON*1.." in capture["query"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dep_type", ["requires", "suggests", "conflicts_with"])
+async def test_add_dependency_rejects_self_loop(dep_type):
+    """A plugin cannot depend on / recommend / conflict-with itself (#673) --
+    a self-loop A DEPENDS_ON A makes get_dependency_chain report A as its own
+    transitive dependency. Rejected before any write reaches the graph."""
+    client = neo4j_client_mod.Neo4jClient(password="test")
+    ran = {"n": 0}
+
+    class _CountingSession(_FakeSession):
+        async def run(self, query, **kwargs):
+            ran["n"] += 1
+            return await super().run(query, **kwargs)
+
+    client.driver.session = MagicMock(return_value=_CountingSession({}))
+
+    with pytest.raises(ValueError, match="itself"):
+        await client.add_dependency("plugin-a", "plugin-a", dep_type)
+    assert ran["n"] == 0  # rejected before touching the DB
+
+
+@pytest.mark.asyncio
+async def test_add_dependency_rejects_cycle():
+    """Adding A DEPENDS_ON B when B already (transitively) depends on A must be
+    rejected -- the cycle-probe finds the back-path and raises (#673)."""
+    client = neo4j_client_mod.Neo4jClient(password="test")
+
+    class _CycleSession(_FakeSession):
+        async def run(self, query, **kwargs):
+            # Probe finds an existing path B ...-> A -> report a cycle.
+            if "RETURN path LIMIT 1" in query:
+                return _FakeResult(single_value={"path": object()})
+            return _FakeResult(single_value={"true": True})
+
+    client.driver.session = MagicMock(return_value=_CycleSession({}))
+
+    with pytest.raises(ValueError, match="cycle"):
+        await client.add_dependency("plugin-a", "plugin-b", "requires")
+
+
+@pytest.mark.asyncio
+async def test_add_dependency_cycle_probe_only_for_depends_on():
+    """RECOMMENDS/CONFLICTS_WITH don't form dependency cycles, so no probe runs --
+    only the write query is issued (self-loops are still caught separately)."""
+    client = neo4j_client_mod.Neo4jClient(password="test")
+    queries = []
+
+    class _RecordingSession(_FakeSession):
+        async def run(self, query, **kwargs):
+            queries.append(query)
+            return _FakeResult(single_value={"true": True})
+
+    client.driver.session = MagicMock(return_value=_RecordingSession({}))
+
+    await client.add_dependency("plugin-a", "plugin-b", "suggests")
+    assert not any("RETURN path LIMIT 1" in q for q in queries)

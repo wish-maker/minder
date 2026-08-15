@@ -120,3 +120,94 @@ async def test_rewrite_returns_empty_not_error_text_on_llm_error_flag():
         "q", _FakeLLM("connection refused", error=True), "m"
     )
     assert r == ""
+
+
+# --- correct() wrapper: still_insufficient signal (#661) --------------------
+# rag/methods/corrective.py's correct() is a thin orchestration wrapper (grade ->
+# maybe rewrite+re-retrieve). When the grade is poor and correction can't find
+# anything better, it now flags details["still_insufficient"] so the runner can
+# surface an honest "low-confidence" degraded note instead of silently answering
+# from context CRAG itself judged insufficient.
+
+_METHODS_MOD = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "services"
+    / "rag-pipeline"
+    / "rag"
+    / "methods"
+    / "corrective.py"
+)
+
+
+def _load_methods():
+    spec = importlib.util.spec_from_file_location(
+        "rag_corrective_methods", _METHODS_MOD
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+corrective_method = _load_methods()
+
+
+class _FakePipeline:
+    def __init__(self, grade, refined="a refined query"):
+        self._grade = grade
+        self._refined = refined
+
+    async def grade_context(self, question, context, ollama_manager, model):
+        return {"grade": self._grade, "score": 0.0}
+
+    async def rewrite_query(self, question, ollama_manager, model):
+        return self._refined
+
+
+def _retrieve_factory(sources):
+    async def retrieve(pipeline, query, top_k):
+        return {"context": "ctx" if sources else "", "sources": sources}
+
+    return retrieve
+
+
+_ORIG = {"context": "original", "sources": [{"text": "orig"}]}
+
+
+async def test_correct_flags_insufficient_when_incorrect_and_no_rewrite():
+    pipe = _FakePipeline("incorrect", refined="")  # rewrite yields nothing
+    result, details = await corrective_method.correct(
+        "q", _ORIG, pipe, _retrieve_factory([]), {}, 3, None, "m"
+    )
+    assert result is _ORIG  # kept the original, uncorrected
+    assert details["still_insufficient"] is True
+    assert details["corrected"] is False
+
+
+async def test_correct_flags_insufficient_when_reretrieval_empty():
+    pipe = _FakePipeline("incorrect", refined="a refined query")
+    result, details = await corrective_method.correct(
+        "q", _ORIG, pipe, _retrieve_factory([]), {}, 3, None, "m"
+    )
+    assert result is _ORIG
+    assert details["still_insufficient"] is True
+
+
+async def test_correct_no_insufficient_flag_when_correction_succeeds():
+    pipe = _FakePipeline("incorrect", refined="a refined query")
+    better = [{"text": "much better"}]
+    result, details = await corrective_method.correct(
+        "q", _ORIG, pipe, _retrieve_factory(better), {}, 3, None, "m"
+    )
+    assert details["corrected"] is True
+    assert "still_insufficient" not in details
+    assert result["sources"] == better
+
+
+async def test_correct_no_insufficient_flag_when_grade_good():
+    pipe = _FakePipeline("correct")
+    result, details = await corrective_method.correct(
+        "q", _ORIG, pipe, _retrieve_factory([]), {}, 3, None, "m"
+    )
+    assert "still_insufficient" not in details
+    assert result is _ORIG

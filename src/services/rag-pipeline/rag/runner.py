@@ -20,6 +20,8 @@ from rag.methods import hyde as hyde_method
 from rag.methods import rerank as rerank_method
 from rag.methods import self_rag as self_rag_method
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 # Conversational RAG is single-user today (see #45 / TODO in conversation repo).
@@ -152,6 +154,15 @@ async def run_query(
     # Effective retrieval depth: the engine's top_k in auto mode, else the request's.
     effective_top_k = auto_top_k if (method == "auto" and auto_top_k) else request.top_k
 
+    # Reranking candidate widening (#660): a reranker can only reorder the pool it is
+    # given, so when rerank will run, fetch a wider candidate set and let the reranker
+    # pick the true best-top_k out of it (it can otherwise never promote a document
+    # ranked just outside top_k). fetch_k collapses to effective_top_k when rerank is
+    # off or the multiplier is 1 — no behaviour change on the common path.
+    will_rerank = bool(getattr(request, "rerank", False) or auto_rerank)
+    multiplier = max(1, settings.RERANK_CANDIDATE_MULTIPLIER)
+    fetch_k = effective_top_k * multiplier if will_rerank else effective_top_k
+
     # HyDE: retrieve using a hypothetical answer rather than the raw question.
     retrieval_query = question
     if use_hyde:
@@ -167,11 +178,10 @@ async def run_query(
                 "hyde: expander unavailable or empty rewrite — retrieved on raw query"
             )
 
-    context_result = await components.retrieve(
-        pipeline, retrieval_query, effective_top_k
-    )
+    context_result = await components.retrieve(pipeline, retrieval_query, fetch_k)
 
     # Corrective RAG: grade the retrieval and re-retrieve with a refined query if weak.
+    # Its re-retrieval feeds the same rerank step, so it stays widened too (fetch_k).
     if method == "corrective":
         context_result, corr_details = await corrective_method.correct(
             question,
@@ -179,12 +189,20 @@ async def run_query(
             components.corrective_pipeline,
             components.retrieve,
             pipeline,
-            effective_top_k,
+            fetch_k,
             components.ollama_manager,
             llm_model,
         )
         if corr_details:
             details["corrective"] = corr_details
+            if corr_details.get("still_insufficient"):
+                # Grade was poor and re-retrieval found nothing better -- the answer
+                # is generated from context Corrective RAG judged insufficient, so
+                # say so rather than letting it read as authoritative (#661).
+                degraded.append(
+                    "corrective: retrieved context graded insufficient and "
+                    "re-retrieval found nothing better — answer may be low-confidence"
+                )
         else:
             # Empty details = pipeline unavailable or it raised → nothing corrective ran.
             degraded.append(
@@ -194,7 +212,7 @@ async def run_query(
     # Optional adaptive re-ranking (cross-encoder if available, else LLM). Orthogonal
     # to method — applies to whatever was retrieved above. In auto mode the decision
     # engine can also request it (#139).
-    if getattr(request, "rerank", False) or auto_rerank:
+    if will_rerank:
         context_result, rr_details = await rerank_method.apply(
             question,
             context_result,
@@ -203,6 +221,10 @@ async def run_query(
             llm_model,
         )
         details.update(rr_details)
+        # Trim the widened candidate pool (#660) back to the requested depth. Runs
+        # unconditionally so the final size is effective_top_k even when the rerank
+        # above was a no-op and returned the wide pool unchanged.
+        context_result = rerank_method.truncate(context_result, effective_top_k)
 
     # Optional contextual compression of the retrieved context before generation.
     if getattr(request, "compress", False):
