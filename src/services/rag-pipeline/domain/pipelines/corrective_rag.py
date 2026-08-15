@@ -74,6 +74,14 @@ class CorrectiveRAGPipeline:
             result = await llm_manager.generate_response(
                 prompt=prompt, context="", model=model, temperature=0.0
             )
+            if result.get("error"):
+                # generate_response never raises on an LLM failure -- it returns
+                # {"text": "Error generating response: ...", "error": True}
+                # instead, which is short enough to pass the len<=500 guard below
+                # and get returned as the "refined query," re-embedding/
+                # re-retrieving against the error text instead of degrading.
+                logger.warning(f"⚠️ CRAG query rewrite failed: {result.get('text')}")
+                return ""
             refined = (result.get("text") or "").strip().strip('"')
             # Guard against the model echoing junk or an empty line.
             if refined and len(refined) <= 500:

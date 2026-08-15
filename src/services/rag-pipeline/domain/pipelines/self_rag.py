@@ -153,6 +153,16 @@ class SelfRAGPipeline:
             result = await llm_manager.generate_response(
                 prompt=question, context=current_context, model=model
             )
+            if result.get("error"):
+                # generate_response never raises on an LLM failure -- it returns
+                # {"text": "Error generating response: ...", "error": True} instead
+                # (see OllamaManager.generate_response). Without this check that
+                # error string is truthy, so the caller (rag/methods/self_rag.py's
+                # generate()) would treat it as a real answer instead of falling
+                # back to standard generation -- which DOES correctly 503 on a
+                # real failure (#232). Raising here is caught by that wrapper's
+                # own try/except, restoring the intended fallback behavior.
+                raise RuntimeError(result.get("text", "LLM generation failed"))
 
             current_answer = result["text"]
 
