@@ -289,7 +289,17 @@ class ExecutionEngine:
                 )
 
             embed_data = response.json()
-            embedding = embed_data.get("embeddings", [])[0]
+            # A 200 with an empty/missing embeddings array (a malformed Ollama
+            # response) would otherwise make `[0]` raise an opaque IndexError; raise a
+            # clear ValueError so the caller sees an actionable message, same shape as
+            # the status-code guard above.
+            embeddings = embed_data.get("embeddings") or []
+            if not embeddings:
+                raise ValueError(
+                    "Ollama embedding response contained no embeddings "
+                    f"(model {ollama_model})"
+                )
+            embedding = embeddings[0]
 
             logger.info(f"Generated embedding: dim={len(embedding)}")
 
