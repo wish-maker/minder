@@ -67,7 +67,12 @@ class GraphRetriever:
                     }
                 else:
                     # Neo4j 5.x doesn't support parameterized path lengths
-                    # Use string formatting for depth value
+                    # Use string formatting for depth value -- clamp/cast first since
+                    # this value goes straight into the query string, not a bound
+                    # parameter; not currently reachable with an unsafe value (the
+                    # only caller bounds it via Pydantic ge=1,le=4) but this function
+                    # has its own callers in the future, so don't rely on that alone.
+                    safe_depth = max(1, min(int(max_depth), 4))
                     # Case-insensitive CONTAINS for partial matching (e.g., "apple"
                     # matches "Apple Computer") - see the case-sensitivity note above.
                     # Traverse RELATES_TO only (not the untyped `-[*..]-` this used to
@@ -78,10 +83,12 @@ class GraphRetriever:
                     query = f"""
                     MATCH (e:Entity)
                     WHERE toLower(e.text) CONTAINS toLower($entity_name)
-                    MATCH path = (e)-[:RELATES_TO*1..{max_depth}]-(related:Entity)
+                    MATCH path = (e)-[:RELATES_TO*1..{safe_depth}]-(related:Entity)
                     WHERE related.text <> e.text
-                    WITH nodes(path) as entities
+                    WITH nodes(path) as entities, e.text as start_text
                     UNWIND entities as entity
+                    WITH entity, start_text
+                    WHERE entity.text <> start_text
                     RETURN DISTINCT entity.text as entity, entity.label as label
                     LIMIT $limit
                     """

@@ -170,6 +170,58 @@ async def test_find_related_entities_without_type_uses_multihop_query(monkeypatc
     ]
 
 
+async def test_find_related_entities_multihop_query_excludes_the_start_entity(
+    monkeypatch,
+):
+    """Found in a background audit: `WHERE related.text <> e.text` only filtered
+    the path *endpoint* -- `WITH nodes(path) as entities` still carried the start
+    node `e` itself into the UNWIND, so every no-relationship-type traversal
+    (the only branch the single caller in routes/api.py ever uses) returned the
+    queried entity back as one of its own "related" results. The fix must carry
+    the start entity's text through WITH and filter it out after UNWIND -- assert
+    that filter is actually present in the generated query, not just that a
+    fake single-row result happens to look right."""
+    captured = {}
+
+    def run_fn(query, params):
+        captured["query"] = query
+        # Simulate what a real multi-hop path would return: nodes(path) includes
+        # the start node "Apple" itself alongside the genuinely related "Acme Corp".
+        return _FakeResult(
+            [
+                _FakeRecord(entity="Acme Corp", label="ORG"),
+            ]
+        )
+
+    retriever = _make_retriever(monkeypatch, run_fn)
+    result = await retriever.find_related_entities("apple", max_depth=2, limit=10)
+
+    assert "WITH nodes(path) as entities, e.text as start_text" in captured["query"]
+    assert "WHERE entity.text <> start_text" in captured["query"]
+    assert all(e["text"] != "apple" for e in result)
+
+
+async def test_find_related_entities_clamps_out_of_range_max_depth(monkeypatch):
+    """max_depth is spliced into the Cypher query via f-string, not a bound
+    parameter (Neo4j 5.x doesn't support parameterized path lengths) -- the only
+    current caller bounds it via Pydantic (ge=1, le=4), but this method itself
+    performed zero validation, a latent injection/resource-exhaustion surface for
+    any future, less-constrained caller. Confirm it's clamped to a safe range
+    regardless of what's passed in."""
+    captured = {}
+
+    def run_fn(query, params):
+        captured["query"] = query
+        return _FakeResult([])
+
+    retriever = _make_retriever(monkeypatch, run_fn)
+    await retriever.find_related_entities("apple", max_depth=999, limit=10)
+    assert "RELATES_TO*1..4" in captured["query"]
+
+    await retriever.find_related_entities("apple", max_depth=0, limit=10)
+    assert "RELATES_TO*1..1" in captured["query"]
+
+
 async def test_find_related_entities_degrades_to_empty_list_on_error(monkeypatch):
     def run_fn(query, params):
         raise RuntimeError("neo4j down")
