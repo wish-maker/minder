@@ -164,6 +164,16 @@ def build_plugins_router(
             del plugin_instances[plugin_name]
         del plugins_db[plugin_name]
         redis_client.delete(f"plugin:{plugin_name}")
+        # #639: uninstall used to leave webhook_routes/plugin_manifests untouched,
+        # so handle_webhook_request (which only checks those two dicts, never
+        # plugins_db) kept matching and executing the "uninstalled" plugin's
+        # webhook. The DB row itself is intentionally left alone here -- whether
+        # uninstall should hard-delete it or soft-disable it is still an open
+        # product decision (#639) -- but this cleanup is correct either way, so
+        # it isn't blocked on that decision.
+        plugin_manifests.pop(plugin_name, None)
+        for path in [p for p, owner in webhook_routes.items() if owner == plugin_name]:
+            del webhook_routes[path]
         return {"message": f"Plugin {plugin_name} uninstalled"}
 
     @router.post("/webhook/{path:path}")
