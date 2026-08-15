@@ -31,6 +31,7 @@ class AIToolsSyncRequest(BaseModel):
 async def list_all_ai_tools(
     active_only: bool = Query(True),
     tier: str = Query(None),
+    tool_name: str = Query(None),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ):
@@ -40,6 +41,13 @@ async def list_all_ai_tools(
     Args:
         active_only: Only return active tools
         tier: Filter by required tier
+        tool_name: Filter to an exact tool name -- plugin-state-manager's
+            validate_tool_access relies on this to look up a SPECIFIC tool's
+            required_tier; without it, an unrecognized query param is silently
+            dropped by FastAPI and the caller's `tools[0]` picks up whatever
+            tool this list's default ordering happens to return first,
+            checking an arbitrary tool's tier instead of the one actually
+            being invoked.
         limit/offset: Pagination window
     """
     pool = await get_pool()
@@ -58,6 +66,11 @@ async def list_all_ai_tools(
         param_count += 1
         conditions.append(f"at.required_tier = ${param_count}")
         params.append(tier)
+
+    if tool_name:
+        param_count += 1
+        conditions.append(f"at.tool_name = ${param_count}")
+        params.append(tool_name)
 
     where_clause = " AND ".join(conditions) if conditions else "1=1"
 
@@ -182,7 +195,16 @@ async def get_plugin_ai_tools(plugin_id: str = Depends(valid_plugin_id)):
 
 @router.get("/tools/{tool_name}")
 async def get_ai_tool_details(tool_name: str):
-    """Get details for a specific AI tool"""
+    """Get details for a specific AI tool.
+
+    tool_name is unique per-plugin (schema.sql: UNIQUE(plugin_id, tool_name)),
+    NOT globally -- two different plugins can legitimately register the same
+    tool name. Filters to active tools (a deactivated tool must not be served
+    as live to plugin-state-manager's execution/license-check callers, which
+    resolve a tool by this exact endpoint) and orders deterministically so a
+    same-name collision across plugins doesn't return a different plugin's
+    tool on every query depending on Postgres's own row order.
+    """
     pool = await get_pool()
 
     async with pool.acquire() as conn:
@@ -205,7 +227,9 @@ async def get_ai_tool_details(tool_name: str):
                 p.description as plugin_description
             FROM marketplace_ai_tools at
             JOIN marketplace_plugins p ON at.plugin_id = p.id
-            WHERE at.tool_name = $1
+            WHERE at.tool_name = $1 AND at.active = TRUE
+            ORDER BY p.name
+            LIMIT 1
             """,
             tool_name,
         )

@@ -46,6 +46,7 @@ async def import_ai_tools_from_manifest(
 
     imported_count = 0
     errors = []
+    synced_tool_names = []
 
     for tool_def in tools_data:
         try:
@@ -156,6 +157,7 @@ async def import_ai_tools_from_manifest(
                 logger.info(f"Imported AI tool: {tool_name} for plugin {plugin_id}")
 
             imported_count += 1
+            synced_tool_names.append(tool_name)
 
         except Exception as e:
             error_msg = (
@@ -164,6 +166,31 @@ async def import_ai_tools_from_manifest(
             logger.error(error_msg)
             errors.append(error_msg)
 
+    deactivated_count = 0
+    if not errors:
+        # Sync was purely additive: a tool that dropped out of the manifest
+        # (renamed or removed by the plugin author) was never reconciled --
+        # its row stayed active = TRUE forever and kept being served as live
+        # by GET /v1/marketplace/ai/tools and .../plugins/{id}/tools. Only run
+        # this when the sync was fully clean (no errors) -- a tool that
+        # merely FAILED to sync this round (a transient error, still present
+        # in the manifest) must not be mistaken for one removed from it.
+        result = await conn.execute(
+            """
+            UPDATE marketplace_ai_tools
+            SET active = FALSE, updated_at = NOW()
+            WHERE plugin_id = $1 AND active = TRUE AND NOT (tool_name = ANY($2::text[]))
+            """,
+            plugin_id,
+            synced_tool_names,
+        )
+        deactivated_count = int(result.split()[-1]) if result else 0
+        if deactivated_count:
+            logger.info(
+                f"Deactivated {deactivated_count} AI tool(s) no longer in "
+                f"plugin {plugin_id}'s manifest"
+            )
+
     # #351: this used to return success=True unconditionally, even when every
     # tool in the manifest failed (imported_count == 0, errors full) -- the
     # /sync route returned it as-is with HTTP 200, so a total DB-write failure
@@ -171,6 +198,7 @@ async def import_ai_tools_from_manifest(
     return {
         "success": not errors,
         "tools_imported": imported_count,
+        "tools_deactivated": deactivated_count,
         "errors": errors,
         "message": f"Imported {imported_count} AI tools",
     }
