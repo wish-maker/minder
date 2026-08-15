@@ -993,6 +993,28 @@ async def test_ingest_document_invalidates_hybrid_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_list_documents_requests_tree_level_in_payload(monkeypatch):
+    """list_documents must scroll WITH tree_level so group_documents can exclude
+    RAPTOR tree-summary nodes; without it tree nodes inflate chunk_count (#694)."""
+    captured = {}
+
+    class _FakeQdrantClient:
+        def scroll(self, **kwargs):
+            captured.update(kwargs)
+            return [], None
+
+    fake_state = SimpleNamespace(
+        knowledge_bases={"kb-1": {}},
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+    )
+    monkeypatch.setattr(rag_routes, "state", fake_state)
+
+    await rag_routes.list_documents("kb-1")
+
+    assert "tree_level" in captured["with_payload"]
+
+
+@pytest.mark.asyncio
 async def test_ingest_document_upserts_in_batches_above_the_batch_size(monkeypatch):
     """#683: a document with more chunks than QDRANT_UPSERT_BATCH_SIZE must be
     upserted across multiple requests, not one giant one -- mirrors the
