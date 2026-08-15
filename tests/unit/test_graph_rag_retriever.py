@@ -528,3 +528,40 @@ async def test_delete_document_with_no_mentioned_entities_checks_nothing(monkeyp
 
     assert tx.entity_orphan_check_calls == []
     assert result["orphan_entities_deleted"] == 0
+
+
+# --- graph_search (#699-adjacent: was implemented but wired to no route) --------
+
+
+async def test_graph_search_parses_entities_and_passes_query_and_limit(monkeypatch):
+    captured = {}
+
+    def run_fn(query, params):
+        captured["query"] = query
+        captured["params"] = params
+        return _FakeResult(
+            [
+                _FakeRecord(text="Elon Musk", label="PERSON", description="CEO"),
+                _FakeRecord(text="Tesla", label="ORG", description=None),
+            ]
+        )
+
+    retriever = _make_retriever(monkeypatch, run_fn)
+    result = await retriever.graph_search("musk", limit=7)
+
+    assert captured["params"] == {"query": "musk", "limit": 7}
+    # Case-insensitive CONTAINS on both text and label.
+    assert "toLower(e.text) CONTAINS toLower($query)" in captured["query"]
+    assert "toLower(e.label) CONTAINS toLower($query)" in captured["query"]
+    assert [e["text"] for e in result] == ["Elon Musk", "Tesla"]
+    assert result[0]["label"] == "PERSON"
+
+
+async def test_graph_search_swallows_errors_returns_empty(monkeypatch):
+    """Documented contract: never raise, degrade to []."""
+
+    def run_fn(query, params):
+        raise RuntimeError("neo4j down")
+
+    retriever = _make_retriever(monkeypatch, run_fn)
+    assert await retriever.graph_search("anything") == []
