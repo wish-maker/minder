@@ -17,6 +17,7 @@ a subclass concern:
     `_initialized` is set True; model-management doesn't. See `_post_connect()`.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -51,6 +52,15 @@ class OllamaClientBase:
         self._host = host
         self.client: Optional["AsyncClient"] = None
         self._initialized = False
+        # Guards _ensure_initialized's lazy-init check (#367 follow-up, found in a
+        # background audit): if Ollama is unreachable at FastAPI-lifespan startup,
+        # that failure is only logged, never fatal (see initialize()'s docstring),
+        # so _initialized stays False and the next wave of concurrent requests
+        # would otherwise each independently see False and each call initialize()
+        # at once -- racing to overwrite self.client (and, for rag-pipeline's
+        # subclass, self.embed_client + rerun its own connection test) instead of
+        # exactly one of them doing the real work.
+        self._init_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         """Build the Ollama client. Raises on failure -- callers/subclasses decide
@@ -78,6 +88,14 @@ class OllamaClientBase:
 
     async def _ensure_initialized(self) -> None:
         """The lazy-init guard previously repeated before every public method on
-        both services' managers."""
-        if not self._initialized:
-            await self.initialize()
+        both services' managers. Double-checked locking: the fast path (already
+        initialized) takes no lock at all; only the first concurrent wave after a
+        failed startup init contends for it, and only one of them actually calls
+        initialize() -- the rest see _initialized True once they acquire the lock
+        and return immediately.
+        """
+        if self._initialized:
+            return
+        async with self._init_lock:
+            if not self._initialized:
+                await self.initialize()
