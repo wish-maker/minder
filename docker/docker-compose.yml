@@ -988,11 +988,11 @@ services:
     container_name: minder-model-management
     restart: on-failure
     environment:
-    # POSTGRES_HOST/PORT/USER/PASSWORD/DB removed: model-management's own
-    # config.py explicitly documents "talks only to Ollama (no DB/Redis/JWT)"
-    # and its Settings class has no Postgres field at all (extra="ignore"
-    # silently drops them) -- dead config that falsely implies this service
-    # is DB-backed.
+    - POSTGRES_HOST=postgres
+    - POSTGRES_PORT=5432
+    - POSTGRES_USER=minder
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    - POSTGRES_DB=minder
     # main.py reads OLLAMA_HOST (not OLLAMA_BASE_URL); previously NEITHER was injected,
     # so this service ignored the knob entirely. Inject both: OLLAMA_HOST is what the
     # code reads today; OLLAMA_BASE_URL is for forward-compat with the code-consolidation
@@ -1424,11 +1424,10 @@ services:
     # PILLAR 3: GPU Passthrough - Hardware acceleration for TTS/STT processing (when available)
     # runtime: nvidia  # Uncomment this line if NVIDIA runtime is available
     environment:
-    # TTS_MODEL/STT_MODEL/DEVICE/COMPUTE_TYPE removed: leftovers from a prior
-    # Coqui-XTTS/Whisper-based implementation (see the values themselves --
-    # "xtts_v2", whisper "base", "int8" compute type). The service was rewritten
-    # to offline Piper TTS + Google STT (config.py's own #18 comment); none of
-    # these four names are read anywhere in this service's code.
+    - TTS_MODEL=${TTS_MODEL:-tts_models/multilingual/multi-dataset/xtts_v2}
+    - STT_MODEL=${STT_MODEL:-base}
+    - DEVICE=${TTS_DEVICE:-cpu}  # Will use cuda if GPU available
+    - COMPUTE_TYPE=${TTS_COMPUTE_TYPE:-int8}  # Will use float16 if GPU available
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - ENVIRONMENT=${ENVIRONMENT:-development}
     - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}

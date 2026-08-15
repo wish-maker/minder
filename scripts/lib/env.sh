@@ -309,6 +309,11 @@ OLLAMA_FAILOVER_PRIMARY=
 # ── Models ─────────────────────────────────────────────────────
 DEFAULT_BASE_MODEL=llama3.2
 
+# ── TTS/STT ───────────────────────────────────────────────────
+TTS_MODEL=tts_models/multilingual/multi-dataset/xtts_v2
+STT_MODEL=base
+TTS_DEVICE=cpu
+TTS_COMPUTE_TYPE=int8
 EOF
     log_success "Generated .env with secure random secrets (fallback mode)"
 }
