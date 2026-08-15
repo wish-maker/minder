@@ -170,7 +170,11 @@ All eight core APIs are FastAPI services with real implementations.
   full internal/external/failover breakdown.
 
 #### OpenWebUI (internal 8080, reached via Traefik)
-- Web-based chat UI. Depends on postgres, rag-pipeline, and optionally ollama.
+- Web-based chat UI. Depends on postgres, and optionally ollama -- NOT
+  rag-pipeline: OpenWebUI's own code never calls it (its Knowledge feature
+  uses a separate, internal ChromaDB store), so a `depends_on` on
+  rag-pipeline was removed to stop an unrelated rag-pipeline health dip
+  (e.g. Qdrant) from blocking the whole chat UI from starting.
 
 #### client (host 8009, `src/services/client/`)
 - Bespoke React/Vite admin frontend — the control-plane for everything

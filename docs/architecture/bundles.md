@@ -118,8 +118,10 @@ Notes:
 - **monitoring observes core but core never depends on monitoring** (exporters /
   prometheus / telegraf read core services one-directionally) → monitoring is safe
   to disable; core keeps running, just unobserved.
-- **chat → rag coupling:** `openwebui` declares `depends_on: rag-pipeline`, so
-  enabling chat claims rag-pipeline anyway — hence chat and rag default together.
+- **chat → rag coupling:** `rag-pipeline`'s own Compose label is
+  `minder.bundle=rag,chat` — it's directly claimed by both bundles, not via any
+  `openwebui` dependency (openwebui has no functional link to rag-pipeline at
+  all) — hence chat and rag default together.
 - **`client` is not a "manager"** (see Vocabulary above) — it's a pure static
   frontend (no backend logic, no bundle it configures), just core because it's
   unconditionally available like the other core services.
