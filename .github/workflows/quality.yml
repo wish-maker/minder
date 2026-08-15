@@ -13,6 +13,12 @@ on:
     branches: [ main, develop ]
   workflow_dispatch:
 
+# Least-privilege default: every job here only lints/scans, none needs to
+# write to the repo. Without this, jobs run with the repo's `write` default
+# GITHUB_TOKEN permission (found in a background CI-workflow audit).
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: '3.12'
 
@@ -291,10 +297,25 @@ jobs:
           fetch-depth: 0
 
       - name: Run TruffleHog
-        uses: trufflesecurity/trufflehog@main
+        # Pinned to v3.97.0 (not @main): a mutable branch ref runs whatever
+        # code is on it at execution time with no review possible before it
+        # lands -- this repo's default GITHUB_TOKEN is write-scoped (found in
+        # the same background audit). aquasecurity/trivy-action below was
+        # hit by exactly this class of attack in a real 2026-03 incident
+        # (CVE-2026-33634, 75 of 76 tags hijacked) -- SHA-pin third-party
+        # actions, don't float on a branch/tag.
+        uses: trufflesecurity/trufflehog@bcfcf73aaf4759d4dadc2783177c245a02792318 # v3.97.0
         with:
           path: ./
-          base: ${{ github.event.before }}
+          # github.event.before only exists on `push` payloads -- it's ABSENT
+          # on `pull_request` payloads, so on every PR run this silently fell
+          # back to TruffleHog's own "user-supplied inputs" branch with an
+          # empty BASE, which scans the entire repository history every time
+          # instead of the intended incremental diff (confirmed via actual
+          # PR run logs: 41,350 chunks / 341MB vs. a push run's 5 chunks /
+          # 2,126 bytes for the same repo state). Use the PR's own base SHA
+          # when this is a pull_request event.
+          base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           head: ${{ github.sha }}
           # --exclude-detectors=Lob: this repo's "Lob" findings are a confirmed false
           # positive, not a real leak. Investigated 2026-08-06: every one of the 30+

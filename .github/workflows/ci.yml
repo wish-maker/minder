@@ -11,6 +11,12 @@ on:
     branches: [ main, develop ]
   workflow_dispatch:  # Manuel tetikleme
 
+# Least-privilege default: every job here only ever builds/tests, none needs to
+# write to the repo. Without this, jobs run with the repo's `write` default
+# GITHUB_TOKEN permission (found in a background CI-workflow audit).
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: '3.12'
 
