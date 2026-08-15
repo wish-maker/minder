@@ -261,6 +261,7 @@ function TextToSpeechCard({
             { role: "user", content: text },
           ],
         },
+        token,
       });
       const rewritten = res.message?.content?.trim();
       if (!rewritten) {

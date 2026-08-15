@@ -45,9 +45,15 @@ class ToolExecutionRequest(BaseModel):
     """Tool execution request"""
 
     parameters: Dict[str, Any] = Field(default_factory=dict)
-    # Moved out of the query string into the body (#147/C7). No per-user auth exists in
-    # this service yet, so it defaults to the single "default" principal.
-    user_id: str = "default"
+    # A caller-supplied user_id field used to live here (#147/C7, back when "No
+    # per-user auth exists in this service yet"). Real JWT auth (Depends(
+    # get_current_user_or_service)) is wired into the /execute route now, so a
+    # client-controlled identity field is both redundant and unsafe: license/tier
+    # checks must run against the VERIFIED caller (current_user["sub"] in
+    # routes/tools.py), not whatever user_id a request body happens to name --
+    # today's hardcoded "community"-tier stub (core/license.py) makes that inert,
+    # but the moment a real per-user tier lookup lands, this field would let any
+    # authenticated caller evaluate the tier check as anyone else.
 
 
 class ToolExecutionResponse(BaseModel):

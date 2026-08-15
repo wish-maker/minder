@@ -35,6 +35,7 @@ from types import ModuleType, SimpleNamespace
 
 import httpx
 import pytest
+from starlette.datastructures import QueryParams
 
 _SERVICE_DIR = Path(__file__).resolve().parents[2] / "src" / "services" / "api-gateway"
 _ROUTE = _SERVICE_DIR / "routes" / "proxy.py"
@@ -102,12 +103,14 @@ class _FakeRequest:
     body()/headers/client.host/state.request_id/method/query_params, so a real
     ASGI Request isn't needed."""
 
-    def __init__(self, method="GET", body=b""):
+    def __init__(self, method="GET", body=b"", headers=None, query_params=None):
         self.method = method
-        self.headers = {"authorization": "Bearer x"}
+        self.headers = headers if headers is not None else {"authorization": "Bearer x"}
         self.client = SimpleNamespace(host="127.0.0.1")
         self.state = SimpleNamespace(request_id="test-req-id")
-        self.query_params = {}
+        self.query_params = (
+            query_params if query_params is not None else QueryParams("")
+        )
         self._body = body
 
     async def body(self):
@@ -124,8 +127,10 @@ class _FakeRequest:
 class _FakeHTTPClient:
     def __init__(self, response):
         self._response = response
+        self.captured_kwargs = None
 
     async def request(self, **kwargs):
+        self.captured_kwargs = kwargs
         return self._response
 
 
@@ -175,6 +180,114 @@ def test_read_body_capped_rejects_body_over_limit(proxy_mod):
             proxy_mod._read_body_capped(_FakeRequest(body=b"x" * 11), max_bytes=10)
         )
     assert exc.value.status_code == 413
+
+
+def _json_fake_response():
+    return SimpleNamespace(
+        status_code=200,
+        content=b'{"ok": true}',
+        headers=httpx.Headers({"content-type": "application/json"}),
+        json=lambda: {"ok": True},
+    )
+
+
+def test_outbound_request_strips_hop_by_hop_and_content_length(proxy_mod):
+    """Found in a background audit: the outbound (request-side) header build
+    only ever popped "host"/"connection", leaving "transfer-encoding" (and the
+    rest of the hop-by-hop set) to pass straight through. A chunk-encoded
+    inbound request has no Content-Length of its own -- httpx then auto-adds
+    ITS OWN Content-Length (computed from the fully-buffered body) alongside
+    the still-present, now-stale "transfer-encoding: chunked", producing a
+    Content-Length + Transfer-Encoding conflict on the wire (RFC 7230 §3.3.3;
+    the classic request-smuggling primitive). Confirm every hop-by-hop header
+    plus content-length is gone from what's actually handed to httpx."""
+    fake_client = _FakeHTTPClient(_json_fake_response())
+    proxy_mod.http_client = fake_client
+
+    inbound_headers = {
+        "authorization": "Bearer x",
+        "transfer-encoding": "chunked",
+        "connection": "keep-alive",
+        "content-length": "999",
+        "host": "gateway.internal",
+        "x-custom": "keep-me",
+    }
+    asyncio.run(
+        proxy_mod.proxy_request(
+            "http://rag-pipeline:8003",
+            "v1/rag/ingest",
+            _FakeRequest("POST", body=b'{"a":1}', headers=inbound_headers),
+        )
+    )
+
+    sent_headers = fake_client.captured_kwargs["headers"]
+    for stripped in (
+        "transfer-encoding",
+        "connection",
+        "content-length",
+        "host",
+    ):
+        assert stripped not in sent_headers
+    assert sent_headers["x-custom"] == "keep-me"
+    assert sent_headers["authorization"] == "Bearer x"
+
+
+def test_outbound_request_preserves_repeated_query_params(proxy_mod):
+    """Found in the same audit: passing request.query_params (a Starlette
+    QueryParams) directly to httpx.request(params=...) silently collapses
+    repeated keys to their last value -- httpx.QueryParams' constructor falls
+    into a generic-Mapping code path that calls .items() (last-value-wins),
+    not the multidict-aware .multi_items(). Confirm all three "tag" values
+    survive into what's actually sent to httpx."""
+    fake_client = _FakeHTTPClient(_json_fake_response())
+    proxy_mod.http_client = fake_client
+
+    request = _FakeRequest(query_params=QueryParams("tag=a&tag=b&tag=c&x=1"))
+    asyncio.run(
+        proxy_mod.proxy_request("http://plugin-registry:8001", "v1/plugins", request)
+    )
+
+    sent_params = list(fake_client.captured_kwargs["params"])
+    assert sent_params.count(("tag", "a")) == 1
+    assert sent_params.count(("tag", "b")) == 1
+    assert sent_params.count(("tag", "c")) == 1
+    assert ("x", "1") in sent_params
+
+
+def test_no_timeout_override_leaves_client_default_in_effect(proxy_mod):
+    """Routes that don't pass `timeout=` must NOT forward an explicit `timeout`
+    kwarg to httpx at all -- httpx.request(timeout=None) means "no timeout
+    whatsoever," not "use the client's own default." Confirm the kwarg is
+    simply absent so the shared http_client's configured 30s default applies."""
+    fake_client = _FakeHTTPClient(_json_fake_response())
+    proxy_mod.http_client = fake_client
+
+    asyncio.run(
+        proxy_mod.proxy_request(
+            "http://plugin-registry:8001", "v1/plugins", _FakeRequest()
+        )
+    )
+
+    assert "timeout" not in fake_client.captured_kwargs
+
+
+def test_long_operation_timeout_override_is_forwarded(proxy_mod):
+    """A route that opts into the long-operation timeout (model pulls, RAG
+    ingestion, TTS/STT, graph-rag construction) must have it actually reach
+    httpx as an explicit override of the shared client's 30s default."""
+    fake_client = _FakeHTTPClient(_json_fake_response())
+    proxy_mod.http_client = fake_client
+
+    asyncio.run(
+        proxy_mod.proxy_request(
+            "http://model-management:8005",
+            "models",
+            _FakeRequest("POST", body=b'{"model_id":"llama3"}'),
+            timeout=proxy_mod._LONG_OPERATION_TIMEOUT,
+        )
+    )
+
+    assert fake_client.captured_kwargs["timeout"] is proxy_mod._LONG_OPERATION_TIMEOUT
 
 
 def test_json_response_still_decoded_and_rewrapped(proxy_mod):

@@ -232,3 +232,48 @@ def test_to_wav_raises_valueerror_on_ffmpeg_failure(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="could not decode audio"):
         _mod._to_wav(b"not-really-audio")
     assert len(unlinked) == 1  # input temp file still cleaned up on failure
+
+
+def test_to_wav_cleans_up_partial_output_file_on_ffmpeg_failure(monkeypatch, tmp_path):
+    """Found in a background audit: ffmpeg writes its output file
+    incrementally, so a timeout or a late failure AFTER it has already created
+    output_path used to leak that file forever -- _to_wav raises instead of
+    returning the path, so nothing else ever gets a chance to unlink it.
+    Repeated slow/bad uploads would accumulate real files on disk unboundedly.
+    Simulates ffmpeg having actually written a partial output before failing
+    (real os.path.exists/os.unlink, not mocked, to prove the file is genuinely
+    gone from disk)."""
+    import subprocess
+
+    class _FakeInputFile:
+        name = str(tmp_path / "input-tmp")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def write(self, data):
+            # Really create the file on disk (unlike the mocked-os.unlink tests
+            # above) since this test lets the real os.unlink run for input_path
+            # and asserts against the real filesystem for output_path.
+            with open(self.name, "wb") as f:
+                f.write(data)
+
+    output_path = f"{_FakeInputFile.name}.wav"
+
+    def _raise_after_writing_partial_output(cmd, **kw):
+        with open(output_path, "wb") as f:
+            f.write(b"partial-ffmpeg-output")
+        raise subprocess.TimeoutExpired(cmd, 30)
+
+    monkeypatch.setattr(
+        _mod.tempfile, "NamedTemporaryFile", lambda delete: _FakeInputFile()
+    )
+    monkeypatch.setattr(_mod.subprocess, "run", _raise_after_writing_partial_output)
+
+    with pytest.raises(ValueError, match="could not decode audio"):
+        _mod._to_wav(b"slow-or-corrupt-audio")
+
+    assert not _mod.os.path.exists(output_path)  # no leaked partial output file

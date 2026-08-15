@@ -234,6 +234,51 @@ def test_load_piper_caches_separately_per_voice(monkeypatch):
     assert fake_load.call_count == 2
 
 
+def test_load_piper_concurrent_first_use_loads_the_voice_only_once(monkeypatch):
+    """Found in a background audit: synthesize() (and so _load_piper) runs via
+    asyncio.to_thread, so concurrent first-use requests for the same voice run
+    in separate real OS threads. The old bare check-then-set on a plain dict
+    let two threads both see a cache miss and both pay for a full
+    PiperVoice.load() -- confirm the lock actually serializes this: force the
+    "loader" to block until BOTH threads have called _load_piper, so a broken
+    (unlocked) version would call PiperVoice.load() twice."""
+    import threading
+    import time
+
+    monkeypatch.setattr(_mod, "_piper_cache", {})
+    monkeypatch.setattr(_mod, "_resolve_voice_id", lambda lang, voice: "default")
+    monkeypatch.setattr(
+        _mod, "_piper_voice_path", lambda lang, voice: "/voices/tr.onnx"
+    )
+
+    load_calls = []
+    first_call_entered = threading.Event()
+
+    def slow_load(path):
+        load_calls.append(path)
+        first_call_entered.set()
+        time.sleep(0.05)  # give a second thread a chance to race in
+        return MagicMock()
+
+    results = []
+
+    def worker():
+        results.append(_mod._load_piper("tr", None))
+
+    with patch.object(_mod, "PiperVoice", create=True) as piper_cls:
+        piper_cls.load = slow_load
+        t1 = threading.Thread(target=worker)
+        t2 = threading.Thread(target=worker)
+        t1.start()
+        first_call_entered.wait(timeout=2)
+        t2.start()
+        t1.join(timeout=2)
+        t2.join(timeout=2)
+
+    assert len(load_calls) == 1  # only ONE PiperVoice.load(), not two
+    assert results[0] is results[1]  # both threads got the same cached instance
+
+
 def test_synthesize_gtts_cleans_up_temp_file_even_when_save_fails(
     monkeypatch, tmp_path
 ):

@@ -1,9 +1,16 @@
-"""Unit tests for model-management's OllamaManager (#367).
+"""Unit tests for model-management's OllamaManager (#367, #680).
 
 Covers the real class end-to-end (list/pull/show/delete/test_model +
-HTTPException wrapping + the lazy-init guard now delegated to
-OllamaClientBase._ensure_initialized), not just a duck-typed stand-in like
-test_model_management_error_handling.py uses for the route layer.
+the lazy-init guard now delegated to OllamaClientBase._ensure_initialized), not
+just a duck-typed stand-in like test_model_management_error_handling.py uses
+for the route layer.
+
+Since #680, a generic failure is re-raised as-is (not wrapped in an
+HTTPException with the raw Ollama error string) so the route layer's own
+`except Exception as e: raise backend_http_error(e, ...)` sanitizes it --
+matching every other service's convention. show_model's genuine "model not
+found" (Ollama ResponseError, status_code=404) is the one case that still
+raises an HTTPException directly, since a clean 404 isn't a detail leak.
 
 Loaded via the same isolated-import pattern as test_model_management_error_handling.py
 (core/routes/models/config are collision-prone across services sharing one pytest
@@ -95,14 +102,16 @@ async def test_list_models_does_not_reinitialize_once_ready(patched_client):
 
 
 @pytest.mark.asyncio
-async def test_list_models_wraps_failure_as_503(patched_client):
+async def test_list_models_reraises_the_original_failure(patched_client):
+    """Not wrapped in an HTTPException -- the route layer's backend_http_error
+    is what sanitizes this into a client-facing response (#680)."""
     mgr = _manager()
     await mgr._ensure_initialized()
-    mgr.client.list = AsyncMock(side_effect=ConnectionError("unreachable"))
-    with pytest.raises(Exception) as exc_info:
+    mgr.client.list = AsyncMock(
+        side_effect=ConnectionError("unreachable: ollama:11434")
+    )
+    with pytest.raises(ConnectionError, match="unreachable"):
         await mgr.list_models()
-    assert exc_info.value.status_code == 503
-    assert "Failed to list models" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
@@ -117,13 +126,12 @@ async def test_pull_model_success(patched_client):
 
 
 @pytest.mark.asyncio
-async def test_pull_model_wraps_failure_as_503(patched_client):
+async def test_pull_model_reraises_the_original_failure(patched_client):
     mgr = _manager()
     await mgr._ensure_initialized()
     mgr.client.pull = AsyncMock(side_effect=RuntimeError("registry down"))
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(RuntimeError, match="registry down"):
         await mgr.pull_model("llama3.2:latest")
-    assert exc_info.value.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -149,18 +157,17 @@ async def test_show_model_wraps_genuine_not_found_as_404(patched_client):
 
 
 @pytest.mark.asyncio
-async def test_show_model_wraps_other_failures_as_503_not_404(patched_client):
+async def test_show_model_reraises_other_failures_not_as_404(patched_client):
     """A transient failure (timeout, connection drop, malformed response) must
     NOT be misreported as "model not found" -- that used to blanket-map every
     exception here to 404, which is indistinguishable from an actually missing
-    model and hides a real Ollama outage from the caller."""
+    model and hides a real Ollama outage from the caller. Re-raised as-is
+    (#680) rather than wrapped in an HTTPException carrying the raw detail."""
     mgr = _manager()
     await mgr._ensure_initialized()
     mgr.client.show = AsyncMock(side_effect=RuntimeError("connection reset"))
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(RuntimeError, match="connection reset"):
         await mgr.show_model("llama3.2:latest")
-    assert exc_info.value.status_code == 503
-    assert "Failed to show model" in exc_info.value.detail
 
 
 @pytest.mark.asyncio
@@ -175,13 +182,12 @@ async def test_delete_model_success(patched_client):
 
 
 @pytest.mark.asyncio
-async def test_delete_model_wraps_failure_as_503(patched_client):
+async def test_delete_model_reraises_the_original_failure(patched_client):
     mgr = _manager()
     await mgr._ensure_initialized()
     mgr.client.delete = AsyncMock(side_effect=RuntimeError("boom"))
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(RuntimeError, match="boom"):
         await mgr.delete_model("llama3.2:latest")
-    assert exc_info.value.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -197,13 +203,12 @@ async def test_test_model_success(patched_client):
 
 
 @pytest.mark.asyncio
-async def test_test_model_wraps_failure_as_503(patched_client):
+async def test_test_model_reraises_the_original_failure(patched_client):
     mgr = _manager()
     await mgr._ensure_initialized()
     mgr.client.generate = AsyncMock(side_effect=RuntimeError("boom"))
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(RuntimeError, match="boom"):
         await mgr.test_model("llama3.2:latest")
-    assert exc_info.value.status_code == 503
 
 
 @pytest.mark.asyncio

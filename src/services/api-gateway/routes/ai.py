@@ -10,7 +10,8 @@ from datetime import datetime, timezone
 from typing import Dict, Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from core.auth import get_current_user_required
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from config import settings
 from shared.errors import backend_http_error
@@ -379,12 +380,24 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
 
 
 @router.post("/chat/completions")
-async def chat_completions(request: Request):
+async def chat_completions(
+    request: Request, current_user: dict = Depends(get_current_user_required)
+):
     """Chat via Ollama. Plugin function-calling is **opt-in and non-blocking**.
 
+    Requires a valid Minder JWT (#613): unlike every other route in this module
+    (read-only tool-discovery metadata, or a tool-execution proxy that forwards the
+    caller's own JWT to a downstream endpoint which enforces its own auth), this one
+    calls Ollama directly with no other gate anywhere in the request path -- an
+    unauthenticated caller could otherwise consume shared inference compute for free.
+    OpenWebUI's own chat traffic doesn't go through this route at all (it talks to
+    Ollama directly per docker-compose.yml's OLLAMA_BASE_URL); the one real in-repo
+    caller (VoicePage.tsx's style-rewrite feature) already gates the feature on being
+    logged in and is updated alongside this fix to actually send its token.
+
     By default this is a plain Ollama `/api/chat` passthrough — byte-identical to the
-    previous behaviour, so no existing consumer (OpenWebUI, plain chat) is affected.
-    Send ``"minder_tools": true`` in the body to offer the platform's plugin tools;
+    previous behaviour for any already-authenticated consumer. Send
+    ``"minder_tools": true`` in the body to offer the platform's plugin tools;
     the model's tool_calls are then executed against the plugin action endpoints
     (forwarding the caller's JWT). Even opted-in, any failure in the tool path falls
     back to a plain passthrough, so a tool problem never breaks a chat.

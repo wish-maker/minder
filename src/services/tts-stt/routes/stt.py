@@ -52,7 +52,17 @@ async def speech_to_text(
             ),
         )
 
-    audio_bytes = await file.read()
+    # Capped read (mirrors rag-pipeline's upload_document) -- file.read() with no
+    # size arg buffers the whole upload into memory regardless of size, before
+    # ffmpeg's own 30s timeout ever gets a chance to bound anything.
+    max_bytes = settings.STT_MAX_AUDIO_SIZE_MB * 1024 * 1024
+    audio_bytes = await file.read(max_bytes + 1)
+    if len(audio_bytes) > max_bytes:
+        stt_requests_total.labels(language=language, status="error").inc()
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio file exceeds the {settings.STT_MAX_AUDIO_SIZE_MB}MB upload limit",
+        )
     if not audio_bytes:
         stt_requests_total.labels(language=language, status="error").inc()
         raise HTTPException(status_code=422, detail="audio file is empty")
