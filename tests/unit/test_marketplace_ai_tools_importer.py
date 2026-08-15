@@ -10,6 +10,8 @@ status code.
 No DB: the asyncpg connection is stubbed.
 """
 
+import json
+
 import pytest
 
 from services.marketplace.core.ai_tools_importer import import_ai_tools_from_manifest
@@ -80,6 +82,51 @@ async def test_success_false_on_partial_failure():
     assert result["success"] is False
     assert result["tools_imported"] == 2
     assert len(result["errors"]) == 1
+
+
+class _CaptureConn(_FakeConn):
+    """Captures every execute() call so the persisted parameters_schema JSON
+    ($9 on the INSERT) can be inspected."""
+
+    def __init__(self, **k):
+        super().__init__(**k)
+        self.calls = []
+
+    async def execute(self, query, *args):
+        self.calls.append((query, args))
+        return "INSERT 0 1"
+
+
+@pytest.mark.asyncio
+async def test_required_flag_persisted_into_parameters_schema():
+    """A tool parameter declared `required: true` must survive into the stored
+    per-param schema (#676). It used to be collected into a `required_params`
+    list and then silently dropped -- no such column in the INSERT -- so
+    plugin-state-manager's execute_tool had no way to enforce required fields."""
+    conn = _CaptureConn()
+    manifest = {
+        "ai_tools": [
+            {
+                "name": "lookup",
+                "parameters": {
+                    "target": {"type": "string", "required": True},
+                    "verbose": {"type": "boolean"},
+                },
+            }
+        ]
+    }
+
+    result = await import_ai_tools_from_manifest(conn, "plugin-1", manifest)
+    assert result["success"] is True
+
+    insert_call = next(
+        q for q in conn.calls if "INSERT INTO marketplace_ai_tools" in q[0]
+    )
+    # parameters_schema is the 9th positional arg (index 8) on the INSERT.
+    schema = json.loads(insert_call[1][8])
+    assert schema["target"]["required"] is True
+    # A non-required param must not gain a spurious `required` key.
+    assert "required" not in schema["verbose"]
 
 
 @pytest.mark.asyncio

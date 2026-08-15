@@ -20,6 +20,21 @@ def _rebuild(context_result, sources):
     return {**context_result, "context": context, "sources": sources}
 
 
+def truncate(context_result, top_k):
+    """Keep only the top_k highest-ranked sources, rebuilding the context string.
+
+    Used after reranking a deliberately-widened candidate pool (#660): retrieval
+    fetches top_k * multiplier candidates so the reranker has something to promote
+    from, then this trims back to the caller's requested top_k. Applied
+    unconditionally after the rerank step so the final size is top_k even when the
+    rerank itself was a no-op (fewer than 2 sources, reranker unavailable, or it
+    raised and returned the pool unchanged)."""
+    sources = context_result.get("sources", [])
+    if top_k is None or len(sources) <= top_k:
+        return context_result
+    return _rebuild(context_result, sources[:top_k])
+
+
 async def _llm_rerank(question, sources, ollama_manager, model):
     """Ask the LLM to order the passages by relevance. Returns reordered sources or None."""
     listing = "\n".join(

@@ -46,6 +46,17 @@ class Settings(MinderBaseSettings):
     # still bounding worst-case memory use.
     MAX_UPLOAD_SIZE_MB: int = 50
 
+    # Reranking candidate widening (#660). A reranker can only reorder the pool it
+    # is given, so when rerank is requested the retriever must first fetch a WIDER
+    # candidate set (fetch_k = top_k * this multiplier) and let the reranker pick
+    # the true best-`top_k` out of it — otherwise reranking only ever reshuffles the
+    # same top_k first-pass scoring already picked, and can never promote a relevant
+    # document that dense/hybrid scoring ranked just outside top_k. 4 is a modest
+    # default: enough to matter (top_k=5 → 20 candidates) without ballooning the
+    # vector search / cross-encoder cost on Pi-class hardware. Set to 1 to disable
+    # widening (restores the pre-#660 behaviour). Only applied when reranking runs.
+    RERANK_CANDIDATE_MULTIPLIER: int = 4
+
 
 settings = Settings()
 
