@@ -29,10 +29,14 @@ from core.retrieval import invalidate_hybrid_index
 from domain import raptor
 from fastapi import HTTPException
 from models import DocumentInfo, DocumentUploadResponse
-from qdrant_client.models import PointStruct
+from qdrant_client.models import FieldCondition, Filter, MatchValue, PointStruct
 from rag.text_utils import chunk_text, extract_text_from_file
 
 logger = logging.getLogger("minder.rag-pipeline")
+
+# Mirrors rag/ollama_manager.py's EMBED_BATCH_SIZE -- same underlying chunk
+# list, same reasoning for capping a single request/response (#683).
+QDRANT_UPSERT_BATCH_SIZE = 96
 
 
 async def _build_and_store_tree(
@@ -176,13 +180,53 @@ async def ingest_document(
             )
         )
 
-    # Upsert points to Qdrant using PointStruct list. Off the event loop (#211): a
-    # large upload's upsert is the worst blocker on the sync client.
-    await asyncio.to_thread(
-        client.upsert,
-        collection_name=kb_id,
-        points=points,
-    )
+    # Upsert points to Qdrant in batches, mirroring EMBED_BATCH_SIZE's rationale
+    # (rag/ollama_manager.py): a very large document must not build one
+    # enormous request/response, which the (already batched) embedding phase
+    # was previously the only side of this to account for (#683). Off the
+    # event loop (#211): a large upload's upsert is the worst blocker on the
+    # sync client.
+    #
+    # On a mid-batch failure, delete whatever this upload already wrote (by
+    # document_id, not by tracked ids -- covers points a partially-applied
+    # batch itself may have written before erroring) so the upload still fails
+    # atomically overall: either every chunk lands, or none do (#77's existing
+    # contract, which single-request upsert satisfied for free before batching).
+    try:
+        for start in range(0, len(points), QDRANT_UPSERT_BATCH_SIZE):
+            batch = points[start : start + QDRANT_UPSERT_BATCH_SIZE]
+            await asyncio.to_thread(
+                client.upsert,
+                collection_name=kb_id,
+                points=batch,
+            )
+    except Exception as e:
+        state.documents_processed_total.labels(status="failed").inc()
+        try:
+            await asyncio.to_thread(
+                client.delete,
+                collection_name=kb_id,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="document_id", match=MatchValue(value=document_id)
+                        )
+                    ]
+                ),
+            )
+        except Exception:
+            logger.error(
+                f"⚠️  Qdrant upsert failed for {filename} (KB {kb_id}) and cleanup "
+                "of any partially-written points also failed — the KB may now "
+                "hold orphaned vectors for this failed upload."
+            )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Vector store unavailable — document was NOT indexed. Check that "
+                f"Qdrant is reachable from the containers. ({e})"
+            ),
+        )
 
     # New chunks landed → drop any cached BM25 index so the next hybrid query
     # rebuilds it over the full, current set (#45).

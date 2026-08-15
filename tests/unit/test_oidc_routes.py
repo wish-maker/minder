@@ -15,7 +15,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 _ROUTE = (
     Path(__file__).resolve().parents[2]
@@ -66,6 +66,12 @@ def auth_route_mod():
         AUTHELIA_ISSUER_URL="https://authelia.minder.local",
         MINDER_CLIENT_BASE_URL="https://client.minder.local",
         JWT_EXPIRATION_MINUTES=60,
+        # register/login's @enforce_rate_limit(max_requests=settings.
+        # AUTH_RATE_LIMIT_PER_MINUTE, ...) reads this at module-import time --
+        # this fake settings object stands in for the whole config module this
+        # route file imports, so it needs every attribute routes/auth.py
+        # actually touches at import time, not just the OIDC-specific ones.
+        AUTH_RATE_LIMIT_PER_MINUTE=10,
     )
     sys.modules["config"] = cfg
 
@@ -225,3 +231,94 @@ async def test_oidc_callback_deletes_state_and_nonce_cookies(auth_route_mod):
     cookies = _set_cookies(response)
     assert any(c.startswith("oidc_state=") for c in cookies)
     assert any(c.startswith("oidc_nonce=") for c in cookies)
+
+
+# ── register/login rate limit is configurable, not hardcoded ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_register_rate_limit_uses_the_configured_value():
+    """register/login's own per-IP rate limit used to be a hardcoded decorator
+    literal (max_requests=10, no env override at all) -- confirmed live to be
+    the actual cause of e2e CI 429 flakes even after raising the unrelated
+    general RATE_LIMIT_PER_MINUTE gateway-middleware knob. Now reads
+    settings.AUTH_RATE_LIMIT_PER_MINUTE. Loads routes/auth.py fresh with a LOW
+    configured value (2) and confirms exactly that many calls succeed before a
+    429 -- proving the config value, not the old literal, is what's enforced."""
+    from starlette.datastructures import Headers
+    from starlette.types import Scope
+
+    from shared.auth.jwt_middleware import _rate_limit_store
+
+    names = ("core", "core.auth", "core.oidc", "config")
+    saved = {n: sys.modules.get(n) for n in names}
+    for n in ("core", "core.auth", "core.oidc"):
+        sys.modules[n] = ModuleType(n)
+    sys.modules["core.auth"].create_jwt_token = lambda data: "signed.jwt.token"
+    sys.modules["core.auth"].create_user = AsyncMock(
+        return_value={
+            "id": 1,
+            "username": "newuser",
+            "email": "newuser@example.com",
+            "role": "user",
+            "created_at": None,
+        }
+    )
+    sys.modules["core.auth"].verify_jwt_token = lambda t: {"sub": "1"}
+    sys.modules["core.auth"].verify_user_credentials = AsyncMock()
+    sys.modules["core.auth"].get_or_create_oidc_user = AsyncMock()
+    sys.modules["core.oidc"].exchange_code_for_tokens = AsyncMock()
+    sys.modules["core.oidc"].verify_id_token = AsyncMock()
+    sys.modules["core.oidc"].fetch_userinfo = AsyncMock()
+
+    saved_config = sys.modules.get("config")
+    cfg = ModuleType("config")
+    cfg.settings = SimpleNamespace(
+        MINDER_OIDC_CLIENT_ID="minder-client",
+        MINDER_OIDC_REDIRECT_URI="https://api.minder.local/v1/auth/oidc/callback",
+        AUTHELIA_ISSUER_URL="https://authelia.minder.local",
+        MINDER_CLIENT_BASE_URL="https://client.minder.local",
+        JWT_EXPIRATION_MINUTES=60,
+        AUTH_RATE_LIMIT_PER_MINUTE=2,
+    )
+    sys.modules["config"] = cfg
+    _rate_limit_store.clear()
+
+    def _register_request():
+        scope: Scope = {
+            "type": "http",
+            "path": "/v1/auth/register",
+            "headers": Headers({}).raw,
+            "client": ("9.9.9.9", 12345),
+        }
+        return Request(scope)
+
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "auth_rate_limit_under_test", _ROUTE
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        body = mod.RegisterRequest(
+            username="newuser", email="newuser@example.com", password="password123"
+        )
+
+        for _ in range(2):  # AUTH_RATE_LIMIT_PER_MINUTE=2 -- both must succeed
+            result = await mod.register(body, _register_request())
+            assert result.user.username == "newuser"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await mod.register(body, _register_request())
+        assert exc_info.value.status_code == 429
+    finally:
+        _rate_limit_store.clear()
+        for n, m in saved.items():
+            if m is not None:
+                sys.modules[n] = m
+            else:
+                sys.modules.pop(n, None)
+        if saved_config is not None:
+            sys.modules["config"] = saved_config
+        else:
+            sys.modules.pop("config", None)

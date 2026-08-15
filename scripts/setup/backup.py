@@ -86,6 +86,18 @@ def run() -> int:
     ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     dest = config.BACKUP_DIR / f"minder-{ts}"
     dest.mkdir(parents=True, exist_ok=True)
+    # Found in a background audit: only env.backup (below) ever got a chmod --
+    # the staging dir itself, the PostgreSQL dump, and the final archive all
+    # landed with ordinary umask-based permissions. The dump is produced by a
+    # bare `pg_dumpall` with no `--no-role-passwords`, so it includes `CREATE
+    # ROLE ... PASSWORD <hash>` for every role -- credential material, not
+    # just table data. Tightening the staging dir here means anything written
+    # into it inherits a non-world-readable parent even before its own chmod
+    # (if any) runs.
+    try:
+        dest.chmod(0o700)
+    except OSError:
+        pass
 
     log.section(f"💾  Platform Backup  →  {dest}")
 
@@ -134,6 +146,16 @@ def run() -> int:
         )
         log.spinner_stop()
         if ok:
+            # The dump contains role-password hashes (see the module-level
+            # comment on dest.chmod above) -- protect it the same way
+            # env.backup already is, regardless of what happens to the
+            # staging dir/archive afterward (including the "compression
+            # failed, uncompressed backup kept" fallback below, where this
+            # file is what's left exposed on disk).
+            try:
+                dump.chmod(0o600)
+            except OSError:
+                pass
             log.success(f"PostgreSQL  ({_du_sh(dump)})")
         else:
             log.warn("PostgreSQL dump failed")
@@ -322,6 +344,16 @@ def run() -> int:
     archive = config.BACKUP_DIR / f"minder-{ts}.tar.gz"
     if _make_archive(archive, config.BACKUP_DIR, f"minder-{ts}"):
         shutil.rmtree(dest, ignore_errors=True)
+        # The archive folds env.backup/postgres.sql back together -- their own
+        # chmod 0600 doesn't survive being tarred (tar preserves the mode of
+        # the ENTRY, not of the resulting archive FILE itself), so a copy of
+        # this archive (e.g. the docs' own recommended off-site rsync, or a
+        # MinIO backup-archives bucket) would otherwise be as readable as
+        # whatever created it. Tighten the archive itself the same way.
+        try:
+            archive.chmod(0o600)
+        except OSError:
+            pass
         log.spinner_stop()
         log.success(f"Archive: {archive}  ({_du_sh(archive)})")
     else:
