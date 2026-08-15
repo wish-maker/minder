@@ -204,3 +204,15 @@ ON CONFLICT (user_id) DO NOTHING;
 -- directory that was never wired up.
 ALTER TABLE marketplace_installations
     DROP CONSTRAINT IF EXISTS marketplace_installations_user_id_fkey;
+
+-- Same dead-FK bug as marketplace_installations above, found in a background audit:
+-- marketplace_licenses.user_id and marketplace_ai_tools_configurations.user_id carry
+-- the identical FK onto marketplace_users, missed when the installations copy was
+-- fixed. POST /v1/marketplace/licenses/activate (core/licensing.py's create_license)
+-- threw the same unhandled ForeignKeyViolationError for any real user_id -- license
+-- activation, the core paid-feature-gating mechanism, 500'd for every user except
+-- the one seeded "admin" row.
+ALTER TABLE marketplace_licenses
+    DROP CONSTRAINT IF EXISTS marketplace_licenses_user_id_fkey;
+ALTER TABLE marketplace_ai_tools_configurations
+    DROP CONSTRAINT IF EXISTS marketplace_ai_tools_configurations_user_id_fkey;
