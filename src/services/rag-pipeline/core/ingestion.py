@@ -250,3 +250,77 @@ def group_documents(records: List) -> List[DocumentInfo]:
         if uploaded_at:
             entry["uploaded_at"] = uploaded_at
     return [DocumentInfo(**g) for g in groups.values()]
+
+
+async def reconcile_kb_counts_from_qdrant(kbs: Dict[str, Dict]) -> int:
+    """Reconcile each KB's document_count/vector_count against Qdrant (#629).
+
+    Qdrant is the source of truth for what's actually indexed. The counts are bumped
+    in-memory on every upload and persisted to Postgres best-effort -- a transient DB
+    blip on that save is only logged (the upload still succeeds, the vectors ARE in
+    Qdrant), so after a restart -- when Postgres becomes the source of truth -- a KB's
+    reported counts can silently revert to a stale, lower value than what's really
+    indexed, with no reconciliation path.
+
+    This runs once at startup: it scrolls each KB's leaf points (excluding RAPTOR
+    tree-summary nodes, exactly as ``group_documents`` does -- ``vector_count`` counts
+    leaf chunks only, per ingest_document) and, if the authoritative counts differ
+    from the loaded values, corrects them in-memory AND heals the drift back into
+    Postgres. Per-KB failures (e.g. a KB row whose Qdrant collection was never
+    created because nothing was uploaded yet) are logged and skipped so one bad KB
+    can't abort startup. Returns the number of KBs whose counts were corrected.
+    """
+    client = state.get_qdrant_client()
+    corrected = 0
+    for kb_id, kb in kbs.items():
+        try:
+            records: List = []
+            next_offset = None
+            while True:
+                batch, next_offset = await asyncio.to_thread(
+                    client.scroll,
+                    collection_name=kb_id,
+                    limit=256,
+                    offset=next_offset,
+                    # tree_level MUST be loaded so group_documents can exclude
+                    # tree-summary nodes -- a missing field is treated as level 0.
+                    with_payload=[
+                        "source",
+                        "document_id",
+                        "uploaded_at",
+                        "tree_level",
+                    ],
+                    with_vectors=False,
+                )
+                records.extend(batch)
+                if next_offset is None:
+                    break
+            documents = group_documents(records)
+            actual_docs = len(documents)
+            actual_vectors = sum(d.chunk_count for d in documents)
+        except Exception as e:
+            logger.warning(f"⚠️  Count reconcile skipped for KB {kb_id}: {e}")
+            continue
+
+        if (actual_docs, actual_vectors) == (
+            kb.get("document_count"),
+            kb.get("vector_count"),
+        ):
+            continue
+
+        logger.warning(
+            f"🔧 KB {kb_id} count drift reconciled from Qdrant: document_count "
+            f"{kb.get('document_count')}→{actual_docs}, vector_count "
+            f"{kb.get('vector_count')}→{actual_vectors}"
+        )
+        kb["document_count"] = actual_docs
+        kb["vector_count"] = actual_vectors
+        corrected += 1
+        if state.PG_AVAILABLE:
+            try:
+                await state.save_kb_to_postgres(kb_id, kb)
+            except Exception as e:
+                logger.warning(
+                    f"⚠️  Failed to persist reconciled counts for KB {kb_id}: {e}"
+                )
+    return corrected
