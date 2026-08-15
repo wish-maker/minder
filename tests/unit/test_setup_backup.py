@@ -7,9 +7,20 @@ absent from influxdb 3-core), so it's no longer silently skipped. No Docker: the
 container probes, docker.run, and the un-gated dump/archive helpers are stubbed.
 """
 
+import sys
+
 import pytest
 
 from scripts.setup import backup
+
+# The secret-permission tests assert exact POSIX file modes (0o700/0o600). Windows
+# (NTFS) can't represent those — os.chmod only toggles the read-only bit — so they
+# spuriously fail on a Windows dev machine while passing in CI (Linux). Skip them
+# there; the CI gate on ubuntu-latest still enforces the real permission contract.
+_posix_perms_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX file modes (0o700/0o600) aren't representable on Windows/NTFS",
+)
 
 
 @pytest.fixture
@@ -109,6 +120,7 @@ def test_minio_snapshot_failure_is_loud(monkeypatch, stubbed):
 # umask-based permissions. These lock in the fix.
 
 
+@_posix_perms_only
 def test_staging_dir_is_chmod_700(monkeypatch, stubbed, tmp_path):
     # _make_archive returns False (the "compression failed, uncompressed
     # backup kept" fallback) so the staging dir survives rmtree for
@@ -125,6 +137,7 @@ def test_staging_dir_is_chmod_700(monkeypatch, stubbed, tmp_path):
     assert (staging_dirs[0].stat().st_mode & 0o777) == 0o700
 
 
+@_posix_perms_only
 def test_postgres_dump_is_chmod_600(monkeypatch, stubbed, tmp_path):
     def fake_dump_to_file(argv, dest_file):
         dest_file.write_bytes(b"-- dump with CREATE ROLE ... PASSWORD 'x'\n")
@@ -147,6 +160,7 @@ def test_postgres_dump_is_chmod_600(monkeypatch, stubbed, tmp_path):
     assert (dump.stat().st_mode & 0o777) == 0o600
 
 
+@_posix_perms_only
 def test_archive_is_chmod_600(monkeypatch, stubbed, tmp_path):
     def fake_make_archive(archive, base_dir, name):
         archive.write_bytes(b"fake-archive-bytes")
