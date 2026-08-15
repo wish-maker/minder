@@ -17,6 +17,13 @@ from config import settings
 
 logger = logging.getLogger("minder.neo4j_client")
 
+# Cap on transitive DEPENDS_ON traversal depth (#673). With the write-time cycle
+# guard in add_dependency the graph stays acyclic, so this is defense-in-depth: it
+# bounds the search space against a pre-existing cycle in a live graph (from before
+# the guard) and keeps the unbounded `*` pattern from exploding on a large/densely-
+# connected graph. Generous enough for any realistic plugin dependency chain.
+MAX_DEPENDENCY_DEPTH = 20
+
 
 def _parse_neo4j_auth(auth_string: str) -> tuple[str, str]:
     """
@@ -149,6 +156,16 @@ class Neo4jClient:
                 f"allowed: {sorted(allowed_rel_types)}"
             )
 
+        # A plugin depending on / recommending / conflicting-with itself is always a
+        # mistake (#673). Without this, a self-loop `A DEPENDS_ON A` makes
+        # get_dependency_chain("A") return A as one of its own transitive
+        # dependencies. Reject before any write; the route maps ValueError -> 400.
+        if plugin_id == depends_on_plugin_id:
+            raise ValueError(
+                f"A plugin cannot {dependency_type} itself (plugin_id "
+                f"{plugin_id!r} == depends_on_plugin_id)"
+            )
+
         query = f"""
         MERGE (p1:Plugin {{id: $plugin_id}})
         ON CREATE SET p1.display_name = $plugin_name
@@ -160,6 +177,31 @@ class Neo4jClient:
         """  # nosec B608 - rel_type is from a fixed allowlist, not user input
 
         async with self.driver.session() as session:
+            # Cycle guard (#673): adding `p1 -[:DEPENDS_ON]-> p2` closes a cycle iff
+            # p2 already (transitively) depends on p1. Neo4j's `*` traversal can
+            # revisit nodes, so an unguarded cycle makes get_dependency_chain report
+            # a plugin as its own dependency. Probe first and reject rather than
+            # create the edge. Only DEPENDS_ON forms a meaningful dependency cycle;
+            # RECOMMENDS/CONFLICTS_WITH self-loops are already caught above.
+            if rel_type == "DEPENDS_ON":
+                cycle_probe = f"""
+                MATCH path = (start:Plugin {{id: $depends_on_id}})
+                      -[:DEPENDS_ON*1..{MAX_DEPENDENCY_DEPTH}]->
+                      (target:Plugin {{id: $plugin_id}})
+                RETURN path LIMIT 1
+                """  # nosec B608 - only the fixed int MAX_DEPENDENCY_DEPTH is interpolated
+                probe_result = await session.run(
+                    cycle_probe,
+                    plugin_id=plugin_id,
+                    depends_on_id=depends_on_plugin_id,
+                )
+                if await probe_result.single() is not None:
+                    raise ValueError(
+                        f"Adding dependency {plugin_id!r} -> "
+                        f"{depends_on_plugin_id!r} would create a cycle in the "
+                        "DEPENDS_ON graph"
+                    )
+
             result = await session.run(
                 query,
                 plugin_id=plugin_id,
@@ -250,13 +292,17 @@ class Neo4jClient:
         Returns:
             Ordered list of dependencies (direct and transitive)
         """
-        query = """
-        MATCH path = (p:Plugin {id: $plugin_id})-[:DEPENDS_ON*]->(dependency:Plugin)
+        # Depth-capped `*1..N` rather than unbounded `*` (#673): defense-in-depth so a
+        # pre-existing cycle (from before add_dependency's write-time guard) can't make
+        # this traversal explode combinatorially on a densely-connected graph.
+        query = f"""
+        MATCH path = (p:Plugin {{id: $plugin_id}})
+              -[:DEPENDS_ON*1..{MAX_DEPENDENCY_DEPTH}]->(dependency:Plugin)
         RETURN DISTINCT dependency.id as plugin_id,
                dependency.display_name as name,
                length(path) as depth
         ORDER BY depth DESC
-        """
+        """  # nosec B608 - only the fixed int MAX_DEPENDENCY_DEPTH is interpolated
 
         async with self.driver.session() as session:
             result = await session.run(query, plugin_id=plugin_id)
