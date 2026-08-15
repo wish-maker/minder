@@ -100,3 +100,62 @@ def test_minio_snapshot_failure_is_loud(monkeypatch, stubbed):
     rc = backup.run()
     assert rc == 0
     assert any("Backup complete — NOT captured: MinIO" in w for w in warns)
+
+
+# ── Secret-handling permissions (found in a background audit) ────────────────
+# Only env.backup ever got a chmod -- the staging dir, the PostgreSQL dump
+# (which includes CREATE ROLE ... PASSWORD hashes via bare pg_dumpall, no
+# --no-role-passwords), and the final archive all landed with ordinary
+# umask-based permissions. These lock in the fix.
+
+
+def test_staging_dir_is_chmod_700(monkeypatch, stubbed, tmp_path):
+    # _make_archive returns False (the "compression failed, uncompressed
+    # backup kept" fallback) so the staging dir survives rmtree for
+    # inspection -- the default stub's "successful" compress (of a no real
+    # archive ever written) still rmtree's it same as a genuine success would.
+    monkeypatch.setattr(backup, "_make_archive", lambda *a, **k: False)
+
+    backup.run()
+
+    staging_dirs = [
+        p for p in tmp_path.iterdir() if p.is_dir() and p.name.startswith("minder-")
+    ]
+    assert len(staging_dirs) == 1
+    assert (staging_dirs[0].stat().st_mode & 0o777) == 0o700
+
+
+def test_postgres_dump_is_chmod_600(monkeypatch, stubbed, tmp_path):
+    def fake_dump_to_file(argv, dest_file):
+        dest_file.write_bytes(b"-- dump with CREATE ROLE ... PASSWORD 'x'\n")
+        return True
+
+    monkeypatch.setattr(backup, "_dump_to_file", fake_dump_to_file)
+    # _make_archive returns False here (the "compression failed, uncompressed
+    # backup kept" fallback) so the staging dir -- with the real dump file
+    # inside it -- survives for inspection instead of being rmtree'd after a
+    # (stubbed, no real archive written) "successful" compress.
+    monkeypatch.setattr(backup, "_make_archive", lambda *a, **k: False)
+
+    backup.run()
+
+    staging_dirs = [
+        p for p in tmp_path.iterdir() if p.is_dir() and p.name.startswith("minder-")
+    ]
+    dump = staging_dirs[0] / "postgres.sql"
+    assert dump.is_file()
+    assert (dump.stat().st_mode & 0o777) == 0o600
+
+
+def test_archive_is_chmod_600(monkeypatch, stubbed, tmp_path):
+    def fake_make_archive(archive, base_dir, name):
+        archive.write_bytes(b"fake-archive-bytes")
+        return True
+
+    monkeypatch.setattr(backup, "_make_archive", fake_make_archive)
+
+    backup.run()
+
+    archives = list(tmp_path.glob("minder-*.tar.gz"))
+    assert len(archives) == 1
+    assert (archives[0].stat().st_mode & 0o777) == 0o600
