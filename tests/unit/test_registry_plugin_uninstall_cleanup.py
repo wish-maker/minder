@@ -64,8 +64,15 @@ class _FakeRedis:
         self.deleted.append(key)
 
 
-def _build_client(*, plugins_db, plugin_manifests, webhook_routes, redis_client):
+def _build_client(
+    *, plugins_db, plugin_manifests, webhook_routes, redis_client, db_deletes=None
+):
     routes_plugins = _fresh_import("routes.plugins")
+
+    async def _fake_delete_from_db(plugin_name):
+        if db_deletes is not None:
+            db_deletes.append(plugin_name)
+
     app = FastAPI()
     app.include_router(
         routes_plugins.build_plugins_router(
@@ -75,6 +82,7 @@ def _build_client(*, plugins_db, plugin_manifests, webhook_routes, redis_client)
             webhook_routes=webhook_routes,
             redis_client=redis_client,
             update_plugin_in_database=lambda *a, **k: None,
+            delete_plugin_from_database=_fake_delete_from_db,
             load_plugin_config=lambda *a, **k: {},
             save_plugin_config=lambda *a, **k: None,
             register_plugin_webhook=lambda *a, **k: None,
@@ -113,6 +121,30 @@ def test_uninstall_removes_the_plugins_own_manifest_and_webhook_route():
     assert "weather" not in plugin_manifests
     assert "/webhook/weather" not in webhook_routes
     assert redis_client.deleted == ["plugin:weather"]
+
+
+def test_uninstall_hard_deletes_the_plugin_from_the_database():
+    """#639 (resolved): uninstall must also delete the persisted rows, else the
+    next registry restart re-loads the plugin + re-arms its webhook (resurrection).
+    """
+    plugins_db = {"weather": _Plugin()}
+    plugin_manifests = {"weather": {"metadata": {"name": "weather"}}}
+    webhook_routes = {"/webhook/weather": "weather"}
+    redis_client = _FakeRedis()
+    db_deletes: list = []
+
+    client = _build_client(
+        plugins_db=plugins_db,
+        plugin_manifests=plugin_manifests,
+        webhook_routes=webhook_routes,
+        redis_client=redis_client,
+        db_deletes=db_deletes,
+    )
+
+    r = client.delete("/v1/plugins/weather")
+
+    assert r.status_code == 200
+    assert db_deletes == ["weather"]  # persisted rows hard-deleted
 
 
 def test_uninstall_leaves_other_plugins_manifests_and_routes_untouched():
