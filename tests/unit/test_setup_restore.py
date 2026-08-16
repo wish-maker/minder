@@ -254,6 +254,67 @@ def test_failed_store_restore_is_tracked_as_skipped(monkeypatch, stubbed, tmp_pa
     assert any("Restore complete — NOT restored: PostgreSQL" in w for w in warns)
 
 
+def test_neo4j_restore_clears_graph_before_import(monkeypatch, stubbed, tmp_path):
+    """#643: the export uses CREATE (not MERGE), so restoring onto a non-empty
+    graph would duplicate every node/rel. Restore must issue a DETACH DELETE
+    clear BEFORE the -f import, and the import must only run if the clear
+    succeeded (else duplication is reintroduced)."""
+    archive = _make_archive(
+        tmp_path,
+        files={
+            "postgres.sql": "-- dump\n",
+            "neo4j.cypher": "CREATE (:X);\n",
+        },
+    )
+    warns, succs, errors = stubbed
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+    bare_calls: list[list] = []
+    monkeypatch.setattr(
+        restore, "_run_bare", lambda cmd, **k: bare_calls.append(cmd) or 0
+    )
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    joined = ["\n".join(c) for c in bare_calls]
+    clear_idx = next(i for i, s in enumerate(joined) if "DETACH DELETE" in s)
+    import_idx = next(i for i, s in enumerate(joined) if "neo4j-restore.cypher" in s)
+    assert clear_idx < import_idx, "graph must be cleared before the import runs"
+    assert any("Neo4j restored" in s for s in succs)
+
+
+def test_neo4j_restore_skips_import_when_clear_fails(monkeypatch, stubbed, tmp_path):
+    """If the DETACH DELETE clear fails, restore must NOT import onto the
+    unemptied graph (that would reintroduce the #643 duplication) — it marks
+    Neo4j skipped instead."""
+    archive = _make_archive(
+        tmp_path,
+        files={
+            "postgres.sql": "-- dump\n",
+            "neo4j.cypher": "CREATE (:X);\n",
+        },
+    )
+    warns, succs, errors = stubbed
+    monkeypatch.setattr(restore.config, "ENV_FILE", tmp_path / "env")
+    bare_calls: list[list] = []
+
+    def fake_bare(cmd, **k):
+        bare_calls.append(cmd)
+        # Fail the clear (the DETACH DELETE), succeed everything else.
+        return 1 if any("DETACH DELETE" in a for a in cmd) else 0
+
+    monkeypatch.setattr(restore, "_run_bare", fake_bare)
+
+    rc = restore.run(str(archive))
+
+    assert rc == 0
+    joined = ["\n".join(c) for c in bare_calls]
+    assert not any(
+        "neo4j-restore.cypher" in s for s in joined
+    ), "import must not run after a failed clear"
+    assert any("Restore complete — NOT restored: Neo4j" in w for w in warns)
+
+
 def test_postgres_not_running_recreates_network_first(monkeypatch, stubbed, tmp_path):
     """#288: found live on hantal — restore's own precondition is "services must
     be stopped", and `stop` deliberately removes the app network, so bringing
