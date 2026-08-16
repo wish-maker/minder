@@ -473,7 +473,7 @@ Model lifecycle over the Ollama runtime.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/models` | List local models (live from Ollama) — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#519) |
-| POST | `/models` | Pull a model (admin-gated, #474) — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists |
+| POST | `/models` | Pull a model (admin-gated, #474) — body `{"model_id": "..."}`. **201** on a fresh pull, **200** if it already exists. `model_id` rejects a custom registry host (**422**) — only the default Ollama library, optionally namespaced (e.g. `namespace/model:tag`), is supported (#679). Concurrent pulls are capped via `MAX_CONCURRENT_MODEL_PULLS` (default 1) — excess concurrent requests queue rather than racing the shared Ollama volume |
 | GET | `/models/{model_id}` | Model details, including a `capabilities` list (e.g. `tools`) sourced from Ollama's own model metadata — **not** a guarantee the model reliably uses tools when offered them, see [testing.md](../development/testing.md#tool-calling-model-reliability-328) (**404** if unknown) |
 | DELETE | `/models/{model_id}` | Delete a local model (admin-gated, #474; **404** if unknown) |
 | POST | `/models/{model_id}/test` | Quick test-prompt inference — body `{"prompt": "..."}` |
@@ -535,7 +535,7 @@ Every route below also has a legacy unversioned alias kept for compatibility
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/v1/extract` | spaCy NER entity extraction from text |
-| POST | `/v1/construct-graph` | Build a Neo4j knowledge graph from documents/entities (idempotent — Cypher `MERGE`, so re-posting the same `document_id` upserts rather than duplicating) |
+| POST | `/v1/construct-graph` | Build a Neo4j knowledge graph from documents/entities. Atomic (one transaction, #668) — a mid-failure can't leave a half-built graph. Re-posting the same `document_id` is a FULL REPLACE of that document's edges (old `RELATES_TO`/`MENTIONS` dropped before rebuild, orphaned entities cleaned up) — not a simple upsert, so omitting a relationship on re-POST removes it. Document metadata (title/source/metadata) upserts via `COALESCE` — an omitted field keeps its previous value rather than blanking |
 | POST | `/v1/retrieve` | Graph-based retrieval over entity relationships |
 | POST | `/v1/entity-context` | Retrieve context / neighbors around an entity |
 | POST | `/v1/graph/search` | Free-text search the graph for entities whose `text` or `label` matches `query` (case-insensitive `CONTAINS`); returns `{text, label, description}` per hit, `limit` 1–50 (default 5) |

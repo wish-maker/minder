@@ -24,7 +24,7 @@ python -m pytest tests/unit/test_model_management_*.py
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/v1/models` | List installed models — `{items,total,limit,offset}` envelope (#501) |
-| POST | `/v1/models` | Pull a model — body `{"model_id": "..."}` → **201** |
+| POST | `/v1/models` | Pull a model — body `{"model_id": "..."}` → **201**. Rejects a custom registry host (**422**) — only the default Ollama library, optionally namespaced (e.g. `namespace/model:tag`), is supported (#679). Concurrent pulls capped via `MAX_CONCURRENT_MODEL_PULLS` |
 | GET | `/v1/models/{model_id}` | Inspect one model (details from Ollama) |
 | DELETE | `/v1/models/{model_id}` | Delete a model |
 | POST | `/v1/models/{model_id}/test` | Smoke-test: send a prompt, return the completion |
@@ -45,7 +45,7 @@ model-management/
 ├── routes/models_api.py     # all endpoints (list/pull/get/delete/test + 501 stubs)
 ├── core/ollama_manager.py   # the Ollama client (list/pull/show/delete/generate)
 ├── models/__init__.py       # Pydantic request/response models (ModelInfo, ...)
-└── config.py                # Settings: OLLAMA_HOST only
+└── config.py                # Settings: OLLAMA_HOST, MAX_CONCURRENT_MODEL_PULLS
 ```
 
 ## Configuration (`config.py`)
@@ -54,6 +54,10 @@ model-management/
   platform `OLLAMA_HOST` convention: empty/local → the internal `minder-ollama`
   container; set → an external/native host (resolve as `host.docker.internal` /
   LAN-IP from inside the container, not `localhost`).
+- `MAX_CONCURRENT_MODEL_PULLS` (default `1`) — caps concurrent `pull_model` calls
+  via an `asyncio.Semaphore` (#679). Each pull can be many GB with no
+  disk-space check; the default serializes pulls entirely so unbounded
+  concurrent downloads can't race to fill the shared Ollama volume.
 
 No secrets — this service holds no auth of its own (writes are JWT-gated at the
 api-gateway proxy, #47).

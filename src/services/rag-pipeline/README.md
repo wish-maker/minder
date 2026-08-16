@@ -93,6 +93,7 @@ rag-pipeline/
 - **Ollama** — embeddings (ingest) + generation (query). A query needs a REACHABLE ollama at `OLLAMA_BASE_URL`; if it's down, upload 503s (no silent zero-vector) and query returns an error (#77).
 - **Postgres** — optional durable rows for KBs / pipelines / conversation history (the in-memory `state` dicts are the source of truth at runtime; PG is write-through via UPSERT).
 - Sync Qdrant/embedding calls run off the event loop via `asyncio.to_thread` (#211) so one slow op can't stall the service.
+- Qdrant upserts during ingestion are batched (`QDRANT_UPSERT_BATCH_SIZE`, mirrors the embedding phase's own batching, #683) — on a mid-document failure, already-written points for that upload are deleted so the upload still fails atomically overall. KB `document_count`/`vector_count` are reconciled from Qdrant's actual point count on startup (#629), rather than trusting a possibly-stale Postgres row.
 
 ## Tests
 
