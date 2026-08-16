@@ -18,6 +18,7 @@ from core.retrieval import (
 from domain.retrievers.hybrid import BM25_AVAILABLE
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from models import (
+    ChunkInfo,
     DocumentInfo,
     DocumentUploadResponse,
     KnowledgeBaseCreate,
@@ -400,6 +401,92 @@ async def list_documents(kb_id: str):
     )
 
 
+def _document_id_filter(document_id: str) -> Filter:
+    """Build the Qdrant filter that scopes to exactly one uploaded document's
+    chunks, handling both a real `document_id` and the synthesized
+    `legacy:<filename>` id (see DocumentInfo) for pre-#427 chunks that never
+    got a `document_id` stamped. Shared by delete_document and
+    get_document_chunks -- both need the identical scoping."""
+    if document_id.startswith("legacy:"):
+        return Filter(
+            must=[
+                FieldCondition(
+                    key="source", match=MatchValue(value=document_id[len("legacy:") :])
+                ),
+                IsEmptyCondition(is_empty=PayloadField(key="document_id")),
+            ]
+        )
+    return Filter(
+        must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]
+    )
+
+
+@router.get(
+    "/v1/knowledge-bases/{kb_id}/documents/{document_id}/chunks",
+    response_model=PaginatedList[ChunkInfo],
+    tags=["Knowledge Base"],
+)
+@router.get(
+    "/knowledge-bases/{kb_id}/documents/{document_id}/chunks",
+    response_model=PaginatedList[ChunkInfo],
+    tags=["Knowledge Base"],
+    include_in_schema=False,
+)  # deprecated unversioned alias -- see list_documents' comment above
+async def get_document_chunks(
+    kb_id: str,
+    document_id: str,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    """List a single document's stored chunks (text + chunk_index), in the
+    shared `{items, total, limit, offset}` envelope (#501) -- lets a caller
+    inspect what actually got extracted/stored (e.g. a garbled PDF parse) as
+    a diagnostic step separate from a retrieval/generation issue. 404 if the
+    KB or the document is unknown.
+
+    RAPTOR tree-summary nodes (tree_level > 0) are excluded, same convention
+    as list_documents/build_metadata_filter -- these are synthesized
+    summaries, not chunks the document's own text was split into.
+    """
+    if kb_id not in state.knowledge_bases:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    filter_ = _document_id_filter(document_id)
+    client = state.get_qdrant_client()
+
+    records: List = []
+    next_offset = None
+    while True:
+        batch, next_offset = await asyncio.to_thread(
+            client.scroll,
+            collection_name=kb_id,
+            scroll_filter=filter_,
+            limit=256,
+            offset=next_offset,
+            with_payload=["text", "chunk_index", "tree_level"],
+            with_vectors=False,
+        )
+        records.extend(batch)
+        if next_offset is None:
+            break
+
+    if not records:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    chunks = sorted(
+        (
+            ChunkInfo(
+                chunk_index=r.payload.get("chunk_index", 0),
+                text=r.payload.get("text", ""),
+            )
+            for r in records
+            if not r.payload.get("tree_level")
+        ),
+        key=lambda c: c.chunk_index,
+    )
+    return PaginatedList.paginate(chunks, limit, offset)
+
+
 @router.delete(
     "/v1/knowledge-bases/{kb_id}/documents/{document_id}",
     tags=["Knowledge Base"],
@@ -432,21 +519,7 @@ async def delete_document(
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    if document_id.startswith("legacy:"):
-        filter_ = Filter(
-            must=[
-                FieldCondition(
-                    key="source", match=MatchValue(value=document_id[len("legacy:") :])
-                ),
-                IsEmptyCondition(is_empty=PayloadField(key="document_id")),
-            ]
-        )
-    else:
-        filter_ = Filter(
-            must=[
-                FieldCondition(key="document_id", match=MatchValue(value=document_id))
-            ]
-        )
+    filter_ = _document_id_filter(document_id)
 
     client = state.get_qdrant_client()
     count_result = await asyncio.to_thread(

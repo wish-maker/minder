@@ -242,3 +242,12 @@ class DocumentInfo(BaseModel):
     filename: str
     chunk_count: int
     uploaded_at: Optional[str] = None
+
+
+class ChunkInfo(BaseModel):
+    """A single stored chunk's text within one document -- lets a caller
+    inspect what actually got extracted/stored, e.g. to tell a bad
+    PDF-parse/OCR apart from a retrieval-side issue."""
+
+    chunk_index: int
+    text: str
