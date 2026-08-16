@@ -10,7 +10,7 @@ import { exampleForSchema } from "../lib/jsonSchemaExample";
 import { badgeClass, inputClass, secondaryButtonClass } from "../lib/ui";
 import { useAsyncResource } from "../lib/useAsyncResource";
 
-interface LiveTool {
+export interface LiveTool {
   type: "function";
   function: {
     name: string;
@@ -37,7 +37,7 @@ interface LiveToolsResponse {
  * the tool's real endpoint with whatever's in the box. GET tools send the
  * parameters as a query string (matching how plugin-registry's read-action
  * route actually reads them); everything else sends a JSON body. */
-function TryItPanel({ tool, token }: { tool: LiveTool; token: string }) {
+export function TryItPanel({ tool, token }: { tool: LiveTool; token: string }) {
   const textareaId = useId();
   const [paramsText, setParamsText] = useState(() =>
     JSON.stringify(exampleForSchema(tool.function.parameters), null, 2),
