@@ -10,6 +10,8 @@ from typing import Any, Dict
 
 import asyncpg
 
+from shared.models.tiers import normalize_tier
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,8 +105,27 @@ async def import_ai_tools_from_manifest(
             if tool_type not in ["analysis", "data", "action", "query"]:
                 tool_type = "analysis"
 
-            # Determine required tier (default: community)
-            required_tier = "community"
+            # Determine required tier (#663). Previously hardcoded to "community",
+            # so a plugin could never ship a paid tool even though the enforcement
+            # side already gates execution by required_tier (plugin-state-manager
+            # execute_tool → license.py, fail-closed #47). Now honors a
+            # tool-declared "required_tier" (free|community|pro|enterprise);
+            # absent or unrecognized → community (the baseline — never silently
+            # fail to a different tier without logging).
+            declared_tier = tool_def.get("required_tier")
+            if declared_tier:
+                try:
+                    required_tier = normalize_tier(declared_tier).value
+                except ValueError:
+                    logger.warning(
+                        "Tool %s declared an invalid required_tier %r; "
+                        "defaulting to community",
+                        tool_name,
+                        declared_tier,
+                    )
+                    required_tier = "community"
+            else:
+                required_tier = "community"
 
             if existing:
                 # Update existing tool

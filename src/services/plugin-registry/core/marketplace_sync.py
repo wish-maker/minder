@@ -89,6 +89,13 @@ def _to_marketplace_tool(tool: Dict) -> Dict:
     endpoint = tool.get("endpoint") or (f"/actions/{action}" if action else None)
     if endpoint:
         out["endpoint"] = endpoint
+    # #663: pass a tool-declared tier through to the marketplace importer. Without
+    # this the field was dropped here, so the importer had nothing to read and
+    # every tool landed at the hardcoded "community" tier regardless of what the
+    # plugin declared. Absent → omitted (importer defaults to community).
+    tier = tool.get("required_tier")
+    if tier:
+        out["required_tier"] = tier
     return out
 
 

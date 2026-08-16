@@ -323,3 +323,19 @@ async def test_multi_sentence_description_gets_a_real_short_headline(
     put_calls = [c for c in existing_plugin_requests if c[0] == "PUT"]
     body = put_calls[0][2]["json"]
     assert body["display_name"] == "Current weather and forecasts"
+
+
+def test_to_marketplace_tool_passes_declared_required_tier_through():
+    """#663: a tool-declared required_tier must survive the flat-shape
+    normalization so the marketplace importer can persist it (it was dropped
+    before, so every tool landed at the hardcoded 'community')."""
+    out = marketplace_sync._to_marketplace_tool(
+        {"name": "premium", "required_tier": "pro"}
+    )
+    assert out["required_tier"] == "pro"
+
+
+def test_to_marketplace_tool_omits_required_tier_when_absent():
+    """No declared tier → key omitted; the importer then defaults to community."""
+    out = marketplace_sync._to_marketplace_tool({"name": "plain"})
+    assert "required_tier" not in out
