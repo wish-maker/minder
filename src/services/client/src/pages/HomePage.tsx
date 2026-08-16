@@ -11,7 +11,7 @@ import { openWebUiUrl } from "../lib/links";
 import { cardClass, sectionLabelClass } from "../lib/ui";
 import { useAsyncResource } from "../lib/useAsyncResource";
 
-interface HomeStats {
+export interface HomeStats {
   kbCount: number;
   pipelineCount: number;
   bundlesEnabled: number;
@@ -57,7 +57,7 @@ interface PrimaryAction {
 /** The single most useful next step, derived from what's actually in this
  * installation -- a first-time user with 0 knowledge bases and someone who
  * already has 12 pipelines running shouldn't see the same call to action. */
-function primaryAction(stats: HomeStats | null): PrimaryAction {
+export function primaryAction(stats: HomeStats | null): PrimaryAction {
   if (stats === null || stats.kbCount === 0) {
     return {
       to: "/rag",
