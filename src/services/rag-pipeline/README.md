@@ -48,6 +48,7 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
 | PATCH | `/v1/pipeline/{id}` | Edit name / knowledge_base_ids in place (#545). JWT-gated |
 | DELETE | `/v1/pipeline/{id}` | Delete a pipeline (its KBs are left intact). JWT-gated |
 | POST | `/v1/pipeline/{id}/query` | Retrieve + generate — the flagship endpoint (see below) |
+| GET | `/v1/decision-stats` | `method="auto"` routing analytics — total decisions + strategy/complexity distributions + mean confidence. `available:false` when the auto engine isn't up. In-memory (resets on restart) |
 
 **Query body:** `{"question": "...", "top_k": 1-100, "method": "standard|hyde|self_rag|auto|corrective", "conversation_id": "...", "rerank": bool, "compress": bool, "hybrid": bool, "parent_context": bool, "metadata_filter": {"source": "...", "document_id": "..."}}`. Response carries the `answer`, the retrieved `sources` (`{source, score, text}`), and `method_details`. Full method semantics + the capability-adaptive behaviour live in **[`docs/rag-methods.md`](../../../docs/rag-methods.md)**; an unknown `method` (incl. `raptor`) → 422. RAPTOR is the one commonly-cited method NOT implemented (tracked in #487).
 

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from core import state
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from models import DecisionStatsResponse
 
 from config import settings
 from shared.errors import backend_http_error
@@ -125,6 +126,37 @@ async def capabilities():
             "rank_bm25": _bm25_available(),
         },
     }
+
+
+@router.get("/v1/decision-stats", tags=["System"], response_model=DecisionStatsResponse)
+@router.get(
+    "/decision-stats",
+    tags=["System"],
+    response_model=DecisionStatsResponse,
+    include_in_schema=False,
+)  # deprecated unversioned alias — how the gateway (/v1/rag/decision-stats) reaches it
+async def decision_stats() -> DecisionStatsResponse:
+    """Cumulative analytics for the ``method="auto"`` decision engine.
+
+    Reachable via the gateway at ``GET /v1/rag/decision-stats`` (which strips the
+    ``/v1/rag/`` prefix and forwards ``/decision-stats`` — the unversioned alias
+    above, mirroring /capabilities and /initialize).
+
+    Every ``method="auto"`` query records the routing decision it made (retrieval
+    strategy + query complexity + confidence) into the engine's in-memory history.
+    This surfaces that history — total decisions, the strategy/complexity
+    distributions, and the mean confidence — so operators can see how the
+    auto-router is actually behaving across queries.
+
+    Returns ``available=False`` when the auto engine isn't initialized on this host
+    (e.g. Ollama was unreachable at startup); the distributions stay empty. History
+    is in-memory, so counts reset on restart.
+    """
+    engine = state.decision_engine
+    if engine is None:
+        return DecisionStatsResponse(available=False)
+    stats = engine.get_decision_stats()
+    return DecisionStatsResponse(available=True, **stats)
 
 
 @router.post("/v1/initialize", tags=["System"])

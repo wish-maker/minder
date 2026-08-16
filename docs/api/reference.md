@@ -415,6 +415,7 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 |--------|------|-------------|
 | POST | `/initialize` | Initialize the Ollama client / warm the pipeline |
 | GET | `/capabilities` | What's actually live on this host (rerank backend, hybrid/parent-context availability, etc.) — see [rag-methods.md](../rag-methods.md) |
+| GET | `/decision-stats` | Cumulative analytics for the `method="auto"` routing engine — total decisions, strategy/complexity distributions, mean confidence. `available:false` when the auto engine isn't initialized (e.g. Ollama unreachable). In-memory (resets on restart) |
 | POST | `/knowledge-bases` | Create a knowledge base (`name` required, `description` optional; pick embedding + LLM model) |
 | GET | `/knowledge-bases` | List knowledge bases — paginated via `limit`/`offset`; returns the shared `{items, total, limit, offset}` envelope (#501) |
 | GET | `/knowledge-bases/{kb_id}` | Get a single knowledge base (404 if unknown) |
