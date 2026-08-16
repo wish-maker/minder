@@ -162,3 +162,138 @@ async def test_load_plugin_shuts_down_instance_on_db_failure(
 
     assert len(created_instances) == 1
     assert created_instances[0].shutdown_called is True
+
+
+async def test_load_plugin_survives_a_config_apply_failure(plugin_loader, monkeypatch):
+    """apply_effective (per-plugin centrally-managed config, #34) failing is a
+    non-fatal degradation -- the plugin must still end up registered, not have
+    the whole load aborted over a config-push hiccup."""
+
+    async def fake_update(name, **kwargs):
+        pass
+
+    monkeypatch.setattr(plugin_loader, "update_plugin_in_database", fake_update)
+    monkeypatch.setattr(
+        plugin_loader.cfgmod,
+        "apply_effective",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("bad config")),
+    )
+
+    await plugin_loader.load_plugin_from_module(Path("testplugin"))
+
+    assert "testplugin" in plugin_loader.plugins_db
+    assert "testplugin" in plugin_loader.plugin_instances
+
+
+async def test_load_plugin_falls_back_to_a_register_method_when_no_dunder_all(
+    plugin_loader,
+):
+    """Without __all__, the loader scans dir(module) for a class exposing
+    register() that's actually DEFINED in this module (attr.__module__ ==
+    module.__name__) -- not just imported into it. A module re-exporting some
+    unrelated imported class with its own register()-shaped API (or the fake
+    plugin class imported from elsewhere) must not be mistaken for the real
+    plugin class."""
+    fake_plugin_module = ModuleType("plugins.noall")
+    # An imported class that happens to expose register() too -- must be
+    # skipped precisely because its __module__ isn't "plugins.noall".
+    fake_plugin_module.ImportedLookalike = _FakePlugin
+
+    class RealPlugin:
+        def __init__(self, config):
+            self.config = config
+
+        async def register(self):
+            return _fake_metadata()
+
+        async def initialize(self):
+            pass
+
+        async def shutdown(self):
+            pass
+
+    RealPlugin.__module__ = "plugins.noall"
+    fake_plugin_module.RealPlugin = RealPlugin
+    sys.modules["plugins.noall"] = fake_plugin_module
+
+    async def fake_update(name, **kwargs):
+        pass
+
+    try:
+        # Re-target update_plugin_in_database without going through the
+        # module-scoped monkeypatch fixture (this test builds its own module).
+        import unittest.mock as mock
+
+        with mock.patch.object(plugin_loader, "update_plugin_in_database", fake_update):
+            await plugin_loader.load_plugin_from_module(Path("noall"))
+        # Registered under the directory name (not metadata.name) -- proves
+        # RealPlugin, not ImportedLookalike, was the class actually picked.
+        assert "noall" in plugin_loader.plugins_db
+        assert isinstance(plugin_loader.plugin_instances["noall"], RealPlugin)
+    finally:
+        sys.modules.pop("plugins.noall", None)
+        plugin_loader.plugins_db.pop("noall", None)
+        plugin_loader.plugin_instances.pop("noall", None)
+
+
+class TestLoadPluginsFromDisk:
+    """load_plugins_from_disk (module-directory discovery), isolated from
+    load_plugin_from_module -- monkeypatched to a call-recorder so these tests
+    only lock down which directories get considered a plugin, not the load
+    itself (already covered above)."""
+
+    def _fresh(self, monkeypatch, plugins_path):
+        mod = _fresh_import("core.plugin_loader")
+        monkeypatch.setattr(mod.settings, "PLUGINS_PATH", str(plugins_path))
+        return mod
+
+    async def test_missing_plugins_path_is_a_noop(self, monkeypatch, tmp_path):
+        mod = self._fresh(monkeypatch, tmp_path / "does-not-exist")
+        calls = []
+        monkeypatch.setattr(
+            mod, "load_plugin_from_module", lambda d: calls.append(d.name)
+        )
+
+        await mod.load_plugins_from_disk()
+
+        assert calls == []
+
+    async def test_skips_non_directory_entries(self, monkeypatch, tmp_path):
+        (tmp_path / "not_a_plugin.txt").write_text("hello")
+        mod = self._fresh(monkeypatch, tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            mod, "load_plugin_from_module", lambda d: calls.append(d.name)
+        )
+
+        await mod.load_plugins_from_disk()
+
+        assert calls == []
+
+    async def test_skips_a_directory_with_no_init_py(self, monkeypatch, tmp_path):
+        (tmp_path / "incomplete_plugin").mkdir()
+        mod = self._fresh(monkeypatch, tmp_path)
+        calls = []
+        monkeypatch.setattr(
+            mod, "load_plugin_from_module", lambda d: calls.append(d.name)
+        )
+
+        await mod.load_plugins_from_disk()
+
+        assert calls == []
+
+    async def test_loads_a_directory_with_an_init_py(self, monkeypatch, tmp_path):
+        plugin_dir = tmp_path / "weather"
+        plugin_dir.mkdir()
+        (plugin_dir / "__init__.py").write_text("")
+        mod = self._fresh(monkeypatch, tmp_path)
+        calls = []
+
+        async def fake_load(d):
+            calls.append(d.name)
+
+        monkeypatch.setattr(mod, "load_plugin_from_module", fake_load)
+
+        await mod.load_plugins_from_disk()
+
+        assert calls == ["weather"]
