@@ -309,3 +309,63 @@ def test_json_response_still_decoded_and_rewrapped(proxy_mod):
 
     assert result.status_code == 200
     assert json.loads(result.body) == {"ok": True}
+
+
+# --- _require_jwt_for_writes -------------------------------------------------
+# Applied uniformly to every proxied service (#47) -- gates every mutating
+# method behind a valid JWT. Had zero direct tests despite being the one
+# auth check every proxy route shares.
+
+
+class _FakeAuthRequest:
+    def __init__(self, method, headers=None):
+        self.method = method
+        self.headers = headers or {}
+        self.state = SimpleNamespace()
+
+
+def test_get_requests_skip_the_check_entirely(proxy_mod):
+    # No Authorization header at all -- would 401 if this were checked.
+    proxy_mod._require_jwt_for_writes(_FakeAuthRequest("GET"))
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE", "PATCH"])
+def test_mutating_methods_require_a_bearer_token(proxy_mod, method):
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc_info:
+        proxy_mod._require_jwt_for_writes(_FakeAuthRequest(method))
+    assert exc_info.value.status_code == 401
+
+
+def test_non_bearer_authorization_is_rejected(proxy_mod):
+    from fastapi import HTTPException
+
+    request = _FakeAuthRequest("POST", headers={"Authorization": "Basic xxx"})
+    with pytest.raises(HTTPException) as exc_info:
+        proxy_mod._require_jwt_for_writes(request)
+    assert exc_info.value.status_code == 401
+
+
+def test_valid_bearer_token_sets_request_state_user(proxy_mod, monkeypatch):
+    claims = {"sub": "user-1", "role": "admin"}
+    monkeypatch.setattr(proxy_mod, "verify_jwt_token", lambda token: claims)
+    request = _FakeAuthRequest("POST", headers={"Authorization": "Bearer good-token"})
+
+    proxy_mod._require_jwt_for_writes(request)
+
+    assert request.state.user == claims
+
+
+def test_an_invalid_tokens_401_propagates(proxy_mod, monkeypatch):
+    from fastapi import HTTPException
+
+    def _boom(token):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    monkeypatch.setattr(proxy_mod, "verify_jwt_token", _boom)
+    request = _FakeAuthRequest("POST", headers={"Authorization": "Bearer bad-token"})
+
+    with pytest.raises(HTTPException) as exc_info:
+        proxy_mod._require_jwt_for_writes(request)
+    assert exc_info.value.status_code == 401
