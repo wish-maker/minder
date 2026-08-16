@@ -15,6 +15,7 @@ import {
   destructiveButtonClass,
   fieldHintClass,
   inputClass,
+  mutedTextClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../lib/ui";
@@ -30,6 +31,14 @@ interface RagPipeline {
   name: string;
   knowledge_base_ids: string[];
   created_at: string;
+}
+
+interface DecisionStats {
+  available: boolean;
+  total_decisions: number;
+  strategy_distribution: Record<string, number>;
+  complexity_distribution: Record<string, number>;
+  avg_confidence: number | null;
 }
 
 interface Capabilities {
@@ -831,11 +840,80 @@ function PipelineCard({
   );
 }
 
+/** Auto-router (method="auto") analytics, from GET /v1/rag/decision-stats. The
+ * decision engine records the strategy/complexity/confidence of every auto query;
+ * this surfaces the cumulative distribution so you can see how it's behaving.
+ * Rendered only when the engine is available (Ollama up) — hidden otherwise so it
+ * doesn't add noise on deployments that don't use the auto method. */
+export function AutoRouterStatsCard({ stats }: { stats: DecisionStats | null }) {
+  if (!stats || !stats.available) return null;
+
+  const dist = (counts: Record<string, number>) =>
+    Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => (
+        <span key={k} className={badgeClass}>
+          {k}: {n}
+        </span>
+      ));
+
+  return (
+    <div className={`${cardClass} mb-4`}>
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+          🧭 Auto-router analytics
+        </h3>
+        <span className={mutedTextClass}>
+          {stats.total_decisions} decision
+          {stats.total_decisions === 1 ? "" : "s"} recorded
+        </span>
+      </div>
+      {stats.total_decisions === 0 ? (
+        <p className={mutedTextClass}>
+          No <code>method=auto</code> queries recorded yet — run one to see which
+          retrieval strategy the router picks. Counts are in-memory and reset on
+          restart.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-gray-600 dark:text-gray-400">
+              Strategy:
+            </span>
+            {dist(stats.strategy_distribution)}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium text-gray-600 dark:text-gray-400">
+              Complexity:
+            </span>
+            {dist(stats.complexity_distribution)}
+          </div>
+          {stats.avg_confidence !== null && (
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium text-gray-600 dark:text-gray-400">
+                Avg confidence:
+              </span>
+              <span
+                className={`inline-block rounded-full px-2 py-0.5 font-medium ${confidenceBadgeColor(
+                  stats.avg_confidence,
+                )}`}
+              >
+                {(stats.avg_confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function RagPipelinesPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
+  const [decisionStats, setDecisionStats] = useState<DecisionStats | null>(null);
   const [pipelines, setPipelines] = useState<RagPipeline[]>([]);
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
@@ -854,14 +932,18 @@ export function RagPipelinesPage() {
   const load = useCallback(async () => {
     setStatusMsg("Loading…");
     try {
-      const [kbList, caps, pipelineList] = await Promise.all([
+      const [kbList, caps, pipelineList, stats] = await Promise.all([
         apiFetch<Paginated<KnowledgeBase>>("/v1/rag/knowledge-bases?limit=100"),
         apiFetch<Capabilities>("/v1/rag/capabilities"),
         apiFetch<Paginated<RagPipeline>>("/v1/rag/pipeline?limit=100"),
+        // Newer endpoint (auto-router analytics) — degrade gracefully rather than
+        // failing the whole page load against a backend that predates it.
+        apiFetch<DecisionStats>("/v1/rag/decision-stats").catch(() => null),
       ]);
       setKbs(kbList.items);
       setCapabilities(caps);
       setPipelines(pipelineList.items);
+      setDecisionStats(stats);
       setStatusMsg("");
     } catch (e) {
       setStatusMsg(friendlyErrorMessage(e), true);
@@ -890,6 +972,7 @@ export function RagPipelinesPage() {
         separate from OpenWebUI's own disconnected Knowledge feature.
       </p>
       <RetrievalMethodsReference />
+      <AutoRouterStatsCard stats={decisionStats} />
       <StatusLine isError={isError}>{status}</StatusLine>
       <CreatePipelineForm
         token={token}
