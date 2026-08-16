@@ -14,6 +14,7 @@ established precedent (test_graph_rag_knowledge_graph_handler.py).
 """
 
 import contextlib
+import functools
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -1445,3 +1446,213 @@ async def test_decision_stats_wraps_full_engine_stats(monkeypatch):
     assert resp.strategy_distribution == {"basic": 2, "hierarchical": 1}
     assert resp.complexity_distribution == {"simple": 1, "moderate": 2}
     assert resp.avg_confidence == 0.75
+
+
+# ── POST /v1/pipeline/{id}/query: retrieval-strategy selection ───────────────
+# query_rag_pipeline's precedence logic (parent_context > hybrid > raptor >
+# dense), metadata_filter binding, and GenerationError -> 503 mapping had ZERO
+# direct test coverage (confirmed via `coverage`: lines 665-768 of routes/rag.py
+# never executed by any unit test) despite being the actual query endpoint
+# every RAG question goes through. run_query itself is faked -- these tests
+# only exercise query_rag_pipeline's OWN logic (which retrieve_fn gets chosen,
+# how errors map to HTTP status), not retrieval/generation themselves (already
+# covered elsewhere in this file / test_rag_pipeline_corrective_rag.py etc).
+
+
+def _unwrap(fn):
+    """functools.partial(retrieve_relevant_documents, ...) -> retrieve_relevant_documents,
+    so assertions can compare against the real underlying retrieve function
+    regardless of whether metadata_filter/include_all_levels bound it."""
+    return fn.func if isinstance(fn, functools.partial) else fn
+
+
+def _fake_run_query_result(**overrides):
+    result = {
+        "answer": "the answer",
+        "sources": [],
+        "confidence": 0.9,
+        "model_used": "llama3.2",
+        "method": "standard",
+        "method_details": {},
+    }
+    result.update(overrides)
+    return result
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_404_for_unknown_pipeline():
+    with _seed_state(rag_pipelines={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.query_rag_pipeline(
+                "nope", models.QueryRequest(question="hi?")
+            )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_selects_parent_context_when_requested(monkeypatch):
+    captured = {}
+
+    async def fake_run_query(*, components, **kwargs):
+        captured["retrieve_fn"] = components.retrieve
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.query_rag_pipeline(
+            "p1",
+            models.QueryRequest(
+                question="hi?", parent_context=True, hybrid=True, method="raptor"
+            ),
+        )
+
+    assert _unwrap(captured["retrieve_fn"]) is rag_routes.retrieve_parent_child
+    assert resp.method_details["retrieval"] == "parent_context"
+    # Both silently-overridden flags are recorded, not just dropped.
+    degraded = resp.method_details["degraded"]
+    assert any("hybrid flag ignored" in n for n in degraded)
+    assert any("method=raptor ignored" in n for n in degraded)
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_selects_hybrid_when_available(monkeypatch):
+    captured = {}
+
+    async def fake_run_query(*, components, **kwargs):
+        captured["retrieve_fn"] = components.retrieve
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    monkeypatch.setattr(rag_routes, "BM25_AVAILABLE", True)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.query_rag_pipeline(
+            "p1", models.QueryRequest(question="hi?", hybrid=True)
+        )
+
+    assert _unwrap(captured["retrieve_fn"]) is rag_routes.retrieve_hybrid
+    assert resp.method_details["retrieval"] == "hybrid"
+    assert "degraded" not in resp.method_details
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_hybrid_falls_back_to_dense_without_bm25(monkeypatch):
+    captured = {}
+
+    async def fake_run_query(*, components, **kwargs):
+        captured["retrieve_fn"] = components.retrieve
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    monkeypatch.setattr(rag_routes, "BM25_AVAILABLE", False)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.query_rag_pipeline(
+            "p1", models.QueryRequest(question="hi?", hybrid=True)
+        )
+
+    assert _unwrap(captured["retrieve_fn"]) is rag_routes.retrieve_relevant_documents
+    assert resp.method_details["retrieval"] == "dense"
+    assert any("rank_bm25 unavailable" in n for n in resp.method_details["degraded"])
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_selects_raptor_collapsed_tree(monkeypatch):
+    captured = {}
+
+    async def fake_run_query(*, components, **kwargs):
+        captured["retrieve_fn"] = components.retrieve
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.query_rag_pipeline(
+            "p1", models.QueryRequest(question="hi?", method="raptor")
+        )
+
+    retrieve_fn = captured["retrieve_fn"]
+    assert _unwrap(retrieve_fn) is rag_routes.retrieve_relevant_documents
+    assert isinstance(retrieve_fn, functools.partial)
+    assert retrieve_fn.keywords == {"include_all_levels": True}
+    assert resp.method_details["retrieval"] == "raptor"
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_binds_metadata_filter_and_echoes_it(monkeypatch):
+    captured = {}
+
+    async def fake_run_query(*, components, **kwargs):
+        captured["retrieve_fn"] = components.retrieve
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.query_rag_pipeline(
+            "p1",
+            models.QueryRequest(
+                question="hi?",
+                metadata_filter=models.MetadataFilter(source="handbook.pdf"),
+            ),
+        )
+
+    retrieve_fn = captured["retrieve_fn"]
+    assert isinstance(retrieve_fn, functools.partial)
+    assert retrieve_fn.keywords["metadata_filter"].source == "handbook.pdf"
+    assert resp.method_details["metadata_filter"] == {"source": "handbook.pdf"}
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_generation_error_maps_to_503_with_its_own_message(
+    monkeypatch,
+):
+    async def fake_run_query(**kwargs):
+        raise rag_routes.state.GenerationError(
+            "failover primary down, served from fallback but it also failed"
+        )
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.query_rag_pipeline(
+                "p1", models.QueryRequest(question="hi?")
+            )
+
+    assert exc_info.value.status_code == 503
+    assert "failover primary down" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_generation_error_default_detail_when_empty(
+    monkeypatch,
+):
+    async def fake_run_query(**kwargs):
+        raise rag_routes.state.GenerationError("")
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.query_rag_pipeline(
+                "p1", models.QueryRequest(question="hi?")
+            )
+
+    assert exc_info.value.status_code == 503
+    assert "LLM backend unavailable" in exc_info.value.detail
