@@ -171,8 +171,13 @@ THIRD_PARTY_IMAGE_META = {
 
 # Health endpoints "port[/path]" (config.sh SERVICE_PORTS). Only services with an
 # entry are health-checked. Path defaults to /health when the value is bare port.
-# (openwebui/rabbitmq/authelia/minio/jaeger are Traefik-only (no host port) →
-# intentionally absent -- jaeger's UI host port was dropped in #472: unlike
+# (openwebui/rabbitmq/authelia/minio/jaeger/tts-stt are Traefik/internal-only (no
+# host port) → intentionally absent. tts-stt (#714): its host :8006 was moved onto
+# the profile-gated tts-stt-router failover sidecar (matching ollama's internal-
+# only pattern), so in the default no-failover deployment nothing publishes :8006
+# on the host -- the container is healthy internally and reached over the docker
+# network by the gateway (/v1/tts, /v1/stt). Host-checking :8006 here only ever
+# produced a false ⚠. jaeger's UI host port was dropped in #472: unlike
 # every other loopback-published service, jaegertracing/all-in-one ships with
 # no authentication of its own, so publishing it gave anyone with host/SSH
 # access the full trace UI with zero credential check, bypassing the
@@ -185,7 +190,6 @@ SERVICE_PORTS = {
     "plugin-state-manager": "8003/health",
     "rag-pipeline": "8004/health",
     "model-management": "8005/health",
-    "tts-stt": "8006/health",
     "graph-rag": "8008/health",
     "client": "8009/health",
     "prometheus": "9090/-/healthy",

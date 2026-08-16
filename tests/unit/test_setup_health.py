@@ -61,3 +61,32 @@ def test_json_reports_error_count(monkeypatch, two_services, capfd):
     assert rc == 1
     assert '"error": 1' in out
     assert '"ok": 1' in out
+
+
+def test_tts_stt_is_not_host_health_checked():
+    """#714: tts-stt's host :8006 was moved to the profile-gated failover router,
+    so nothing publishes it on the host in the default deployment. Host-checking it
+    only ever produced a false ⚠ — it must stay OUT of SERVICE_PORTS, like the
+    other Traefik/internal-only services (openwebui/rabbitmq/authelia/minio/jaeger)."""
+    from scripts.setup import config
+
+    for internal_only in (
+        "tts-stt",
+        "openwebui",
+        "rabbitmq",
+        "authelia",
+        "minio",
+        "jaeger",
+    ):
+        assert internal_only not in config.SERVICE_PORTS, internal_only
+    # The seven host-published core APIs stay checked.
+    for core in (
+        "api-gateway",
+        "plugin-registry",
+        "marketplace",
+        "plugin-state-manager",
+        "rag-pipeline",
+        "model-management",
+        "graph-rag",
+    ):
+        assert core in config.SERVICE_PORTS, core

@@ -128,9 +128,11 @@ def run_health_checks(json_mode: bool = False) -> int:
 
     if not json_mode:
         log._emit("\n" + log.bold("AI Services"))
-    # NOTE: the service key is "tts-stt" (SERVICE_PORTS + AI_SERVICES); the bash
-    # original looped "tts-stt-service" (a stale name) so it never matched → tts-stt
-    # was silently never health-checked. Fixed here + in the bash reference.
+    # Both openwebui and tts-stt are Traefik/internal-only (no host port) so both
+    # are absent from SERVICE_PORTS and skipped by the guard below -- kept in the
+    # loop so re-adding a host port to either automatically re-enables its check.
+    # tts-stt lost its host :8006 to the profile-gated failover router (#714); it's
+    # healthy internally (docker healthcheck) and reached via the gateway.
     for svc in ("openwebui", "tts-stt"):
         if svc in config.SERVICE_PORTS:
             _check_endpoint(svc, config.SERVICE_PORTS[svc])
