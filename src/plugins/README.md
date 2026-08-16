@@ -6,8 +6,8 @@ uploaded code by design). `telegraf/` is the reference implementation; copy it a
 the template for new plugins.
 
 Name a plugin for its **responsibility**: `telegraf` manages the telegraf config +
-reload; a future `network` plugin would do network discovery (scan IPs) and feed
-targets into `telegraf`'s managed region. Don't conflate the two.
+reload; the `network` plugin does network discovery (scan IPs) and feeds targets
+into `telegraf`'s managed region. Don't conflate the two.
 
 ## How they load
 
