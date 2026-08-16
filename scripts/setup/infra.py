@@ -43,35 +43,17 @@ def create_networks() -> None:
         # that's a confusing place to first learn about it.
         log.warn(f"Network '{config.NETWORK_NAME}' was NOT created")
 
-    if docker.network_exists(config.MONITORING_NETWORK_NAME):
-        log.info(f"Network '{config.MONITORING_NETWORK_NAME}' already exists")
-    elif (
-        docker.run(
-            "docker",
-            "network",
-            "create",
-            config.MONITORING_NETWORK_NAME,
-            "--driver",
-            "bridge",
-            "--attachable",
-        )
-        == 0
-    ):
-        log.success(f"Network '{config.MONITORING_NETWORK_NAME}' created")
-    else:
-        log.warn(f"Network '{config.MONITORING_NETWORK_NAME}' was NOT created")
-
 
 def remove_networks() -> None:
     log.step("Removing Docker networks")
-    for name in (config.NETWORK_NAME, config.MONITORING_NETWORK_NAME):
-        if docker.network_exists(name):
-            if docker.run("docker", "network", "rm", name) == 0:
-                log.success(f"Network '{name}' removed")
-            else:
-                log.warn(f"Network '{name}' was NOT removed (may still be in use)")
+    name = config.NETWORK_NAME
+    if docker.network_exists(name):
+        if docker.run("docker", "network", "rm", name) == 0:
+            log.success(f"Network '{name}' removed")
         else:
-            log.info(f"Network '{name}' already absent")
+            log.warn(f"Network '{name}' was NOT removed (may still be in use)")
+    else:
+        log.info(f"Network '{name}' already absent")
 
 
 # One-time volume-name cleanup (#262): these 9 keys carried a redundant "docker_"

@@ -1844,6 +1844,3 @@ networks:
   minder-network:
     external: true
     name: minder-network
-  minder-monitoring:
-    external: true
-    name: minder-monitoring
