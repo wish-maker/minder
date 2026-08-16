@@ -25,7 +25,7 @@ import {
 type ModelType = "local" | "remote";
 type ModelStatusValue = "ready" | "loading" | "error";
 
-interface ModelInfo {
+export interface ModelInfo {
   id: string;
   name: string;
   type: ModelType;
@@ -159,7 +159,7 @@ function TestPromptWidget({ modelId, token }: { modelId: string; token: string }
   );
 }
 
-function ModelCard({
+export function ModelCard({
   model,
   token,
   isAdmin,
@@ -233,7 +233,7 @@ function ModelCard({
 }
 
 
-function PullModelForm({
+export function PullModelForm({
   token,
   isAdmin,
   onPulled,
