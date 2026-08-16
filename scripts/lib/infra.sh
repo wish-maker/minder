@@ -12,30 +12,20 @@ create_networks() {
         run docker network create "$NETWORK_NAME"
         log_success "Network '${NETWORK_NAME}' created"
     fi
-
-    # Create monitoring network (for isolated monitoring zone)
-    if docker network ls --format '{{.Name}}' | grep -q "^${MONITORING_NETWORK_NAME}$"; then
-        log_info "Network '${MONITORING_NETWORK_NAME}' already exists"
-    else
-        run docker network create "${MONITORING_NETWORK_NAME}" --driver bridge --attachable
-        log_success "Network '${MONITORING_NETWORK_NAME}' created"
-    fi
 }
 
-# Counterpart to create_networks, for cmd_uninstall --purge. Both networks are
+# Counterpart to create_networks, for cmd_uninstall --purge. The network is
 # declared `external: true` in docker-compose.yml, so `compose down -v` never
-# removes them on its own — without this, they silently survive every purge.
+# removes it on its own — without this, it silently survives every purge.
 remove_networks() {
     log_step "Removing Docker networks"
 
-    for net in "$NETWORK_NAME" "$MONITORING_NETWORK_NAME"; do
-        if docker network ls --format '{{.Name}}' | grep -q "^${net}$"; then
-            run docker network rm "$net"
-            log_success "Network '${net}' removed"
-        else
-            log_info "Network '${net}' already absent"
-        fi
-    done
+    if docker network ls --format '{{.Name}}' | grep -q "^${NETWORK_NAME}$"; then
+        run docker network rm "$NETWORK_NAME"
+        log_success "Network '${NETWORK_NAME}' removed"
+    else
+        log_info "Network '${NETWORK_NAME}' already absent"
+    fi
 }
 
 # One-time volume-name cleanup (#262): these 9 keys carried a redundant "docker_"

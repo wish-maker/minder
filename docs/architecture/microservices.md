@@ -319,7 +319,7 @@ Services use `restart: on-failure`.
 - **Edge**: only Traefik and the monitoring services expose host ports.
 - **Storage**: PostgreSQL, Redis, Qdrant, Neo4j, MinIO, RabbitMQ, and the schema registry are
   internal-only; management UIs are Traefik-routed with IP whitelists.
-- **Networks**: `minder-network` (all services) and `minder-monitoring` (attachable, prepared).
+- **Networks**: `minder-network` (all services).
 
 ### Authentication
 - JWT for API authentication (bcrypt password hashing)

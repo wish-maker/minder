@@ -136,7 +136,7 @@ this JWT's role permit this." Tracked as
 ## Network Model
 
 - Services attach to the `minder-network` Docker network and resolve each other by container
-  name via Docker DNS. A second `minder-monitoring` network is prepared/attachable.
+  name via Docker DNS.
 - Storage backends (postgres, redis, qdrant, neo4j, minio, rabbitmq, schema-registry) and
   the metric exporters are **internal-only** — no host port.
 - Application and observability services (API core 8000–8006/8008, Grafana, Prometheus,
