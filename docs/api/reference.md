@@ -64,7 +64,9 @@ http://localhost:<port>/openapi.json  # OpenAPI schema
 
 Ports: `8000` (gateway), `8001` (plugin-registry), `8002` (marketplace),
 `8003` (plugin-state-manager), `8004` (rag-pipeline), `8005` (model-management),
-`8006` (tts-stt), `8008` (graph-rag).
+`8008` (graph-rag). (`tts-stt`'s `:8006` is internal-only by default — no host port
+unless the `tts-stt-router` failover profile is active, #714 — so its `/docs` is
+reachable from inside the docker network / via Traefik, not `localhost:8006`.)
 
 > The interactive `/docs` page for each service is the **authoritative, always-current**
 > source for request/response schemas. The tables below enumerate every route as wired in
@@ -483,7 +485,14 @@ Model lifecycle over the Ollama runtime.
 
 ---
 
-## TTS / STT — `http://localhost:8006`
+## TTS / STT — via the gateway (`/v1/tts`, `/v1/stt`)
+
+> **Reached through the API Gateway**, not a host port. Unlike the other core APIs,
+> `minder-tts-stt` is internal-only by default (#714): its host `:8006` publish was
+> moved to the profile-gated `tts-stt-router` failover sidecar (ollama's pattern), so
+> in the default no-failover deployment nothing binds `:8006` on the host. The gateway
+> proxies `/v1/tts`/`/v1/stt` to it over the docker network; `:8006` on the host only
+> appears when the `tts-stt-router` failover profile is active.
 
 Speech synthesis and recognition. ~12 languages supported; **Turkish is the default**.
 Every route below also has a legacy unversioned alias (e.g. `/tts` alongside

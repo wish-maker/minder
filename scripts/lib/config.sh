@@ -55,9 +55,12 @@ declare -A SERVICE_PORTS=(
     [plugin-state-manager]="8003/health"
     [rag-pipeline]="8004/health"
     [model-management]="8005/health"
-    [tts-stt]="8006/health"
     [graph-rag]="8008/health"
     # OpenWebUI port not exposed (Traefik only), skipping direct health check
+    # tts-stt (#714): its host :8006 was moved to the profile-gated tts-stt-router
+    # failover sidecar (ollama's internal-only pattern), so nothing publishes :8006
+    # on the host in the default no-failover deployment -- host-checking it here
+    # only produced a false warning. Healthy internally; reached via the gateway.
     [prometheus]="9090/-/healthy"
     [grafana]="3000/api/health"
     [influxdb]="8086"
