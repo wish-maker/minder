@@ -210,13 +210,17 @@ class GraphRetriever:
             async with self.driver.session() as session:
                 search_query = """
                 MATCH (e:Entity)
-                WHERE toLower(e.text) CONTAINS toLower($query)
-                   OR toLower(e.label) CONTAINS toLower($query)
+                WHERE toLower(e.text) CONTAINS toLower($search_term)
+                   OR toLower(e.label) CONTAINS toLower($search_term)
                 RETURN e.text as text, e.label as label, e.description as description
                 LIMIT $limit
                 """
 
-                result = await session.run(search_query, query=query, limit=limit)
+                # Cypher param can't be named "query" -- AsyncSession.run's own
+                # first positional parameter is ALSO named "query", so
+                # `query=query` here would crash every call with "run() got
+                # multiple values for argument 'query'" (confirmed live).
+                result = await session.run(search_query, search_term=query, limit=limit)
 
                 entities = []
                 async for record in result:

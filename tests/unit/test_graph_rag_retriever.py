@@ -86,8 +86,15 @@ class _FakeSession:
     async def __aexit__(self, *exc):
         return False
 
-    async def run(self, cypher, **params):
-        return self._run_fn(cypher, params)
+    async def run(self, query, **params):
+        # Matches the real neo4j.AsyncSession.run's own positional parameter
+        # name ("query") -- catches the exact class of bug fixed in
+        # graph_retriever.py's graph_search (a Cypher param ALSO named
+        # "query" collided with this positional arg and crashed every real
+        # call with TypeError: run() got multiple values for argument
+        # "query"). A fake using a different param name (the old "cypher")
+        # would silently accept what the real driver rejects.
+        return self._run_fn(query, params)
 
 
 class _FakeDriver:
@@ -624,10 +631,15 @@ async def test_graph_search_parses_entities_and_passes_query_and_limit(monkeypat
     retriever = _make_retriever(monkeypatch, run_fn)
     result = await retriever.graph_search("musk", limit=7)
 
-    assert captured["params"] == {"query": "musk", "limit": 7}
+    # Cypher param is "search_term", not "query" -- AsyncSession.run's own
+    # first positional parameter is ALSO named "query", so a Cypher param
+    # named "query" collides and crashes every real call (the bug this test
+    # guards against; the fake _FakeSession.run's own signature now matches
+    # the real driver's, so this test would fail again if that regressed).
+    assert captured["params"] == {"search_term": "musk", "limit": 7}
     # Case-insensitive CONTAINS on both text and label.
-    assert "toLower(e.text) CONTAINS toLower($query)" in captured["query"]
-    assert "toLower(e.label) CONTAINS toLower($query)" in captured["query"]
+    assert "toLower(e.text) CONTAINS toLower($search_term)" in captured["query"]
+    assert "toLower(e.label) CONTAINS toLower($search_term)" in captured["query"]
     assert [e["text"] for e in result] == ["Elon Musk", "Tesla"]
     assert result[0]["label"] == "PERSON"
 
