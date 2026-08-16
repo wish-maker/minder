@@ -61,7 +61,7 @@ class _NoopLogger:
         pass
 
 
-def _client(ollama_manager):
+def _client(ollama_manager, *, as_admin=False):
     models_api = _isolated_import("routes.models_api")
     app = FastAPI()
     app.include_router(
@@ -69,6 +69,13 @@ def _client(ollama_manager):
             ollama_manager=ollama_manager, models={}, logger=_NoopLogger()
         )
     )
+    if as_admin:
+        from shared.auth.jwt_middleware import get_current_user_or_service
+
+        app.dependency_overrides[get_current_user_or_service] = lambda: {
+            "sub": "test-admin",
+            "role": "admin",
+        }
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -214,3 +221,215 @@ def test_pull_custom_registry_host_rejected_at_the_edge(model_id):
     models_api = _isolated_import("routes.models_api")
     with pytest.raises(pydantic.ValidationError, match="custom registry host"):
         models_api.ModelPullRequest(model_id=model_id)
+
+
+# --- register_model (POST /v1/models) ----------------------------------------
+
+
+def test_register_model_already_exists_is_200_not_201():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "pull_model": AsyncMock(
+                side_effect=AssertionError("must not pull an already-existing model")
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).post(
+        "/v1/models", json={"model_id": "llama3.2:latest"}
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "already_exists"
+    assert body["model"] == "llama3.2:latest"
+
+
+def test_register_model_fresh_pull_is_201():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[]),
+            "pull_model": AsyncMock(return_value={"status": "success"}),
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).post(
+        "/v1/models", json={"model_id": "llama3.2:latest"}
+    )
+
+    assert r.status_code == 201
+    body = r.json()
+    assert body["status"] == "pulled"
+    assert body["details"] == {"status": "success"}
+
+
+def test_register_model_requires_admin():
+    ollama_manager = type("M", (), {"list_models": AsyncMock(return_value=[])})()
+
+    r = _client(ollama_manager, as_admin=False).post(
+        "/v1/models", json={"model_id": "llama3.2:latest"}
+    )
+
+    assert r.status_code in (401, 403)
+
+
+# --- get_model (GET /v1/models/{model_id}) -----------------------------------
+
+
+def test_get_model_unknown_is_404():
+    ollama_manager = type("M", (), {"list_models": AsyncMock(return_value=[])})()
+
+    r = _client(ollama_manager).get("/v1/models/no-such-model")
+
+    assert r.status_code == 404
+
+
+def test_get_model_returns_details_and_promoted_capabilities():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "show_model": AsyncMock(
+                return_value={
+                    "capabilities": ["completion", "tools"],
+                    "family": "llama",
+                }
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager).get("/v1/models/llama3.2:latest")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["capabilities"] == ["completion", "tools"]
+    assert body["details"]["family"] == "llama"
+    assert body["status"] == "ready"
+
+
+def test_get_model_defaults_capabilities_to_empty_list_when_absent():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "show_model": AsyncMock(return_value={"family": "llama"}),
+        },
+    )()
+
+    r = _client(ollama_manager).get("/v1/models/llama3.2:latest")
+
+    assert r.json()["capabilities"] == []
+
+
+# --- delete_model (DELETE /v1/models/{model_id}) -----------------------------
+
+
+def test_delete_model_unknown_is_404():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[]),
+            "delete_model": AsyncMock(
+                side_effect=AssertionError("must not delete an unknown model")
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).delete("/v1/models/no-such-model")
+
+    assert r.status_code == 404
+
+
+def test_delete_model_success():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "delete_model": AsyncMock(return_value={"status": "success"}),
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).delete("/v1/models/llama3.2:latest")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "deleted"
+    assert body["model"] == "llama3.2:latest"
+
+
+def test_delete_model_requires_admin():
+    ollama_manager = type("M", (), {"list_models": AsyncMock(return_value=[])})()
+
+    r = _client(ollama_manager, as_admin=False).delete("/v1/models/llama3.2:latest")
+
+    assert r.status_code in (401, 403)
+
+
+# --- test_model success path (POST /v1/models/{model_id}/test) --------------
+
+
+def test_test_model_success_returns_result_verbatim():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "test_model": AsyncMock(
+                return_value={
+                    "model": "llama3.2:latest",
+                    "prompt": "hi",
+                    "response": "hello!",
+                    "status": "success",
+                }
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager).post(
+        "/v1/models/llama3.2:latest/test", json={"prompt": "hi"}
+    )
+
+    assert r.status_code == 200
+    assert r.json()["response"] == "hello!"
+
+
+# --- Unimplemented stubs (501) ------------------------------------------------
+
+
+def test_set_model_constraints_is_501():
+    ollama_manager = type("M", (), {})()
+    r = _client(ollama_manager).post(
+        "/v1/models/llama3.2:latest/constraints",
+        json={
+            "rate_limit": 10,
+            "cost_limit": 1.0,
+            "allowed_users": ["alice"],
+            "content_filtering": True,
+            "max_tokens": 100,
+        },
+    )
+    assert r.status_code == 501
+
+
+def test_get_model_metrics_is_501():
+    ollama_manager = type("M", (), {})()
+    r = _client(ollama_manager).get("/v1/models/llama3.2:latest/metrics")
+    assert r.status_code == 501
+
+
+def test_fine_tune_model_is_501():
+    ollama_manager = type("M", (), {})()
+    r = _client(ollama_manager, as_admin=True).post(
+        "/v1/models/fine-tune",
+        json={"base_model": "llama3.2:latest"},
+    )
+    assert r.status_code == 501
