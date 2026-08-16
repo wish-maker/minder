@@ -11,6 +11,11 @@ pytest-mock>=3.12.0,<4.0.0
 # Test-time service deps (needed to import service modules during tests;
 # e.g. marketplace models use pydantic EmailStr -> email-validator)
 email-validator>=2.1.0,<3.0.0
+# rag-pipeline's HybridSearchRetriever gates its real BM25 path behind
+# BM25_AVAILABLE (rank_bm25 is an optional import there) -- without it here,
+# CI's unit-test job silently falls back to the "not available" RuntimeError
+# branch and can never actually exercise the BM25 indexing/scoring logic.
+rank-bm25>=0.2.2,<0.3.0
 
 # Code Quality
 mypy>=1.8.0,<2.0.0
