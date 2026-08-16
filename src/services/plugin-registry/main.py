@@ -27,6 +27,7 @@ sys.path.insert(0, "/app/plugins")
 
 from core.database import (  # noqa: E402
     create_plugins_table_if_not_exists,
+    delete_plugin_from_database,
     get_postgres_connection,
     load_plugin_config,
     load_plugins_from_database,
@@ -272,6 +273,7 @@ app.include_router(
         webhook_routes=webhook_routes,
         redis_client=redis_client,
         update_plugin_in_database=update_plugin_in_database,
+        delete_plugin_from_database=delete_plugin_from_database,
         load_plugin_config=load_plugin_config,
         save_plugin_config=save_plugin_config,
         register_plugin_webhook=register_plugin_webhook,

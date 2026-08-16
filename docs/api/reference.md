@@ -593,10 +593,14 @@ Plugins advertise **AI tools** for Ollama function-calling. A module plugin decl
 `AI_TOOLS` class attribute (a manifest plugin uses its `ai_tools` key), each tool being:
 
 ```json
-{ "name": "...", "description": "...", "parameters": { "type": "object", "properties": {} }, "action": "..." }
+{ "name": "...", "description": "...", "parameters": { "type": "object", "properties": {} }, "action": "...", "required_tier": "community" }
 ```
 
-`action` maps to `POST /v1/plugins/<plugin>/actions/<action>`. `GET /v1/plugins/ai/tools`
+`action` maps to `POST /v1/plugins/<plugin>/actions/<action>`. Optional `required_tier`
+(`free` | `community` | `pro` | `enterprise`, default `community`, #663) sets the license
+tier the marketplace records for the tool — the plugin-state-manager enforces it at
+execution time (a user below that tier gets a 403 "License tier too low"). An absent or
+unrecognized value falls back to `community`. `GET /v1/plugins/ai/tools`
 aggregates these into OpenAI/Ollama tool defs; drive the end-to-end loop via
 `POST /v1/ai/chat/completions` with `"minder_tools": true` (see the API Gateway section).
 

@@ -205,3 +205,48 @@ async def test_stale_deactivation_skipped_when_sync_had_errors():
     assert result["tools_deactivated"] == 0
     assert conn.deactivate_calls == 0
     assert conn.active["flaky_tool"] is True  # never touched, sync just errored
+
+
+async def _tier_for(tool_def):
+    """Import a single tool and return the required_tier persisted on the INSERT
+    (arg index 10). #663."""
+    conn = _CaptureConn()
+    await import_ai_tools_from_manifest(conn, "plugin-1", {"ai_tools": [tool_def]})
+    insert_call = next(
+        q for q in conn.calls if "INSERT INTO marketplace_ai_tools" in q[0]
+    )
+    return insert_call[1][10]
+
+
+@pytest.mark.asyncio
+async def test_declared_required_tier_is_honored():
+    """#663: a tool declaring required_tier must persist that tier, not the old
+    hardcoded 'community' — enforcement (plugin-state-manager) gates by it."""
+    assert await _tier_for({"name": "premium_tool", "required_tier": "pro"}) == "pro"
+    assert (
+        await _tier_for({"name": "ent_tool", "required_tier": "enterprise"})
+        == "enterprise"
+    )
+
+
+@pytest.mark.asyncio
+async def test_absent_required_tier_defaults_to_community():
+    assert await _tier_for({"name": "plain_tool"}) == "community"
+
+
+@pytest.mark.asyncio
+async def test_invalid_required_tier_falls_back_to_community():
+    """An unrecognized tier must not fail the import or persist garbage — it
+    defaults to the community baseline (logged)."""
+    assert await _tier_for({"name": "typo_tool", "required_tier": "platinum"}) == (
+        "community"
+    )
+
+
+@pytest.mark.asyncio
+async def test_professional_alias_normalizes_to_pro():
+    """The legacy 'professional' spelling normalizes to canonical 'pro' (#142)."""
+    assert (
+        await _tier_for({"name": "legacy_tool", "required_tier": "professional"})
+        == "pro"
+    )
