@@ -13,9 +13,19 @@ deliberately scopes to just the new behavior, not a full backfill of the
 pre-existing function.
 """
 
+import sys
+
 import pytest
 
 from scripts.setup import env
+
+# See test_setup_backup.py's identical guard: POSIX file modes (0o600) aren't
+# representable on Windows/NTFS (os.chmod only toggles the read-only bit) --
+# skip there; the CI gate on ubuntu-latest still enforces the real contract.
+_posix_perms_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX file modes (0o600) aren't representable on Windows/NTFS",
+)
 
 
 @pytest.fixture
@@ -52,3 +62,16 @@ def test_stays_silent_on_a_later_run_once_already_set(_env_paths, capsys):
     out = capsys.readouterr().out
     assert "Authelia Admin Password" not in out
     assert env.get("MINDER_AUTHELIA_ADMIN_PASSWORD") == "already-set-value"
+
+
+@_posix_perms_only
+def test_env_backup_file_is_chmod_600(_env_paths):
+    """fill_env_secrets() snapshots the pre-heal .env to .env.backup-<ts> --
+    a full plaintext copy of every platform secret. Unlike ENV_FILE itself
+    (already _chmod_600'd), this sibling backup was left at the OS default
+    umask (commonly world-readable) until this fix."""
+    env.fill_env_secrets()
+
+    backups = list(_env_paths.parent.glob(".env.backup-*"))
+    assert len(backups) == 1
+    assert (backups[0].stat().st_mode & 0o777) == 0o600

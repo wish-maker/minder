@@ -503,6 +503,11 @@ def fill_env_secrets() -> None:
         ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         backup = ENV_FILE.parent / f".env.backup-{ts}"
         backup.write_bytes(ENV_FILE.read_bytes())
+        # A full plaintext copy of every platform secret -- left at the OS
+        # default umask (commonly world-readable) otherwise, unlike ENV_FILE
+        # itself which _chmod_600's below. Nothing else ever secures or
+        # cleans up old .env.backup-* files (confirmed via repo-wide grep).
+        _chmod_600(backup)
         log.detail(f"Backed up .env → {backup.name}")
 
         for key in to_fill:
