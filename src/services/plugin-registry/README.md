@@ -54,7 +54,14 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
 - **Webhooks** (`core/webhooks.py`): `POST /webhook/{path}` inbound triggers +
   reload.
 - **Marketplace sync** (`core/marketplace_sync.py`): pushes module `AI_TOOLS` into
-  the marketplace catalog (`SERVICE_SYNC_TOKEN` service-auth, #87).
+  the marketplace catalog (`SERVICE_SYNC_TOKEN` service-auth, #87). Plugins are
+  matched to their marketplace row by `name` only — plugin-registry has no
+  other stable identifier to correlate the two systems' state. **Known
+  limitation (#664)**: renaming a plugin's manifest `name` therefore creates a
+  brand-new marketplace row rather than reconciling the old one, which is left
+  behind as a stale `approved` entry (still visible in listings/search) until
+  an operator manually deactivates it. Rare in practice, but worth knowing
+  about after a deliberate plugin rename.
 
 ## Layout
 

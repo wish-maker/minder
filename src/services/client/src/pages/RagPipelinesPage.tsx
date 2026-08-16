@@ -469,6 +469,7 @@ function QueryPanel({
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               rows={2}
+              placeholder="e.g. What does the refund policy say about digital purchases?"
             />
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
