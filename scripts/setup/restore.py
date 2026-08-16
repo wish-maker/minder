@@ -377,9 +377,18 @@ def run(archive: str = "") -> int:
 
     # ── Neo4j (APOC cypher restore; #124 — restore was previously missing) ─
     # Load the exported cypher via cypher-shell -f. Password resolved inside the
-    # container from its own $NEO4J_AUTH (never on the host cmdline). Assumes a
-    # fresh/empty graph (the export uses CREATE, not MERGE) — matches the
-    # "OVERWRITE current data" contract above.
+    # container from its own $NEO4J_AUTH (never on the host cmdline).
+    #
+    # #643: the export uses CREATE (not MERGE), so restoring onto a NON-empty
+    # graph — a host only `stop`ped (not wiped), or a re-run after a partial /
+    # aborted first attempt — would DUPLICATE every node and relationship rather
+    # than replace them, silently leaving stale data alongside the import. That
+    # contradicts the "OVERWRITE current data" contract above (and PostgreSQL's
+    # restore in this file, whose --clean/--if-exists really does converge to the
+    # archive). So clear the graph first. Batched via CALL {} IN TRANSACTIONS so
+    # a large graph doesn't have to fit one heap-busting transaction; restore
+    # already runs with services stopped and behind the top-level OVERWRITE
+    # warning, so the (now slightly wider) destructive window is in-contract.
     if restore_dir and (restore_dir / "neo4j.cypher").is_file():
         _ensure_running("neo4j")
     if (
@@ -389,6 +398,16 @@ def run(archive: str = "") -> int:
     ):
         log.spinner_start("Restoring Neo4j…")
         nname = docker.container_name("neo4j")
+        clear_cmd = [
+            "docker",
+            "exec",
+            nname,
+            "bash",
+            "-c",
+            'cypher-shell -u neo4j -p "${NEO4J_AUTH#*/}" '
+            '"MATCH (n) CALL (n) { DETACH DELETE n } '
+            'IN TRANSACTIONS OF 10000 ROWS"',
+        ]
         docker.run(
             "docker",
             "cp",
@@ -405,10 +424,16 @@ def run(archive: str = "") -> int:
             "-f /var/lib/neo4j/import/neo4j-restore.cypher",
         ]
         if config.DRY_RUN:
+            docker.run(*clear_cmd)
             docker.run(*restore_cmd)
             ok = True
         else:
-            ok = _run_bare(restore_cmd, stderr_null=True) == 0
+            # Only import if the clear succeeded — importing onto a graph we
+            # failed to empty would reintroduce the very duplication this guards.
+            ok = (
+                _run_bare(clear_cmd, stderr_null=True) == 0
+                and _run_bare(restore_cmd, stderr_null=True) == 0
+            )
         log.spinner_stop()
         if ok:
             log.success("Neo4j restored")
