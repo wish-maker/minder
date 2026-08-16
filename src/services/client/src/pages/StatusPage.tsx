@@ -39,7 +39,7 @@ function statusBadgeColor(status: string): string {
   return badgeTone.danger;
 }
 
-function LogViewer({ name, token }: { name: string; token: string }) {
+export function LogViewer({ name, token }: { name: string; token: string }) {
   const [loaded, setLoaded] = useState(false);
   const [lines, setLines] = useState<LogLine[]>([]);
   const [status, setStatus] = useState("");
