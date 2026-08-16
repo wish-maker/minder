@@ -89,39 +89,54 @@ class _FakeExtractor:
 
 
 class _FakeConstructor:
-    """entity_ids/linked_count/relationship_count are pre-scripted -- this
-    stands in for create_document_node/create_entity_nodes/
-    create_relationship_nodes/link_document_to_entities."""
+    """Stands in for the real KnowledgeGraphConstructor. `construct_graph` is now
+    a single transactional call (#668); its committed counts are pre-scripted.
+    `entity_ids` is the set of entities the (atomic) construct actually committed;
+    `mentions_count` defaults to len(entity_ids) (each committed entity links)."""
 
     def __init__(
         self,
         entity_ids,
         relationship_count=0,
-        linked_count=None,
+        mentions_count=None,
         stats=None,
         documents=None,
+        construct_error=None,
     ):
         self._entity_ids = entity_ids
         self._relationship_count = relationship_count
-        self._linked_count = (
-            linked_count if linked_count is not None else len(entity_ids)
+        self._mentions_count = (
+            mentions_count if mentions_count is not None else len(entity_ids)
         )
-        self.linked_with = None
+        self.constructed_with = None
+        self._construct_error = construct_error
         self._stats = stats
         self._documents = documents
 
-    async def create_document_node(self, **kwargs):
-        return True
-
-    async def create_entity_nodes(self, document_id, entities):
-        return self._entity_ids
-
-    async def create_relationship_nodes(self, document_id, relationships):
-        return self._relationship_count
-
-    async def link_document_to_entities(self, document_id, entity_ids):
-        self.linked_with = entity_ids
-        return self._linked_count
+    async def construct_graph(
+        self,
+        document_id,
+        entities,
+        relationships,
+        title=None,
+        source=None,
+        metadata=None,
+    ):
+        if self._construct_error:
+            raise self._construct_error
+        self.constructed_with = {
+            "document_id": document_id,
+            "entities": entities,
+            "relationships": relationships,
+            "title": title,
+            "source": source,
+            "metadata": metadata,
+        }
+        return {
+            "entity_count": len(self._entity_ids),
+            "relationship_count": self._relationship_count,
+            "mentions_count": self._mentions_count,
+        }
 
     async def get_graph_statistics(self):
         if isinstance(self._stats, Exception):
@@ -158,11 +173,10 @@ async def test_entity_count_reflects_created_not_extracted_on_full_success():
 
 
 @pytest.mark.asyncio
-async def test_entity_count_reflects_created_when_some_entities_fail_to_write():
-    """3 entities extracted, only 1 actually written to Neo4j (2 failed) --
-    entity_count must report 1, not 3, and the response must still be a
-    non-crashing success (partial writes are a real, expected Neo4j failure
-    mode, not a hard error)."""
+async def test_entity_count_reflects_committed_count_from_construct():
+    """The reported entity_count is exactly what construct_graph committed (the
+    atomic transaction's result), not the extracted count — #351's spirit, now
+    trivially true because the transaction either commits everything or nothing."""
     extractor = _FakeExtractor(
         entities=[
             {"text": "Acme Corp", "label": "ORG"},
@@ -171,15 +185,34 @@ async def test_entity_count_reflects_created_when_some_entities_fail_to_write():
         ],
         relationships=[],
     )
-    constructor = _FakeConstructor(entity_ids=["Acme Corp"])  # only 1 of 3 survived
+    # construct_graph committed 2 of the 3 (e.g. one deduped by #669 upstream).
+    constructor = _FakeConstructor(entity_ids=["Acme Corp", "Jane Doe"])
 
     result = await construct_knowledge_graph_handler(_request(), extractor, constructor)
 
     assert result.success is True
-    assert result.entity_count == 1  # NOT 3
-    # link_document_to_entities must only be asked to link the entities that
-    # actually exist in Neo4j, not the full extracted list.
-    assert constructor.linked_with == ["Acme Corp"]
+    assert result.entity_count == 2
+    # The full extraction is handed to the single transactional call.
+    assert len(constructor.constructed_with["entities"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_construct_failure_aborts_instead_of_reporting_partial_success():
+    """#668: the write is now atomic — a mid-construct Neo4j failure must surface
+    as an error, not a success reporting a half-built graph. backend_http_error
+    maps a connectivity failure to 503."""
+    from fastapi import HTTPException
+
+    extractor = _FakeExtractor(
+        entities=[{"text": "Acme Corp", "label": "ORG"}], relationships=[]
+    )
+    constructor = _FakeConstructor(
+        entity_ids=[], construct_error=ConnectionRefusedError("neo4j down")
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await construct_knowledge_graph_handler(_request(), extractor, constructor)
+    assert exc.value.status_code == 503
 
 
 @pytest.mark.asyncio
