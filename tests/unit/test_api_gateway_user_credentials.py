@@ -9,7 +9,7 @@ create_user/verify_user_credentials live in the same module and share the
 same isolation needs.
 
 Also characterizes (does NOT endorse) the current pre-authentication
-account-state leak tracked in #717/#749: verify_user_credentials checks
+account-state leak tracked in #717 (decision issue: #758): verify_user_credentials checks
 `is_active` BEFORE the bcrypt password check, so a disabled account gets a
 distinct 403 regardless of the password supplied, while a wrong password on
 an active account returns a generic None. That is a real, filed, decision-
@@ -245,11 +245,12 @@ async def test_wrong_password_on_an_active_account_returns_none(auth_mod, monkey
 async def test_characterizes_the_717_leak_disabled_account_403_regardless_of_password(
     auth_mod, monkeypatch
 ):
-    """Documents #717/#749's current (pre-decision) behavior: ANY password for
-    a disabled account raises a distinct 403 -- the exact opposite of the
-    generic None a wrong password gets on an active account (see the test
-    above). This is what makes the account state enumerable pre-auth. Not an
-    endorsement -- update this test if/when #717 is resolved."""
+    """Documents #717's current (pre-decision, see #758) behavior: ANY
+    password for a disabled account raises a distinct 403 -- the exact
+    opposite of the generic None a wrong password gets on an active account
+    (see the test above). This is what makes the account state enumerable
+    pre-auth. Not an endorsement -- update this test if/when #717/#758 is
+    resolved."""
     row = _user_row("hunter2", is_active=False)
     conn = _ScriptedConn({"WHERE username = $1": [row]})
     _patch_pool(monkeypatch, auth_mod, conn)
