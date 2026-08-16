@@ -18,7 +18,7 @@ import {
   secondaryButtonClass,
 } from "../lib/ui";
 
-interface Plugin {
+export interface Plugin {
   id: string;
   name: string;
   display_name: string;
@@ -51,7 +51,7 @@ interface PluginListResponse {
   offset: number;
 }
 
-interface Installation {
+export interface Installation {
   installation_id: string;
   plugin_id: string;
   version: string | null;
@@ -191,7 +191,7 @@ function DependencyPanel({ pluginId }: { pluginId: string }) {
   );
 }
 
-function PluginCard({
+export function PluginCard({
   plugin,
   installation,
   token,
