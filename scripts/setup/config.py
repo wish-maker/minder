@@ -68,7 +68,6 @@ TIMEOUT_REGISTRY = 8  # per registry HTTP call
 # Service naming (config.sh SERVICE DEFINITIONS block).
 CONTAINER_PREFIX = "minder"
 NETWORK_NAME = "minder-network"  # #274: dropped the stale "docker_" prefix
-MONITORING_NETWORK_NAME = "minder-monitoring"
 
 # Service groups, in startup order (config.sh SERVICE DEFINITIONS block).
 # ollama is intentionally absent — it is gated by the compose 'internal-ollama'

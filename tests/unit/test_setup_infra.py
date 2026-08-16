@@ -71,7 +71,9 @@ def test_create_networks_warns_not_success_on_failure(monkeypatch, _quiet_log):
 
     infra.create_networks()  # must not raise
 
-    assert len(warned) == 2  # app network + monitoring network
+    assert (
+        len(warned) == 1
+    )  # app network (the dead minder-monitoring net, #650, is gone)
     assert not succeeded
 
 

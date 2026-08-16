@@ -27,7 +27,6 @@ readonly CACHE_TTL_HOURS=24  # Tag cache expires after 24 hours
 
 readonly CONTAINER_PREFIX="minder"
 readonly NETWORK_NAME="minder-network"  # #274: dropped the stale "docker_" prefix
-readonly MONITORING_NETWORK_NAME="minder-monitoring"
 
 readonly -a SECURITY_SERVICES=(traefik authelia)
 readonly -a CORE_SERVICES=(postgres redis qdrant neo4j rabbitmq minio schema-registry )
