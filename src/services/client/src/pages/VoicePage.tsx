@@ -73,7 +73,7 @@ interface ChatCompletionResponse {
   message?: { content?: string };
 }
 
-function TextToSpeechCard({
+export function TextToSpeechCard({
   token,
   seed,
 }: {
