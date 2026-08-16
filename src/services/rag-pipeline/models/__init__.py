@@ -213,6 +213,23 @@ class DocumentUploadResponse(BaseModel):
     tree_nodes_created: int = 0
 
 
+class DecisionStatsResponse(BaseModel):
+    """Cumulative analytics for the ``method="auto"`` routing engine (#701-style
+    unwired-capability wiring). The engine's `AgentDecisionEngine.get_decision_stats`
+    was fully built (and its enum keys made JSON-safe in #238) but exposed by no
+    route. `available` is False when the auto engine isn't initialized on this host
+    (e.g. Ollama unreachable at startup) — the distributions/avg stay at their empty
+    defaults then, and also while the engine is up but no `auto` query has run yet
+    (`total_decisions == 0`)."""
+
+    available: bool
+    total_decisions: int = 0
+    # Keyed by RetrievalStrategy.value / QueryComplexity.value → count.
+    strategy_distribution: Dict[str, int] = Field(default_factory=dict)
+    complexity_distribution: Dict[str, int] = Field(default_factory=dict)
+    avg_confidence: Optional[float] = None
+
+
 class DocumentInfo(BaseModel):
     """A single uploaded document within a knowledge base (#427) -- aggregated
     from its chunks' Qdrant payloads, not a separate stored record. `document_id`
