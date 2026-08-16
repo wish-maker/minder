@@ -44,7 +44,12 @@ def test_construct_rejects_empty_text():
 def test_construct_accepts_real_document():
     req = _schemas.KnowledgeGraphRequest(document_id="doc-1", text="Marie Curie")
     assert req.document_id == "doc-1"
-    assert req.title == ""  # optional defaults unchanged
+    # #668: omitted title/source/metadata now default to None (not ""/"unknown"/{})
+    # so construct_graph can COALESCE them to previously-stored values on re-POST
+    # instead of blanking them.
+    assert req.title is None
+    assert req.source is None
+    assert req.metadata is None
 
 
 def test_extract_rejects_empty_text():

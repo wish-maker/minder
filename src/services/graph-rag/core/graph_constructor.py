@@ -27,185 +27,189 @@ class KnowledgeGraphConstructor:
         """Close Neo4j connection"""
         await self.driver.close()
 
-    async def create_document_node(
+    async def construct_graph(
         self,
         document_id: str,
+        entities: List[Dict[str, Any]],
+        relationships: List[Dict[str, Any]],
         title: Optional[str] = None,
         source: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> bool:
+    ) -> Dict[str, int]:
+        """Build (or rebuild) a document's contribution to the graph atomically.
+
+        Everything runs in ONE write transaction (#668, following delete_document's
+        precedent) so a mid-sequence failure can't leave a half-built graph —
+        entities written but no relationships/links, indistinguishable from a
+        clean "constructed with zero relationships". This deliberately supersedes
+        the earlier per-item best-effort behavior (#351): a failure now aborts the
+        whole construct and surfaces as an error, rather than silently committing a
+        partial graph. (Extraction yields plain string text/label values, so the
+        only realistic failure here is an infra one — exactly when atomicity is
+        wanted.)
+
+        Re-ingest is a FULL REPLACE of this document's edges (#668 item 2, matching
+        the #639 hard-delete precedent): the document's existing RELATES_TO and
+        MENTIONS edges are dropped first, so re-processing an edited document (a
+        removed paragraph) drops entities/relationships that are no longer present
+        instead of leaving them permanently attributed. Entities shared with other
+        documents survive; entities left orphaned are cleaned up (scoped to the ones
+        this document previously touched, like delete_document).
+
+        Document metadata is upserted with COALESCE (#668 item 3): a re-POST that
+        omits title/source/metadata keeps the previously-set values instead of
+        blanking them with the request-model defaults.
+
+        Returns {entity_count, relationship_count, mentions_count} — the counts
+        actually committed.
         """
-        Create a document node in Neo4j
 
-        Args:
-            document_id: Document identifier
-            title: Document title
-            source: Document source
-            metadata: Additional metadata
+        async def _construct_in_one_transaction(tx):
+            # Capture the entities this document currently mentions BEFORE dropping
+            # its edges, so the post-rebuild orphan check only re-checks these
+            # (delete_document's scoped-orphan precedent) rather than scanning the
+            # whole graph.
+            mentioned = await tx.run(
+                "MATCH (:Document {id: $document_id})-[:MENTIONS]->(e:Entity) "
+                "RETURN e.text AS text, e.label AS label",
+                document_id=document_id,
+            )
+            previously_mentioned = [
+                (record["text"], record["label"]) async for record in mentioned
+            ]
 
-        Returns:
-            True if successful
-        """
-        async with self.driver.session() as session:
-            try:
-                # ON MATCH SET matters -- re-POSTing the same document_id (the
-                # route docstring calls this an "upsert") used to only ever hit
-                # ON CREATE, so a document's title/source/metadata were frozen
-                # forever after first ingest: renaming/retitling and re-ingesting
-                # had no effect, silently keeping stale values indefinitely.
-                query = """
-                MERGE (d:Document {id: $document_id})
-                ON CREATE SET d.created_at = datetime(),
-                              d.title = $title,
-                              d.source = $source,
-                              d.metadata = $metadata
-                ON MATCH SET d.title = $title,
-                             d.source = $source,
-                             d.metadata = $metadata
-                RETURN d
-                """
+            # Full-replace: drop this document's old edges before rebuilding.
+            await (
+                await tx.run(
+                    "MATCH ()-[r:RELATES_TO {document_id: $document_id}]->() DELETE r",
+                    document_id=document_id,
+                )
+            ).consume()
+            await (
+                await tx.run(
+                    "MATCH (:Document {id: $document_id})-[m:MENTIONS]->() DELETE m",
+                    document_id=document_id,
+                )
+            ).consume()
 
-                # Neo4j property values must be primitive types or arrays thereof -
-                # a raw dict (even {}) always raised Neo.ClientError.Statement.TypeError
-                # ("Encountered: Map{}"), silently caught below, so the Document node
-                # was NEVER created and every downstream MENTIONS/traversal query
-                # matched nothing. JSON-encode it instead.
-                result = await session.run(
-                    query,
+            # Upsert the Document node. COALESCE keeps a previously-set title/source/
+            # metadata when the current request omits it (passes None), instead of
+            # the old blind ON MATCH SET that overwrote with request-model defaults.
+            # metadata is JSON-encoded: Neo4j rejects a raw Map property.
+            await (
+                await tx.run(
+                    """
+                    MERGE (d:Document {id: $document_id})
+                    ON CREATE SET d.created_at = datetime(),
+                                  d.title = $title,
+                                  d.source = $source,
+                                  d.metadata = $metadata
+                    ON MATCH SET d.title = COALESCE($title, d.title),
+                                 d.source = COALESCE($source, d.source),
+                                 d.metadata = COALESCE($metadata, d.metadata)
+                    """,
                     document_id=document_id,
                     title=title,
                     source=source,
                     metadata=json.dumps(metadata) if metadata else None,
                 )
+            ).consume()
 
-                return await result.single() is not None
-
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to create document node: {e}")
-                return False
-
-    async def create_entity_nodes(
-        self, document_id: str, entities: List[Dict[str, Any]]
-    ) -> List[str]:
-        """
-        Create entity nodes in Neo4j
-
-        Returns:
-            List of created entity IDs
-        """
-        entity_ids = []
-
-        async with self.driver.session() as session:
+            # Entities (MERGE by {text,label}; re-add this document_id to the array).
+            created_entities: List[tuple] = []
             for entity in entities:
-                try:
-                    query = """
+                result = await tx.run(
+                    """
                     MERGE (e:Entity {text: $text, label: $label})
                     ON CREATE SET e.created_at = datetime(),
-                                e.description = $description,
-                                e.document_ids = [$document_id]
-                    ON MATCH SET e.document_ids = [doc_id IN e.document_ids WHERE doc_id <> $document_id] + $document_id
-                    RETURN e.text as entity_id
+                                  e.description = $description,
+                                  e.document_ids = [$document_id]
+                    ON MATCH SET e.document_ids =
+                        [doc_id IN e.document_ids WHERE doc_id <> $document_id]
+                        + $document_id
+                    RETURN e.text AS text, e.label AS label
+                    """,
+                    text=entity["text"],
+                    label=entity["label"],
+                    description=entity.get("description", ""),
+                    document_id=document_id,
+                )
+                record = await result.single()
+                if record:
+                    created_entities.append((record["text"], record["label"]))
+
+            # Document -> Entity MENTIONS edges (rebuilt from the fresh entities).
+            mentions_count = 0
+            for text, label in created_entities:
+                result = await tx.run(
                     """
-
-                    result = await session.run(
-                        query,
-                        text=entity["text"],
-                        label=entity["label"],
-                        description=entity.get("description", ""),
-                        document_id=document_id,
-                    )
-
-                    record = await result.single()
-                    if record:
-                        entity_ids.append(record["entity_id"])
-
-                except Exception as e:
-                    logger.warning(
-                        f"⚠️  Failed to create entity {entity.get('text')}: {e}"
-                    )
-
-        logger.info(f"✅ Created {len(entity_ids)} entity nodes")
-        return entity_ids
-
-    async def create_relationship_nodes(
-        self, document_id: str, relationships: List[Dict[str, Any]]
-    ) -> int:
-        """
-        Create relationship nodes in Neo4j
-
-        Returns:
-            Number of created relationships
-        """
-        count = 0
-
-        async with self.driver.session() as session:
-            for rel in relationships:
-                try:
-                    query = """
-                    MATCH (s:Entity {text: $subject})
-                    MATCH (o:Entity {text: $object})
-                    MERGE (s)-[r:RELATES_TO {predicate: $predicate, document_id: $document_id}]->(o)
-                    ON CREATE SET r.type = $type,
-                                  r.created_at = datetime()
-                    RETURN r
-                    """
-
-                    result = await session.run(
-                        query,
-                        subject=rel["subject"],
-                        object=rel["object"],
-                        predicate=rel["predicate"],
-                        type=rel.get("type", "UNKNOWN"),
-                        document_id=document_id,
-                    )
-
-                    if await result.single():
-                        count += 1
-
-                except Exception as e:
-                    logger.warning(f"⚠️  Failed to create relationship: {e}")
-
-        logger.info(f"✅ Created {count} relationship nodes")
-        return count
-
-    async def link_document_to_entities(
-        self, document_id: str, entity_ids: List[str]
-    ) -> int:
-        """
-        Link document to entities
-
-        Args:
-            document_id: Document identifier
-            entity_ids: List of entity IDs
-
-        Returns:
-            Number of document-entity links created
-        """
-        count = 0
-
-        async with self.driver.session() as session:
-            for entity_id in entity_ids:
-                try:
-                    query = """
                     MATCH (d:Document {id: $document_id})
-                    MATCH (e:Entity {text: $entity_id})
+                    MATCH (e:Entity {text: $text, label: $label})
                     MERGE (d)-[r:MENTIONS]->(e)
                     ON CREATE SET r.created_at = datetime()
                     RETURN r
+                    """,
+                    document_id=document_id,
+                    text=text,
+                    label=label,
+                )
+                if await result.single():
+                    mentions_count += 1
+
+            # Relationships (tagged with this document_id so re-ingest can scope them).
+            relationship_count = 0
+            for rel in relationships:
+                result = await tx.run(
                     """
+                    MATCH (s:Entity {text: $subject})
+                    MATCH (o:Entity {text: $object})
+                    MERGE (s)-[r:RELATES_TO {predicate: $predicate,
+                                             document_id: $document_id}]->(o)
+                    ON CREATE SET r.type = $type,
+                                  r.created_at = datetime()
+                    RETURN r
+                    """,
+                    subject=rel["subject"],
+                    object=rel["object"],
+                    predicate=rel["predicate"],
+                    type=rel.get("type", "UNKNOWN"),
+                    document_id=document_id,
+                )
+                if await result.single():
+                    relationship_count += 1
 
-                    result = await session.run(
-                        query, document_id=document_id, entity_id=entity_id
+            # Orphan cleanup: an entity this document PREVIOUSLY mentioned but that
+            # is no longer connected to anything after the rebuild (dropped from the
+            # new extraction and not shared with another document) is deleted —
+            # scoped to previously-touched entities, mirroring delete_document.
+            for text, label in previously_mentioned:
+                await (
+                    await tx.run(
+                        "MATCH (e:Entity {text: $text, label: $label}) "
+                        "WHERE NOT (e)--() DELETE e",
+                        text=text,
+                        label=label,
                     )
+                ).consume()
 
-                    if await result.single():
-                        count += 1
+            return len(created_entities), relationship_count, mentions_count
 
-                except Exception as e:
-                    logger.warning(f"⚠️  Failed to link document to entity: {e}")
+        async with self.driver.session() as session:
+            (
+                entity_count,
+                relationship_count,
+                mentions_count,
+            ) = await session.execute_write(_construct_in_one_transaction)
 
-        logger.info(f"✅ Linked document to {count} entities")
-        return count
+        logger.info(
+            f"✅ Constructed graph for {document_id}: {entity_count} entities, "
+            f"{relationship_count} relationships, {mentions_count} mentions"
+        )
+        return {
+            "entity_count": entity_count,
+            "relationship_count": relationship_count,
+            "mentions_count": mentions_count,
+        }
 
     async def delete_document(self, document_id: str) -> Dict[str, int]:
         """Delete a document's graph: its RELATES_TO edges (tagged with this

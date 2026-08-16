@@ -28,10 +28,13 @@ class KnowledgeGraphRequest(BaseModel):
     # text is nothing to build a graph from — reject both at the edge (#538).
     document_id: str = Field(..., min_length=1, description="Document identifier")
     text: str = Field(..., min_length=1, description="Document text for processing")
-    title: str = Field(default="", description="Document title")
-    source: str = Field(default="unknown", description="Document source")
-    metadata: Dict[str, Any] = Field(
-        default_factory=dict, description="Additional document metadata"
+    # Optional/None (not ""/"unknown"/{}) so an OMITTED field on a re-POST is
+    # distinguishable from an explicit value: construct_graph COALESCEs None to the
+    # previously-stored value instead of blanking it (#668 item 3).
+    title: Optional[str] = Field(default=None, description="Document title")
+    source: Optional[str] = Field(default=None, description="Document source")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Additional document metadata"
     )
     # Exposed instead of hard-coded True in the handler, matching
     # EntityExtractionRequest (#147).

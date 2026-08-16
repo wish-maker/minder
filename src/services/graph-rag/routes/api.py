@@ -74,55 +74,32 @@ async def construct_knowledge_graph_handler(
             extract_relationships=request.extract_relationships,
         )
 
-        # Create document node. The return value MUST be checked: on failure
-        # (e.g. a Neo4j write error) this previously returned False silently and
-        # construction carried on, reporting success with entity nodes created
-        # but no Document node and no MENTIONS edges to them at all (#248).
-        document_created = await graph_constructor.create_document_node(
+        # Build the graph in ONE transaction (#668): document node + entities +
+        # relationships + MENTIONS links, with a full-replace of this document's
+        # prior edges first so a re-ingest drops content no longer present. Either
+        # the whole thing commits or it raises (no half-built graph, #351 spirit
+        # preserved — the committed counts below are exactly what's in Neo4j).
+        result = await graph_constructor.construct_graph(
             document_id=request.document_id,
+            entities=extraction_result["entities"],
+            relationships=extraction_result["relationships"],
             title=request.title,
             source=request.source,
             metadata=request.metadata,
         )
-        if not document_created:
-            raise RuntimeError(
-                f"Failed to create document node for '{request.document_id}' "
-                "(see graph-rag logs for the underlying Neo4j error)"
-            )
-
-        # Create entity nodes
-        entity_ids = await graph_constructor.create_entity_nodes(
-            document_id=request.document_id, entities=extraction_result["entities"]
-        )
-
-        # Create relationship nodes
-        relationship_count = await graph_constructor.create_relationship_nodes(
-            document_id=request.document_id,
-            relationships=extraction_result["relationships"],
-        )
-
-        # Link document to entities
-        linked_count = await graph_constructor.link_document_to_entities(
-            document_id=request.document_id, entity_ids=entity_ids
-        )
-        # #351: a partial/total link failure used to be completely invisible
-        # (return value discarded) -- at minimum, log it so it's discoverable.
-        if linked_count < len(entity_ids):
+        entity_count = result["entity_count"]
+        if result["mentions_count"] < entity_count:
             logger.warning(
-                f"⚠️  Only linked {linked_count}/{len(entity_ids)} entities to "
-                f"document '{request.document_id}'"
+                f"⚠️  Only linked {result['mentions_count']}/{entity_count} "
+                f"entities to document '{request.document_id}'"
             )
 
         return KnowledgeGraphResponse(
             success=True,
             document_id=request.document_id,
-            # #351: this used to report len(extraction_result["entities"]) --
-            # the *extracted* count -- even though create_entity_nodes only
-            # returns the entity IDs actually written to Neo4j. A partial
-            # Neo4j write reported success with an inflated count.
-            entity_count=len(entity_ids),
-            relationship_count=relationship_count,
-            message=f"Knowledge graph constructed with {len(entity_ids)} entities",
+            entity_count=entity_count,
+            relationship_count=result["relationship_count"],
+            message=f"Knowledge graph constructed with {entity_count} entities",
         )
 
     except Exception as e:

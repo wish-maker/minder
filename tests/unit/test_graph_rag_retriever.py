@@ -316,24 +316,68 @@ async def test_close_closes_the_driver(monkeypatch):
     assert retriever.driver.closed is True
 
 
-# --- core/graph_constructor.py: create_document_node -------------------------
+# --- core/graph_constructor.py: construct_graph (#668) -----------------------
 #
-# Found in a background audit: create_document_node's MERGE only had an
-# ON CREATE SET clause, never ON MATCH SET. The route docstring calls
-# re-POSTing the same document_id an "upsert," and entities/relationships
-# elsewhere in graph_constructor.py DO have ON MATCH SET -- but the Document
-# node itself didn't, so once created, its title/source/metadata were frozen
-# forever regardless of what a later re-ingest sent.
+# The old per-method write path (create_document_node/create_entity_nodes/
+# create_relationship_nodes/link_document_to_entities) was replaced by a single
+# atomic construct_graph transaction (#668): one execute_write so a mid-sequence
+# failure can't leave a half-built graph; a full-replace of this document's edges
+# before rebuild so a re-ingest drops content no longer present; and a COALESCE
+# document upsert so a re-POST that omits title/source/metadata doesn't blank the
+# previously-stored values.
 
 
-class _FakeConstructorResult:
+class _FakeConstructResult:
+    def __init__(self, records=None, single_val=None):
+        from types import SimpleNamespace
+
+        self._records = list(records or [])
+        self._single = single_val
+        self._counters = SimpleNamespace(relationships_deleted=0, nodes_deleted=0)
+
+    def __aiter__(self):
+        return self._aiter()
+
+    async def _aiter(self):
+        for r in self._records:
+            yield r
+
     async def single(self):
-        return {"d": "unused"}  # any truthy value -- just checked for not-None
+        return self._single
+
+    async def consume(self):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(counters=self._counters)
 
 
-class _FakeConstructorSession:
-    def __init__(self):
+class _FakeConstructTx:
+    """Routes on query text so construct_graph's transaction runs end-to-end:
+    the previously-mentioned lookup async-iterates records; entity/mention/rel
+    MERGEs return a single truthy record; deletes/doc-merge/orphan use consume()."""
+
+    def __init__(self, previously_mentioned=None):
         self.calls = []
+        self._prev = previously_mentioned or []
+
+    async def run(self, query, **kwargs):
+        self.calls.append((query, kwargs))
+        if "MENTIONS]->(e:Entity)" in query and "RETURN e.text AS text" in query:
+            return _FakeConstructResult(
+                records=[{"text": t, "label": lbl} for t, lbl in self._prev]
+            )
+        if "MERGE (e:Entity" in query:
+            return _FakeConstructResult(
+                single_val={"text": kwargs.get("text"), "label": kwargs.get("label")}
+            )
+        if "MERGE (d)-[r:MENTIONS]" in query or "MERGE (s)-[r:RELATES_TO" in query:
+            return _FakeConstructResult(single_val={"r": 1})
+        return _FakeConstructResult()  # deletes / doc merge / orphan (consume only)
+
+
+class _FakeConstructSession:
+    def __init__(self, tx):
+        self._tx = tx
 
     async def __aenter__(self):
         return self
@@ -341,52 +385,83 @@ class _FakeConstructorSession:
     async def __aexit__(self, *exc):
         return False
 
-    async def run(self, query, **kwargs):
-        self.calls.append((query, kwargs))
-        return _FakeConstructorResult()
+    async def execute_write(self, fn):
+        return await fn(self._tx)
 
 
-class _FakeConstructorDriver:
-    def __init__(self):
-        self.fake_session = _FakeConstructorSession()
+class _FakeConstructDriver:
+    def __init__(self, tx):
+        self._session = _FakeConstructSession(tx)
 
     def session(self):
-        return self.fake_session
+        return self._session
 
 
-def _make_constructor(monkeypatch):
+def _make_construct_constructor(monkeypatch, previously_mentioned=None):
     module = _load_constructor()
+    tx = _FakeConstructTx(previously_mentioned)
     monkeypatch.setattr(
-        module.AsyncGraphDatabase,
-        "driver",
-        lambda *a, **k: _FakeConstructorDriver(),
+        module.AsyncGraphDatabase, "driver", lambda *a, **k: _FakeConstructDriver(tx)
     )
-    return module.KnowledgeGraphConstructor("bolt://fake:7687", "neo4j", "pw")
+    constructor = module.KnowledgeGraphConstructor("bolt://fake:7687", "neo4j", "pw")
+    return constructor, tx
 
 
-async def test_create_document_node_query_includes_on_match_set(monkeypatch):
-    constructor = _make_constructor(monkeypatch)
-    ok = await constructor.create_document_node(
-        document_id="doc-1", title="Original Title", source="upload"
+async def test_construct_graph_document_merge_uses_coalesce(monkeypatch):
+    """#668 item 3: a re-POST that omits fields must NOT blank them — the doc
+    upsert COALESCEs the request value against the stored one."""
+    constructor, tx = _make_construct_constructor(monkeypatch)
+    await constructor.construct_graph(
+        document_id="doc-1", entities=[], relationships=[], title="Final", source="up"
     )
-    assert ok is True
+    doc_merge = next(q for q, _ in tx.calls if "MERGE (d:Document" in q)
+    assert "ON MATCH SET" in doc_merge
+    on_match = doc_merge.split("ON MATCH SET")[1]
+    assert "COALESCE($title, d.title)" in on_match
+    assert "COALESCE($source, d.source)" in on_match
+    assert "COALESCE($metadata, d.metadata)" in on_match
 
-    query, kwargs = constructor.driver.fake_session.calls[0]
-    assert "ON MATCH SET" in query
-    assert "d.title = $title" in query.split("ON MATCH SET")[1]
-    assert kwargs["title"] == "Original Title"
+
+async def test_construct_graph_full_replaces_edges_before_rebuild(monkeypatch):
+    """#668 items 1+2: old RELATES_TO/MENTIONS edges are deleted (full-replace)
+    BEFORE the document/entity rebuild, all in one transaction, and a previously-
+    mentioned entity is re-checked for orphaning."""
+    constructor, tx = _make_construct_constructor(
+        monkeypatch, previously_mentioned=[("Old", "ORG")]
+    )
+    await constructor.construct_graph(
+        document_id="doc-1",
+        entities=[{"text": "Acme", "label": "ORG"}],
+        relationships=[],
+        title="T",
+    )
+    queries = [q for q, _ in tx.calls]
+    rel_del = next(
+        i for i, q in enumerate(queries) if "RELATES_TO" in q and "DELETE r" in q
+    )
+    men_del = next(i for i, q in enumerate(queries) if "DELETE m" in q)
+    doc_merge_i = next(i for i, q in enumerate(queries) if "MERGE (d:Document" in q)
+    ent_merge_i = next(i for i, q in enumerate(queries) if "MERGE (e:Entity" in q)
+    assert rel_del < doc_merge_i and men_del < doc_merge_i  # replace before rebuild
+    assert doc_merge_i < ent_merge_i
+    assert any("WHERE NOT (e)--()" in q and k.get("text") == "Old" for q, k in tx.calls)
 
 
-async def test_reingest_sends_the_new_title_as_the_on_match_value(monkeypatch):
-    """Two calls for the same document_id -- the second must carry the NEW
-    title as a bound parameter the ON MATCH SET clause can apply."""
-    constructor = _make_constructor(monkeypatch)
-    await constructor.create_document_node(document_id="doc-1", title="Draft")
-    await constructor.create_document_node(document_id="doc-1", title="Final Title")
-
-    calls = constructor.driver.fake_session.calls
-    assert len(calls) == 2
-    assert calls[1][1]["title"] == "Final Title"
+async def test_construct_graph_returns_committed_counts(monkeypatch):
+    constructor, tx = _make_construct_constructor(monkeypatch)
+    result = await constructor.construct_graph(
+        document_id="doc-1",
+        entities=[
+            {"text": "Acme", "label": "ORG"},
+            {"text": "Bob", "label": "PERSON"},
+        ],
+        relationships=[{"subject": "Acme", "object": "Bob", "predicate": "employs"}],
+    )
+    assert result == {
+        "entity_count": 2,
+        "relationship_count": 1,
+        "mentions_count": 2,
+    }
 
 
 # --- core/graph_constructor.py: delete_document -------------------------------
