@@ -318,11 +318,13 @@ This is a development environment; production hardening is not yet applied. Stil
 - **Validate all inputs** with Pydantic models.
 - **Use parameterized queries** — never string-format SQL.
 
-Authentication in api-gateway is **JWT + bcrypt** with Redis-backed rate limiting. There is
-**no RBAC** implemented (JWT auth only). The Authelia SSO component is **enabled** (a live
-service in compose, not commented out), and Traefik forward-auth is enforced on the minio,
-api-gateway, grafana, openwebui, and jaeger routers. Full browser SSO still needs real DNS
-+ TLS on the deploy.
+Authentication in api-gateway is **JWT + bcrypt** with Redis-backed rate limiting. RBAC is
+**partially enforced** (#474): `require_role("admin")` returns 403 on a role mismatch for a
+specific set of admin-only actions (model pull/delete/test, bundle enable/disable/reconcile,
+the marketplace admin endpoints); most other write endpoints still only require a valid JWT.
+The Authelia SSO component is **enabled** (a live service in compose, not commented out), and
+Traefik forward-auth is enforced on the minio, api-gateway, grafana, openwebui, jaeger, and
+client routers (six). Full browser SSO still needs real DNS + TLS on the deploy.
 
 ## Resources
 

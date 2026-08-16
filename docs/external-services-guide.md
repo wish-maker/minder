@@ -29,7 +29,7 @@ in some cases via a Traefik route).
 
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
-| Ollama | `minder-ollama` | `ollama/ollama:0.32.5` | 11434 (internal) | Profile-gated `internal-ollama`; runs only when `OLLAMA_BASE_URL` is empty (local mode). Models auto-pulled via `OLLAMA_PULL_MODELS` (the container-internal name; set `OLLAMA_MODELS` in `.env`), stored in the `/root/.ollama/models` volume |
+| Ollama | `minder-ollama` | `ollama/ollama:0.32.6` | 11434 (internal) | Profile-gated `internal-ollama`; runs only when `OLLAMA_BASE_URL` is empty (local mode). Models auto-pulled via `OLLAMA_PULL_MODELS` (the container-internal name; set `OLLAMA_MODELS` in `.env`), stored in the `/root/.ollama/models` volume |
 | OpenWebUI | `minder-openwebui` | `ghcr.io/open-webui/open-webui:v0.11.0` | 8080 (internal) | LLM chat UI; reached via Traefik (`chat.minder.local`) |
 
 ### Storage
@@ -49,12 +49,12 @@ in some cases via a Traefik route).
 | Service | Container | Image | Ports | Notes |
 |---------|-----------|-------|-------|-------|
 | Prometheus | `minder-prometheus` | `prom/prometheus:v3.13.2` | 9090 (host) | Metrics collection |
-| Grafana | `minder-grafana` | `grafana/grafana:13.1.2` | 3000 (host) | Dashboards; Traefik-routed |
+| Grafana | `minder-grafana` | `grafana/grafana:13.1.3` | 3000 (host) | Dashboards; Traefik-routed |
 | Alertmanager | `minder-alertmanager` | `prom/alertmanager:v0.33.1` | 9093 (host) | Alert routing |
 | InfluxDB | `minder-influxdb` | `influxdb:3.11.0-core` | 8086 (host) | Time-series |
 | Telegraf | `minder-telegraf` | `telegraf:1.39.2` | — | Metrics agent |
 | Jaeger | `minder-jaeger` | `jaegertracing/all-in-one:1.76.0` | Traefik-only UI (no loopback port, #472) + OTLP/thrift/zipkin (host) | Distributed tracing |
-| OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.157.0` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) | No healthcheck by design |
+| OTel Collector | `minder-otel-collector` | `otel/opentelemetry-collector:0.158.0` | 14317 (OTLP gRPC), 14318 (OTLP HTTP), 18888 (metrics) | No healthcheck by design |
 
 ### Exporters (internal, scraped by Prometheus)
 
@@ -73,7 +73,7 @@ in some cases via a Traefik route).
 |---------|-----------|-------|-------|-------|
 | Traefik | `minder-traefik` | `traefik:v3.7.10` | 80 / 443 / 8081 (host) | Reverse proxy, TLS, label-based routing (`exposedByDefault: false`). Dashboard (8081) IP-whitelisted |
 | Authelia | `minder-authelia` | `authelia/authelia:4.39.20` | — | **ENABLED** — live service in compose (no `profiles:` gate, runs by default); depends on postgres + redis being healthy. Traefik's `authelia-forwardauth` middleware is enforced on 6 routers (minio, api-gateway, grafana, openwebui, jaeger, client) — unauthenticated requests get a 302 redirect to the portal. Full browser SSO still needs real DNS + TLS on the deploy. No active healthcheck configured. Counted in the 36 containers |
-| Docker Socket Proxy | `minder-docker-socket-proxy` | `ghcr.io/wollomatic/socket-proxy:1.12.3` | — (internal only) | Least-privilege proxy in front of `docker.sock` for plugin-registry (core bundle) — see [bundles.md](architecture/bundles.md) for the allowlist model and its tracked gaps (#377/#378). No active healthcheck configured. |
+| Docker Socket Proxy | `minder-docker-socket-proxy` | `ghcr.io/wollomatic/socket-proxy:1.13.0` | — (internal only) | Least-privilege proxy in front of `docker.sock` for plugin-registry (core bundle) — see [bundles.md](architecture/bundles.md) for the allowlist model and its tracked gaps (#377/#378). No active healthcheck configured. |
 
 > **Healthchecks:** 31 of 36 containers have an active healthcheck. `otel-collector`,
 > `redis-exporter`, and `rabbitmq-exporter` intentionally have none (image tooling limits)
