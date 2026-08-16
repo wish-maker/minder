@@ -3,37 +3,68 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GraphExplorerPage } from "./GraphExplorerPage";
 
-// apiFetch is dispatched by request path: stats/documents fire on mount (via
-// useAsyncResource), and /graph/search is the new "Find entities" endpoint (#701).
+const statsResult = {
+  success: true,
+  nodes: 0,
+  relationships: 0,
+  documents: 0,
+  entities: 0,
+  entity_types: {},
+};
+const documentsResult = { success: true, documents: [], count: 0 };
+
+// The three retrieval modes (Search/Find entities/Entity lookup, #701) each
+// hit a different endpoint -- each has its own overridable behavior so a
+// test can inject a rejection without disturbing the other two, and its own
+// captured request options to assert the right query/body was sent.
+let searchBehavior: () => Promise<unknown>;
+let retrieveBehavior: () => Promise<unknown>;
+let entityBehavior: () => Promise<unknown>;
 let lastSearchOpts: { body?: { query?: string } } | undefined;
+let lastRetrieveOpts: { body?: { query?: string } } | undefined;
+let lastEntityOpts: { body?: { entity_text?: string } } | undefined;
+
+function resetBehaviors() {
+  searchBehavior = async () => ({
+    success: true,
+    query: "tesla",
+    entities: [
+      { text: "Tesla", label: "ORG" },
+      { text: "Tesla Model 3", label: "PRODUCT" },
+    ],
+    entity_count: 2,
+  });
+  retrieveBehavior = async () => ({
+    success: true,
+    query: "who runs tesla",
+    related_entities: [{ text: "Elon Musk" }],
+    entity_count: 1,
+    retrieval_time_ms: 12,
+  });
+  entityBehavior = async () => ({
+    success: true,
+    entity: { text: "Elon Musk", label: "PERSON" },
+    related_entities: [{ text: "Tesla" }],
+    documents: [{ id: "d1", title: "bio.txt" }],
+    context_window: 5,
+  });
+}
+resetBehaviors();
 
 const apiFetch = vi.fn(async (path: string, opts?: unknown) => {
+  if (path.includes("/graph/stats")) return statsResult;
+  if (path.includes("/graph/documents")) return documentsResult;
   if (path.includes("/graph/search")) {
-    lastSearchOpts = opts as { body?: { query?: string } };
+    lastSearchOpts = opts as typeof lastSearchOpts;
+    return searchBehavior();
   }
-  if (path.includes("/graph/stats")) {
-    return {
-      success: true,
-      nodes: 0,
-      relationships: 0,
-      documents: 0,
-      entities: 0,
-      entity_types: {},
-    };
+  if (path.includes("/retrieve")) {
+    lastRetrieveOpts = opts as typeof lastRetrieveOpts;
+    return retrieveBehavior();
   }
-  if (path.includes("/graph/documents")) {
-    return { success: true, documents: [], count: 0 };
-  }
-  if (path.includes("/graph/search")) {
-    return {
-      success: true,
-      query: "tesla",
-      entities: [
-        { text: "Tesla", label: "ORG" },
-        { text: "Tesla Model 3", label: "PRODUCT" },
-      ],
-      entity_count: 2,
-    };
+  if (path.includes("/entity-context")) {
+    lastEntityOpts = opts as typeof lastEntityOpts;
+    return entityBehavior();
   }
   return {};
 });
@@ -49,17 +80,17 @@ vi.mock("../components/ConfirmDialog", () => ({
   useConfirm: () => ({ confirm: vi.fn(), dialog: null }),
 }));
 
-describe("GraphExplorerPage — Find entities (graph search)", () => {
-  afterEach(() => {
-    cleanup();
-    apiFetch.mockClear();
-    lastSearchOpts = undefined;
-  });
+afterEach(() => {
+  cleanup();
+  apiFetch.mockClear();
+  lastSearchOpts = lastRetrieveOpts = lastEntityOpts = undefined;
+  resetBehaviors();
+});
 
+describe("GraphExplorerPage — Find entities (graph search)", () => {
   it("searches the graph for entities and renders the matches", async () => {
     render(<GraphExplorerPage />);
 
-    // Switch to the new "Find entities" tab and run a query.
     fireEvent.click(screen.getByRole("button", { name: "Find entities" }));
     fireEvent.change(
       screen.getByLabelText("Find entities by name or label"),
@@ -67,42 +98,18 @@ describe("GraphExplorerPage — Find entities (graph search)", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Find" }));
 
-    // Both matching entities render.
     expect(await screen.findByText("Tesla")).toBeTruthy();
     expect(screen.getByText("Tesla Model 3")).toBeTruthy();
-
-    // The new /v1/graph/search endpoint was hit with the typed query.
-    await waitFor(() => {
-      expect(lastSearchOpts?.body?.query).toBe("tesla");
-    });
+    await waitFor(() => expect(lastSearchOpts?.body?.query).toBe("tesla"));
   });
 
   it("shows an empty-state message when nothing matches", async () => {
-    apiFetch.mockImplementationOnce(async () => ({
+    searchBehavior = async () => ({
       success: true,
-      nodes: 0,
-      relationships: 0,
-      documents: 0,
-      entities: 0,
-      entity_types: {},
-    }));
-    apiFetch.mockImplementation(async (path: string) => {
-      if (path.includes("/graph/search")) {
-        return { success: true, query: "zzz", entities: [], entity_count: 0 };
-      }
-      if (path.includes("/graph/documents")) {
-        return { success: true, documents: [], count: 0 };
-      }
-      return {
-        success: true,
-        nodes: 0,
-        relationships: 0,
-        documents: 0,
-        entities: 0,
-        entity_types: {},
-      };
+      query: "zzz",
+      entities: [],
+      entity_count: 0,
     });
-
     render(<GraphExplorerPage />);
     fireEvent.click(screen.getByRole("button", { name: "Find entities" }));
     fireEvent.change(
@@ -112,5 +119,115 @@ describe("GraphExplorerPage — Find entities (graph search)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Find" }));
 
     expect(await screen.findByText(/No entities match/i)).toBeTruthy();
+  });
+
+  it("shows a friendly error when the search request fails", async () => {
+    searchBehavior = async () => {
+      throw new Error("graph-rag unreachable");
+    };
+    render(<GraphExplorerPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Find entities" }));
+    fireEvent.change(
+      screen.getByLabelText("Find entities by name or label"),
+      { target: { value: "tesla" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Find" }));
+
+    expect(await screen.findByText("Error: graph-rag unreachable")).toBeTruthy();
+  });
+});
+
+describe("GraphExplorerPage — Search (graph-based retrieval)", () => {
+  it("retrieves related entities for a query (default tab)", async () => {
+    render(<GraphExplorerPage />);
+
+    fireEvent.change(screen.getByLabelText("Search the knowledge graph"), {
+      target: { value: "who runs tesla" },
+    });
+    // Two "Search" buttons exist simultaneously (the tab + the submit button,
+    // since "search" is the default mode) -- the submit button is the last one.
+    fireEvent.click(screen.getAllByRole("button", { name: "Search" }).at(-1)!);
+
+    expect(await screen.findByText("Elon Musk")).toBeTruthy();
+    await waitFor(() =>
+      expect(lastRetrieveOpts?.body?.query).toBe("who runs tesla"),
+    );
+  });
+
+  it("requires non-empty query text before calling the API", () => {
+    render(<GraphExplorerPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Search" }).at(-1)!);
+
+    expect(screen.getByText("Query is required.")).toBeTruthy();
+    expect(apiFetch).not.toHaveBeenCalledWith(
+      "/v1/graph-rag/retrieve",
+      expect.anything(),
+    );
+  });
+
+  it("shows a friendly error when the retrieve request fails", async () => {
+    retrieveBehavior = async () => {
+      throw new Error("neo4j unreachable");
+    };
+    render(<GraphExplorerPage />);
+    fireEvent.change(screen.getByLabelText("Search the knowledge graph"), {
+      target: { value: "who runs tesla" },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Search" }).at(-1)!);
+
+    expect(await screen.findByText("Error: neo4j unreachable")).toBeTruthy();
+  });
+});
+
+describe("GraphExplorerPage — Entity lookup", () => {
+  it("looks up an entity and renders its neighbors and documents", async () => {
+    render(<GraphExplorerPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Entity lookup" }));
+    fireEvent.change(screen.getByLabelText("Entity name to look up"), {
+      target: { value: "Elon Musk" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+    await screen.findByText("Elon Musk"); // the looked-up entity's own name
+    expect(screen.getByText("Tesla")).toBeTruthy(); // related entity
+    expect(screen.getByText(/Mentioned in: bio.txt/)).toBeTruthy();
+    await waitFor(() =>
+      expect(lastEntityOpts?.body?.entity_text).toBe("Elon Musk"),
+    );
+  });
+
+  it("shows 'Entity not found' for an empty entity result", async () => {
+    entityBehavior = async () => ({
+      success: true,
+      entity: {},
+      related_entities: [],
+      documents: [],
+      context_window: 5,
+    });
+    render(<GraphExplorerPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Entity lookup" }));
+    fireEvent.change(screen.getByLabelText("Entity name to look up"), {
+      target: { value: "Nobody" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+    expect(
+      await screen.findByText("Entity not found in the graph."),
+    ).toBeTruthy();
+  });
+
+  it("shows a friendly error when the entity-context request fails", async () => {
+    entityBehavior = async () => {
+      throw new Error("entity lookup failed");
+    };
+    render(<GraphExplorerPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Entity lookup" }));
+    fireEvent.change(screen.getByLabelText("Entity name to look up"), {
+      target: { value: "Elon Musk" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Look up" }));
+
+    expect(await screen.findByText("Error: entity lookup failed")).toBeTruthy();
   });
 });
