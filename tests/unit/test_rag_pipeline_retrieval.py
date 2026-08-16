@@ -1391,3 +1391,57 @@ async def test_non_legacy_delete_filter_is_unaffected(monkeypatch):
     assert not any(isinstance(cond, IsEmptyCondition) for cond in filter_.must)
     assert filter_.must[0].key == "document_id"
     assert filter_.must[0].match.value == "doc-uuid-123"
+
+
+# ── GET /v1/decision-stats wiring (system_routes.decision_stats) ──────────────
+# The `AgentDecisionEngine.get_decision_stats` aggregation itself is covered in
+# test_decision_engine_heuristics.py; these cover the ROUTE glue that was newly
+# wired: the `available` flag and that the stats dict maps cleanly onto the
+# DecisionStatsResponse fields (a key rename would silently drop data or 500).
+@pytest.mark.asyncio
+async def test_decision_stats_reports_unavailable_when_engine_is_none(monkeypatch):
+    monkeypatch.setattr(system_routes.state, "decision_engine", None)
+
+    resp = await system_routes.decision_stats()
+
+    assert resp.available is False
+    assert resp.total_decisions == 0
+    assert resp.strategy_distribution == {}
+    assert resp.complexity_distribution == {}
+    assert resp.avg_confidence is None
+
+
+@pytest.mark.asyncio
+async def test_decision_stats_handles_engine_with_empty_history(monkeypatch):
+    fake_engine = SimpleNamespace(get_decision_stats=lambda: {"total_decisions": 0})
+    monkeypatch.setattr(system_routes.state, "decision_engine", fake_engine)
+
+    resp = await system_routes.decision_stats()
+
+    assert resp.available is True
+    assert resp.total_decisions == 0
+    assert resp.strategy_distribution == {}
+    assert resp.avg_confidence is None
+
+
+@pytest.mark.asyncio
+async def test_decision_stats_wraps_full_engine_stats(monkeypatch):
+    """The exact contract the route depends on: every key get_decision_stats
+    returns for a non-empty history must map onto a DecisionStatsResponse field."""
+    fake_engine = SimpleNamespace(
+        get_decision_stats=lambda: {
+            "total_decisions": 3,
+            "strategy_distribution": {"basic": 2, "hierarchical": 1},
+            "complexity_distribution": {"simple": 1, "moderate": 2},
+            "avg_confidence": 0.75,
+        }
+    )
+    monkeypatch.setattr(system_routes.state, "decision_engine", fake_engine)
+
+    resp = await system_routes.decision_stats()
+
+    assert resp.available is True
+    assert resp.total_decisions == 3
+    assert resp.strategy_distribution == {"basic": 2, "hierarchical": 1}
+    assert resp.complexity_distribution == {"simple": 1, "moderate": 2}
+    assert resp.avg_confidence == 0.75
