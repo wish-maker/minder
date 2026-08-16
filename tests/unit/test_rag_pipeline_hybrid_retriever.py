@@ -14,6 +14,12 @@ from pathlib import Path
 
 import pytest
 
+# These tests exercise the real BM25 index (rank_bm25 is an optional runtime
+# import in hybrid.py itself), not a mock -- skip cleanly rather than hard-fail
+# if it's ever missing from the test environment (it's declared in
+# requirements-dev.txt precisely so CI's unit-test job has it).
+pytest.importorskip("rank_bm25")
+
 _MODULE_PATH = (
     Path(__file__).resolve().parents[2]
     / "src"
