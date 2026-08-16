@@ -16,7 +16,7 @@ import {
   secondaryButtonClass,
 } from "../lib/ui";
 
-interface Installation {
+export interface Installation {
   installation_id: string;
   plugin_id: string;
   version: string | null;
@@ -128,7 +128,7 @@ function FieldInput({
  * (for first-party plugins that just run regardless of any per-user
  * install) have a schema without ever appearing as "installed" for a given
  * user -- this panel only ever claims the former case, honestly. */
-function ConfigurePanel({ name, token }: { name: string; token: string }) {
+export function ConfigurePanel({ name, token }: { name: string; token: string }) {
   const baseId = useId();
   const [loaded, setLoaded] = useState(false);
   const [configurable, setConfigurable] = useState(false);
@@ -243,7 +243,7 @@ function ConfigurePanel({ name, token }: { name: string; token: string }) {
   );
 }
 
-function InstalledPluginCard({
+export function InstalledPluginCard({
   installation,
   token,
   onUninstalled,
