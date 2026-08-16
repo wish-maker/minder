@@ -31,7 +31,7 @@ function downloadJson(filename: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
-function ExportImportPanel({
+export function ExportImportPanel({
   bundles,
   token,
   isAdmin,
