@@ -27,11 +27,13 @@
   "Log in" button drives a real OIDC authorization-code flow (`/v1/auth/oidc/login` →
   Authelia → `/v1/auth/oidc/callback`), so a Minder JWT is now minted from a verified
   Authelia identity, not a locally-registered account, for anyone who logs in through the UI.
-- **RBAC:** **Not enforced.** `role` is now populated from Authelia's `groups` claim
-  (`admins` group → `admin` role) instead of only ever defaulting to `"user"`, but nothing
-  in the codebase checks it before permitting an action — every write-protected endpoint
-  still only checks "is there a valid JWT," not "does this JWT's role permit this." Tracked
-  as [#474](https://github.com/wish-maker/minder/issues/474).
+- **RBAC:** **Partially enforced** ([#474](https://github.com/wish-maker/minder/issues/474)).
+  `role` is populated from Authelia's `groups` claim (`admins` group → `admin` role)
+  instead of only ever defaulting to `"user"`, and `require_role("admin")` (in
+  `shared/auth/jwt_middleware.py`) now returns **403** on a role mismatch on a specific set
+  of admin-only actions — model pull/delete/test, bundle enable/disable/reconcile, and the
+  marketplace admin endpoints. Most *other* write endpoints still only check "is there a
+  valid JWT," not the role, so authorization is not yet uniform.
 - **Network:** Services communicate over Docker networks by container name. Some application
   and observability services publish host ports directly (see
   [Service Access Guide](./service-access.md)); storage backends are internal-only.
@@ -122,13 +124,20 @@ authenticate against Authelia directly and never see a Minder-specific login for
 local `/v1/auth/register` + `/v1/auth/login` endpoints below still exist (useful for
 scripting/dev), but are no longer the primary path a real user takes.
 
-### RBAC (not enforced)
+### RBAC (partially enforced)
 
 `role` is derived from Authelia's `groups` claim on every OIDC login (`admins` group →
-`admin` role, else `"user"`) and stored on the user row / JWT, but **nothing checks it**
-before permitting an action — do not assume per-role or per-group authorization is
-enforced. Every write-protected endpoint still only checks "is there a valid JWT," not "does
-this JWT's role permit this." Tracked as
+`admin` role, else `"user"`) and stored on the user row / JWT. `require_role("admin")` (and
+its service-token-tolerant sibling `require_role_or_service("admin")`, both in
+`shared/auth/jwt_middleware.py`) enforce it — a valid JWT whose role isn't `admin` gets a
+**403** — on a specific set of admin-only actions:
+
+- model-management: model **pull / delete / test** (`routes/models_api.py`)
+- plugin-registry: bundle **enable / disable / reconcile** (`routes/bundles.py`)
+- marketplace: the **admin management** endpoints (`routes/management.py`, `routes/ai_tools.py`)
+
+Enforcement is **not yet uniform**, though: most *other* write endpoints still only check
+"is there a valid JWT," not "does this JWT's role permit this." Tracked as
 [#474](https://github.com/wish-maker/minder/issues/474).
 
 ---
@@ -181,8 +190,8 @@ This is a development deployment. Before treating it as production-ready:
 3. Replace self-signed `.local` certificates with a real CA / Let's Encrypt.
 4. ~~Implement authorization (RBAC) beyond "is there a valid JWT"~~ — **partially done**
    ([#474](https://github.com/wish-maker/minder/issues/474)): `role` is now checked on a
-   specific set of admin-only actions (model pull/delete/fine-tune, bundle enable/
-   disable/reconcile, listing a plugin's installations). Most other write endpoints
+   specific set of admin-only actions (model pull/delete/test, bundle enable/
+   disable/reconcile, the marketplace admin endpoints). Most other write endpoints
    still only require a valid JWT, not a role.
 5. Rotate credentials via `./.env` (and `sync-postgres-password` for stateful ones).
    ~~Also rotate Authelia's own admin credential, which currently ships identical
@@ -202,4 +211,4 @@ This is a development deployment. Before treating it as production-ready:
 
 ---
 
-*Last Updated: 2026-08-15 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled, real OIDC (Authelia) · RBAC: not enforced*
+*Last Updated: 2026-08-16 · Development environment · Reverse proxy: Traefik v3 · SSO: enabled, real OIDC (Authelia) · RBAC: partially enforced (admin actions)*
