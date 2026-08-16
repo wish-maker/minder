@@ -30,10 +30,10 @@ _ROUTE = (
 )
 
 
-def _load_ai_tools_module():
+def _load_ai_tools_module(plugins_path="/tmp"):
     saved_config = sys.modules.get("config")
     fake_config = ModuleType("config")
-    fake_config.settings = SimpleNamespace(PLUGINS_PATH="/tmp")
+    fake_config.settings = SimpleNamespace(PLUGINS_PATH=plugins_path)
     sys.modules["config"] = fake_config
     try:
         spec = importlib.util.spec_from_file_location("registry_ai_tools_route", _ROUTE)
@@ -75,8 +75,8 @@ _ANALYZE_RESULT = {
 }
 
 
-def _client(*, plugins_db, plugin_instances):
-    mod = _load_ai_tools_module()
+def _client(*, plugins_db, plugin_instances, plugins_path="/tmp"):
+    mod = _load_ai_tools_module(plugins_path)
     app = FastAPI()
     app.include_router(
         mod.build_ai_tools_router(
@@ -119,3 +119,157 @@ def test_analysis_not_running_plugin_503():
         plugin_instances={},  # enabled but no live instance
     )
     assert client.get("/v1/plugins/crypto/analysis").status_code == 503
+
+
+class _FailingInstance:
+    async def analyze(self):
+        raise RuntimeError("boom")
+
+
+def test_analysis_500_on_analyze_exception():
+    client = _client(
+        plugins_db={"crypto": _FakePlugin(enabled=True)},
+        plugin_instances={"crypto": _FailingInstance()},
+    )
+    r = client.get("/v1/plugins/crypto/analysis")
+    assert r.status_code == 500
+    assert "boom" in r.json()["detail"]
+
+
+# --- GET /v1/plugins/ai/tools -----------------------------------------------
+
+
+class _ModuleToolsInstance:
+    """A module plugin declaring AI_TOOLS in code (no manifest on disk)."""
+
+    def __init__(self, tools):
+        self.AI_TOOLS = tools
+
+
+def test_get_all_ai_tools_empty_when_no_plugins():
+    client = _client(plugins_db={}, plugin_instances={})
+    assert client.get("/v1/plugins/ai/tools").json() == {"tools": []}
+
+
+def test_get_all_ai_tools_from_module_ai_tools_attribute():
+    client = _client(
+        plugins_db={"weather": _FakePlugin()},
+        plugin_instances={
+            "weather": _ModuleToolsInstance(
+                [{"name": "get_weather", "description": "Current weather"}]
+            )
+        },
+    )
+    tools = client.get("/v1/plugins/ai/tools").json()["tools"]
+    assert len(tools) == 1
+    assert tools[0]["function"]["name"] == "get_weather"
+    assert tools[0]["metadata"]["plugin"] == "weather"
+
+
+def test_get_all_ai_tools_skips_a_plugin_with_no_live_instance():
+    client = _client(
+        plugins_db={"weather": _FakePlugin()},
+        plugin_instances={},  # in plugins_db but never actually started
+    )
+    assert client.get("/v1/plugins/ai/tools").json() == {"tools": []}
+
+
+class _RaisingToolsInstance:
+    @property
+    def AI_TOOLS(self):
+        raise RuntimeError("boom")
+
+
+def test_get_all_ai_tools_continues_after_a_per_plugin_exception():
+    client = _client(
+        plugins_db={"broken": _FakePlugin(), "weather": _FakePlugin()},
+        plugin_instances={
+            "broken": _RaisingToolsInstance(),
+            "weather": _ModuleToolsInstance(
+                [{"name": "get_weather", "description": "Current weather"}]
+            ),
+        },
+    )
+    tools = client.get("/v1/plugins/ai/tools").json()["tools"]
+    assert len(tools) == 1
+    assert tools[0]["function"]["name"] == "get_weather"
+
+
+def test_get_all_ai_tools_combines_module_and_manifest_tools(tmp_path):
+    plugin_dir = tmp_path / "hybrid"
+    plugin_dir.mkdir()
+    (plugin_dir / "manifest.yml").write_text(
+        "ai_tools:\n  - name: manifest_tool\n    description: From the manifest\n"
+    )
+    client = _client(
+        plugins_db={"hybrid": _FakePlugin()},
+        plugin_instances={
+            "hybrid": _ModuleToolsInstance(
+                [{"name": "module_tool", "description": "From code"}]
+            )
+        },
+        plugins_path=str(tmp_path),
+    )
+    tools = client.get("/v1/plugins/ai/tools").json()["tools"]
+    names = {t["function"]["name"] for t in tools}
+    assert names == {"module_tool", "manifest_tool"}
+
+
+def test_tool_to_openai_skips_a_tool_with_no_name():
+    client = _client(
+        plugins_db={"weather": _FakePlugin()},
+        plugin_instances={
+            "weather": _ModuleToolsInstance([{"description": "no name here"}])
+        },
+    )
+    assert client.get("/v1/plugins/ai/tools").json() == {"tools": []}
+
+
+def test_tool_to_openai_maps_action_to_endpoint():
+    client = _client(
+        plugins_db={"weather": _FakePlugin()},
+        plugin_instances={
+            "weather": _ModuleToolsInstance(
+                [{"name": "get_weather", "action": "current"}]
+            )
+        },
+    )
+    tool = client.get("/v1/plugins/ai/tools").json()["tools"][0]
+    assert tool["metadata"]["endpoint"] == "/v1/plugins/weather/actions/current"
+    assert tool["metadata"]["method"] == "POST"
+
+
+def test_tool_to_openai_explicit_endpoint_overrides_action():
+    client = _client(
+        plugins_db={"weather": _FakePlugin()},
+        plugin_instances={
+            "weather": _ModuleToolsInstance(
+                [
+                    {
+                        "name": "get_weather",
+                        "action": "current",
+                        "endpoint": "/custom",
+                        "method": "GET",
+                    }
+                ]
+            )
+        },
+    )
+    tool = client.get("/v1/plugins/ai/tools").json()["tools"][0]
+    assert tool["metadata"]["endpoint"] == "/v1/plugins/weather/custom"
+    assert tool["metadata"]["method"] == "GET"
+
+
+def test_tool_to_openai_defaults_parameters_and_endpoint_when_none_given():
+    client = _client(
+        plugins_db={"weather": _FakePlugin()},
+        plugin_instances={"weather": _ModuleToolsInstance([{"name": "get_weather"}])},
+    )
+    tool = client.get("/v1/plugins/ai/tools").json()["tools"][0]
+    assert tool["function"]["parameters"] == {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+    # No action AND no endpoint -- must NOT synthesize "/actions/None".
+    assert tool["metadata"]["endpoint"] == "/v1/plugins/weather"
