@@ -652,3 +652,109 @@ async def test_graph_search_swallows_errors_returns_empty(monkeypatch):
 
     retriever = _make_retriever(monkeypatch, run_fn)
     assert await retriever.graph_search("anything") == []
+
+
+# --- core/graph_constructor.py: get_graph_statistics / list_documents ----------
+# Both had ZERO direct test coverage (confirmed via `coverage`: lines 287-323/
+# 335-358 of graph_constructor.py never executed by any unit test) -- only
+# reachable through the handler-level tests in
+# test_graph_rag_knowledge_graph_handler.py, which fake out the WHOLE
+# constructor (a _FakeConstructor stand-in), so the real Cypher-calling code
+# here was never actually exercised. Reuses the same _FakeSession/_FakeDriver
+# already used for GraphRetriever above -- plain session.run(), no
+# transaction needed, unlike construct_graph/delete_document's _FakeConstructTx.
+
+
+def _make_stats_constructor(monkeypatch, run_fn):
+    module = _load_constructor()
+    monkeypatch.setattr(
+        module.AsyncGraphDatabase, "driver", lambda *a, **k: _FakeDriver(run_fn)
+    )
+    return module.KnowledgeGraphConstructor("bolt://fake:7687", "neo4j", "pw")
+
+
+async def test_get_graph_statistics_returns_counts_and_entity_type_breakdown(
+    monkeypatch,
+):
+    def run_fn(query, params):
+        if "RETURN e.label as label" in query:
+            return _FakeResult(
+                [{"label": "ORG", "count": 2}, {"label": "PERSON", "count": 1}]
+            )
+        if "MATCH (e:Entity) RETURN count(e)" in query:
+            return _FakeResult([{"count": 3}])
+        if "MATCH (d:Document) RETURN count(d)" in query:
+            return _FakeResult([{"count": 2}])
+        if "RETURN count(r) as count" in query:
+            return _FakeResult([{"count": 5}])
+        if "RETURN count(n) as count" in query:
+            return _FakeResult([{"count": 10}])
+        raise AssertionError(f"unexpected query: {query}")
+
+    constructor = _make_stats_constructor(monkeypatch, run_fn)
+    stats = await constructor.get_graph_statistics()
+
+    assert stats == {
+        "nodes": 10,
+        "relationships": 5,
+        "documents": 2,
+        "entities": 3,
+        "entity_types": {"ORG": 2, "PERSON": 1},
+    }
+
+
+async def test_get_graph_statistics_zero_counts_on_an_empty_graph(monkeypatch):
+    """.single() returning None (no rows) must read as 0, not crash."""
+
+    def run_fn(query, params):
+        return _FakeResult([])
+
+    constructor = _make_stats_constructor(monkeypatch, run_fn)
+    stats = await constructor.get_graph_statistics()
+
+    assert stats == {
+        "nodes": 0,
+        "relationships": 0,
+        "documents": 0,
+        "entities": 0,
+        "entity_types": {},
+    }
+
+
+async def test_list_documents_stringifies_neo4j_datetime_and_keeps_none(monkeypatch):
+    from datetime import datetime
+
+    def run_fn(query, params):
+        return _FakeResult(
+            [
+                {
+                    "id": "d1",
+                    "title": "T1",
+                    "source": "s1",
+                    "created_at": datetime(2026, 1, 1),
+                    "entity_count": 3,
+                },
+                {
+                    "id": "d2",
+                    "title": "T2",
+                    "source": "s2",
+                    "created_at": None,
+                    "entity_count": 0,
+                },
+            ]
+        )
+
+    constructor = _make_stats_constructor(monkeypatch, run_fn)
+    docs = await constructor.list_documents()
+
+    assert docs[0]["created_at"] == "2026-01-01 00:00:00"  # real object -> str
+    assert docs[1]["created_at"] is None  # None stays None, not "None"
+    assert docs[0]["entity_count"] == 3
+
+
+async def test_list_documents_empty_graph_returns_empty_list(monkeypatch):
+    def run_fn(query, params):
+        return _FakeResult([])
+
+    constructor = _make_stats_constructor(monkeypatch, run_fn)
+    assert await constructor.list_documents() == []
