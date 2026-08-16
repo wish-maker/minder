@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Bundle } from "../lib/bundles";
-import { ExportImportPanel } from "./InstalledBundlesPage";
+import { ExportImportPanel, InstalledBundlesPage } from "./InstalledBundlesPage";
 
 const apiFetch = vi.fn();
 const onChanged = vi.fn();
@@ -10,6 +10,9 @@ const onChanged = vi.fn();
 vi.mock("../lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   friendlyErrorMessage: (e: unknown) => (e instanceof Error ? e.message : "error"),
+}));
+vi.mock("../lib/auth", () => ({
+  useAuth: () => ({ token: "tok", role: "admin" }),
 }));
 
 function bundle(overrides: Partial<Bundle> = {}): Bundle {
@@ -36,6 +39,41 @@ async function importFile(content: unknown) {
   fireEvent.change(input, { target: { files: [file] } });
   await vi.waitFor(() => expect(onChanged).toHaveBeenCalled());
 }
+
+describe("InstalledBundlesPage", () => {
+  afterEach(() => {
+    apiFetch.mockReset();
+    cleanup();
+  });
+
+  it("shows only the enabled bundles", async () => {
+    apiFetch.mockResolvedValue({
+      bundles: [
+        bundle({ name: "core", enabled: true }),
+        bundle({ name: "monitoring", enabled: false }),
+        bundle({ name: "voice", enabled: true }),
+      ],
+      count: 3,
+    });
+    render(<InstalledBundlesPage />);
+
+    expect(await screen.findByText("core")).toBeTruthy();
+    expect(screen.getByText("voice")).toBeTruthy();
+    expect(screen.queryByText("monitoring")).toBeNull();
+  });
+
+  it("shows an empty state when no bundle is enabled", async () => {
+    apiFetch.mockResolvedValue({
+      bundles: [bundle({ name: "monitoring", enabled: false })],
+      count: 1,
+    });
+    render(<InstalledBundlesPage />);
+
+    expect(
+      await screen.findByText("No bundles are enabled yet — see Available Bundles."),
+    ).toBeTruthy();
+  });
+});
 
 describe("ExportImportPanel import logic", () => {
   afterEach(() => {
