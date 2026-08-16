@@ -264,6 +264,45 @@ async def save_plugin_manifest(plugin_name: str, manifest: dict) -> None:
         raise
 
 
+async def delete_plugin_from_database(plugin_name: str) -> None:
+    """Hard-delete a plugin's persisted rows on uninstall (#639).
+
+    Uninstall previously deleted only the in-memory state (plugins_db + the
+    webhook_routes/plugin_manifests dicts), never the DB. On the next registry
+    restart, ``load_plugins_from_database()`` re-loaded the plugin row (never
+    deleted) and ``register_all_webhooks_on_startup()`` restored its webhook from
+    the persisted manifest (also never deleted) — the "uninstalled" plugin fully
+    resurrected, webhook and all. "Uninstall" means removal, so this hard-deletes
+    the `plugins` row, its webhook `plugin_manifests` row, and any
+    `plugin_configs` overrides, in one transaction. Re-adding the plugin then
+    goes through registration again (from its on-disk manifest for a module
+    plugin, or a fresh API register), which is the intended semantic.
+
+    Only ever called from the uninstall path (routes/plugins.py). Disk-loaded
+    module plugins (telegraf/network/…) still re-register from disk on the next
+    boot regardless — that's correct, they ship in the repo; this deletion is
+    about API/DB-registered plugins not silently coming back.
+    """
+    try:
+        pool = await get_postgres_connection()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute("DELETE FROM plugins WHERE name = $1", plugin_name)
+                await conn.execute(
+                    "DELETE FROM plugin_manifests WHERE plugin_name = $1", plugin_name
+                )
+                await conn.execute(
+                    "DELETE FROM plugin_configs WHERE plugin_name = $1", plugin_name
+                )
+        logger.info(f"Deleted plugin {plugin_name} from database (uninstall)")
+    except Exception as e:
+        logger.error(f"Failed to delete plugin {plugin_name} from database: {e}")
+        # Re-raise (same #351 contract as the writes above) so uninstall can
+        # report an honest error instead of a 200 that leaves the row behind to
+        # resurrect on restart.
+        raise
+
+
 async def load_all_plugin_manifests() -> dict:
     """Load every persisted plugin manifest (plugin_name -> manifest dict), to
     restore webhook routes on startup (#269). {} on error — startup continues

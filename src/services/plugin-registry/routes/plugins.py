@@ -30,6 +30,7 @@ def build_plugins_router(
     webhook_routes,
     redis_client,
     update_plugin_in_database,
+    delete_plugin_from_database,
     load_plugin_config,
     save_plugin_config,
     register_plugin_webhook,
@@ -167,13 +168,17 @@ def build_plugins_router(
         # #639: uninstall used to leave webhook_routes/plugin_manifests untouched,
         # so handle_webhook_request (which only checks those two dicts, never
         # plugins_db) kept matching and executing the "uninstalled" plugin's
-        # webhook. The DB row itself is intentionally left alone here -- whether
-        # uninstall should hard-delete it or soft-disable it is still an open
-        # product decision (#639) -- but this cleanup is correct either way, so
-        # it isn't blocked on that decision.
+        # webhook. Clean the in-memory routes...
         plugin_manifests.pop(plugin_name, None)
         for path in [p for p, owner in webhook_routes.items() if owner == plugin_name]:
             del webhook_routes[path]
+        # ...AND hard-delete the persisted rows (#639, resolved): without this the
+        # plugins row + persisted manifest survived, so the next registry restart
+        # re-loaded the plugin and re-armed its webhook — the "uninstalled" plugin
+        # fully resurrected. "Uninstall" means removal; re-adding goes through
+        # registration again. Disk module plugins still re-register from disk on
+        # boot (correct — they ship in the repo).
+        await delete_plugin_from_database(plugin_name)
         return {"message": f"Plugin {plugin_name} uninstalled"}
 
     @router.post("/webhook/{path:path}")
