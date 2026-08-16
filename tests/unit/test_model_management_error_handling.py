@@ -179,3 +179,38 @@ def test_pull_empty_model_id_rejected_at_the_edge():
         models_api.ModelPullRequest(model_id="")
     # a non-empty id is still accepted
     assert models_api.ModelPullRequest(model_id="llama3.2").model_id == "llama3.2"
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "llama3.2:latest",  # plain name:tag -- the colon is a tag separator, not a port
+        "jimscard/whiterabbit-neo:latest",  # real namespaced community model, must stay allowed
+        "qwen2.5-coder:32b",
+    ],
+)
+def test_pull_default_library_model_ids_are_allowed(model_id):
+    """#679-b: only a CUSTOM REGISTRY HOST should be rejected -- a plain name
+    or a namespace under the default Ollama library must keep working."""
+    models_api = _isolated_import("routes.models_api")
+    assert models_api.ModelPullRequest(model_id=model_id).model_id == model_id
+
+
+@pytest.mark.parametrize(
+    "model_id",
+    [
+        "registry.example.com/library/llama3.2",  # domain in the first segment
+        "myregistry:5000/model",  # explicit port in the first segment
+        "localhost:11434/model",
+        "localhost/model",
+    ],
+)
+def test_pull_custom_registry_host_rejected_at_the_edge(model_id):
+    """#679-b: block pulls from a custom OCI registry host -- no legitimate
+    use of one exists anywhere in this codebase/docs today, so this is the
+    simplest safe default rather than an allowlist."""
+    import pydantic
+
+    models_api = _isolated_import("routes.models_api")
+    with pytest.raises(pydantic.ValidationError, match="custom registry host"):
+        models_api.ModelPullRequest(model_id=model_id)
