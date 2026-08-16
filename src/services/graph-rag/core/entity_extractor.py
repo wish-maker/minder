@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict, List
 
 import spacy
+from core.entity_dedup import filter_noun_phrases
 
 logger = logging.getLogger(__name__)
 
@@ -53,18 +54,20 @@ class EntityExtractor:
                 }
                 entities.append(entity)
 
-            # Extract noun phrases as additional entities
-            noun_phrases = list(doc.noun_chunks)
-            for np in noun_phrases[:10]:  # Limit to top 10
-                if len(np.text) > 2:  # Skip short phrases
-                    entity = {
-                        "text": np.text,
-                        "label": "NOUN_PHRASE",
-                        "start": np.start_char,
-                        "end": np.end_char,
-                        "description": "Noun phrase",
-                    }
-                    entities.append(entity)
+            # Extract noun phrases as additional entities — but dedup them against
+            # the NER entities above (#669): a noun chunk that duplicates or
+            # overlaps an NER entity used to be emitted as a second Entity node
+            # under the NOUN_PHRASE label, and since relationships match entities
+            # by text alone that made relationship linking ambiguous.
+            np_candidates = [
+                {
+                    "text": np.text,
+                    "start": np.start_char,
+                    "end": np.end_char,
+                }
+                for np in list(doc.noun_chunks)[:10]  # top 10 (as before)
+            ]
+            entities.extend(filter_noun_phrases(entities, np_candidates))
 
             # Extract relationships
             relationships = []
