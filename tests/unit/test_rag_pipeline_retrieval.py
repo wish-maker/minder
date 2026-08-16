@@ -1314,6 +1314,123 @@ async def test_reconcile_does_not_persist_when_pg_unavailable(monkeypatch):
     assert saves == []  # ...but no Postgres write attempted
 
 
+# ── GET .../documents/{document_id}/chunks ────────────────────────────────────
+# Lets a caller inspect what actually got extracted/stored for a document (a
+# diagnostic step separate from a retrieval/generation issue) -- previously
+# nothing exposed chunk text at all, only per-document summaries.
+
+
+class _FakeChunkRecord:
+    def __init__(self, payload):
+        self.payload = payload
+
+
+class _FakeChunksQdrantClient:
+    def __init__(self, records):
+        self._records = records
+        self.scroll_calls = []
+
+    def scroll(self, **kwargs):
+        self.scroll_calls.append(kwargs)
+        return self._records, None
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_returns_sorted_chunks_excluding_tree_nodes(
+    monkeypatch,
+):
+    records = [
+        _FakeChunkRecord({"chunk_index": 2, "text": "third"}),
+        _FakeChunkRecord({"chunk_index": 0, "text": "first"}),
+        _FakeChunkRecord({"chunk_index": 1, "text": "second"}),
+        _FakeChunkRecord({"chunk_index": 0, "text": "tree summary", "tree_level": 1}),
+    ]
+    fake_client = _FakeChunksQdrantClient(records)
+    with _seed_state(knowledge_bases={"kb-1": _kb("kb-1")}):
+        monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+        # Explicit limit/offset: called directly (not through FastAPI's request
+        # handling), so the function's own Query(...) defaults would otherwise
+        # arrive as unresolved Query sentinel objects, not plain ints.
+        result = await rag_routes.get_document_chunks(
+            "kb-1", "doc-1", limit=50, offset=0
+        )
+
+    assert [c.text for c in result.items] == ["first", "second", "third"]
+    assert [c.chunk_index for c in result.items] == [0, 1, 2]
+    assert result.total == 3  # tree-summary node excluded from the count too
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_404_for_unknown_kb():
+    with _seed_state(knowledge_bases={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.get_document_chunks("nope", "doc-1")
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_404_when_document_has_no_chunks(monkeypatch):
+    fake_client = _FakeChunksQdrantClient([])
+    with _seed_state(knowledge_bases={"kb-1": _kb("kb-1")}):
+        monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.get_document_chunks("kb-1", "nope")
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_paginates_via_limit_offset(monkeypatch):
+    records = [
+        _FakeChunkRecord({"chunk_index": i, "text": f"chunk {i}"}) for i in range(5)
+    ]
+    fake_client = _FakeChunksQdrantClient(records)
+    with _seed_state(knowledge_bases={"kb-1": _kb("kb-1")}):
+        monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+        result = await rag_routes.get_document_chunks(
+            "kb-1", "doc-1", limit=2, offset=2
+        )
+
+    assert result.total == 5
+    assert result.limit == 2
+    assert result.offset == 2
+    assert [c.chunk_index for c in result.items] == [2, 3]
+
+
+@pytest.mark.asyncio
+async def test_get_document_chunks_scopes_to_the_requested_document(monkeypatch):
+    """Confirms the shared _document_id_filter is actually applied to the
+    scroll call, not just built and ignored."""
+    fake_client = _FakeChunksQdrantClient(
+        [_FakeChunkRecord({"chunk_index": 0, "text": "x"})]
+    )
+    with _seed_state(knowledge_bases={"kb-1": _kb("kb-1")}):
+        monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+        await rag_routes.get_document_chunks(
+            "kb-1", "legacy:notes.txt", limit=50, offset=0
+        )
+
+    scroll_filter = fake_client.scroll_calls[0]["scroll_filter"]
+    assert scroll_filter == rag_routes._document_id_filter("legacy:notes.txt")
+
+
+def test_get_document_chunks_route_is_wired_and_open_read(monkeypatch):
+    """Through the real router (not a direct call) -- proves the route path
+    itself resolves and the Query(...) limit/offset defaults actually work
+    when FastAPI, not a test, supplies them."""
+    fake_client = _FakeChunksQdrantClient(
+        [_FakeChunkRecord({"chunk_index": 0, "text": "hello"})]
+    )
+    client = _rag_router_client()
+    with _seed_state(knowledge_bases={"kb-1": _kb("kb-1")}):
+        monkeypatch.setattr(rag_routes.state, "get_qdrant_client", lambda: fake_client)
+        resp = client.get("/v1/knowledge-bases/kb-1/documents/doc-1/chunks")
+
+    assert resp.status_code == 200  # no auth required -- matches list_documents
+    body = resp.json()
+    assert set(body) == {"items", "total", "limit", "offset"}
+    assert body["items"] == [{"chunk_index": 0, "text": "hello"}]
+
+
 # ── delete_document: legacy delete must not sweep up a document_id-tagged
 # re-upload sharing the same filename ────────────────────────────────────────
 

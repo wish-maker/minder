@@ -50,6 +50,73 @@ interface KbDocument {
   uploaded_at?: string;
 }
 
+interface ChunkInfo {
+  chunk_index: number;
+  text: string;
+}
+
+/** Lazily fetches a document's stored chunk text on first expand -- lets a
+ * user tell a bad extraction/OCR (garbled or missing text) apart from a
+ * retrieval/generation issue, which previously had no diagnostic short of
+ * trial-and-error querying. Same lazy-expand-on-first-open pattern as
+ * ConfigurePanel (InstalledPluginsPage) / ModelDetailPanel (ModelManagementPage). */
+export function ChunkViewer({
+  kbId,
+  documentId,
+}: {
+  kbId: string;
+  documentId: string;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [chunks, setChunks] = useState<ChunkInfo[]>([]);
+  const [status, setStatus] = useState("");
+
+  async function handleToggle(e: React.SyntheticEvent<HTMLDetailsElement>) {
+    if (!e.currentTarget.open || loaded) return;
+    setStatus("Loading…");
+    try {
+      // 500 (the max page size the backend allows) rather than paginating in
+      // the UI -- a document with more chunks than that is a rare edge case
+      // not worth building pagination controls for in a first version.
+      const res = await apiFetch<Paginated<ChunkInfo>>(
+        `/v1/rag/knowledge-bases/${kbId}/documents/${documentId}/chunks?limit=500`,
+      );
+      setChunks(res.items);
+      setLoaded(true);
+      setStatus("");
+    } catch (err) {
+      setStatus(friendlyErrorMessage(err));
+    }
+  }
+
+  return (
+    <details className="mt-1.5" onToggle={handleToggle}>
+      <summary className="cursor-pointer text-xs font-medium text-indigo-600 dark:text-indigo-400">
+        View chunks
+      </summary>
+      <div className="mt-2 flex flex-col gap-2">
+        {status && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">{status}</p>
+        )}
+        {loaded &&
+          chunks.map((c) => (
+            <div
+              key={c.chunk_index}
+              className="rounded-md bg-white p-2 text-xs dark:bg-gray-900"
+            >
+              <div className="mb-1 font-mono text-gray-400 dark:text-gray-500">
+                #{c.chunk_index}
+              </div>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap font-sans text-gray-700 dark:text-gray-300">
+                {c.text}
+              </pre>
+            </div>
+          ))}
+      </div>
+    </details>
+  );
+}
+
 interface QueueItem {
   file: File;
   status: "queued" | "uploading" | "done" | "error";
@@ -248,21 +315,24 @@ function DocumentsList({
           {docs.map((d) => (
             <li
               key={d.document_id}
-              className="flex items-center justify-between gap-3 rounded-md bg-gray-50 px-3 py-1.5 text-sm dark:bg-gray-800"
+              className="rounded-md bg-gray-50 px-3 py-1.5 text-sm dark:bg-gray-800"
             >
-              <span className="truncate">
-                📄 {d.filename} —{" "}
-                <span className="text-gray-500 dark:text-gray-400">
-                  {d.chunk_count} chunk{d.chunk_count === 1 ? "" : "s"}
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate">
+                  📄 {d.filename} —{" "}
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {d.chunk_count} chunk{d.chunk_count === 1 ? "" : "s"}
+                  </span>
                 </span>
-              </span>
-              <button
-                onClick={() => handleDelete(d)}
-                disabled={!token}
-                className={destructiveButtonClass}
-              >
-                🗑 Delete
-              </button>
+                <button
+                  onClick={() => handleDelete(d)}
+                  disabled={!token}
+                  className={destructiveButtonClass}
+                >
+                  🗑 Delete
+                </button>
+              </div>
+              <ChunkViewer kbId={kbId} documentId={d.document_id} />
             </li>
           ))}
         </ul>
