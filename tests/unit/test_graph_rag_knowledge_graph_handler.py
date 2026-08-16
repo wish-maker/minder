@@ -64,8 +64,8 @@ def _isolated_import(module_path: str):
 
     try:
         module = importlib.import_module(module_path)
-        request_cls = importlib.import_module("models.schemas").KnowledgeGraphRequest
-        return module, request_cls
+        schemas = importlib.import_module("models.schemas")
+        return module, schemas
     finally:
         sys.path[:] = saved_path
         for name in _COLLISION_PRONE_NAMES:
@@ -75,8 +75,13 @@ def _isolated_import(module_path: str):
         sys.modules.update(saved_modules)
 
 
-_api, KnowledgeGraphRequest = _isolated_import("routes.api")
+_api, _schemas = _isolated_import("routes.api")
+KnowledgeGraphRequest = _schemas.KnowledgeGraphRequest
+GraphRetrievalRequest = _schemas.GraphRetrievalRequest
+EntityContextRequest = _schemas.EntityContextRequest
 construct_knowledge_graph_handler = _api.construct_knowledge_graph_handler
+retrieve_with_graph_handler = _api.retrieve_with_graph_handler
+get_entity_context_handler = _api.get_entity_context_handler
 
 
 class _FakeExtractor:
@@ -404,3 +409,135 @@ def test_list_documents_endpoint_is_open_read():
     body = resp.json()
     assert body["success"] is True
     assert "documents" in body and "count" in body
+
+
+# ── retrieve_with_graph_handler / get_entity_context_handler ─────────────────
+# Both had ZERO direct test coverage (confirmed via `coverage`: routes/api.py's
+# lines 164-223 / 230-257 never executed by any unit test) despite being the
+# actual /v1/retrieve and /v1/entity-context endpoint handlers.
+
+
+class _FakeQueryExtractor:
+    def __init__(self, entities):
+        self._entities = entities
+
+    def extract_entities(self, text):
+        return {"entity_count": len(self._entities), "entities": self._entities}
+
+
+class _FakeRetrieverForQuery:
+    def __init__(self, related_by_entity=None, context_result=None):
+        self._related_by_entity = related_by_entity or {}
+        self._context_result = context_result
+        self.find_related_calls = []
+
+    async def find_related_entities(self, entity_name, max_depth, limit):
+        self.find_related_calls.append(entity_name)
+        return self._related_by_entity.get(entity_name, [])
+
+    async def get_entity_context(self, entity_name, context_window):
+        return self._context_result
+
+
+@pytest.mark.asyncio
+async def test_retrieve_with_graph_handler_returns_empty_when_no_entities_extracted():
+    extractor = _FakeQueryExtractor(entities=[])
+    retriever = _FakeRetrieverForQuery()
+
+    result = await retrieve_with_graph_handler(
+        GraphRetrievalRequest(query="nothing here"), extractor, retriever
+    )
+
+    assert result.success is True
+    assert result.entity_count == 0
+    assert result.related_entities == []
+    assert retriever.find_related_calls == []  # never searches the graph
+
+
+@pytest.mark.asyncio
+async def test_retrieve_with_graph_handler_dedupes_across_search_terms():
+    """Two extracted entities ("Apple", "Tesla") both relate to "Musk" --
+    the same related entity must appear once in the final list, not twice."""
+    extractor = _FakeQueryExtractor(entities=[{"text": "Apple"}, {"text": "Tesla"}])
+    retriever = _FakeRetrieverForQuery(
+        related_by_entity={
+            "Apple": [{"text": "Musk", "label": "PERSON"}],
+            "Tesla": [
+                {"text": "Musk", "label": "PERSON"},
+                {"text": "Model 3", "label": "PRODUCT"},
+            ],
+        }
+    )
+
+    result = await retrieve_with_graph_handler(
+        GraphRetrievalRequest(query="who runs Apple and Tesla?"), extractor, retriever
+    )
+
+    assert result.entity_count == 2
+    texts = [e["text"] for e in result.related_entities]
+    assert texts.count("Musk") == 1
+    assert "Model 3" in texts
+
+
+@pytest.mark.asyncio
+async def test_retrieve_with_graph_handler_limits_to_top_5_search_terms():
+    entities = [{"text": f"Entity{i}"} for i in range(7)]
+    extractor = _FakeQueryExtractor(entities=entities)
+    retriever = _FakeRetrieverForQuery()
+
+    await retrieve_with_graph_handler(
+        GraphRetrievalRequest(query="seven things"), extractor, retriever
+    )
+
+    assert retriever.find_related_calls == [f"Entity{i}" for i in range(5)]
+
+
+@pytest.mark.asyncio
+async def test_get_entity_context_handler_404_when_entity_not_found():
+    from fastapi import HTTPException
+
+    retriever = _FakeRetrieverForQuery(context_result={"error": "Entity not found"})
+
+    with pytest.raises(HTTPException) as exc:
+        await get_entity_context_handler(
+            EntityContextRequest(entity_text="nope"), retriever
+        )
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_entity_context_handler_drops_related_when_include_neighbors_false():
+    retriever = _FakeRetrieverForQuery(
+        context_result={
+            "entity": {"text": "Acme", "label": "ORG"},
+            "related_entities": [{"text": "Alice", "label": "PERSON"}],
+            "documents": [{"doc_id": "d1", "title": "t"}],
+            "context_window": 3,
+        }
+    )
+
+    result = await get_entity_context_handler(
+        EntityContextRequest(entity_text="Acme", include_neighbors=False), retriever
+    )
+
+    assert result.entity == {"text": "Acme", "label": "ORG"}
+    assert result.related_entities == []  # dropped, not just empty by chance
+    assert result.documents == [{"doc_id": "d1", "title": "t"}]
+
+
+@pytest.mark.asyncio
+async def test_get_entity_context_handler_includes_related_by_default():
+    retriever = _FakeRetrieverForQuery(
+        context_result={
+            "entity": {"text": "Acme", "label": "ORG"},
+            "related_entities": [{"text": "Alice", "label": "PERSON"}],
+            "documents": [],
+            "context_window": 3,
+        }
+    )
+
+    result = await get_entity_context_handler(
+        EntityContextRequest(entity_text="Acme"), retriever
+    )
+
+    assert result.related_entities == [{"text": "Alice", "label": "PERSON"}]
