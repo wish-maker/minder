@@ -99,6 +99,13 @@ jobs:
           format: 'sarif'
           output: 'trivy-results-${{ matrix.service }}.sarif'
           severity: 'CRITICAL,HIGH'
+          # By default SARIF format ignores `severity` and reports every finding
+          # regardless of configured severity -- this alone left the code-scanning
+          # tab full of ~100 open LOW/MEDIUM/note OS-package alerts (all Debian
+          # base-image CVEs with no fixed version available yet) despite the
+          # intent above being CRITICAL/HIGH only. Confirmed via
+          # https://github.com/aquasecurity/trivy-action's own docs for this input.
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy results
         uses: github/codeql-action/upload-sarif@v4
