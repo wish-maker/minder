@@ -47,7 +47,16 @@ services:
     - --providers.file.directory=/etc/traefik/dynamic
     - --entrypoints.web.address=:80
     - --entrypoints.websecure.address=:443
-    - --entrypoints.metrics.address=:8080
+    # #646: was :8080, colliding with api.insecure's auto-created "traefik"
+    # entrypoint (also defaults to :8080 when --api.entrypoint isn't set) --
+    # confirmed live on hantal: Traefik's own /api/entrypoints only ever listed
+    # "traefik"/"web"/"websecure", never "metrics", and /metrics 404'd on the
+    # published dashboard port. The two entrypoints silently collided and
+    # "metrics" never actually got created, so Prometheus scraping this
+    # (job "traefik" in docker/services/prometheus/prometheus.yml) would
+    # always fail. Not published to the host -- internal-only, matching the
+    # comment above.
+    - --entrypoints.metrics.address=:8082
     - --certificatesresolvers.default.acme.tlschallenge=true
     - --certificatesresolvers.default.acme.email=${ACME_EMAIL:-admin@minder.local}
     - --certificatesresolvers.default.acme.storage=/letsencrypt/acme.json

@@ -46,8 +46,13 @@ certificatesResolvers:
     acme:
       email: admin@minder.local
       storage: /letsencrypt/acme.json
-      httpChallenge:
-        entryPoint: web
+      # #646: tlsChallenge (not httpChallenge) is the actual mechanism in use --
+      # set via docker-compose.yml's --certificatesresolvers.default.acme.tlschallenge=true
+      # CLI flag. This file used to ALSO declare httpChallenge here, for the
+      # same resolver -- two different, mutually exclusive ACME challenge
+      # mechanisms configured for one resolver is undefined/ambiguous, not a
+      # real fallback. Keep the CLI flags as the single source of truth for
+      # this resolver's challenge type.
 
 log:
   level: INFO
@@ -64,8 +69,11 @@ accessLog:
         User-Agent: keep
         Authorization: keep
 
-metrics:
-  prometheus:
-    entryPoint: websecure
-    addEntryPointsLabels: true
-    addServicesLabels: true
+# #646: metrics.prometheus config lives ENTIRELY in docker-compose.yml's CLI
+# flags now (--metrics.prometheus=true/.entrypoint=metrics/.addentrypointslabels/
+# .addserviceslabels) -- this file used to ALSO declare a metrics.prometheus
+# block with entryPoint: websecure, which would have put Prometheus metrics on
+# the PUBLIC HTTPS entrypoint instead of the internal-only "metrics" one the
+# CLI flags intend. Confirmed live on hantal that the CLI's dedicated
+# entrypoint is the one actually meant to serve this -- removed the
+# conflicting duplicate here rather than trying to keep two sources in sync.
