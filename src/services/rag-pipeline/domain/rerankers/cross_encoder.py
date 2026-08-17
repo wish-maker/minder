@@ -118,8 +118,15 @@ class CrossEncoderReranker:
         if top_k <= 0:
             raise ValueError(f"top_k must be positive, got {top_k}")
 
-        # Fallback if model unavailable
-        if not self.use_reranker or not self.model:
+        # Fallback if model unavailable. `self.model` is the sole source of
+        # truth here (it lazy-loads AND sets use_reranker as a side effect) --
+        # checking `not self.use_reranker` first would short-circuit the `or`
+        # and skip the `.model` access entirely on a fresh instance, since
+        # use_reranker only ever becomes True as a RESULT of that access. That
+        # used to make a standalone `rerank()` call (no prior `.model` touch --
+        # exactly what this class's own docstring example does) always fall
+        # back, even with the cross-encoder fully available.
+        if not self.model:
             logger.debug("Using fallback ranking (original scores)")
             return [(doc, doc.get("score", 0.0)) for doc in documents[:top_k]]
 
