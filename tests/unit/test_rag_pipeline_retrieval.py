@@ -1338,6 +1338,301 @@ async def test_ingest_document_invalidates_hybrid_cache(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ingest_document_cleanup_failure_is_logged_not_raised_over(monkeypatch):
+    """The delete-cleanup itself can ALSO fail (Qdrant still unreachable) --
+    must still surface the original 503, not crash inside the except block."""
+    chunk_count = ingestion.QDRANT_UPSERT_BATCH_SIZE + 10
+    monkeypatch.setattr(
+        ingestion,
+        "chunk_text",
+        lambda *a, **k: [f"chunk {i}" for i in range(chunk_count)],
+    )
+
+    class _DoublyFlakyQdrantClient:
+        def upsert(self, **kwargs):
+            raise ConnectionError("qdrant unreachable")
+
+        def delete(self, **kwargs):
+            raise ConnectionError("qdrant still unreachable")
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _DoublyFlakyQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    with pytest.raises(Exception) as exc_info:
+        await ingestion.ingest_document(
+            "kb-1", _fake_kb(), "big.txt", b"doesn't matter, chunk_text is stubbed"
+        )
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_saves_kb_to_postgres_when_available(monkeypatch):
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
+    saved = {}
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            pass
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    async def fake_save(kb_id, kb):
+        saved["kb_id"] = kb_id
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=True,
+        save_kb_to_postgres=fake_save,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    await ingestion.ingest_document("kb-1", _fake_kb(), "doc.txt", b"New content.")
+
+    assert saved["kb_id"] == "kb-1"
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_tolerates_postgres_save_failure(monkeypatch):
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            pass
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    async def failing_save(kb_id, kb):
+        raise ConnectionError("postgres unreachable")
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=True,
+        save_kb_to_postgres=failing_save,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    # Must still succeed overall -- the vectors are already safely in Qdrant.
+    result = await ingestion.ingest_document(
+        "kb-1", _fake_kb(), "doc.txt", b"New content."
+    )
+    assert result.filename == "doc.txt"
+
+
+# ── _build_and_store_tree / ingest_document(build_tree=True) ----------------
+
+
+@pytest.mark.asyncio
+async def test_build_and_store_tree_upserts_summary_nodes(monkeypatch):
+    async def fake_generate_response(prompt, model):
+        return {"text": "a concise summary"}
+
+    async def fake_generate_embeddings(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        ollama_manager=SimpleNamespace(
+            generate_response=fake_generate_response,
+            generate_embeddings=fake_generate_embeddings,
+        ),
+        get_qdrant_client=lambda: _UpsertCapturingClient(),
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    leaf_ids = [f"leaf-{i}" for i in range(6)]
+    leaf_texts = [f"chunk {i} content" for i in range(6)]
+    leaf_embeddings = [[0.1, 0.2, 0.3] for _ in range(6)]
+
+    node_count = await ingestion._build_and_store_tree(
+        "kb-1",
+        _fake_kb(llm_model="llama3.2"),
+        "doc-1",
+        "doc.txt",
+        "2026-01-01T00:00:00+00:00",
+        leaf_ids,
+        leaf_texts,
+        leaf_embeddings,
+    )
+
+    assert node_count > 0
+    assert _UpsertCapturingClient.last_points
+    assert _UpsertCapturingClient.last_points[0].payload["document_id"] == "doc-1"
+    assert _UpsertCapturingClient.last_points[0].payload["tree_level"] >= 1
+
+
+class _UpsertCapturingClient:
+    last_points: list = []
+
+    def upsert(self, **kwargs):
+        type(self).last_points = kwargs["points"]
+
+
+@pytest.mark.asyncio
+async def test_build_and_store_tree_summary_falls_back_when_llm_reports_error(
+    monkeypatch,
+):
+    """summarize()'s own error-branch (a generate_response() error envelope,
+    not an exception) -- exercised via the REAL raptor.build_tree rather than
+    a fake, since raptor itself degrades an empty summary to a truncated
+    concatenation of the cluster's text (never drops the cluster)."""
+
+    async def erroring_generate_response(prompt, model):
+        return {"error": True, "text": "model unavailable"}
+
+    async def fake_generate_embeddings(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    fake_state = SimpleNamespace(
+        ollama_manager=SimpleNamespace(
+            generate_response=erroring_generate_response,
+            generate_embeddings=fake_generate_embeddings,
+        ),
+        get_qdrant_client=lambda: _UpsertCapturingClient(),
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    leaf_ids = [f"leaf-{i}" for i in range(6)]
+    leaf_texts = [f"distinct chunk number {i} about topic {i}" for i in range(6)]
+    leaf_embeddings = [
+        [float(i), float(i) * 2, float(i) * 3] for i in range(6)
+    ]  # spread out so clustering actually reduces the node count
+
+    node_count = await ingestion._build_and_store_tree(
+        "kb-1",
+        _fake_kb(llm_model="llama3.2"),
+        "doc-1",
+        "doc.txt",
+        "2026-01-01T00:00:00+00:00",
+        leaf_ids,
+        leaf_texts,
+        leaf_embeddings,
+    )
+
+    assert node_count > 0
+    # No exception propagated, and a real (non-empty) node was still produced --
+    # raptor.build_tree's own fallback truncated the cluster's own text instead.
+    text = _UpsertCapturingClient.last_points[0].payload["text"]
+    assert text  # non-empty fallback text, not a blank summary
+
+
+@pytest.mark.asyncio
+async def test_build_and_store_tree_returns_zero_when_raptor_raises(monkeypatch):
+    async def boom(*args, **kwargs):
+        raise RuntimeError("clustering failed")
+
+    monkeypatch.setattr(ingestion.raptor, "build_tree", boom)
+
+    node_count = await ingestion._build_and_store_tree(
+        "kb-1", _fake_kb(), "doc-1", "doc.txt", "2026-01-01T00:00:00+00:00", [], [], []
+    )
+
+    assert node_count == 0
+
+
+@pytest.mark.asyncio
+async def test_build_and_store_tree_returns_zero_when_no_nodes_produced(monkeypatch):
+    async def empty_tree(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(ingestion.raptor, "build_tree", empty_tree)
+
+    node_count = await ingestion._build_and_store_tree(
+        "kb-1", _fake_kb(), "doc-1", "doc.txt", "2026-01-01T00:00:00+00:00", [], [], []
+    )
+
+    assert node_count == 0
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_builds_tree_when_requested_and_within_chunk_bounds(
+    monkeypatch,
+):
+    chunk_count = ingestion.raptor.MIN_CHUNKS_FOR_TREE
+    monkeypatch.setattr(
+        ingestion,
+        "chunk_text",
+        lambda *a, **k: [f"chunk {i} content" for i in range(chunk_count)],
+    )
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            pass
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    tree_calls = []
+
+    async def fake_build_and_store_tree(*args, **kwargs):
+        tree_calls.append(args)
+        return 3
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+    monkeypatch.setattr(ingestion, "_build_and_store_tree", fake_build_and_store_tree)
+
+    result = await ingestion.ingest_document(
+        "kb-1", _fake_kb(), "big.txt", b"doesn't matter", build_tree=True
+    )
+
+    assert len(tree_calls) == 1
+    assert result.tree_nodes_created == 3
+
+
+@pytest.mark.asyncio
+async def test_ingest_document_skips_tree_when_too_few_chunks(monkeypatch):
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)  # always 1 chunk
+
+    class _FakeQdrantClient:
+        def upsert(self, **kwargs):
+            pass
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3] for _ in texts]
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("tree build must be skipped below MIN_CHUNKS_FOR_TREE")
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+        embedding_generation_duration=_FakeMetric(),
+        documents_processed_total=_FakeMetric(),
+        PG_AVAILABLE=False,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+    monkeypatch.setattr(ingestion, "_build_and_store_tree", _boom)
+
+    result = await ingestion.ingest_document(
+        "kb-1", _fake_kb(), "doc.txt", b"short doc", build_tree=True
+    )
+
+    assert result.tree_nodes_created == 0
+
+
+@pytest.mark.asyncio
 async def test_list_documents_requests_tree_level_in_payload(monkeypatch):
     """list_documents must scroll WITH tree_level so group_documents can exclude
     RAPTOR tree-summary nodes; without it tree nodes inflate chunk_count (#694)."""
@@ -1656,6 +1951,29 @@ async def test_reconcile_does_not_persist_when_pg_unavailable(monkeypatch):
     assert fixed == 1  # in-memory corrected...
     assert kbs["kb-1"]["vector_count"] == 2
     assert saves == []  # ...but no Postgres write attempted
+
+
+@pytest.mark.asyncio
+async def test_reconcile_tolerates_postgres_persist_failure(monkeypatch):
+    records = [_pt("d1"), _pt("d1")]
+
+    async def failing_save(kb_id, kb):
+        raise ConnectionError("postgres unreachable")
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeScrollClient(records),
+        PG_AVAILABLE=True,
+        save_kb_to_postgres=failing_save,
+    )
+    monkeypatch.setattr(ingestion, "state", fake_state)
+
+    kbs = {"kb-1": {"document_count": 0, "vector_count": 0}}
+    fixed = await ingestion.reconcile_kb_counts_from_qdrant(kbs)
+
+    # In-memory correction still applied and reported despite the failed
+    # persist -- Qdrant is the source of truth, Postgres is best-effort.
+    assert fixed == 1
+    assert kbs["kb-1"]["vector_count"] == 2
 
 
 # ── GET .../documents/{document_id}/chunks ────────────────────────────────────
