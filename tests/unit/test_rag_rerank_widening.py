@@ -157,3 +157,129 @@ async def test_no_rerank_fetches_exactly_top_k():
     # No widening on the common path -- fetch_k collapses to top_k.
     assert capture["fetch_k"] == 5
     assert len(result["sources"]) == 5
+
+
+# --- rerank._llm_rerank / rerank.apply --------------------------------------
+
+
+class _RankingOllama:
+    """Returns a fixed ranking string, e.g. "2,0,1", from generate_response."""
+
+    def __init__(self, text):
+        self._text = text
+
+    async def generate_response(self, *a, **k):
+        return {"text": self._text}
+
+
+class _RaisingOllama:
+    async def generate_response(self, *a, **k):
+        raise RuntimeError("ollama unreachable")
+
+
+@pytest.mark.asyncio
+async def test_llm_rerank_reorders_by_model_ranking():
+    sources = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+    ordered = await rerank_mod._llm_rerank(
+        "q", sources, _RankingOllama("2,0,1"), "llama3.2"
+    )
+    assert [s["text"] for s in ordered] == ["c", "a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_llm_rerank_appends_indices_the_model_dropped():
+    # Model only ranks index 1 -- the other two must still appear, in their
+    # original order, appended after it (nothing the model omits is lost).
+    sources = [{"text": "a"}, {"text": "b"}, {"text": "c"}]
+    ordered = await rerank_mod._llm_rerank(
+        "q", sources, _RankingOllama("1"), "llama3.2"
+    )
+    assert [s["text"] for s in ordered] == ["b", "a", "c"]
+
+
+@pytest.mark.asyncio
+async def test_llm_rerank_ignores_out_of_range_and_duplicate_indices():
+    sources = [{"text": "a"}, {"text": "b"}]
+    ordered = await rerank_mod._llm_rerank(
+        "q", sources, _RankingOllama("5,0,0,1"), "llama3.2"
+    )
+    assert [s["text"] for s in ordered] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_llm_rerank_returns_none_when_no_sources_to_rank():
+    result = await rerank_mod._llm_rerank("q", [], _RankingOllama(""), "llama3.2")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_llm_rerank_returns_none_on_generation_failure():
+    sources = [{"text": "a"}, {"text": "b"}]
+    result = await rerank_mod._llm_rerank("q", sources, _RaisingOllama(), "llama3.2")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_apply_returns_unchanged_when_fewer_than_two_sources():
+    ctx = {"sources": [{"text": "a"}]}
+    result, details = await rerank_mod.apply(
+        "q", ctx, None, _RankingOllama("0"), "llama3.2"
+    )
+    assert result is ctx
+    assert details == {}
+
+
+@pytest.mark.asyncio
+async def test_apply_returns_unchanged_when_no_sources_key():
+    ctx = {}
+    result, details = await rerank_mod.apply(
+        "q", ctx, None, _RankingOllama("0"), "llama3.2"
+    )
+    assert result is ctx
+    assert details == {}
+
+
+class _FakeCrossEncoderReranker:
+    def __init__(self):
+        self.model = True
+
+    def rerank(self, question, sources, top_k):
+        return [(sources[1], 0.9), (sources[0], 0.5)]
+
+
+@pytest.mark.asyncio
+async def test_apply_prefers_cross_encoder_when_model_available():
+    ctx = {"context": "a\n\nb", "sources": [{"text": "a"}, {"text": "b"}]}
+    result, details = await rerank_mod.apply(
+        "q", ctx, _FakeCrossEncoderReranker(), _RankingOllama("0,1"), "llama3.2"
+    )
+    assert details == {"reranker": "cross_encoder"}
+    assert [s["text"] for s in result["sources"]] == ["b", "a"]
+    assert result["context"] == "b\n\na"
+
+
+class _UnavailableCrossEncoderReranker:
+    """`.model` lazily loads and returns False when sentence-transformers/torch
+    isn't installed -- apply() must fall back to the LLM path in that case."""
+
+    model = False
+
+
+@pytest.mark.asyncio
+async def test_apply_falls_back_to_llm_when_cross_encoder_model_unavailable():
+    ctx = {"context": "a\n\nb", "sources": [{"text": "a"}, {"text": "b"}]}
+    result, details = await rerank_mod.apply(
+        "q", ctx, _UnavailableCrossEncoderReranker(), _RankingOllama("1,0"), "llama3.2"
+    )
+    assert details == {"reranker": "llm"}
+    assert [s["text"] for s in result["sources"]] == ["b", "a"]
+
+
+@pytest.mark.asyncio
+async def test_apply_returns_unchanged_when_llm_rerank_fails():
+    ctx = {"context": "a\n\nb", "sources": [{"text": "a"}, {"text": "b"}]}
+    result, details = await rerank_mod.apply(
+        "q", ctx, None, _RaisingOllama(), "llama3.2"
+    )
+    assert result is ctx
+    assert details == {}
