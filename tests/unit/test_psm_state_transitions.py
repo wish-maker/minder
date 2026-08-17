@@ -56,10 +56,23 @@ class FakeConn:
     with that ``required`` flag. ``existing_state``: the plugin_states row (dict) or None.
     """
 
-    def __init__(self, *, default_required=None, existing_state=None):
+    def __init__(
+        self,
+        *,
+        default_required=None,
+        existing_state=None,
+        dependents=None,
+        dependent_plugins_rows=None,
+        list_rows=None,
+        dep_graph_rows=None,
+    ):
         self.default_required = default_required
         self.existing_state = existing_state
         self.inserts = []
+        self.dependents = dependents or []
+        self.dependent_plugins_rows = dependent_plugins_rows or []
+        self.list_rows = list_rows if list_rows is not None else []
+        self.dep_graph_rows = dep_graph_rows or []
 
     async def fetchrow(self, query, *args):
         q = " ".join(query.split())
@@ -102,6 +115,15 @@ class FakeConn:
         return None
 
     async def fetch(self, query, *args):
+        q = " ".join(query.split())
+        if "FROM plugin_dependencies pd" in q and "JOIN default_plugins dp" in q:
+            return self.dependent_plugins_rows
+        if "FROM plugin_dependencies" in q:
+            return self.dependents
+        if "FROM default_plugins dp" in q and "LEFT JOIN plugin_dependencies pd" in q:
+            return self.dep_graph_rows
+        if "FROM plugin_states" in q:
+            return self.list_rows
         return []
 
 
@@ -166,3 +188,169 @@ async def test_update_plugin_state_normalizes_uuid_and_jsonb(state_mod):
     assert isinstance(row["id"], str)
     assert row["config"] == {"threshold": 5}
     assert row["state"] == state_mod.PluginState.ENABLED.value
+
+
+# --- enable_plugin: remaining branches ---------------------------------------
+
+
+async def test_enable_required_plugin_non_bootstrap_still_enables(state_mod):
+    """A required plugin enabled with a non-bootstrap reason only logs a
+    warning -- it does NOT block the enable (only disable enforces force=True
+    for required plugins)."""
+    conn = FakeConn(
+        default_required=True,
+        existing_state={"plugin_name": "core-thing", "state": "installed"},
+    )
+    row = await state_mod.enable_plugin(conn, "core-thing", reason="user click")
+    assert row["state"] == state_mod.PluginState.ENABLED.value
+
+
+async def test_enable_already_enabled_plugin_is_a_noop(state_mod):
+    existing = {"state": "enabled", "plugin_name": "crypto"}
+    conn = FakeConn(default_required=None, existing_state=existing)
+    row = await state_mod.enable_plugin(conn, "crypto")
+    assert (
+        row == existing
+    )  # returned unchanged (fresh dict via _record_to_dict, same content), no UPDATE issued
+
+
+async def test_enable_from_invalid_state_raises_transition_error(state_mod):
+    conn = FakeConn(default_required=None, existing_state={"state": "pending"})
+    with pytest.raises(state_mod.StateTransitionError):
+        await state_mod.enable_plugin(conn, "weird-plugin")
+
+
+# --- disable_plugin: remaining branches --------------------------------------
+
+
+async def test_disable_with_non_required_dependents_still_disables(state_mod):
+    conn = FakeConn(
+        default_required=None,
+        existing_state={"state": "enabled", "plugin_name": "core-lib"},
+        dependents=[{"plugin_name": "weather", "required": False}],
+    )
+    row = await state_mod.disable_plugin(conn, "core-lib")
+    assert row["state"] == state_mod.PluginState.DISABLED.value
+
+
+async def test_disable_with_required_dependent_raises_transition_error(state_mod):
+    conn = FakeConn(
+        default_required=None,
+        existing_state={"state": "enabled", "plugin_name": "core-lib"},
+        dependents=[{"plugin_name": "weather", "required": True}],
+    )
+    with pytest.raises(state_mod.StateTransitionError):
+        await state_mod.disable_plugin(conn, "core-lib")
+
+
+async def test_disable_already_disabled_plugin_is_a_noop(state_mod):
+    existing = {"state": "disabled", "plugin_name": "crypto"}
+    conn = FakeConn(default_required=None, existing_state=existing)
+    row = await state_mod.disable_plugin(conn, "crypto")
+    assert (
+        row == existing
+    )  # returned unchanged (fresh dict via _record_to_dict, same content), no UPDATE issued
+
+
+async def test_disable_from_invalid_state_raises_transition_error(state_mod):
+    conn = FakeConn(default_required=None, existing_state={"state": "pending"})
+    with pytest.raises(state_mod.StateTransitionError):
+        await state_mod.disable_plugin(conn, "weird-plugin")
+
+
+# --- list_plugin_states -------------------------------------------------
+
+
+async def test_list_plugin_states_returns_all_when_unfiltered(state_mod):
+    rows = [
+        {"plugin_name": "a", "state": "enabled", "config": "{}"},
+        {"plugin_name": "b", "state": "disabled", "config": "{}"},
+    ]
+    conn = FakeConn(list_rows=rows)
+
+    result = await state_mod.list_plugin_states(conn, None)
+
+    assert [r["plugin_name"] for r in result] == ["a", "b"]
+    assert result[0]["config"] == {}  # _record_to_dict's JSONB parsing applied
+
+
+async def test_list_plugin_states_applies_state_filter(state_mod):
+    captured = {}
+
+    class _FilterConn(FakeConn):
+        async def fetch(self, query, *args):
+            captured["args"] = args
+            return await super().fetch(query, *args)
+
+    conn = _FilterConn(
+        list_rows=[{"plugin_name": "a", "state": "enabled", "config": "{}"}]
+    )
+
+    result = await state_mod.list_plugin_states(conn, state_mod.PluginState.ENABLED)
+
+    assert captured["args"] == ("enabled",)
+    assert len(result) == 1
+
+
+# --- get_dependent_plugins ----------------------------------------------
+
+
+async def test_get_dependent_plugins_returns_normalized_rows(state_mod):
+    rows = [
+        {
+            "plugin_name": "weather",
+            "required": False,
+            "auto_enable": True,
+            "is_required": False,
+        }
+    ]
+    conn = FakeConn(dependent_plugins_rows=rows)
+
+    result = await state_mod.get_dependent_plugins(conn, "core-lib")
+
+    assert result == rows
+
+
+# --- resolve_dependencies ------------------------------------------------
+
+
+async def test_resolve_dependencies_returns_topological_order(state_mod):
+    # c depends on b, b depends on a -- enable order must be a, b, c.
+    rows = [
+        {"plugin_name": "a", "depends_on": None, "required": False},
+        {"plugin_name": "b", "depends_on": "a", "required": True},
+        {"plugin_name": "c", "depends_on": "b", "required": True},
+    ]
+    conn = FakeConn(dep_graph_rows=rows)
+
+    order = await state_mod.resolve_dependencies(conn, "c")
+
+    assert order.index("a") < order.index("b") < order.index("c")
+
+
+async def test_update_plugin_state_generic_branch_for_non_enabled_disabled_state(
+    state_mod,
+):
+    """update_plugin_state's third query branch (neither ENABLED nor DISABLED)
+    -- no enable_plugin/disable_plugin call site reaches it, but it's a public
+    function other callers could use directly for e.g. an ERROR transition."""
+    conn = FakeConn(
+        existing_state={"plugin_name": "crypto", "state": "installed", "config": {}}
+    )
+
+    row = await state_mod.update_plugin_state(
+        conn, "crypto", state_mod.PluginState.ERROR
+    )
+
+    assert row["state"] == state_mod.PluginState.ERROR.value
+
+
+async def test_resolve_dependencies_raises_on_circular_dependency(state_mod):
+    rows = [
+        {"plugin_name": "a", "depends_on": "b", "required": True},
+        {"plugin_name": "b", "depends_on": "a", "required": True},
+    ]
+    conn = FakeConn(dep_graph_rows=rows)
+
+    with pytest.raises(ValueError, match="Circular dependency"):
+        await state_mod.resolve_dependencies(conn, "a")
