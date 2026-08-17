@@ -16,6 +16,13 @@ email-validator>=2.1.0,<3.0.0
 # CI's unit-test job silently falls back to the "not available" RuntimeError
 # branch and can never actually exercise the BM25 indexing/scoring logic.
 rank-bm25>=0.2.2,<0.3.0
+# rag-pipeline's rag/text_utils.py does local `from pypdf import PdfReader` /
+# `from langchain_text_splitters import RecursiveCharacterTextSplitter` inside
+# its own function bodies -- without these here, CI's unit-test job can't
+# exercise PDF extraction or chunk_text at all (confirmed live: PR #762's
+# CI run failed both with ModuleNotFoundError before this was added).
+pypdf==6.15.0
+langchain-text-splitters==1.1.2
 
 # Code Quality
 mypy>=1.8.0,<2.0.0

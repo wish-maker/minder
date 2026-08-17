@@ -88,6 +88,7 @@ async def test_pdf_extraction_concatenates_text_across_all_pages(monkeypatch):
     top-level `pypdf` package's PdfReader with a duck-typed fake so this
     exercises the real per-page concatenation loop without needing to hand-
     construct a PDF with actual extractable text content."""
+    pytest.importorskip("pypdf")
 
     class _FakePage:
         def __init__(self, text):
@@ -108,6 +109,7 @@ async def test_pdf_extraction_concatenates_text_across_all_pages(monkeypatch):
 
 
 def test_chunk_text_splits_long_text_into_multiple_chunks():
+    pytest.importorskip("langchain_text_splitters")
     long_text = "\n\n".join(f"Paragraph {i}. " * 20 for i in range(5))
 
     chunks = chunk_text(long_text, chunk_size=200, chunk_overlap=20)
@@ -118,6 +120,7 @@ def test_chunk_text_splits_long_text_into_multiple_chunks():
 
 
 def test_chunk_text_short_text_returns_a_single_chunk():
+    pytest.importorskip("langchain_text_splitters")
     short_text = "Just one short sentence."
 
     chunks = chunk_text(short_text, chunk_size=512, chunk_overlap=50)
