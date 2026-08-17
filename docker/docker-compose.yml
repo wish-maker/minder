@@ -165,7 +165,7 @@ services:
   postgres:
     labels:
     - minder.bundle=core
-    image: postgres:18.4-trixie
+    image: postgres:18.6-trixie
     container_name: minder-postgres
     restart: on-failure
     # PILLAR 5 (#379): limit sized from live Pi profiling (idle ~83MiB) + generous
@@ -356,7 +356,7 @@ services:
   ollama:
     labels:
     - minder.bundle=inference,rag,chat
-    image: ollama/ollama:0.32.6
+    image: ollama/ollama:0.32.14
     container_name: minder-ollama
     # Present ONLY in internal Ollama mode. In external mode (OLLAMA_BASE_URL set)
     # start_services leaves this profile inactive, so the container is not part of the
@@ -494,7 +494,7 @@ services:
     networks:
     - minder-network
   neo4j:
-    image: neo4j:2026.06.0-community
+    image: neo4j:2026.07.1-community
     container_name: minder-neo4j
     restart: on-failure
     # PILLAR 5 (#379): limit sized from live Pi profiling (idle ~898MiB, already
@@ -708,7 +708,7 @@ services:
   docker-socket-proxy:
     labels:
     - minder.bundle=core
-    image: ghcr.io/wollomatic/socket-proxy:1.13.0
+    image: ghcr.io/wollomatic/socket-proxy:1.13.1
     container_name: minder-docker-socket-proxy
     restart: on-failure
     # PILLAR 5 (#379): limit sized from live Pi profiling (idle ~3.6MiB) + headroom
@@ -1059,7 +1059,7 @@ services:
   influxdb:
     labels:
     - minder.bundle=monitoring
-    image: influxdb:3.11.0-core
+    image: influxdb:3.11.1-core
     container_name: minder-influxdb
     restart: on-failure
     command:
@@ -1095,7 +1095,7 @@ services:
   telegraf:
     labels:
     - minder.bundle=monitoring
-    image: telegraf:1.39.2
+    image: telegraf:1.39.3
     container_name: minder-telegraf
     restart: on-failure
     volumes:
@@ -1185,7 +1185,7 @@ services:
   alertmanager:
     labels:
     - minder.bundle=monitoring
-    image: prom/alertmanager:v0.33.1
+    image: prom/alertmanager:v0.34.0
     container_name: minder-alertmanager
     restart: on-failure
     volumes:
