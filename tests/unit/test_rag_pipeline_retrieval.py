@@ -844,6 +844,349 @@ async def test_retrieve_hybrid_excludes_sparse_only_hit_from_excluded_document(
     assert "Globex makes gadgets." not in sources_text
 
 
+# ── _ensure_bm25_index (the scroll/pagination loop itself) ─────────────────
+# The tests above always pre-seed _hybrid.sparse_index so this scroll loop is
+# skipped entirely (avoids depending on the optional rank-bm25 package via
+# _hybrid.index_documents). These exercise the loop directly, with
+# index_documents monkeypatched to a no-op recorder -- isolating pagination
+# from real BM25 indexing.
+
+
+def test_ensure_bm25_index_paginates_via_scroll_offset_until_none(monkeypatch):
+    calls = []
+
+    class _Point:
+        def __init__(self, id_, payload):
+            self.id = id_
+            self.payload = payload
+
+    class _FakeScrollClient:
+        def scroll(self, **kwargs):
+            calls.append(kwargs.get("offset"))
+            if kwargs.get("offset") is None:
+                return (
+                    [_Point("p1", {"text": "a", "source": "s1", "document_id": "d1"})],
+                    "next-page",
+                )
+            return (
+                [_Point("p2", {"text": "b", "source": "s2", "document_id": "d2"})],
+                None,
+            )
+
+    indexed = {}
+    monkeypatch.setattr(
+        retrieval._hybrid,
+        "index_documents",
+        lambda kb_id, docs: indexed.setdefault(kb_id, docs),
+    )
+
+    retrieval._ensure_bm25_index(_FakeScrollClient(), "kb-1")
+
+    assert calls == [None, "next-page"]
+    assert [d["text"] for d in indexed["kb-1"]] == ["a", "b"]
+
+
+def test_ensure_bm25_index_skips_indexing_when_no_documents_found(monkeypatch):
+    class _FakeScrollClient:
+        def scroll(self, **kwargs):
+            return [], None
+
+    called = []
+    monkeypatch.setattr(
+        retrieval._hybrid,
+        "index_documents",
+        lambda kb_id, docs: called.append((kb_id, docs)),
+    )
+
+    retrieval._ensure_bm25_index(_FakeScrollClient(), "kb-empty")
+
+    assert called == []
+
+
+def test_ensure_bm25_index_short_circuits_when_already_cached():
+    retrieval._hybrid.sparse_index["kb-cached"] = object()
+
+    class _BoomClient:
+        def scroll(self, **kwargs):
+            raise AssertionError("should not scroll when already cached")
+
+    retrieval._ensure_bm25_index(_BoomClient(), "kb-cached")  # must not raise
+
+
+# ── retrieve_hybrid / retrieve_parent_child: per-KB failure tolerance -------
+
+
+@pytest.mark.asyncio
+async def test_retrieve_hybrid_tolerates_one_kb_failing(monkeypatch):
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    ok_hit = _Hit(
+        "ok-1",
+        {"_id": "ok-1", "text": "ok text", "source": "ok.txt", "document_id": "d1"},
+        0.9,
+    )
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            if kwargs["collection_name"] == "kb-broken":
+                raise RuntimeError("qdrant down")
+            return _QueryResult([ok_hit])
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={
+            "kb-broken": {"embedding_model": "nomic-embed-text"},
+            "kb-ok": {"embedding_model": "nomic-embed-text"},
+        },
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    # Pre-seed the BM25 cache for kb-ok so _ensure_bm25_index short-circuits;
+    # kb-broken never even reaches that call (query_points raises first).
+    retrieval._hybrid.sparse_index["kb-ok"] = object()
+    retrieval._hybrid.documents["kb-ok"] = [
+        {"_id": "ok-1", "text": "ok text", "source": "ok.txt", "document_id": "d1"}
+    ]
+
+    async def fake_hybrid_search(kb_id, query_embedding, query, dense, top_k):
+        return [("ok-1", 0.9)]
+
+    monkeypatch.setattr(retrieval._hybrid, "hybrid_search", fake_hybrid_search)
+
+    result = await retrieval.retrieve_hybrid(
+        {"knowledge_base_ids": ["kb-broken", "kb-ok"]}, "question", top_k=5
+    )
+
+    assert result["sources"] == [{"text": "ok text", "source": "ok.txt", "score": 0.9}]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_parent_child_tolerates_one_kb_failing(monkeypatch):
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    ok_hit = _Hit("ok-1", {"text": "ok text", "source": "ok.txt"}, 0.9)
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            if kwargs["collection_name"] == "kb-broken":
+                raise RuntimeError("qdrant down")
+            return _QueryResult([ok_hit])
+
+        def scroll(self, **kwargs):
+            return [ok_hit], None
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={
+            "kb-broken": {"embedding_model": "nomic-embed-text"},
+            "kb-ok": {"embedding_model": "nomic-embed-text"},
+        },
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    result = await retrieval.retrieve_parent_child(
+        {"knowledge_base_ids": ["kb-broken", "kb-ok"]}, "question", top_k=5
+    )
+
+    assert [s["text"] for s in result["sources"]] == ["ok text"]
+
+
+# ── retrieve_parent_child: the actual neighbour-window expansion path -------
+# The tests above only ever hit older chunks with no chunk_index (the
+# leave-as-is branch) -- these cover the real small-to-big expansion.
+
+
+@pytest.mark.asyncio
+async def test_retrieve_parent_child_expands_to_neighbour_window(monkeypatch):
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    center_hit = _Hit(
+        "child-2",
+        {"text": "middle chunk.", "source": "doc.txt", "chunk_index": 2},
+        0.9,
+    )
+    # Neighbour window comes back out of order -- must be re-sorted by chunk_index.
+    neighbours = [
+        _Hit(
+            "child-3",
+            {"text": "last chunk.", "source": "doc.txt", "chunk_index": 3},
+            0.5,
+        ),
+        _Hit(
+            "child-1",
+            {"text": "first chunk.", "source": "doc.txt", "chunk_index": 1},
+            0.5,
+        ),
+        center_hit,
+    ]
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            return _QueryResult([center_hit])
+
+        def scroll(self, **kwargs):
+            return neighbours, None
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={"kb-1": {"embedding_model": "nomic-embed-text"}},
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    result = await retrieval.retrieve_parent_child(
+        {"knowledge_base_ids": ["kb-1"]}, "question", top_k=3
+    )
+
+    assert result["sources"][0]["text"] == "first chunk.\nmiddle chunk.\nlast chunk."
+    assert result["sources"][0]["context_type"] == "parent"
+    assert result["sources"][0]["child_chunk_index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_retrieve_parent_child_dedupes_hits_sharing_the_same_window(monkeypatch):
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    # Two dense hits land in the SAME (source, chunk_index) window -- only the
+    # first should trigger a neighbour fetch / produce a source entry.
+    hit_a = _Hit(
+        "child-2a", {"text": "chunk a", "source": "doc.txt", "chunk_index": 2}, 0.9
+    )
+    hit_b = _Hit(
+        "child-2b", {"text": "chunk b", "source": "doc.txt", "chunk_index": 2}, 0.8
+    )
+
+    scroll_calls = []
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            return _QueryResult([hit_a, hit_b])
+
+        def scroll(self, **kwargs):
+            scroll_calls.append(kwargs)
+            return [hit_a], None
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={"kb-1": {"embedding_model": "nomic-embed-text"}},
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    result = await retrieval.retrieve_parent_child(
+        {"knowledge_base_ids": ["kb-1"]}, "question", top_k=3
+    )
+
+    assert len(scroll_calls) == 1  # deduped -- only one neighbour fetch
+    assert len(result["sources"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_retrieve_parent_child_falls_back_to_the_hit_when_neighbour_fetch_fails(
+    monkeypatch,
+):
+    class _Hit:
+        def __init__(self, id_, payload, score):
+            self.id = id_
+            self.payload = payload
+            self.score = score
+
+    class _QueryResult:
+        def __init__(self, points):
+            self.points = points
+
+    hit = _Hit(
+        "child-2", {"text": "solo chunk.", "source": "doc.txt", "chunk_index": 2}, 0.9
+    )
+
+    class _FakeQdrantClient:
+        def query_points(self, **kwargs):
+            return _QueryResult([hit])
+
+        def scroll(self, **kwargs):
+            raise RuntimeError("qdrant scroll timed out")
+
+    async def fake_embed(texts, model):
+        return [[0.1, 0.2, 0.3]]
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: _FakeQdrantClient(),
+        knowledge_bases={"kb-1": {"embedding_model": "nomic-embed-text"}},
+        ollama_manager=SimpleNamespace(generate_embeddings=fake_embed),
+    )
+    monkeypatch.setattr(retrieval, "state", fake_state)
+
+    result = await retrieval.retrieve_parent_child(
+        {"knowledge_base_ids": ["kb-1"]}, "question", top_k=3
+    )
+
+    # Neighbour scroll failed -- falls back to just the original hit's own text.
+    assert result["sources"][0]["text"] == "solo chunk."
+
+
+# ── _matches_metadata_filter: no-filter passthrough --------------------------
+
+
+def test_matches_metadata_filter_returns_true_when_filter_is_none():
+    assert retrieval._matches_metadata_filter({"source": "anything"}, None) is True
+
+
+def test_matches_metadata_filter_rejects_a_source_mismatch():
+    doc = {"source": "wrong.txt", "document_id": "d1"}
+    assert (
+        retrieval._matches_metadata_filter(
+            doc, models.MetadataFilter(source="right.txt")
+        )
+        is False
+    )
+
+
 # ── Document ingestion (core/ingestion.py, #491) ────────────────────────────
 # upload_document/_group_documents had ZERO unit coverage before this
 # extraction -- only integration tests (needing the full stack running)
