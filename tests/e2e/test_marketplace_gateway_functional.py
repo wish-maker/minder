@@ -87,9 +87,18 @@ def test_list_plugins_reachable_through_gateway(live_stack):
 
 def test_graph_health_reachable_through_gateway(live_stack):
     # /v1/graph is a SEPARATE route namespace from /v1/marketplace -- needs
-    # its own proxy route, not covered by fixing bug 1 alone.
+    # its own proxy route, not covered by fixing bug 1 alone. This only checks
+    # that the route is PROXIED (a 404 here would mean the gateway route is
+    # missing, the original bug) -- it deliberately does not require 200,
+    # since /v1/graph/health now honestly 503s if Neo4j itself is unreachable
+    # in this environment (fixed alongside the stack-trace-exposure bug this
+    # endpoint used to have); that's a real Neo4j-availability signal, not a
+    # routing failure, and this test's job is only to prove the route wiring.
     r = httpx.get(f"{live_stack.gateway_url}/v1/graph/health", timeout=10.0)
-    assert r.status_code == 200, r.text
+    assert r.status_code in (200, 503), r.text
+    body = r.json()
+    assert body["database"] == "neo4j"
+    assert body["status"] in ("healthy", "unhealthy")
 
 
 def test_install_plugin_does_not_500(live_stack, plugin_id, auth_token):
