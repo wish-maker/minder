@@ -274,9 +274,8 @@ async def sync_plugin_tools(
     """
     from core.database import get_pool
 
-    pool = await get_pool()
-
     try:
+        pool = await get_pool()
         async with pool.acquire() as conn:
             # Import AI tools from manifest
             result = await import_ai_tools_from_manifest(conn, plugin_id, manifest)
