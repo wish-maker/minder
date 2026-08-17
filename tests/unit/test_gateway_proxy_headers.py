@@ -369,3 +369,186 @@ def test_an_invalid_tokens_401_propagates(proxy_mod, monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         proxy_mod._require_jwt_for_writes(request)
     assert exc_info.value.status_code == 401
+
+
+# --- proxy_request: target URL building + exception mapping -----------------
+
+
+def test_empty_path_uses_the_service_url_directly(proxy_mod):
+    """`path=""` (e.g. a bare service root) must hit service_url itself, not
+    service_url + "/" -- the branch this file's other tests never exercise
+    since they always pass a non-empty path."""
+    fake_client = _FakeHTTPClient(_json_fake_response())
+    proxy_mod.http_client = fake_client
+
+    asyncio.run(
+        proxy_mod.proxy_request("http://plugin-registry:8001", "", _FakeRequest())
+    )
+
+    assert fake_client.captured_kwargs["url"] == "http://plugin-registry:8001"
+
+
+class _RaisingHTTPClient:
+    def __init__(self, exc):
+        self._exc = exc
+
+    async def request(self, **kwargs):
+        raise self._exc
+
+
+def test_timeout_exception_maps_to_504(proxy_mod):
+    from fastapi import HTTPException
+
+    proxy_mod.http_client = _RaisingHTTPClient(httpx.TimeoutException("timed out"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            proxy_mod.proxy_request(
+                "http://rag-pipeline:8004", "v1/rag/query", _FakeRequest()
+            )
+        )
+    assert exc_info.value.status_code == 504
+
+
+def test_connect_error_maps_to_503(proxy_mod):
+    from fastapi import HTTPException
+
+    proxy_mod.http_client = _RaisingHTTPClient(httpx.ConnectError("connection refused"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            proxy_mod.proxy_request(
+                "http://rag-pipeline:8004", "v1/rag/query", _FakeRequest()
+            )
+        )
+    assert exc_info.value.status_code == 503
+
+
+def test_generic_exception_maps_to_500_without_leaking_detail(proxy_mod):
+    from fastapi import HTTPException
+
+    proxy_mod.http_client = _RaisingHTTPClient(RuntimeError("internal secret detail"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            proxy_mod.proxy_request(
+                "http://rag-pipeline:8004", "v1/rag/query", _FakeRequest()
+            )
+        )
+    assert exc_info.value.status_code == 500
+    assert "internal secret detail" not in str(exc_info.value.detail)
+
+
+# --- individual route wrappers: correct backend/path/timeout per route -----
+# Each of these is a one-line delegation to proxy_request -- previously never
+# invoked directly, so a wrong SERVICE_REGISTRY key or a typo'd path prefix
+# would only ever surface in a live/E2E run, not a unit test.
+
+_FAKE_REGISTRY = {
+    "plugin_registry": "http://plugin-registry:8001",
+    "rag_pipeline": "http://rag-pipeline:8004",
+    "model_management": "http://model-management:8005",
+    "marketplace": "http://marketplace:8002",
+    "tts_stt": "http://tts-stt:8006",
+    "graph_rag": "http://graph-rag:8007",
+    "plugin_state_manager": "http://plugin-state-manager:8003",
+}
+
+# (function name, kwargs beyond `request`, expected SERVICE_REGISTRY key,
+#  expected forwarded path, whether the LONG_OPERATION_TIMEOUT is expected)
+_ROUTE_CASES = [
+    ("list_plugins", {}, "plugin_registry", "v1/plugins", False),
+    (
+        "proxy_to_plugin_registry",
+        {"path": "weather"},
+        "plugin_registry",
+        "v1/plugins/weather",
+        False,
+    ),
+    ("list_bundles", {}, "plugin_registry", "v1/bundles", False),
+    (
+        "proxy_to_bundles",
+        {"path": "reconcile"},
+        "plugin_registry",
+        "v1/bundles/reconcile",
+        False,
+    ),
+    (
+        "proxy_to_containers",
+        {"path": "api-gateway/logs"},
+        "plugin_registry",
+        "v1/containers/api-gateway/logs",
+        False,
+    ),
+    ("proxy_to_rag_pipeline", {"path": "query"}, "rag_pipeline", "query", True),
+    ("model_management_root", {}, "model_management", "models", True),
+    (
+        "proxy_to_model_management",
+        {"path": "llama3.2"},
+        "model_management",
+        "models/llama3.2",
+        True,
+    ),
+    (
+        "proxy_to_marketplace",
+        {"path": "plugins"},
+        "marketplace",
+        "v1/marketplace/plugins",
+        False,
+    ),
+    (
+        "proxy_to_marketplace_graph",
+        {"path": "dependencies"},
+        "marketplace",
+        "v1/graph/dependencies",
+        False,
+    ),
+    ("proxy_to_tts", {"path": "voices"}, "tts_stt", "v1/tts/voices", True),
+    ("tts_root", {}, "tts_stt", "v1/tts", True),
+    ("proxy_to_stt", {"path": "languages"}, "tts_stt", "v1/stt/languages", True),
+    ("stt_root", {}, "tts_stt", "v1/stt", True),
+    ("proxy_to_graph_rag", {"path": "extract"}, "graph_rag", "v1/extract", True),
+    ("list_tools", {}, "plugin_state_manager", "v1/tools", False),
+    (
+        "proxy_to_tools",
+        {"path": "weather/execute"},
+        "plugin_state_manager",
+        "v1/tools/weather/execute",
+        False,
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "func_name,kwargs,expected_key,expected_path,expects_long_timeout",
+    _ROUTE_CASES,
+    ids=[case[0] for case in _ROUTE_CASES],
+)
+def test_route_forwards_to_the_correct_backend_path_and_timeout(
+    proxy_mod, func_name, kwargs, expected_key, expected_path, expects_long_timeout
+):
+    calls = []
+
+    async def fake_proxy_request(service_url, path, request, *, timeout=None):
+        calls.append((service_url, path, timeout))
+        return "PROXIED"
+
+    proxy_mod.proxy_request = fake_proxy_request
+    proxy_mod.SERVICE_REGISTRY = _FAKE_REGISTRY
+
+    func = getattr(proxy_mod, func_name)
+    # GET always skips _require_jwt_for_writes -- these tests are about
+    # backend/path/timeout selection, not auth (already covered above).
+    request = _FakeAuthRequest("GET")
+
+    result = asyncio.run(func(request=request, **kwargs))
+
+    assert result == "PROXIED"
+    assert len(calls) == 1
+    service_url, path, timeout = calls[0]
+    assert service_url == _FAKE_REGISTRY[expected_key]
+    assert path == expected_path
+    if expects_long_timeout:
+        assert timeout is proxy_mod._LONG_OPERATION_TIMEOUT
+    else:
+        assert timeout is None
