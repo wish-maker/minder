@@ -163,6 +163,15 @@ class ProxyRouter:
                 detail=f"Service '{service_name}' health check timeout",
             )
 
+        except HTTPException:
+            # The non-200-status branch above deliberately raises its own
+            # HTTPException(503, "unhealthy: ...") -- without this re-raise it
+            # falls into the generic Exception handler below (HTTPException IS
+            # an Exception) and gets masked into a 500 by backend_http_error,
+            # losing the correct 503 "unhealthy" signal a caller needs to
+            # distinguish it from a genuine internal error.
+            raise
+
         except Exception as e:
             logger.error(f"Health check failed for {service_name}: {e}")
             raise backend_http_error(e, f"Health check for service '{service_name}'")
