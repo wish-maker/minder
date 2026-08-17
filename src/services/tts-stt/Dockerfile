@@ -5,11 +5,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies. apt-get upgrade pulls in Debian security
+# patches already available for base-image packages (e.g. util-linux's CVE
+# fixes) that the pinned python:3.12-slim layer predates.
 # flac: SpeechRecognition's recognize_google() shells out to the `flac` CLI to
 # transcode non-WAV/AIFF audio before uploading - without it every /stt call
 # fails at runtime with "FLAC conversion utility not available" (#246).
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     libsndfile1 \

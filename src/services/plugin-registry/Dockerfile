@@ -6,10 +6,12 @@ WORKDIR /app
 # Set PYTHONPATH
 ENV PYTHONPATH=/app:$PYTHONPATH
 
-# Install system dependencies
+# Install system dependencies. apt-get upgrade pulls in Debian security
+# patches already available for base-image packages (e.g. util-linux's CVE
+# fixes) that the pinned python:3.12-slim layer predates.
 # nmap: host/port/service discovery for the network plugin (connect scan -sT, no
 #       root needed). snmp: net-snmp CLI (snmpget) for SNMP OID lookup.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl \
     gcc \
     python3-dev \
