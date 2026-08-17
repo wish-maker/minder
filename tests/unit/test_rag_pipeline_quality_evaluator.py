@@ -200,6 +200,239 @@ def test_answer_quality_poor_answer_scores_low():
     assert r["is_high_quality"] is False
 
 
+# --- semantic_model / evaluate_semantic_similarity (real-model path) -------
+
+
+class _FakeSentenceTransformer:
+    def __init__(self, model_name):
+        self.model_name = model_name
+
+    def encode(self, text):
+        return text
+
+
+def _fake_cos_sim(a, b):
+    def sim(x, y):
+        return 1.0 if x == y else 0.3
+
+    if isinstance(b, list):
+        return [[sim(a, item) for item in b]]
+    return [[sim(a, b)]]
+
+
+def _with_fake_sentence_transformers(monkeypatch):
+    monkeypatch.setattr(_qe, "SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    monkeypatch.setattr(
+        _qe, "SentenceTransformer", _FakeSentenceTransformer, raising=False
+    )
+    monkeypatch.setattr(_qe, "cos_sim", _fake_cos_sim, raising=False)
+
+
+def test_semantic_model_property_loads_and_caches(monkeypatch):
+    _with_fake_sentence_transformers(monkeypatch)
+    ev = _ev()
+
+    model = ev.semantic_model
+
+    assert isinstance(model, _FakeSentenceTransformer)
+    assert ev.semantic_model is model  # cached, not reloaded
+
+
+def test_semantic_model_property_falls_back_to_false_on_load_exception(monkeypatch):
+    monkeypatch.setattr(_qe, "SENTENCE_TRANSFORMERS_AVAILABLE", True)
+
+    def _boom(model_name):
+        raise RuntimeError("model download failed")
+
+    monkeypatch.setattr(_qe, "SentenceTransformer", _boom, raising=False)
+    ev = _ev()
+
+    assert ev.semantic_model is False
+    # Cached as False -- a second access must not retry the failing load.
+    assert ev.semantic_model is False
+
+
+def test_evaluate_semantic_similarity_uses_real_model_when_available(monkeypatch):
+    _with_fake_sentence_transformers(monkeypatch)
+    ev = _ev()
+
+    result = ev.evaluate_semantic_similarity("the answer", "the answer")
+
+    assert result["similarity"] == 1.0
+    assert result["confidence"] == "high"
+    assert "fallback" not in result
+
+
+def test_evaluate_semantic_similarity_checks_max_source_similarity(monkeypatch):
+    _with_fake_sentence_transformers(monkeypatch)
+    ev = _ev()
+    sources = [{"text": "unrelated"}, {"text": "the answer"}, {"text": ""}]
+
+    result = ev.evaluate_semantic_similarity("the answer", "different context", sources)
+
+    # The "the answer" source matches exactly -> max source similarity is 1.0,
+    # even though the raw context similarity is only the "not equal" 0.3.
+    assert result["similarity"] == 0.3
+    assert result["max_source_similarity"] == 1.0
+
+
+def test_evaluate_semantic_similarity_falls_back_on_model_exception(monkeypatch):
+    monkeypatch.setattr(_qe, "SENTENCE_TRANSFORMERS_AVAILABLE", True)
+    monkeypatch.setattr(
+        _qe, "SentenceTransformer", _FakeSentenceTransformer, raising=False
+    )
+
+    def _boom(a, b):
+        raise RuntimeError("cos_sim blew up")
+
+    monkeypatch.setattr(_qe, "cos_sim", _boom, raising=False)
+    ev = _ev()
+
+    result = ev.evaluate_semantic_similarity("a b c", "a b")
+
+    assert result["fallback"] == "basic_word_overlap"
+
+
+# --- bertscore_model / evaluate_bertscore (real-model path) -----------------
+
+
+class _FakeTensor:
+    """Duck-types just enough of a single-element torch tensor: real BERTScore
+    compares the whole (1-example) tensor directly against a float (`F1 >
+    0.85`), not `F1[0] > 0.85` -- a plain list/float stand-in can't support
+    that comparison the way this code calls it."""
+
+    def __init__(self, value):
+        self._value = value
+
+    def __getitem__(self, idx):
+        return self._value
+
+    def __float__(self):
+        return float(self._value)
+
+    def __gt__(self, other):
+        return self._value > other
+
+
+class _FakeBERTScorer:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def score(self, cands, refs, batch_size=1, verbose=False):
+        return _FakeTensor(0.9), _FakeTensor(0.8), _FakeTensor(0.85)
+
+
+def _with_fake_bertscore(monkeypatch, scorer_cls=_FakeBERTScorer):
+    monkeypatch.setattr(_qe, "BERTSCORE_AVAILABLE", True)
+    monkeypatch.setattr(_qe, "BERTScorer", scorer_cls, raising=False)
+
+
+def test_bertscore_model_property_loads_and_caches(monkeypatch):
+    _with_fake_bertscore(monkeypatch)
+    ev = _ev()
+
+    model = ev.bertscore_model
+
+    assert isinstance(model, _FakeBERTScorer)
+    assert ev.bertscore_model is model
+
+
+def test_bertscore_model_property_falls_back_to_false_on_load_exception(monkeypatch):
+    monkeypatch.setattr(_qe, "BERTSCORE_AVAILABLE", True)
+
+    def _boom(**kwargs):
+        raise RuntimeError("model download failed")
+
+    monkeypatch.setattr(_qe, "BERTScorer", _boom, raising=False)
+    ev = _ev()
+
+    assert ev.bertscore_model is False
+    assert ev.bertscore_model is False
+
+
+def test_evaluate_bertscore_uses_real_model_when_available(monkeypatch):
+    _with_fake_bertscore(monkeypatch)
+    ev = _ev()
+
+    result = ev.evaluate_bertscore("the answer", "the reference")
+
+    assert result["precision"] == 0.9
+    assert result["recall"] == 0.8
+    assert result["f1"] == 0.85
+    assert result["confidence"] == "medium"
+    assert "fallback" not in result
+
+
+def test_evaluate_bertscore_falls_back_on_model_exception(monkeypatch):
+    class _RaisingScorer(_FakeBERTScorer):
+        def score(self, *a, **k):
+            raise RuntimeError("scoring blew up")
+
+    _with_fake_bertscore(monkeypatch, _RaisingScorer)
+    ev = _ev()
+
+    result = ev.evaluate_bertscore("the answer", "the reference")
+
+    assert result["fallback"] == "basic_word_overlap"
+
+
+# --- exception handlers ------------------------------------------------------
+
+
+def test_hallucination_detection_exception_returns_medium_confidence_default(
+    monkeypatch,
+):
+    ev = _ev()
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ev, "evaluate_semantic_similarity", _boom)
+
+    result = ev.evaluate_hallucination("some answer here", "some context")
+
+    assert result == {
+        "hallucination_score": 0.5,
+        "indicators": [],
+        "is_hallucination": False,
+        "confidence": "medium",
+        "error": "boom",
+    }
+
+
+def test_answer_quality_uses_explicit_reference_for_factual_check():
+    ev = _ev()
+
+    result = ev.evaluate_answer_quality(
+        "question",
+        "the exact reference text",
+        "totally unrelated context",
+        reference="the exact reference text",
+    )
+
+    assert result["factual"]["precision"] == 1.0
+    assert result["factual"]["recall"] == 1.0
+
+
+def test_answer_quality_exception_returns_low_confidence_default(monkeypatch):
+    ev = _ev()
+
+    def _boom(*a, **k):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ev, "evaluate_semantic_similarity", _boom)
+
+    result = ev.evaluate_answer_quality("q", "answer", "context")
+
+    assert result == {
+        "overall_quality": 0.5,
+        "error": "boom",
+        "confidence": "low",
+        "is_high_quality": False,
+    }
+
+
 # --- singleton --------------------------------------------------------------
 
 
