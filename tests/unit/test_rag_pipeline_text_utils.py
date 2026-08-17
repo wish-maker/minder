@@ -39,7 +39,9 @@ def _load():
     return mod
 
 
-extract_text_from_file = _load().extract_text_from_file
+_mod = _load()
+extract_text_from_file = _mod.extract_text_from_file
+chunk_text = _mod.chunk_text
 
 
 @pytest.mark.asyncio
@@ -69,3 +71,58 @@ async def test_unknown_extension_also_strips_bom_via_utf8_fallback():
     content = b"\xef\xbb\xbfsome content"
     text = await extract_text_from_file(content, "notes.log")
     assert text == "some content"
+
+
+@pytest.mark.asyncio
+async def test_unknown_extension_falls_back_to_latin_1_on_invalid_utf8():
+    # \xe9 alone is an incomplete UTF-8 multi-byte sequence (invalid), but a
+    # perfectly valid single latin-1 byte (=> U+00E9, "é").
+    content = b"caf\xe9"
+    text = await extract_text_from_file(content, "notes.dat")
+    assert text == "café"
+
+
+@pytest.mark.asyncio
+async def test_pdf_extraction_concatenates_text_across_all_pages(monkeypatch):
+    """The pypdf import is local to the function body -- monkeypatch the real
+    top-level `pypdf` package's PdfReader with a duck-typed fake so this
+    exercises the real per-page concatenation loop without needing to hand-
+    construct a PDF with actual extractable text content."""
+    pytest.importorskip("pypdf")
+
+    class _FakePage:
+        def __init__(self, text):
+            self._text = text
+
+        def extract_text(self):
+            return self._text
+
+    class _FakeReader:
+        def __init__(self, file_obj):
+            self.pages = [_FakePage("Page one. "), _FakePage("Page two.")]
+
+    monkeypatch.setattr("pypdf.PdfReader", _FakeReader)
+
+    text = await extract_text_from_file(b"irrelevant-bytes", "doc.pdf")
+
+    assert text == "Page one. Page two."
+
+
+def test_chunk_text_splits_long_text_into_multiple_chunks():
+    pytest.importorskip("langchain_text_splitters")
+    long_text = "\n\n".join(f"Paragraph {i}. " * 20 for i in range(5))
+
+    chunks = chunk_text(long_text, chunk_size=200, chunk_overlap=20)
+
+    assert len(chunks) > 1
+    assert all(len(c) <= 200 for c in chunks)
+    assert all(c.strip() for c in chunks)
+
+
+def test_chunk_text_short_text_returns_a_single_chunk():
+    pytest.importorskip("langchain_text_splitters")
+    short_text = "Just one short sentence."
+
+    chunks = chunk_text(short_text, chunk_size=512, chunk_overlap=50)
+
+    assert chunks == [short_text]
