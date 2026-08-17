@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy requirements first for caching
 COPY src/services/graph-rag/requirements.txt .
+# pip itself (bundled with python:3.12-slim) ships a version with known CVEs
+# (e.g. CVE-2026-8643) that predate this Dockerfile -- bump before installing
+# any requirements, as its own cacheable layer.
+RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Download spaCy model

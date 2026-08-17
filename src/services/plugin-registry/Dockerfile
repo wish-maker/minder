@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements first for better caching
 COPY src/services/plugin-registry/requirements.txt .
 
+# pip itself (bundled with python:3.12-slim) ships a version with known CVEs
+# (e.g. CVE-2026-8643) that predate this Dockerfile -- bump before installing
+# any requirements, as its own cacheable layer.
+RUN pip install --no-cache-dir --upgrade pip
+
 # Install Python dependencies
 RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || \
     pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt
