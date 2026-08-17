@@ -92,11 +92,13 @@ class _Plugin:
 def _clean_state(monkeypatch):
     monitoring.plugins_db.clear()
     monitoring.plugin_instances.clear()
+    monitoring.services_db.clear()
     monkeypatch.setattr(monitoring, "redis_client", MagicMock())
     monkeypatch.setattr(monitoring, "update_plugin_in_database", AsyncMock())
     yield
     monitoring.plugins_db.clear()
     monitoring.plugin_instances.clear()
+    monitoring.services_db.clear()
 
 
 def _plugin_info(status="registered"):
@@ -185,6 +187,91 @@ async def test_data_collection_scheduler_skips_disabled_plugins(monkeypatch):
         await monitoring.data_collection_scheduler()
 
     assert plugin.collect_calls == 0
+
+
+# --- load_services_from_redis -----------------------------------------------
+
+
+async def test_load_services_from_redis_populates_services_db(monkeypatch):
+    redis = MagicMock()
+    redis.keys.return_value = ["service:weather"]
+    redis.hgetall.return_value = {
+        "service_type": "plugin",
+        "host": "weather-host",
+        "port": "8080",
+        "health_check_url": "/health",
+        "metadata": '{"region": "eu"}',
+    }
+    monkeypatch.setattr(monitoring, "redis_client", redis)
+
+    await monitoring.load_services_from_redis()
+
+    reg = monitoring.services_db["weather"]
+    assert reg.service_name == "weather"
+    assert reg.service_type == "plugin"
+    assert reg.host == "weather-host"
+    assert reg.port == 8080
+    assert reg.metadata == {"region": "eu"}
+
+
+async def test_load_services_from_redis_noop_when_no_keys(monkeypatch):
+    redis = MagicMock()
+    redis.keys.return_value = []
+    monkeypatch.setattr(monitoring, "redis_client", redis)
+
+    await monitoring.load_services_from_redis()  # must not raise
+
+    assert monitoring.services_db == {}
+
+
+async def test_load_services_from_redis_skips_service_with_empty_data(monkeypatch):
+    redis = MagicMock()
+    redis.keys.return_value = ["service:ghost"]
+    redis.hgetall.return_value = {}
+    monkeypatch.setattr(monitoring, "redis_client", redis)
+
+    await monitoring.load_services_from_redis()
+
+    assert "ghost" not in monitoring.services_db
+
+
+async def test_load_services_from_redis_isolates_one_service_failure(monkeypatch):
+    # "broken"'s metadata is invalid JSON -> json.loads raises inside the loop;
+    # must not prevent "fine" from still being loaded.
+    redis = MagicMock()
+    redis.keys.return_value = ["service:broken", "service:fine"]
+
+    def fake_hgetall(key):
+        if key == "service:broken":
+            return {
+                "service_type": "plugin",
+                "host": "h",
+                "port": "1",
+                "metadata": "{not valid json",
+            }
+        return {
+            "service_type": "plugin",
+            "host": "h2",
+            "port": "2",
+            "metadata": "{}",
+        }
+
+    redis.hgetall.side_effect = fake_hgetall
+    monkeypatch.setattr(monitoring, "redis_client", redis)
+
+    await monitoring.load_services_from_redis()
+
+    assert "broken" not in monitoring.services_db
+    assert "fine" in monitoring.services_db
+
+
+async def test_load_services_from_redis_reraises_when_keys_lookup_fails(monkeypatch):
+    redis = MagicMock()
+    redis.keys.side_effect = ConnectionError("redis unreachable")
+    monkeypatch.setattr(monitoring, "redis_client", redis)
+
+    with pytest.raises(ConnectionError):
+        await monitoring.load_services_from_redis()
 
 
 async def test_auto_enable_plugins_isolates_one_persist_failure():
