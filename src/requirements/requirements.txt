@@ -11,11 +11,11 @@ qdrant-client==1.19.0
 neo4j==6.2.0
 
 # Server
-uvicorn==0.52.1
+uvicorn==0.52.3
 
 # Configuration & Settings
 pydantic-settings==2.15.0
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 
 # Utilities
 python-multipart==0.0.32

@@ -1,12 +1,12 @@
 fastapi==0.141.1
-uvicorn==0.52.1
+uvicorn==0.52.3
 pydantic==2.13.4
 pydantic-settings==2.15.0
 python-multipart==0.0.32
 prometheus-client==0.26.0
 
 # TTS/STT (Minimal working set)
-piper-tts==1.6.0  # offline neural TTS (CPU/Pi-friendly, permissive voices) — default (#18)
+piper-tts==1.7.0  # offline neural TTS (CPU/Pi-friendly, permissive voices) — default (#18)
 gtts==2.5.4  # Google TTS (online) - fallback for non-bundled languages
 SpeechRecognition==3.17.0
 httpx==0.28.1
