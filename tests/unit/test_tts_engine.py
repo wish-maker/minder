@@ -14,6 +14,7 @@ precedent for hyphenated-service modules that pull a same-named config/core.
 import importlib.util
 import sys
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -93,6 +94,32 @@ def test_resolve_voice_id_falls_back_to_default_for_unknown_voice(monkeypatch):
     assert _mod._resolve_voice_id("en", "nonexistent-voice") == "default"
     assert _mod._resolve_voice_id("en", None) == "default"
     assert _mod._resolve_voice_id("en", "male") == "male"
+
+
+def test_resolve_voice_id_returns_none_for_unconfigured_language(monkeypatch):
+    monkeypatch.setattr(
+        _mod, "PIPER_VOICES", {"en": {"default": {"model": "en_US-lessac-low"}}}
+    )
+    assert _mod._resolve_voice_id("de", None) is None
+
+
+def test_piper_voice_path_none_when_resolve_voice_id_yields_none(monkeypatch):
+    # Guards the (currently unreachable in practice, since _piper_voice_path's
+    # own `if not voices` already short-circuits first) defensive None-check
+    # on voice_id -- exercised directly here in case that invariant ever
+    # changes.
+    monkeypatch.setattr(
+        _mod, "PIPER_VOICES", {"en": {"default": {"model": "en_US-lessac-low"}}}
+    )
+    monkeypatch.setattr(_mod, "_resolve_voice_id", lambda language, voice: None)
+    assert _mod._piper_voice_path("en", None) is None
+
+
+def test_load_piper_returns_none_when_no_voice_path(monkeypatch):
+    monkeypatch.setattr(_mod, "_piper_cache", {})
+    monkeypatch.setattr(_mod, "_resolve_voice_id", lambda lang, voice: "default")
+    monkeypatch.setattr(_mod, "_piper_voice_path", lambda lang, voice: None)
+    assert _mod._load_piper("de", None) is None
 
 
 def test_list_voices_only_includes_onnx_present_on_disk(monkeypatch, tmp_path):
@@ -277,6 +304,113 @@ def test_load_piper_concurrent_first_use_loads_the_voice_only_once(monkeypatch):
 
     assert len(load_calls) == 1  # only ONE PiperVoice.load(), not two
     assert results[0] is results[1]  # both threads got the same cached instance
+
+
+def test_synthesize_piper_returns_none_when_no_voice_loaded(monkeypatch):
+    monkeypatch.setattr(_mod, "_load_piper", lambda language, voice: None)
+    assert _mod._synthesize_piper("hello", "en", False, None) is None
+
+
+def _fake_synthesize_wav(text, wf, syn_config=None):
+    """Duck-types PiperVoice.synthesize_wav enough to produce real WAV bytes."""
+    wf.setnchannels(1)
+    wf.setsampwidth(2)
+    wf.setframerate(16000)
+    wf.writeframes(b"\x00\x00")
+
+
+def test_synthesize_piper_falls_back_when_synthesisconfig_unavailable(monkeypatch):
+    # piper isn't installed in this test environment, so the function's own
+    # local `from piper import SynthesisConfig` always raises ImportError here
+    # -- exercises the except-branch fallback call (no syn_config kwarg passed
+    # at all), matching what happens in production against any piper-tts
+    # version that predates SynthesisConfig.
+    fake_voice = MagicMock()
+    fake_voice.synthesize_wav.side_effect = _fake_synthesize_wav
+    monkeypatch.setattr(_mod, "_load_piper", lambda language, voice: fake_voice)
+
+    data = _mod._synthesize_piper("hello", "en", True, None)
+
+    assert data.startswith(b"RIFF")  # real WAV bytes
+    args, kwargs = fake_voice.synthesize_wav.call_args
+    assert "syn_config" not in kwargs
+
+
+def test_synthesize_piper_uses_synthesisconfig_when_slow(monkeypatch):
+    fake_voice = MagicMock()
+    fake_voice.synthesize_wav.side_effect = _fake_synthesize_wav
+    monkeypatch.setattr(_mod, "_load_piper", lambda language, voice: fake_voice)
+
+    class _FakeSynthesisConfig:
+        def __init__(self, length_scale=None):
+            self.length_scale = length_scale
+
+    fake_piper_module = ModuleType("piper")
+    fake_piper_module.SynthesisConfig = _FakeSynthesisConfig
+    monkeypatch.setitem(sys.modules, "piper", fake_piper_module)
+
+    data = _mod._synthesize_piper("hello", "en", True, None)
+
+    assert data.startswith(b"RIFF")
+    _, kwargs = fake_voice.synthesize_wav.call_args
+    assert kwargs["syn_config"].length_scale == 1.5
+
+
+def test_synthesize_piper_passes_no_length_scale_when_not_slow(monkeypatch):
+    fake_voice = MagicMock()
+    fake_voice.synthesize_wav.side_effect = _fake_synthesize_wav
+    monkeypatch.setattr(_mod, "_load_piper", lambda language, voice: fake_voice)
+
+    class _FakeSynthesisConfig:
+        def __init__(self, length_scale=None):
+            self.length_scale = length_scale
+
+    fake_piper_module = ModuleType("piper")
+    fake_piper_module.SynthesisConfig = _FakeSynthesisConfig
+    monkeypatch.setitem(sys.modules, "piper", fake_piper_module)
+
+    data = _mod._synthesize_piper("hello", "en", False, None)
+
+    assert data.startswith(b"RIFF")
+    _, kwargs = fake_voice.synthesize_wav.call_args
+    assert kwargs["syn_config"] is None
+
+
+def test_synthesize_gtts_returns_bytes_and_cleans_up_temp_file(monkeypatch, tmp_path):
+    created_path = {}
+
+    class _FakeTempFile:
+        def __init__(self, path):
+            self.name = path
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_named_temp_file(delete, suffix):
+        path = str(tmp_path / f"fake{suffix}")
+        open(path, "wb").close()
+        created_path["path"] = path
+        return _FakeTempFile(path)
+
+    monkeypatch.setattr(_mod.tempfile, "NamedTemporaryFile", fake_named_temp_file)
+
+    class _FakeGTTS:
+        def __init__(self, **kwargs):
+            pass
+
+        def save(self, path):
+            with open(path, "wb") as f:
+                f.write(b"fake-mp3-bytes")
+
+    monkeypatch.setattr(_mod, "gTTS", _FakeGTTS, raising=False)
+
+    data = _mod._synthesize_gtts("hello", "en", False)
+
+    assert data == b"fake-mp3-bytes"
+    assert not Path(created_path["path"]).exists()
 
 
 def test_synthesize_gtts_cleans_up_temp_file_even_when_save_fails(
