@@ -32,10 +32,10 @@ jsonschema==4.26.0
 aiohttp==3.14.3
 psutil==7.2.2
 importlib-metadata==9.0.0
-python-json-logger==4.1.0
+python-json-logger==4.2.0
 influxdb-client==1.50.0
 langchain-text-splitters==1.1.2
-pypdf==6.15.0
-sqlalchemy==2.0.51
+pypdf==6.16.1
+sqlalchemy==2.0.52
 ollama==0.6.2
 rank-bm25==0.2.2

@@ -21,7 +21,7 @@ rank-bm25>=0.2.2,<0.3.0
 # its own function bodies -- without these here, CI's unit-test job can't
 # exercise PDF extraction or chunk_text at all (confirmed live: PR #762's
 # CI run failed both with ModuleNotFoundError before this was added).
-pypdf==6.15.0
+pypdf==6.16.1
 langchain-text-splitters==1.1.2
 
 # Code Quality
