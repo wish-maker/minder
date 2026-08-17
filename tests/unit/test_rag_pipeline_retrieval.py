@@ -15,6 +15,7 @@ established precedent (test_graph_rag_knowledge_graph_handler.py).
 
 import contextlib
 import functools
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -1773,3 +1774,134 @@ async def test_query_pipeline_generation_error_default_detail_when_empty(
 
     assert exc_info.value.status_code == 503
     assert "LLM backend unavailable" in exc_info.value.detail
+
+
+# ── GET /capabilities (system_routes.capabilities) ──────────────────────────
+# Reports which RAG methods/enhancers/retrievers are active on this host --
+# had zero direct coverage despite driving the client's RagPipelinesPage
+# capability gating (#485).
+
+
+@pytest.mark.asyncio
+async def test_capabilities_reports_availability_from_state(monkeypatch):
+    fake_state = SimpleNamespace(
+        conversation_repository=object(),
+        hyde_expander=object(),
+        self_rag_pipeline=None,
+        decision_engine=object(),
+        corrective_pipeline=None,
+        reranker=object(),
+        compressor=None,
+    )
+    monkeypatch.setattr(system_routes, "state", fake_state)
+    monkeypatch.setattr(system_routes, "_sentence_transformers_available", lambda: True)
+    monkeypatch.setattr(system_routes, "_bm25_available", lambda: True)
+
+    result = await system_routes.capabilities()
+
+    assert result["methods"] == {
+        "standard": True,
+        "conversational": True,
+        "hyde": True,
+        "self_rag": False,
+        "auto": True,
+        "corrective": False,
+        "raptor": True,
+    }
+    assert result["enhancers"]["rerank"] == {
+        "available": True,
+        "backend": "cross_encoder",
+    }
+    assert result["enhancers"]["compress"] == {"available": False}
+    assert result["retrievers"]["hybrid"] == {"available": True}
+    assert result["optional_deps"] == {
+        "sentence_transformers": True,
+        "rank_bm25": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_capabilities_reports_llm_rerank_backend_without_sentence_transformers(
+    monkeypatch,
+):
+    fake_state = SimpleNamespace(
+        conversation_repository=None,
+        hyde_expander=None,
+        self_rag_pipeline=None,
+        decision_engine=None,
+        corrective_pipeline=None,
+        reranker=object(),
+        compressor=None,
+    )
+    monkeypatch.setattr(system_routes, "state", fake_state)
+    monkeypatch.setattr(
+        system_routes, "_sentence_transformers_available", lambda: False
+    )
+    monkeypatch.setattr(system_routes, "_bm25_available", lambda: False)
+
+    result = await system_routes.capabilities()
+
+    assert result["enhancers"]["rerank"] == {"available": True, "backend": "llm"}
+    assert result["retrievers"]["hybrid"] == {"available": False}
+
+
+# ── GET /health (system_routes.health_check) ────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_health_check_all_healthy_is_200(monkeypatch):
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: SimpleNamespace(get_collections=lambda: None),
+        OLLAMA_AVAILABLE=True,
+        ollama_manager=SimpleNamespace(_initialized=True),
+        knowledge_bases={},
+        rag_pipelines={},
+    )
+    monkeypatch.setattr(system_routes, "state", fake_state)
+
+    response = await system_routes.health_check()
+
+    assert response.status_code == 200
+    body = json.loads(response.body)
+    assert body["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_health_check_qdrant_down_is_503(monkeypatch):
+    def _boom():
+        raise ConnectionError("qdrant unreachable")
+
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: SimpleNamespace(get_collections=_boom),
+        OLLAMA_AVAILABLE=True,
+        ollama_manager=SimpleNamespace(_initialized=True),
+        knowledge_bases={},
+        rag_pipelines={},
+    )
+    monkeypatch.setattr(system_routes, "state", fake_state)
+
+    response = await system_routes.health_check()
+
+    assert response.status_code == 503
+    body = json.loads(response.body)
+    assert body["status"] == "unhealthy"
+
+
+@pytest.mark.asyncio
+async def test_health_check_ollama_unavailable_is_degraded_not_down(monkeypatch):
+    fake_state = SimpleNamespace(
+        get_qdrant_client=lambda: SimpleNamespace(get_collections=lambda: None),
+        OLLAMA_AVAILABLE=False,
+        ollama_manager=SimpleNamespace(_initialized=False),
+        knowledge_bases={"kb1": {}},
+        rag_pipelines={},
+    )
+    monkeypatch.setattr(system_routes, "state", fake_state)
+
+    response = await system_routes.health_check()
+
+    # Ollama is non-critical -- still 200, but reported as degraded, not silently healthy.
+    assert response.status_code == 200
+    body = json.loads(response.body)
+    assert body["status"] == "degraded"
+    assert body["knowledge_bases"] == 1
