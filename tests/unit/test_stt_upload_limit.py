@@ -107,3 +107,77 @@ async def test_speech_to_text_passes_within_limit_audio_through(monkeypatch):
 
     assert result.text == "hello"
     assert result.confidence == 0.9
+
+
+@pytest.mark.asyncio
+async def test_speech_to_text_unavailable_is_503(monkeypatch):
+    monkeypatch.setattr(_mod, "STT_AVAILABLE", False)
+
+    with pytest.raises(Exception) as exc_info:
+        await _mod.speech_to_text(file=_FakeUploadFile(b"clip"), language="tr-TR")
+
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_speech_to_text_rejects_unsupported_language(monkeypatch):
+    monkeypatch.setattr(_mod.settings, "STT_MAX_AUDIO_SIZE_MB", 1)
+
+    with pytest.raises(Exception) as exc_info:
+        await _mod.speech_to_text(file=_FakeUploadFile(b"clip"), language="xx-XX")
+
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_speech_to_text_rejects_empty_audio(monkeypatch):
+    monkeypatch.setattr(_mod.settings, "STT_MAX_AUDIO_SIZE_MB", 1)
+
+    with pytest.raises(Exception) as exc_info:
+        await _mod.speech_to_text(file=_FakeUploadFile(b""), language="tr-TR")
+
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_speech_to_text_undecodable_audio_is_400_not_500(monkeypatch):
+    monkeypatch.setattr(_mod.settings, "STT_MAX_AUDIO_SIZE_MB", 1)
+
+    def _boom(audio_bytes, language):
+        raise ValueError("could not understand audio")
+
+    monkeypatch.setattr(_mod, "transcribe", _boom)
+
+    with pytest.raises(Exception) as exc_info:
+        await _mod.speech_to_text(file=_FakeUploadFile(b"clip"), language="tr-TR")
+
+    assert exc_info.value.status_code == 400
+    assert "could not understand audio" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_speech_to_text_generic_failure_does_not_leak_exception_text(
+    monkeypatch,
+):
+    monkeypatch.setattr(_mod.settings, "STT_MAX_AUDIO_SIZE_MB", 1)
+    secret_looking = "internal token=hunter2"
+
+    def _boom(audio_bytes, language):
+        raise RuntimeError(secret_looking)
+
+    monkeypatch.setattr(_mod, "transcribe", _boom)
+
+    with pytest.raises(Exception) as exc_info:
+        await _mod.speech_to_text(file=_FakeUploadFile(b"clip"), language="tr-TR")
+
+    assert secret_looking not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_get_stt_languages_reports_config():
+    result = await _mod.get_stt_languages()
+
+    assert result["default"] == _mod.settings.DEFAULT_STT_LANG
+    assert result["available"] == _mod.STT_AVAILABLE
+    assert result["auto_detect"] is True
+    assert "tr-TR" in result["languages"]
