@@ -14,6 +14,11 @@ ENV PYTHONPATH=/app:$PYTHONPATH
 
 # Copy requirements first for caching
 COPY src/services/marketplace/requirements.txt .
+
+# pip itself (bundled with python:3.12-slim) ships a version with known CVEs
+# (e.g. CVE-2026-8643) that predate this Dockerfile -- bump before installing
+# any requirements, as its own cacheable layer.
+RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || \
     pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt
 
