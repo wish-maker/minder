@@ -14,9 +14,11 @@ from typing import List, Optional
 
 from core.neo4j_client import Neo4jClient, get_neo4j_client
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 
 from shared.auth.jwt_middleware import get_current_user, get_current_user_or_service
 from shared.errors import backend_http_error
+from shared.health import DependencyCheck, evaluate_dependencies
 
 logger = logging.getLogger("minder.graph_dependencies")
 
@@ -177,18 +179,32 @@ async def get_plugin_recommendations(
 
 
 @router.get("/health")
-async def graph_health_check():
-    """Check if Neo4j graph database is accessible"""
-    try:
-        neo4j = await get_neo4j_client()
-        # Test connection
+async def graph_health_check(neo4j: Neo4jClient = Depends(get_neo4j_client)):
+    """Check if Neo4j graph database is accessible.
+
+    Uses shared.health.evaluate_dependencies (the same convention as this
+    service's own root /health) instead of an ad-hoc try/except: that gets a
+    real 503 on failure for free (the previous version always returned 200,
+    even when unhealthy -- misleading to monitoring) and bounds/formats the
+    driver exception the same safe way (type name + message, truncated to
+    200 chars) rather than returning the raw, unbounded exception text to an
+    external caller (CodeQL py/stack-trace-exposure). Takes `neo4j` via
+    Depends(get_neo4j_client), matching every sibling route in this file
+    (the previous version called get_neo4j_client() directly, the only route
+    here that did -- inconsistent, and untestable via this file's own
+    dependency_overrides-based test fixture)."""
+
+    async def _neo4j():
         async with neo4j.driver.session() as session:
             result = await session.run("RETURN 1 as test")
             record = await result.single()
-            if record and record["test"] == 1:
-                return {"status": "healthy", "database": "neo4j"}
-            else:
-                return {"status": "unhealthy", "database": "neo4j"}
-    except Exception as e:
-        logger.error(f"Neo4j health check failed: {e}")
-        return {"status": "unhealthy", "database": "neo4j", "error": str(e)}
+            if not record or record["test"] != 1:
+                raise RuntimeError("unexpected result from RETURN 1 probe query")
+
+    status, code, checks = await evaluate_dependencies(
+        [DependencyCheck("neo4j", _neo4j, critical=True)]
+    )
+    return JSONResponse(
+        status_code=code,
+        content={"status": status, "database": "neo4j", "checks": checks},
+    )

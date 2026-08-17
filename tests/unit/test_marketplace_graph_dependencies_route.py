@@ -217,3 +217,91 @@ def test_recommendations_generic_error_is_500(gd):
     client = _client(gd, _FakeNeo4j(raises=RuntimeError("boom")))
     r = client.post("/v1/graph/recommendations", json=["a"])
     assert r.status_code == 500
+
+
+# --- GET /v1/graph/health ----------------------------------------------------
+#
+# Previously untested (0% coverage) and previously always returned 200 even
+# when Neo4j was unreachable, plus leaked the raw unbounded exception text to
+# the caller (CodeQL py/stack-trace-exposure). Now goes through
+# shared.health.evaluate_dependencies, matching this service's own root
+# /health -- a real 503 on failure, exception text truncated to 200 chars
+# with the type name prefixed, same as every sibling service.
+
+
+class _FakeResult:
+    def __init__(self, record):
+        self._record = record
+
+    async def single(self):
+        return self._record
+
+
+class _FakeSession:
+    def __init__(self, record=None, raises=None):
+        self._record = record
+        self._raises = raises
+
+    async def run(self, query, *args, **kwargs):
+        if self._raises:
+            raise self._raises
+        return _FakeResult(self._record)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeDriver:
+    def __init__(self, session):
+        self._session = session
+
+    def session(self):
+        return self._session
+
+
+class _FakeNeo4jForHealth:
+    def __init__(self, driver):
+        self.driver = driver
+
+
+def test_graph_health_check_healthy_when_probe_returns_expected_row(gd):
+    driver = _FakeDriver(_FakeSession(record={"test": 1}))
+    client = _client(gd, _FakeNeo4jForHealth(driver))
+    r = client.get("/v1/graph/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "healthy"
+    assert body["database"] == "neo4j"
+    assert body["checks"]["neo4j"] == "healthy"
+
+
+def test_graph_health_check_503_when_probe_row_is_unexpected(gd):
+    driver = _FakeDriver(_FakeSession(record={"test": 0}))
+    client = _client(gd, _FakeNeo4jForHealth(driver))
+    r = client.get("/v1/graph/health")
+    assert r.status_code == 503
+    assert r.json()["status"] == "unhealthy"
+
+
+def test_graph_health_check_503_when_probe_returns_no_record(gd):
+    driver = _FakeDriver(_FakeSession(record=None))
+    client = _client(gd, _FakeNeo4jForHealth(driver))
+    r = client.get("/v1/graph/health")
+    assert r.status_code == 503
+
+
+def test_graph_health_check_503_and_masks_raw_exception_text(gd):
+    secret_looking = "bolt://neo4j:hunter2@internal-host:7687 connection refused"
+    driver = _FakeDriver(_FakeSession(raises=ConnectionError(secret_looking)))
+    client = _client(gd, _FakeNeo4jForHealth(driver))
+    r = client.get("/v1/graph/health")
+    assert r.status_code == 503
+    body = r.json()
+    assert body["status"] == "unhealthy"
+    # Formatted as "ConnectionError: <message>" (truncated to 200 chars) by
+    # shared.health.evaluate_dependencies -- not raw str(e) passthrough.
+    assert body["checks"]["neo4j"].startswith("unhealthy: ConnectionError:")
+    assert secret_looking in body["checks"]["neo4j"]  # present, but bounded/typed
