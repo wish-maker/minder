@@ -38,6 +38,14 @@ services:
         limits:
           memory: 256M
           cpus: '0.5'
+    # #646: entryPoints (web/websecure/metrics), metrics.prometheus.*, and the
+    # ACME challenge type used to ALSO be set here via CLI flags, duplicating
+    # (and, for the metrics entrypoint and ACME challenge type, actively
+    # contradicting) ./services/traefik/traefik.yml. Confirmed live on hantal
+    # that once traefik.yml is mounted, Traefik's CLI-supplied values for keys
+    # the file also populates are silently ignored -- traefik.yml is now the
+    # single source of truth for those three; only genuinely CLI-only
+    # settings remain here.
     command:
     - --api.dashboard=true
     - --api.insecure=true
@@ -45,17 +53,8 @@ services:
     - --providers.docker.exposedbydefault=false
     - --providers.docker.network=minder-network
     - --providers.file.directory=/etc/traefik/dynamic
-    - --entrypoints.web.address=:80
-    - --entrypoints.websecure.address=:443
-    - --entrypoints.metrics.address=:8080
-    - --certificatesresolvers.default.acme.tlschallenge=true
     - --certificatesresolvers.default.acme.email=${ACME_EMAIL:-admin@minder.local}
     - --certificatesresolvers.default.acme.storage=/letsencrypt/acme.json
-    # PILLAR 1: Enable Prometheus metrics
-    - --metrics.prometheus=true
-    - --metrics.prometheus.entrypoint=metrics
-    - --metrics.prometheus.addentrypointslabels=true
-    - --metrics.prometheus.addserviceslabels=true
     ports:
     # PILLAR 1: ONLY Traefik binds to host - Zero-Trust entrypoint
     - 80:80      # HTTP

@@ -19,6 +19,13 @@ rule_files:
 
 # Scrape configurations
 scrape_configs:
+  # Traefik (#646: was never scraped at all -- the dedicated internal
+  # --entrypoints.metrics.address the ingress serves this on had silently
+  # failed to bind due to a port collision, fixed alongside this job)
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8082']
+
   # API Gateway
   - job_name: 'api-gateway'
     static_configs:
