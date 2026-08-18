@@ -134,7 +134,7 @@ export function StatusPage() {
   // Single whole-object read → useAsyncResource (cancels on unmount, drops a
   // stale response if Refresh is clicked twice fast). #502
   const services = useAsyncResource((signal) =>
-    apiFetch<StatusResponse>("/v1/status", { signal }).then((r) => r.services),
+    apiFetch<StatusResponse>("/v1/status", { signal }).then((r) => r.services ?? []),
   );
 
   return (

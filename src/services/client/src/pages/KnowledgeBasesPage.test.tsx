@@ -228,6 +228,14 @@ describe("DocumentsList", () => {
     await screen.findByText(/No documents uploaded yet/);
   });
 
+  it("shows an empty state (not a crash) when the response omits `items` entirely", async () => {
+    apiFetch.mockResolvedValue({});
+    render(
+      <DocumentsList kbId="kb-1" token="tok" refreshToken={0} onDeleted={vi.fn()} confirm={vi.fn()} />,
+    );
+    await screen.findByText(/No documents uploaded yet/);
+  });
+
   it("lists documents and shows a distinct error state on fetch failure", async () => {
     apiFetch.mockRejectedValue(new Error("rag-pipeline unreachable"));
     render(
