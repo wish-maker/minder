@@ -1,13 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { LogViewer } from "./StatusPage";
+import { LogViewer, StatusPage } from "./StatusPage";
 
 const apiFetch = vi.fn();
 
 vi.mock("../lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   friendlyErrorMessage: (e: unknown) => (e instanceof Error ? e.message : "error"),
+}));
+vi.mock("../lib/auth", () => ({
+  useAuth: () => ({ token: "test-token" }),
 }));
 
 describe("LogViewer", () => {
@@ -121,5 +124,80 @@ describe("LogViewer", () => {
     await waitFor(() => expect(details.open).toBe(true));
 
     expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("StatusPage", () => {
+  afterEach(() => {
+    apiFetch.mockReset();
+    cleanup();
+  });
+
+  it("shows a loading state, then an empty state when no services are reported", async () => {
+    apiFetch.mockResolvedValue({ services: [] });
+    render(<StatusPage />);
+
+    expect(screen.getByText("Loading…")).toBeTruthy();
+    await screen.findByText("No services reported by the server.");
+  });
+
+  it("shows a friendly error when the status fetch fails", async () => {
+    apiFetch.mockRejectedValue(new Error("api-gateway unreachable"));
+    render(<StatusPage />);
+
+    await screen.findByText("api-gateway unreachable");
+  });
+
+  it("renders a service card with version, error, and dependency checks", async () => {
+    apiFetch.mockResolvedValue({
+      services: [
+        {
+          name: "rag-pipeline",
+          reachable: true,
+          status: "degraded",
+          version: "1.4.2",
+          checks: { postgres: "ok", qdrant: "slow" },
+          error: "qdrant latency above threshold",
+        },
+      ],
+    });
+    render(<StatusPage />);
+
+    await screen.findByText("rag-pipeline");
+    expect(screen.getByText("degraded")).toBeTruthy();
+    expect(screen.getByText("reported v1.4.2")).toBeTruthy();
+    expect(screen.getByText("qdrant latency above threshold")).toBeTruthy();
+    expect(screen.getByText("postgres: ok")).toBeTruthy();
+    expect(screen.getByText("qdrant: slow")).toBeTruthy();
+    // Logged in (mocked token above) -- LogViewer should offer the real
+    // action, not the "log in required" hint.
+    expect(screen.getByText("View recent logs")).toBeTruthy();
+  });
+
+  it("renders one card per service, unreachable ones included", async () => {
+    apiFetch.mockResolvedValue({
+      services: [
+        { name: "api-gateway", reachable: true, status: "healthy" },
+        { name: "tts-stt", reachable: false, status: "unreachable" },
+      ],
+    });
+    render(<StatusPage />);
+
+    await screen.findByText("api-gateway");
+    expect(screen.getByText("tts-stt")).toBeTruthy();
+    expect(screen.getByText("unreachable")).toBeTruthy();
+  });
+
+  it("re-fetches when the page-level Refresh button is clicked", async () => {
+    apiFetch
+      .mockResolvedValueOnce({ services: [{ name: "svc-a", reachable: true, status: "healthy" }] })
+      .mockResolvedValueOnce({ services: [{ name: "svc-b", reachable: true, status: "healthy" }] });
+    render(<StatusPage />);
+
+    await screen.findByText("svc-a");
+    fireEvent.click(screen.getByRole("button", { name: "🔄 Refresh" }));
+
+    await screen.findByText("svc-b");
+    expect(apiFetch).toHaveBeenCalledTimes(2);
   });
 });
