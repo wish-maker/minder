@@ -153,6 +153,11 @@ bash setup.sh uninstall --purge     # Stop AND DELETE all data volumes (irrevers
    - **RAG Pipeline**: http://localhost:8004
    - **Graph-RAG**: http://localhost:8008
    - **OpenWebUI**: reached via Traefik (the container's 8080 is not host-exposed)
+   - **Minder's own admin web client**: `https://client.minder.local` via Traefik (not
+     host-exposed either; add `127.0.0.1 client.minder.local` to `/etc/hosts` first) —
+     knowledge bases/RAG pipelines, plugin marketplace/config, bundles, model
+     management, and per-service status/logs, all in one UI. Different from OpenWebUI:
+     that's for chatting with your models, this is for managing the platform itself.
 
 3. **View monitoring**:
    - **Prometheus**: http://localhost:9090
