@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Sidebar } from "./components/Sidebar";
+import { ThemeToggle } from "./components/ThemeToggle";
 import { UserMenu } from "./components/UserMenu";
 import { AuthProvider } from "./lib/auth";
 import { AuthCallbackPage } from "./pages/AuthCallbackPage";
@@ -52,7 +53,8 @@ export function App() {
             >
               ☰
             </button>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <ThemeToggle />
               <UserMenu />
             </div>
           </header>
