@@ -59,14 +59,17 @@ class _FakeChannelFile:
 
 
 class _FakeStderr:
+    def __init__(self, data=b""):
+        self._data = data
+
     def read(self):
-        return b""
+        return self._data
 
 
-def _stub_client(monkeypatch, chunks, exit_status=0):
+def _stub_client(monkeypatch, chunks, exit_status=0, stderr_data=b""):
     channel = _FakeChannel(chunks, exit_status)
     stdout = _FakeChannelFile(channel)
-    stderr = _FakeStderr()
+    stderr = _FakeStderr(stderr_data)
 
     fake_client = types.SimpleNamespace(
         exec_command=lambda *a, **k: (None, stdout, stderr),
@@ -101,3 +104,28 @@ def test_run_streams_plain_ascii_output(monkeypatch, capsys):
     assert rc == 0
     out = capsys.readouterr().out
     assert out == "line one\nline two\n"
+
+
+def test_run_prints_non_empty_stderr_after_stdout(monkeypatch, capsys):
+    _stub_client(
+        monkeypatch,
+        [b"line one\n"],
+        exit_status=1,
+        stderr_data=b"something went wrong\n",
+    )
+
+    rc = remote_lib.run("hantal", ["exit 1"])
+
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "line one" in out
+    assert "something went wrong" in out
+
+
+def test_run_skips_blank_stderr(monkeypatch, capsys):
+    _stub_client(monkeypatch, [b"line one\n"], exit_status=0, stderr_data=b"   \n")
+
+    remote_lib.run("hantal", ["echo hi"])
+
+    out = capsys.readouterr().out
+    assert out == "line one\n"
