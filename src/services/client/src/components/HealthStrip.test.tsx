@@ -44,6 +44,13 @@ describe("HealthStrip", () => {
     await vi.waitFor(() => expect(container.firstChild).toBeNull());
   });
 
+  it("renders nothing (not a crash) when the response omits `services` entirely", async () => {
+    apiFetch.mockResolvedValue({});
+    const { container } = render(<HealthStrip />);
+
+    await vi.waitFor(() => expect(container.firstChild).toBeNull());
+  });
+
   it("shows 'All systems healthy' with a green indicator when every service is up", async () => {
     apiFetch.mockResolvedValue({
       services: [
