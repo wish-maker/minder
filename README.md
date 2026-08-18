@@ -57,13 +57,25 @@ cd minder
 # 2️⃣ Run the setup script (fills any missing secrets in ./.env, then starts the stack)
 bash setup.sh start
 
-# 3️⃣ Access the chat UI (OpenWebUI, via Traefik — no real DNS by default,
-#    so add this host entry first):
-echo "127.0.0.1 chat.minder.local" | sudo tee -a /etc/hosts
-# Open: https://chat.minder.local  (self-signed cert — your browser will warn once)
+# 3️⃣ Access the UIs (via Traefik — no real DNS by default, so add these
+#    host entries first):
+echo "127.0.0.1 chat.minder.local client.minder.local" | sudo tee -a /etc/hosts
+# Open: https://chat.minder.local    (OpenWebUI — chat with your models/documents)
+# Open: https://client.minder.local  (Minder's own admin UI — knowledge bases,
+#                                      RAG pipelines, plugins/marketplace, bundles,
+#                                      model management, live service status)
 ```
 
-The API Gateway (`http://localhost:8000`) is for developers/integrations, not the chat UI — see
+These are two different, separately-served frontends: **OpenWebUI** (`chat.minder.local`) is the
+chat interface for talking to your models and documents; **Minder's own web client**
+(`client.minder.local`, the `client` service — source at
+[src/services/client](src/services/client)) is where you manage the platform itself — create
+knowledge bases and RAG pipelines, browse/install marketplace plugins and configure them, enable
+bundles, pull/test Ollama models, and check per-service health and logs. Both sit behind the same
+Authelia forward-auth gate, then each has its own login on top (JWT for the Minder client, its own
+account system for OpenWebUI).
+
+The API Gateway (`http://localhost:8000`) is for developers/integrations, not either UI — see
 the printed banner for the full URL list + a JWT auth quickstart, and
 [docs/guides/authentication.md](docs/guides/authentication.md) for the default Authelia login (a
 shared default password baked into every clone — rotate it before exposing this instance to any
@@ -90,6 +102,8 @@ exposing an instance beyond your LAN.
 ## 🎯 **Real-World Usage Scenarios**
 
 ### 📚 **"I want to chat with my documents privately"**
+Via the UI: `client.minder.local` → RAG → Knowledge Bases (create + upload) → Pipelines (create +
+query) — no curl needed. Or directly against the API:
 ```bash
 # Create a knowledge base (name required; description optional), then upload documents
 curl -X POST http://localhost:8004/knowledge-bases \
@@ -105,9 +119,10 @@ curl -X POST http://localhost:8004/pipeline/<pipeline_id>/query \
 ```
 
 ### 🤖 **"I want to run custom AI models locally"**
-Open [OpenWebUI](http://localhost:8080) → Admin Panel → Connections → Ollama → Manage —
-pull, delete, and update models there (same Ollama instance the whole platform uses),
-then chat with any of them directly.
+Via the UI: `client.minder.local` → Platform → Models — pull, delete, and test-prompt models
+against the same Ollama instance the whole platform uses. Or [OpenWebUI](http://localhost:8080) →
+Admin Panel → Connections → Ollama → Manage does the same pull/delete against that instance too,
+with more per-model settings (system prompts, parameters) if you're already there for chat.
 
 ```bash
 # Or manage models from inside the container directly (Ollama is internal-only,
