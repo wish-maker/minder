@@ -253,6 +253,20 @@ def live_stack():
                 "OLLAMA_HOST": ollama_url,
                 "PLUGINS_PATH": "/app/plugins",
                 "PLUGINS_DATA_PATH": "/app/plugins-data",
+                # routes/bundles.py's defaults are container-absolute paths that
+                # don't exist on a bare checkout. Point at the real compose file
+                # (read-only -- it's just parsed for `minder.bundle=` labels) and
+                # a scratch state file under /app so bundle enable/disable have
+                # somewhere real to persist without touching the repo's own
+                # dev-only bundles.state.json. No DOCKER_HOST is set anywhere in
+                # this harness (no Docker at all) -- bundles.py's _ops() then
+                # returns None, so enable/disable/reconcile exercise their real
+                # "no proxy reachable -> pending_create" branch rather than
+                # trying to talk to a real docker-socket-proxy.
+                "BUNDLES_COMPOSE_PATH": str(
+                    _REPO_ROOT / "docker" / "docker-compose.yml"
+                ),
+                "BUNDLES_STATE_PATH": "/app/plugins-data/e2e-bundles.state.json",
             }
         )
         registry_proc = _spawn_uvicorn(
