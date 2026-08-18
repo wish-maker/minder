@@ -82,6 +82,32 @@ def test_render_authelia_config_logs_and_returns_on_read_failure(monkeypatch, tm
     assert not rendered.exists()
 
 
+def test_render_authelia_config_applies_the_client_secret_hash_when_present(
+    monkeypatch, tmp_path
+):
+    src = tmp_path / "configuration.yml"
+    src.write_text(
+        "issuer: __MINDER_OIDC_ISSUER_KEY_PEM__\n"
+        'client_secret: "__MINDER_OIDC_CLIENT_SECRET_HASH__"\n',
+        encoding="utf-8",
+    )
+    issuer_key = tmp_path / "oidc_issuer.pem"
+    issuer_key.write_text(
+        "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n"
+    )
+    rendered = tmp_path / "configuration.rendered.yml"
+    monkeypatch.setattr(env, "_AUTHELIA_CONFIG_SRC", src)
+    monkeypatch.setattr(env, "_OIDC_ISSUER_KEY", issuer_key)
+    monkeypatch.setattr(env, "_AUTHELIA_CONFIG_RENDERED", rendered)
+    monkeypatch.setattr(env, "_hash_oidc_client_secret", lambda: "$argon2id$fake$hash")
+
+    env.render_authelia_config()
+
+    content = rendered.read_text(encoding="utf-8")
+    assert "__MINDER_OIDC_CLIENT_SECRET_HASH__" not in content
+    assert '"$argon2id$fake$hash"' in content
+
+
 def test_render_authelia_config_logs_and_returns_on_write_failure(
     monkeypatch, _config_paths
 ):
@@ -167,3 +193,14 @@ def test_render_users_database_logs_and_returns_on_read_failure(monkeypatch, tmp
     env.render_users_database()  # must not raise
 
     assert not rendered.exists()
+
+
+def test_render_users_database_logs_and_returns_on_write_failure(
+    monkeypatch, _users_db_paths
+):
+    def _boom(self, *args, **kwargs):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "write_text", _boom)
+
+    env.render_users_database()  # must not raise
