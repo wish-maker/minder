@@ -10,11 +10,22 @@ test_model_management_ollama_manager.py / test_rag_pipeline_ollama_manager.py).
 """
 
 import asyncio
+import importlib.util
+import sys
+from pathlib import Path
 
 import pytest
 
 import shared.ai.ollama_client_base as base_mod
 from shared.ai.ollama_client_base import OllamaClientBase
+
+_MODULE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "src"
+    / "shared"
+    / "ai"
+    / "ollama_client_base.py"
+)
 
 
 class _FakeAsyncClient:
@@ -160,3 +171,29 @@ def test_ensure_initialized_serializes_concurrent_callers_after_a_failed_startup
     asyncio.run(_run_concurrently())
     assert calls["n"] == 1
     assert mgr._initialized is True
+
+
+def test_ollama_unavailable_when_package_cannot_be_imported():
+    """The module-level `try: from ollama import AsyncClient` guard -- OLLAMA_AVAILABLE
+    is real in this environment (the ollama package IS installed), so this loads a
+    throwaway independent copy of the module with `ollama` poisoned in sys.modules to
+    force the ImportError, rather than touching the real cached
+    shared.ai.ollama_client_base module every other test in this file (and
+    test_rag_pipeline_ollama_manager.py / test_model_management_ollama_manager.py)
+    already imports."""
+    saved_ollama = sys.modules.get("ollama")
+    sys.modules["ollama"] = None  # `from ollama import X` raises ImportError on None
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "ollama_client_base_import_guard_test", _MODULE_PATH
+        )
+        fresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fresh)
+    finally:
+        if saved_ollama is not None:
+            sys.modules["ollama"] = saved_ollama
+        else:
+            sys.modules.pop("ollama", None)
+
+    assert fresh.OLLAMA_AVAILABLE is False
+    assert fresh.AsyncClient is None
