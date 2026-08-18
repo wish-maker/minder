@@ -2983,3 +2983,29 @@ async def test_query_pipeline_hybrid_precedence_over_raptor_records_degraded_not
 
     assert resp.method_details["retrieval"] == "hybrid"
     assert any("method=raptor ignored" in n for n in resp.method_details["degraded"])
+
+
+# ── core/state.py: get_qdrant_client (creates once, reuses) ──────────────────
+# core.state can't be freshly re-imported by its own test file (it registers
+# process-global Prometheus Counters/Histograms -- a second import raises
+# DuplicateTimeseries, per this file's own _isolated_import docstring), so
+# this exercises it via rag_routes.state, the SAME already-loaded module
+# object every other state-dependent test in this file already patches
+# attributes on.
+
+
+def test_get_qdrant_client_creates_once_and_reuses(monkeypatch):
+    created_urls = []
+
+    class _FakeQdrantClient:
+        def __init__(self, url):
+            created_urls.append(url)
+
+    monkeypatch.setattr(rag_routes.state, "QdrantClient", _FakeQdrantClient)
+    monkeypatch.setattr(rag_routes.state, "_qdrant_client", None)
+
+    first = rag_routes.state.get_qdrant_client()
+    second = rag_routes.state.get_qdrant_client()
+
+    assert first is second
+    assert len(created_urls) == 1
