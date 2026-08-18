@@ -164,8 +164,12 @@ export function InstalledToolsPage() {
   const { token } = useAuth();
   const liveTools = useAsyncResource(
     (signal) =>
+      // `?? []`: a response omitting `tools` would otherwise resolve this
+      // hook's `data` to `undefined`, past the `liveTools.data !== null`
+      // guard below and crashing `.length`/`.map` -- same failure shape as
+      // HealthStrip.tsx's `services` bug.
       apiFetch<LiveToolsResponse>("/v1/plugins/ai/tools", { signal }).then(
-        (r) => r.tools,
+        (r) => r.tools ?? [],
       ),
     { timeoutMs: 15_000 },
   );
