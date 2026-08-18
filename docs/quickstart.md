@@ -115,11 +115,15 @@ bash setup.sh logs [service]        # Tail logs (all or specific service)
 bash setup.sh shell <service>       # Interactive shell in container
 bash setup.sh migrate               # Run Alembic DB migrations
 bash setup.sh doctor                # Deep diagnostics (disk, ports, secrets, images)
-bash setup.sh ollama-mode <mode>    # Switch Ollama internal / external
-bash setup.sh tts-stt-mode <mode>   # Switch Voice's STT/TTS backend (internal / external URL)
+bash setup.sh ollama-mode internal|external|failover [url]  # Switch Ollama backend
+                                    # e.g. `ollama-mode external http://192.168.1.50:11434`
+bash setup.sh tts-stt-mode internal|external|failover [url] # Same idea, for Voice's STT/TTS backend
 bash setup.sh sync-postgres-password # Re-sync the Postgres password
 bash setup.sh bundle status                # List bundles, their services, enable state
 bash setup.sh bundle enable|disable <name> # Toggle a capability bundle
+                                            # <name> is one of: monitoring, inference, rag,
+                                            # graph-rag, chat, voice (core is always on)
+bash setup.sh bundle enable monitoring     # e.g. turn on Prometheus/Grafana/Jaeger
 bash setup.sh bundle reconcile              # Converge running containers to match enabled bundles
 
 # Data management
