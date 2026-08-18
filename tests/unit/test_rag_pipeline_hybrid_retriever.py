@@ -187,3 +187,68 @@ class TestHybridSearch:
             "kb1", [0.1], "widgets", dense_results, top_k=5
         )
         assert results == [("d1", 0.9), ("d2", 0.4)]
+
+
+class TestIndexDocumentsRemainingBranches:
+    def test_raises_when_bm25_unavailable(self, monkeypatch):
+        monkeypatch.setattr(hybrid, "BM25_AVAILABLE", False)
+        retriever = HybridSearchRetriever()
+        with pytest.raises(RuntimeError, match="BM25 not available"):
+            retriever.index_documents("kb1", _docs())
+
+    def test_no_valid_tokens_is_a_noop_not_a_crash(self):
+        """Every document tokenizing to nothing (e.g. a scanned/image-only
+        upload with no extractable text) used to reach BM25Okapi with an
+        all-empty corpus, which raises ZeroDivisionError computing idf --
+        confirmed live against the real rank_bm25 dependency before this was
+        fixed to check `any(corpus)` instead of the always-truthy `corpus`."""
+        retriever = HybridSearchRetriever()
+        retriever.index_documents("kb1", [{"_id": "d1", "text": "!!! ... ---"}])
+        assert "kb1" not in retriever.sparse_index
+        assert "kb1" not in retriever.documents
+
+    def test_builds_the_index_when_only_some_documents_have_no_tokens(self):
+        """A mixed batch (one real document + one punctuation-only document)
+        must still build the index from the document(s) that do have text --
+        the empty-corpus guard must not over-trigger just because ONE
+        document contributed nothing."""
+        retriever = HybridSearchRetriever()
+        retriever.index_documents(
+            "kb1",
+            [
+                {"_id": "d1", "text": "Acme makes widgets."},
+                {"_id": "d2", "text": "..."},
+            ],
+        )
+        assert "kb1" in retriever.sparse_index
+        assert retriever.documents["kb1"][0]["_id"] == "d1"
+
+    def test_reraises_when_bm25_construction_fails(self, monkeypatch):
+        def boom(corpus):
+            raise ValueError("bad corpus")
+
+        monkeypatch.setattr(hybrid, "BM25Okapi", boom)
+        retriever = HybridSearchRetriever()
+        with pytest.raises(ValueError, match="bad corpus"):
+            retriever.index_documents("kb1", _docs())
+        assert "kb1" not in retriever.sparse_index
+
+
+class TestSparseSearchRemainingBranches:
+    def test_python_fallback_when_numpy_unavailable(self, monkeypatch):
+        monkeypatch.setattr(hybrid, "NUMPY_AVAILABLE", False)
+        retriever = HybridSearchRetriever()
+        retriever.index_documents("kb1", _docs())
+
+        scores = retriever._sparse_search("kb1", "widgets acme", 5)
+
+        assert "d1" in scores and "d3" in scores
+
+    def test_returns_empty_on_internal_error(self):
+        retriever = HybridSearchRetriever()
+        retriever.index_documents("kb1", _docs())
+        retriever.sparse_index["kb1"].get_scores = lambda tokens: (_ for _ in ()).throw(
+            RuntimeError("boom")
+        )
+
+        assert retriever._sparse_search("kb1", "widgets", 5) == {}

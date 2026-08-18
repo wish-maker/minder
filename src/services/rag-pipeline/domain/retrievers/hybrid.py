@@ -101,7 +101,14 @@ class HybridSearchRetriever:
                 tokens = re.findall(r"\w+", text.lower())
                 corpus.append(tokens)
 
-            if not corpus:
+            # `corpus` always has one entry per document regardless of token
+            # content, so a bare `if not corpus` never fires here -- the real
+            # failure mode is every document tokenizing to an empty list (e.g.
+            # a scanned/image-only upload with no extractable text), which
+            # BM25Okapi doesn't handle: it divides by the corpus-wide distinct
+            # -word count while computing idf, raising ZeroDivisionError when
+            # that count is zero.
+            if not any(corpus):
                 logger.warning(
                     f"No valid tokens extracted from {len(documents)} documents"
                 )
