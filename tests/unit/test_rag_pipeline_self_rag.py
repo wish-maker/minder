@@ -230,3 +230,84 @@ async def test_evaluation_exception_breaks_after_first():
     assert r["answer"] == "a1"
     assert llm.calls == 1
     assert r["quality"]["iterations"] == 1
+
+
+# --- _load_evaluator: both branches, isolated from the by-path import quirk --
+# The module-level tests above rely on domain.quality_evaluator naturally
+# being unimportable in this harness to model the evaluator-absent path.
+# These inject a fake domain.quality_evaluator directly into sys.modules to
+# exercise _load_evaluator's own success/failure branches on their own terms.
+
+
+def test_load_evaluator_success_sets_evaluator_and_flag():
+    import sys
+    from types import ModuleType
+
+    sentinel = object()
+    fake_mod = ModuleType("domain.quality_evaluator")
+    fake_mod.get_advanced_evaluator = lambda: sentinel
+    saved = sys.modules.get("domain.quality_evaluator")
+    sys.modules["domain.quality_evaluator"] = fake_mod
+    try:
+        pipe = SelfRAGPipeline()
+        pipe._load_evaluator()
+    finally:
+        if saved is not None:
+            sys.modules["domain.quality_evaluator"] = saved
+        else:
+            sys.modules.pop("domain.quality_evaluator", None)
+
+    assert pipe.evaluator is sentinel
+    assert pipe._evaluator_loaded is True
+
+
+def test_load_evaluator_failure_leaves_evaluator_none_but_stops_retrying():
+    import sys
+    from types import ModuleType
+
+    def boom():
+        raise RuntimeError("model load failed")
+
+    fake_mod = ModuleType("domain.quality_evaluator")
+    fake_mod.get_advanced_evaluator = boom
+    saved = sys.modules.get("domain.quality_evaluator")
+    sys.modules["domain.quality_evaluator"] = fake_mod
+    try:
+        pipe = SelfRAGPipeline()
+        pipe._load_evaluator()
+    finally:
+        if saved is not None:
+            sys.modules["domain.quality_evaluator"] = saved
+        else:
+            sys.modules.pop("domain.quality_evaluator", None)
+
+    assert pipe.evaluator is None
+    assert pipe._evaluator_loaded is True  # don't retry on the next call
+
+
+def test_load_evaluator_is_a_noop_once_already_loaded():
+    calls = {"n": 0}
+
+    pipe = SelfRAGPipeline()
+    pipe._evaluator_loaded = True  # already resolved (either way) previously
+    pipe.evaluator = "whatever-was-resolved-before"
+
+    pipe._load_evaluator()  # must not touch sys.modules or re-run anything
+
+    assert pipe.evaluator == "whatever-was-resolved-before"
+    assert calls["n"] == 0
+
+
+# --- no-sources warning (line-138, #138) -------------------------------------
+
+
+async def test_no_sources_warns_but_still_generates(caplog):
+    pipe = _with_evaluator(SelfRAGPipeline(max_iterations=1), None)
+
+    result = await pipe.generate_with_self_refinement("q", "ctx", [], _FakeLLM())
+
+    assert result["answer"] == "answer"
+    assert any(
+        "No sources provided for quality evaluation" in r.message
+        for r in caplog.records
+    )
