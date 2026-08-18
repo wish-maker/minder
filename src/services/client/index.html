@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Minder</title>
+    <!-- Applies the theme class before first paint, so a "dark" preference
+         doesn't flash light (or vice versa) while the JS bundle loads.
+         "minder-theme" must stay in sync with lib/theme.ts's STORAGE_KEY. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem("minder-theme");
+          var dark =
+            t === "dark" ||
+            ((!t || t === "system") &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* localStorage unavailable (e.g. private-mode restrictions) -- fall
+             through to the default light theme rather than breaking load. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

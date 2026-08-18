@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Tailwind v4 defaults every `dark:` utility to `@media
+ * (prefers-color-scheme: dark)`, with no way to override the OS preference.
+ * Switching the variant to a `.dark` class match lets lib/theme.ts apply an
+ * explicit choice by toggling that class on <html> -- "system" (the
+ * default) still tracks the OS preference, just via JS instead of a bare
+ * media query, so nothing changes for anyone who never touches the toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Self-hosted, no runtime CDN fetch: Minder ships offline-capable, and the
  * client should not gain a network dependency Piper/gTTS et al. do not have.
  * Only the weights headings actually use (400 fallback, 600 semibold, 700
