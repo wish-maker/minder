@@ -3009,3 +3009,56 @@ def test_get_qdrant_client_creates_once_and_reuses(monkeypatch):
 
     assert first is second
     assert len(created_urls) == 1
+
+
+# ── system.py: _sentence_transformers_available / _bm25_available's own ─────
+# bodies (always mocked out in the capabilities tests above), root(), and
+# initialize_ollama's success path -- none had ever executed directly.
+
+
+def test_sentence_transformers_available_matches_find_spec():
+    import importlib.util
+
+    expected = importlib.util.find_spec("sentence_transformers") is not None
+    assert system_routes._sentence_transformers_available() is expected
+
+
+def test_bm25_available_matches_find_spec():
+    import importlib.util
+
+    expected = importlib.util.find_spec("rank_bm25") is not None
+    assert system_routes._bm25_available() is expected
+
+
+@pytest.mark.asyncio
+async def test_root_reports_name_version_and_ollama_availability():
+    fake_state = SimpleNamespace(OLLAMA_AVAILABLE=True)
+    saved = system_routes.state
+    system_routes.state = fake_state
+    try:
+        result = await system_routes.root()
+    finally:
+        system_routes.state = saved
+
+    assert result["name"] == "Minder RAG Pipeline"
+    assert result["status"] == "operational"
+    assert result["ollama_available"] is True
+
+
+@pytest.mark.asyncio
+async def test_initialize_ollama_success_returns_confirmation(monkeypatch):
+    initialized = {"called": False}
+
+    async def fake_initialize():
+        initialized["called"] = True
+
+    monkeypatch.setattr(
+        system_routes.state,
+        "ollama_manager",
+        type("M", (), {"initialize": staticmethod(fake_initialize)})(),
+    )
+
+    result = await system_routes.initialize_ollama()
+
+    assert initialized["called"] is True
+    assert result == {"message": "Ollama client initialized successfully"}
