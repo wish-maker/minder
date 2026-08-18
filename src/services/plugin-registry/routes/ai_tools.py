@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException
 
 from config import settings
 from shared.ai.tool_validator import validate_ai_tools
+from shared.errors import backend_http_error
 
 
 def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
@@ -122,6 +123,6 @@ def build_ai_tools_router(*, plugins_db, plugin_instances, logger) -> APIRouter:
             return await plugin_instances[plugin_name].analyze()
         except Exception as e:
             logger.error(f"Analysis error for plugin {plugin_name}: {e}")
-            raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+            raise backend_http_error(e, f"Analysis for plugin '{plugin_name}'")
 
     return router

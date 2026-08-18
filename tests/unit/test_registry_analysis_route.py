@@ -64,6 +64,7 @@ _NOOP_LOGGER = SimpleNamespace(
     error=lambda *a, **k: None,
     info=lambda *a, **k: None,
     warning=lambda *a, **k: None,
+    debug=lambda *a, **k: None,
 )
 
 # A plugin-specific shape the OLD code would have reshaped for crypto — kept whole
@@ -126,14 +127,36 @@ class _FailingInstance:
         raise RuntimeError("boom")
 
 
-def test_analysis_500_on_analyze_exception():
+def test_analysis_500_on_analyze_exception_without_leaking_the_raw_message():
+    """analyze() can be third-party plugin code -- its exception message may carry
+    internal detail (a DB DSN, a stack-trace fragment). Routed through
+    backend_http_error like every other plugin-registry route, not a raw f-string,
+    so the raw message never reaches the caller."""
     client = _client(
         plugins_db={"crypto": _FakePlugin(enabled=True)},
         plugin_instances={"crypto": _FailingInstance()},
     )
     r = client.get("/v1/plugins/crypto/analysis")
     assert r.status_code == 500
-    assert "boom" in r.json()["detail"]
+    assert "boom" not in r.json()["detail"]
+    assert "Analysis for plugin 'crypto'" in r.json()["detail"]
+
+
+class _UnreachableInstance:
+    async def analyze(self):
+        raise ConnectionRefusedError("downstream backend unreachable")
+
+
+def test_analysis_503_on_a_connectivity_failure():
+    """backend_http_error classifies a connectivity-shaped failure as a retryable
+    503, not a generic 500 -- confirms the fix actually routes through the shared
+    classifier rather than just wrapping every exception as 500."""
+    client = _client(
+        plugins_db={"crypto": _FakePlugin(enabled=True)},
+        plugin_instances={"crypto": _UnreachableInstance()},
+    )
+    r = client.get("/v1/plugins/crypto/analysis")
+    assert r.status_code == 503
 
 
 # --- GET /v1/plugins/ai/tools -----------------------------------------------
@@ -213,6 +236,41 @@ def test_get_all_ai_tools_combines_module_and_manifest_tools(tmp_path):
     tools = client.get("/v1/plugins/ai/tools").json()["tools"]
     names = {t["function"]["name"] for t in tools}
     assert names == {"module_tool", "manifest_tool"}
+
+
+def test_get_all_ai_tools_falls_back_to_json_manifest_when_no_yaml_exists(tmp_path):
+    plugin_dir = tmp_path / "jsonplugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "manifest.json").write_text(
+        '{"ai_tools": [{"name": "json_tool", "description": "From JSON"}]}'
+    )
+    client = _client(
+        plugins_db={"jsonplugin": _FakePlugin()},
+        plugin_instances={"jsonplugin": _ModuleToolsInstance([])},
+        plugins_path=str(tmp_path),
+    )
+    tools = client.get("/v1/plugins/ai/tools").json()["tools"]
+    assert [t["function"]["name"] for t in tools] == ["json_tool"]
+
+
+def test_get_all_ai_tools_tolerates_a_malformed_manifest_file(tmp_path):
+    plugin_dir = tmp_path / "broken"
+    plugin_dir.mkdir()
+    (plugin_dir / "manifest.yml").write_text(": : not valid yaml : :")
+    client = _client(
+        plugins_db={"broken": _FakePlugin(), "weather": _FakePlugin()},
+        plugin_instances={
+            "broken": _ModuleToolsInstance([]),
+            "weather": _ModuleToolsInstance(
+                [{"name": "get_weather", "description": "Current weather"}]
+            ),
+        },
+        plugins_path=str(tmp_path),
+    )
+    tools = client.get("/v1/plugins/ai/tools").json()["tools"]
+    # The broken plugin's manifest load fails and is skipped -- doesn't take
+    # down the whole aggregation.
+    assert [t["function"]["name"] for t in tools] == ["get_weather"]
 
 
 def test_tool_to_openai_skips_a_tool_with_no_name():
