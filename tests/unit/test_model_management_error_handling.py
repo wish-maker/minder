@@ -18,7 +18,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 _SERVICE_DIR = (
@@ -433,3 +433,108 @@ def test_fine_tune_model_is_501():
         json={"base_model": "llama3.2:latest"},
     )
     assert r.status_code == 501
+
+
+# ── register_model / get_model / delete_model / test_model's own generic ─────
+# -exception branches -- only list_models' had a test above; each of these
+# four routes has the identical try/except HTTPException-reraise/generic
+# -Exception->backend_http_error pattern, and none of the others had ever
+# hit it.
+
+
+def test_register_model_generic_failure_returns_500_without_leaking():
+    ollama_manager = type(
+        "M",
+        (),
+        {"list_models": AsyncMock(side_effect=KeyError("some_internal_field"))},
+    )()
+
+    r = _client(ollama_manager, as_admin=True).post(
+        "/v1/models", json={"model_id": "llama3.2:latest"}
+    )
+
+    assert r.status_code == 500
+    assert "some_internal_field" not in r.text
+
+
+def test_get_model_generic_failure_returns_500_without_leaking():
+    ollama_manager = type(
+        "M",
+        (),
+        {"list_models": AsyncMock(side_effect=KeyError("some_internal_field"))},
+    )()
+
+    r = _client(ollama_manager).get("/v1/models/llama3.2:latest")
+
+    assert r.status_code == 500
+    assert "some_internal_field" not in r.text
+
+
+def test_delete_model_generic_failure_returns_500_without_leaking():
+    ollama_manager = type(
+        "M",
+        (),
+        {"list_models": AsyncMock(side_effect=KeyError("some_internal_field"))},
+    )()
+
+    r = _client(ollama_manager, as_admin=True).delete("/v1/models/llama3.2:latest")
+
+    assert r.status_code == 500
+    assert "some_internal_field" not in r.text
+
+
+def test_test_model_generic_failure_returns_500_without_leaking():
+    ollama_manager = type(
+        "M",
+        (),
+        {"list_models": AsyncMock(side_effect=KeyError("some_internal_field"))},
+    )()
+
+    r = _client(ollama_manager).post(
+        "/v1/models/llama3.2:latest/test", json={"prompt": "hi"}
+    )
+
+    assert r.status_code == 500
+    assert "some_internal_field" not in r.text
+
+
+# ── list_models / register_model: HTTPException reraised unchanged, not ─────
+# remapped by the generic-Exception handler (HTTPException IS an Exception,
+# so without the `except HTTPException: raise` guard it would fall through
+# and get masked into a different status).
+
+
+def test_list_models_reraises_an_httpexception_unchanged():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(
+                side_effect=HTTPException(status_code=418, detail="teapot")
+            )
+        },
+    )()
+
+    r = _client(ollama_manager).get("/v1/models")
+
+    assert r.status_code == 418
+    assert r.json()["detail"] == "teapot"
+
+
+def test_register_model_reraises_an_httpexception_unchanged():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(
+                side_effect=HTTPException(status_code=418, detail="teapot")
+            )
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).post(
+        "/v1/models", json={"model_id": "llama3.2:latest"}
+    )
+
+    assert r.status_code == 418
+    assert r.json()["detail"] == "teapot"
