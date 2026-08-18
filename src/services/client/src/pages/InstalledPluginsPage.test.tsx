@@ -1,17 +1,32 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ConfigurePanel,
   InstalledPluginCard,
+  InstalledPluginsPage,
   type Installation,
 } from "./InstalledPluginsPage";
 
 const apiFetch = vi.fn();
+let mockAuth = { token: "tok", isAuthenticated: true };
 
 vi.mock("../lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   friendlyErrorMessage: (e: unknown) => (e instanceof Error ? e.message : "error"),
+}));
+vi.mock("../lib/auth", () => ({
+  useAuth: () => mockAuth,
+}));
+const mockConfirm = vi.fn();
+vi.mock("../components/ConfirmDialog", () => ({
+  useConfirm: () => ({ confirm: mockConfirm, dialog: null }),
+}));
+vi.mock("react-router-dom", () => ({
+  Link: ({ children, to }: { children: ReactNode; to: string }) => (
+    <a href={to}>{children}</a>
+  ),
 }));
 
 function installation(overrides: Partial<Installation> = {}): Installation {
@@ -38,7 +53,64 @@ function installation(overrides: Partial<Installation> = {}): Installation {
 
 afterEach(() => {
   apiFetch.mockReset();
+  mockConfirm.mockReset();
+  mockAuth = { token: "tok", isAuthenticated: true };
   cleanup();
+});
+
+describe("InstalledPluginsPage", () => {
+  it("prompts to log in and never fetches when not authenticated", async () => {
+    mockAuth = { token: "", isAuthenticated: false };
+    render(<InstalledPluginsPage />);
+
+    expect(
+      await screen.findByText("Log in (top right) to see your installed plugins."),
+    ).toBeTruthy();
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("shows an empty state with a link to Available Plugins when nothing is installed", async () => {
+    apiFetch.mockResolvedValue({ installations: [], count: 0 });
+    render(<InstalledPluginsPage />);
+
+    expect(await screen.findByText("browse Available Plugins")).toBeTruthy();
+  });
+
+  it("renders installed plugin cards and the AI Tools cross-link when non-empty", async () => {
+    apiFetch.mockResolvedValue({ installations: [installation()], count: 1 });
+    render(<InstalledPluginsPage />);
+
+    expect(await screen.findByText("My Plugin")).toBeTruthy();
+    expect(screen.getByText("check AI Tools")).toBeTruthy();
+  });
+
+  it("shows a friendly error when the installations fetch fails", async () => {
+    apiFetch.mockRejectedValue(new Error("marketplace unreachable"));
+    render(<InstalledPluginsPage />);
+
+    expect(await screen.findByText("marketplace unreachable")).toBeTruthy();
+  });
+
+  it("treats a response that omits `installations` as an empty list, not a crash", async () => {
+    apiFetch.mockResolvedValue({ count: 0 });
+    render(<InstalledPluginsPage />);
+
+    expect(await screen.findByText("browse Available Plugins")).toBeTruthy();
+  });
+
+  it("removes an uninstalled plugin from the list without a re-fetch", async () => {
+    mockConfirm.mockResolvedValue(true);
+    apiFetch
+      .mockResolvedValueOnce({ installations: [installation()], count: 1 })
+      .mockResolvedValueOnce(undefined); // the DELETE .../uninstall call itself
+    render(<InstalledPluginsPage />);
+
+    expect(await screen.findByText("My Plugin")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Uninstall/ }));
+
+    await waitFor(() => expect(screen.queryByText("My Plugin")).toBeNull());
+    expect(await screen.findByText("browse Available Plugins")).toBeTruthy();
+  });
 });
 
 describe("InstalledPluginCard — enable/disable", () => {
