@@ -277,3 +277,27 @@ def test_to_wav_cleans_up_partial_output_file_on_ffmpeg_failure(monkeypatch, tmp
         _mod._to_wav(b"slow-or-corrupt-audio")
 
     assert not _mod.os.path.exists(output_path)  # no leaked partial output file
+
+
+def test_stt_unavailable_when_speech_recognition_cannot_be_imported():
+    """The module-level `try: import speech_recognition as sr / except ImportError`
+    guard -- every other test in this file stubs speech_recognition into
+    sys.modules (STT_AVAILABLE always True there), so this loads a throwaway
+    independent copy of the module with speech_recognition poisoned to None to
+    force the ImportError, rather than touching the shared `_mod` module object
+    every other test in this file references."""
+    saved_sr = sys.modules.get("speech_recognition")
+    sys.modules["speech_recognition"] = None
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "stt_engine_import_guard_test", _SERVICE_DIR / "core" / "stt_engine.py"
+        )
+        fresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(fresh)
+    finally:
+        if saved_sr is not None:
+            sys.modules["speech_recognition"] = saved_sr
+        else:
+            sys.modules.pop("speech_recognition", None)
+
+    assert fresh.STT_AVAILABLE is False
