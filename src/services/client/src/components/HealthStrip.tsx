@@ -26,7 +26,12 @@ function isHealthy(s: ServiceStatus): boolean {
  * exists at /platform/status. */
 export function HealthStrip() {
   const services = useAsyncResource((signal) =>
-    apiFetch<StatusResponse>("/v1/status", { signal }).then((r) => r.services),
+    // `?? []`, not a bare `r.services`: a response that omits `services`
+    // resolves this hook's `data` to `undefined`, which slips past the
+    // `data === null` guards below (both stay false) and crashes on
+    // `.length`/`.filter` -- exactly the outage-looking failure this
+    // component exists to avoid (see the "deliberately quiet" doc above).
+    apiFetch<StatusResponse>("/v1/status", { signal }).then((r) => r.services ?? []),
   );
 
   if (services.error) return null;
