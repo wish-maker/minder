@@ -7,7 +7,7 @@ time.sleep is a no-op.
 
 import pytest
 
-from scripts.setup import infra
+from scripts.setup import config, infra
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +18,55 @@ def _no_sleep(monkeypatch):
 class _FakeCompleted:
     def __init__(self, returncode=0):
         self.returncode = returncode
+
+
+# ── regression guards against the REAL config (not a mocked stand-in) ────────
+
+
+def test_extra_databases_includes_authelia_and_schema_registry():
+    """#294: minder_authelia and minder_schemaregistry are hardcoded,
+    non-configurable database names required by
+    services/authelia/configuration.yml and docker-compose.yml's
+    schema-registry JDBC URLs. Dropping either from this tuple again means
+    both containers fatally crash-loop forever on a fresh install (confirmed
+    live on the Pi: 835 and 363 restarts)."""
+    assert "minder_authelia" in config.EXTRA_DATABASES
+    assert "minder_schemaregistry" in config.EXTRA_DATABASES
+
+
+def test_bare_volume_renames_covers_openwebui_and_qdrant():
+    """Regression guard (#408/#414): openwebui_data/qdrant_data were made
+    `external: true` with a hardcoded name at first -- that fixed the Pi
+    (which had them bare-named) but broke hantal (a second real deployment
+    with no bare volume at all, only the standard "minder_<name>" one) with
+    "external volume ... not found". The general fix is this migration
+    entry, not a compose-level pin -- if it's ever removed, the same class
+    of bug reappears for any host that still has the bare volume."""
+    assert infra._BARE_VOLUME_RENAMES == {
+        "openwebui_data": "openwebui_data",
+        "qdrant_data": "qdrant_data",
+    }
+
+
+def test_initialize_database_creates_every_real_extra_database(monkeypatch):
+    """Ties #294's EXTRA_DATABASES list to actual initialize_database()
+    behavior -- against the REAL tuple, not a mocked stand-in, so a future
+    entry added to EXTRA_DATABASES is automatically exercised here too."""
+    monkeypatch.setattr(infra.docker, "compose", lambda *a: 0)
+    monkeypatch.setattr(infra.docker, "wait_postgres_ready", lambda: True)
+    monkeypatch.setattr(infra.docker, "container_name", lambda svc: "minder-postgres")
+    calls = []
+
+    def _run(argv, **kw):
+        calls.append(argv[-1])
+        return _FakeCompleted(returncode=0)
+
+    monkeypatch.setattr(infra.subprocess, "run", _run)
+
+    infra.initialize_database()
+
+    for db in config.EXTRA_DATABASES:
+        assert f"CREATE DATABASE {db};" in calls
 
 
 # ── create_networks ────────────────────────────────────────────────────────────
