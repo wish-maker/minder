@@ -268,7 +268,7 @@ export function DocumentsList({
       apiFetch<Paginated<KbDocument>>(
         `/v1/rag/knowledge-bases/${kbId}/documents`,
         { signal },
-      ).then((res) => res.items),
+      ).then((res) => res.items ?? []),
     { deps: [kbId, refreshToken] },
   );
 

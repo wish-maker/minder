@@ -141,6 +141,13 @@ describe("StatusPage", () => {
     await screen.findByText("No services reported by the server.");
   });
 
+  it("shows an empty state (not a crash) when the response omits `services` entirely", async () => {
+    apiFetch.mockResolvedValue({});
+    render(<StatusPage />);
+
+    await screen.findByText("No services reported by the server.");
+  });
+
   it("shows a friendly error when the status fetch fails", async () => {
     apiFetch.mockRejectedValue(new Error("api-gateway unreachable"));
     render(<StatusPage />);
