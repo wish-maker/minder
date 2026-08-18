@@ -148,3 +148,21 @@ async def test_auto_create_refuses_unsafe_database_name(monkeypatch, unsafe_name
         )
     # Must reject BEFORE ever connecting to the postgres maintenance DB.
     admin_connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_plain_success_never_touches_the_admin_connection(monkeypatch):
+    """The common case: the database already exists, so create_pool succeeds on
+    the first try -- no InvalidCatalogNameError, no auto-create machinery
+    involved at all. Every other test here only exercises the auto-create
+    branch; this is the one that was actually untested."""
+    admin_connect = AsyncMock()
+    monkeypatch.setattr(asyncpg, "connect", admin_connect)
+    monkeypatch.setattr(asyncpg, "create_pool", AsyncMock(return_value=_FakePool()))
+
+    result = await db_pool.create_pg_pool(
+        host="db", port=5432, user="u", password="p", database="minder"
+    )
+
+    assert isinstance(result, _FakePool)
+    admin_connect.assert_not_awaited()
