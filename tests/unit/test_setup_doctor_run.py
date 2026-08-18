@@ -145,6 +145,37 @@ def test_wrong_permissions_warns_and_counts_issue(clean_env, capfd):
     assert "1 issue(s) found" in out
 
 
+class _FakeOSName:
+    """Shadows doctor's OWN `os` name binding with name='nt', delegating
+    everything else to the real module -- avoids mutating the process-global
+    os.name, which unrelated code (including pathlib's own Path dispatch for
+    any Path constructed while it's patched) could observe."""
+
+    def __init__(self, real_os, name):
+        self._real = real_os
+        self.name = name
+
+    def __getattr__(self, attr):
+        return getattr(self._real, attr)
+
+
+def test_windows_skips_permission_enforcement_without_flagging_an_issue(
+    clean_env, monkeypatch, capfd
+):
+    # real chmod(0o600) is a documented no-op on Windows (env.py) -- st_mode
+    # comes back ~0o666 regardless, so the permission check must be skipped
+    # there rather than flagging a permanent false issue on every run.
+    clean_env.chmod(0o644)
+    monkeypatch.setattr(doctor, "os", _FakeOSName(doctor.os, "nt"))
+
+    doctor.run()
+
+    out = capfd.readouterr().out
+    assert "not enforced on Windows" in out
+    assert "permissions are" not in out
+    assert "No issues found" in out
+
+
 class _FakeOSStatFails:
     """Shadows doctor's OWN `os` name binding (doctor.os), not the real global
     `os` module -- doctor.py's only os.* use is `os.stat(config.ENV_FILE)`, but

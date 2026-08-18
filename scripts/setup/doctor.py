@@ -82,15 +82,22 @@ def run() -> int:
         log.warn(".env not found — run install first")
         issues += 1
     else:
-        try:
-            perm = oct(os.stat(config.ENV_FILE).st_mode & 0o777)[2:]
-        except OSError:
-            perm = "???"
-        if perm not in ("600", "0600"):
-            log.warn(f".env permissions are {perm} — should be 600")
-            issues += 1
+        if os.name == "nt":
+            # env.py's own chmod 600 is a documented no-op on Windows (no POSIX
+            # permission bits) -- st_mode always comes back ~0o666 regardless of
+            # what was requested, so enforcing "600" here would flag a false
+            # issue on every single Windows run, forever. Skip, don't warn.
+            log.detail("Permissions: not enforced on Windows (chmod is a no-op there)")
         else:
-            log.detail(f"Permissions: {perm} ✓")
+            try:
+                perm = oct(os.stat(config.ENV_FILE).st_mode & 0o777)[2:]
+            except OSError:
+                perm = "???"
+            if perm not in ("600", "0600"):
+                log.warn(f".env permissions are {perm} — should be 600")
+                issues += 1
+            else:
+                log.detail(f"Permissions: {perm} ✓")
         weak = 0
         try:
             lines = config.ENV_FILE.read_text(encoding="utf-8").splitlines()
