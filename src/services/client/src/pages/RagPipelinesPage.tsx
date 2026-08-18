@@ -21,19 +21,19 @@ import {
 } from "../lib/ui";
 import { EmptyState } from "../components/EmptyState";
 
-interface KnowledgeBase {
+export interface KnowledgeBase {
   id: string;
   name: string;
 }
 
-interface RagPipeline {
+export interface RagPipeline {
   id: string;
   name: string;
   knowledge_base_ids: string[];
   created_at: string;
 }
 
-interface DecisionStats {
+export interface DecisionStats {
   available: boolean;
   total_decisions: number;
   strategy_distribution: Record<string, number>;
@@ -41,7 +41,7 @@ interface DecisionStats {
   avg_confidence: number | null;
 }
 
-interface Capabilities {
+export interface Capabilities {
   methods: {
     standard: boolean;
     conversational: boolean;
@@ -99,7 +99,7 @@ const ENHANCER_DESCRIPTIONS: Record<string, string> = {
  * user can learn what these methods and add-ons actually do WITHOUT first
  * creating a knowledge base and a pipeline just to reach the query form
  * that used to be the only place any of this was explained (#485). */
-function RetrievalMethodsReference() {
+export function RetrievalMethodsReference() {
   return (
     <section className={`mb-4 ${cardClass}`}>
       <h2 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
@@ -139,13 +139,13 @@ function RetrievalMethodsReference() {
   );
 }
 
-interface Source {
+export interface Source {
   text: string;
   source: string;
   score: number;
 }
 
-interface QueryResponse {
+export interface QueryResponse {
   answer: string;
   sources: Source[];
   confidence: number;
@@ -159,7 +159,7 @@ interface QueryResponse {
   } | null;
 }
 
-interface Turn {
+export interface Turn {
   question: string;
   response: QueryResponse;
 }
@@ -167,7 +167,7 @@ interface Turn {
 /** Shared by the single-shot result panel and each turn in a conversation
  * thread -- `compact` drops the source list for non-latest turns so an
  * ongoing conversation doesn't grow a wall of repeated citations. */
-function QueryResultCard({
+export function QueryResultCard({
   response,
   compact = false,
 }: {
@@ -219,7 +219,7 @@ function QueryResultCard({
   );
 }
 
-function CreatePipelineForm({
+export function CreatePipelineForm({
   token,
   kbs,
   onCreated,
@@ -348,7 +348,7 @@ function CreatePipelineForm({
   );
 }
 
-function QueryPanel({
+export function QueryPanel({
   pipelineId,
   token,
   capabilities,
@@ -686,7 +686,7 @@ function QueryPanel({
   );
 }
 
-function PipelineCard({
+export function PipelineCard({
   pipeline,
   token,
   capabilities,

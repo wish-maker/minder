@@ -18,12 +18,12 @@ import {
 } from "../lib/ui";
 import { EmptyState } from "../components/EmptyState";
 
-interface ModelInfo {
+export interface ModelInfo {
   id: string;
   name: string;
 }
 
-interface KnowledgeBase {
+export interface KnowledgeBase {
   id: string;
   name: string;
   description: string;
@@ -34,7 +34,7 @@ interface KnowledgeBase {
   created_at: string;
 }
 
-interface UploadResponse {
+export interface UploadResponse {
   message: string;
   chunks_processed: number;
   vectors_created: number;
@@ -43,14 +43,14 @@ interface UploadResponse {
   tree_nodes_created?: number;
 }
 
-interface KbDocument {
+export interface KbDocument {
   document_id: string;
   filename: string;
   chunk_count: number;
   uploaded_at?: string;
 }
 
-interface ChunkInfo {
+export interface ChunkInfo {
   chunk_index: number;
   text: string;
 }
@@ -123,7 +123,7 @@ interface QueueItem {
   detail: string;
 }
 
-function UploadWidget({
+export function UploadWidget({
   kb,
   token,
   onUploaded,
@@ -242,7 +242,7 @@ function UploadWidget({
   );
 }
 
-function DocumentsList({
+export function DocumentsList({
   kbId,
   token,
   refreshToken,
@@ -342,7 +342,7 @@ function DocumentsList({
   );
 }
 
-function KnowledgeBaseCard({
+export function KnowledgeBaseCard({
   kb,
   token,
   onDeleted,
@@ -513,7 +513,7 @@ function KnowledgeBaseCard({
   );
 }
 
-function CreateKbForm({
+export function CreateKbForm({
   token,
   onCreated,
 }: {
