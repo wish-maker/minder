@@ -18,14 +18,16 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def pipeline_id(live_stack):
+def pipeline_id(live_stack, auth_token):
     """Create a KB, upload a small doc, and build a pipeline; return its id."""
     base = live_stack.rag_url
+    headers = {"Authorization": f"Bearer {auth_token}"}
     # Canonical plural collection path (#144); the singular form still works as a
     # deprecated alias.
     kb = httpx.post(
         f"{base}/knowledge-bases",
         json={"name": f"test-func-{os.getpid()}", "description": "functional test"},
+        headers=headers,
         timeout=20.0,
     )
     assert kb.status_code == 200, kb.text
@@ -38,6 +40,7 @@ def pipeline_id(live_stack):
     up = httpx.post(
         f"{base}/knowledge-bases/{kb_id}/upload",
         files={"file": ("fact.txt", doc, "text/plain")},
+        headers=headers,
         timeout=60.0,
     )
     assert up.status_code == 200, up.text
@@ -46,6 +49,7 @@ def pipeline_id(live_stack):
     pl = httpx.post(
         f"{base}/pipeline",
         json={"name": f"test-pl-{os.getpid()}", "knowledge_base_ids": [kb_id]},
+        headers=headers,
         timeout=20.0,
     )
     assert pl.status_code == 200, pl.text
@@ -79,17 +83,19 @@ def auth_token(live_stack):
 
 
 @pytest.fixture(scope="module")
-def filter_pipeline_id(live_stack):
+def filter_pipeline_id(live_stack, auth_token):
     """A KB with two documents carrying distinct sentinel facts, dedicated to
     metadata_filter tests -- proves filtering actually excludes chunks from the
     non-matching document rather than just silently accepting the parameter."""
     base = live_stack.rag_url
+    headers = {"Authorization": f"Bearer {auth_token}"}
     kb = httpx.post(
         f"{base}/knowledge-bases",
         json={
             "name": f"test-filter-{os.getpid()}",
             "description": "metadata filter test",
         },
+        headers=headers,
         timeout=20.0,
     )
     assert kb.status_code == 200, kb.text
@@ -104,6 +110,7 @@ def filter_pipeline_id(live_stack):
                 "text/plain",
             )
         },
+        headers=headers,
         timeout=60.0,
     )
     assert up_a.status_code == 200, up_a.text
@@ -117,6 +124,7 @@ def filter_pipeline_id(live_stack):
                 "text/plain",
             )
         },
+        headers=headers,
         timeout=60.0,
     )
     assert up_b.status_code == 200, up_b.text
@@ -127,6 +135,7 @@ def filter_pipeline_id(live_stack):
             "name": f"test-filter-pl-{os.getpid()}",
             "knowledge_base_ids": [kb_id],
         },
+        headers=headers,
         timeout=20.0,
     )
     assert pl.status_code == 200, pl.text
@@ -134,7 +143,7 @@ def filter_pipeline_id(live_stack):
 
 
 def test_metadata_filter_excludes_non_matching_source_dense(
-    live_stack, filter_pipeline_id
+    live_stack, filter_pipeline_id, auth_token
 ):
     r = httpx.post(
         f"{live_stack.rag_url}/pipeline/{filter_pipeline_id}/query",
@@ -143,6 +152,7 @@ def test_metadata_filter_excludes_non_matching_source_dense(
             "top_k": 5,
             "metadata_filter": {"source": "filter-doc-a.txt"},
         },
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=180.0,
     )
     assert r.status_code == 200, r.text
@@ -153,7 +163,7 @@ def test_metadata_filter_excludes_non_matching_source_dense(
 
 
 def test_metadata_filter_excludes_non_matching_source_hybrid(
-    live_stack, filter_pipeline_id
+    live_stack, filter_pipeline_id, auth_token
 ):
     r = httpx.post(
         f"{live_stack.rag_url}/pipeline/{filter_pipeline_id}/query",
@@ -163,6 +173,7 @@ def test_metadata_filter_excludes_non_matching_source_hybrid(
             "hybrid": True,
             "metadata_filter": {"source": "filter-doc-b.txt"},
         },
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=180.0,
     )
     assert r.status_code == 200, r.text
@@ -172,13 +183,14 @@ def test_metadata_filter_excludes_non_matching_source_hybrid(
 
 
 @pytest.fixture
-def doc_kb_id(live_stack):
+def doc_kb_id(live_stack, auth_token):
     """A fresh, empty KB dedicated to document list/delete tests (#427) -- kept
     separate from `pipeline_id`'s KB so deleting a document here can't affect
     the other tests that query against that KB's one known document."""
     kb = httpx.post(
         f"{live_stack.rag_url}/knowledge-bases",
         json={"name": f"test-docs-{os.getpid()}", "description": "document tests"},
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=20.0,
     )
     assert kb.status_code == 200, kb.text
@@ -224,10 +236,11 @@ def test_get_unknown_pipeline_404s(live_stack):
     assert r.status_code == 404
 
 
-def test_standard_query_grounded(live_stack, pipeline_id):
+def test_standard_query_grounded(live_stack, pipeline_id, auth_token):
     r = httpx.post(
         f"{live_stack.rag_url}/pipeline/{pipeline_id}/query",
         json={"question": "What is the sentinel token?", "top_k": 3},
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=180.0,
     )
     assert r.status_code == 200, r.text
@@ -237,41 +250,46 @@ def test_standard_query_grounded(live_stack, pipeline_id):
     assert body["sources"], "no sources returned"
 
 
-def test_invalid_method_rejected_with_422(live_stack, pipeline_id):
+def test_invalid_method_rejected_with_422(live_stack, pipeline_id, auth_token):
     # An unknown method must fail loudly rather than silently running standard, so the
     # caller learns what they actually asked for (#138). 422 lists the valid values.
     r = httpx.post(
         f"{live_stack.rag_url}/pipeline/{pipeline_id}/query",
         json={"question": "What is the sentinel token?", "top_k": 2, "method": "bogus"},
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=180.0,
     )
     assert r.status_code == 422, r.text
     assert "valid values" in r.text.lower()
 
 
-def test_retrieval_strategy_reported(live_stack, pipeline_id):
+def test_retrieval_strategy_reported(live_stack, pipeline_id, auth_token):
     # A standard query reports the retrieval strategy it actually used (#138).
     r = httpx.post(
         f"{live_stack.rag_url}/pipeline/{pipeline_id}/query",
         json={"question": "What is the sentinel token?", "top_k": 2},
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=180.0,
     )
     assert r.status_code == 200, r.text
     assert r.json()["method_details"]["retrieval"] == "dense"
 
 
-def test_upload_response_includes_document_id(live_stack, doc_kb_id):
+def test_upload_response_includes_document_id(live_stack, doc_kb_id, auth_token):
     doc = io.BytesIO(b"Doc A content for #427 document-list tests.")
     r = httpx.post(
         f"{live_stack.rag_url}/knowledge-bases/{doc_kb_id}/upload",
         files={"file": ("doc-a.txt", doc, "text/plain")},
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=60.0,
     )
     assert r.status_code == 200, r.text
     assert r.json()["document_id"]
 
 
-def test_list_documents_groups_by_upload_not_by_chunk(live_stack, doc_kb_id):
+def test_list_documents_groups_by_upload_not_by_chunk(
+    live_stack, doc_kb_id, auth_token
+):
     # Two separate uploads of the SAME filename must show as two distinct
     # documents (source alone can't disambiguate them -- document_id can, #427).
     for _ in range(2):
@@ -279,6 +297,7 @@ def test_list_documents_groups_by_upload_not_by_chunk(live_stack, doc_kb_id):
         up = httpx.post(
             f"{live_stack.rag_url}/knowledge-bases/{doc_kb_id}/upload",
             files={"file": ("same-name.txt", doc, "text/plain")},
+            headers={"Authorization": f"Bearer {auth_token}"},
             timeout=60.0,
         )
         assert up.status_code == 200, up.text
@@ -300,6 +319,7 @@ def test_delete_document_removes_it_and_updates_kb_counts(
     up = httpx.post(
         f"{live_stack.rag_url}/knowledge-bases/{doc_kb_id}/upload",
         files={"file": ("delete-me.txt", doc, "text/plain")},
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=60.0,
     )
     assert up.status_code == 200, up.text
