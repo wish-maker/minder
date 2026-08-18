@@ -182,6 +182,8 @@ the one service with no Python. It has its own toolchain, mirrored by the
 cd src/services/client
 npm ci                 # install pinned deps (package-lock.json)
 npm run dev            # local dev server with HMR
+npm run test           # vitest run         (must pass)
+npm run test:coverage  # same, plus a per-file coverage report
 npm run typecheck      # tsc -b --noEmit  (must pass)
 npm run lint           # eslint .          (must pass — 0 errors)
 npm run build          # tsc -b && vite build (what the Docker image runs)
