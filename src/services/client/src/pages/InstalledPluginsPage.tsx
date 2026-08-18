@@ -346,7 +346,7 @@ export function InstalledPluginsPage() {
         "/v1/marketplace/installations/me",
         { token },
       );
-      setInstallations(res.installations);
+      setInstallations(res.installations ?? []);
       setStatusMsg("");
     } catch (e) {
       setStatusMsg(friendlyErrorMessage(e), true);

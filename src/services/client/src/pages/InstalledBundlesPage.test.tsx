@@ -11,8 +11,9 @@ vi.mock("../lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   friendlyErrorMessage: (e: unknown) => (e instanceof Error ? e.message : "error"),
 }));
+let mockAuth = { token: "tok", role: "admin" };
 vi.mock("../lib/auth", () => ({
-  useAuth: () => ({ token: "tok", role: "admin" }),
+  useAuth: () => mockAuth,
 }));
 
 function bundle(overrides: Partial<Bundle> = {}): Bundle {
@@ -43,6 +44,7 @@ async function importFile(content: unknown) {
 describe("InstalledBundlesPage", () => {
   afterEach(() => {
     apiFetch.mockReset();
+    mockAuth = { token: "tok", role: "admin" };
     cleanup();
   });
 
@@ -72,6 +74,76 @@ describe("InstalledBundlesPage", () => {
     expect(
       await screen.findByText("No bundles are enabled yet — see Available Bundles."),
     ).toBeTruthy();
+  });
+
+  it("shows an orphaned-services warning banner listing every orphan", async () => {
+    apiFetch.mockResolvedValue({
+      bundles: [bundle({ name: "core", enabled: true })],
+      count: 1,
+      orphaned: ["old-worker", "stale-cache"],
+    });
+    render(<InstalledBundlesPage />);
+
+    const banner = await screen.findByText(/Orphaned services/);
+    expect(banner.textContent).toContain("old-worker, stale-cache");
+  });
+
+  it("reconciles successfully and reports the outcome, then reloads", async () => {
+    apiFetch
+      .mockResolvedValueOnce({ bundles: [bundle({ name: "core", enabled: true })], count: 1 })
+      .mockResolvedValueOnce({
+        started: ["worker"],
+        already_running: [],
+        pending_create: [],
+        stopped: [],
+        already_stopped: [],
+        errors: [],
+      })
+      .mockResolvedValueOnce({ bundles: [bundle({ name: "core", enabled: true })], count: 1 });
+    render(<InstalledBundlesPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Reconcile/ }));
+
+    await screen.findByText(/Reconciled: started worker/);
+    expect(apiFetch).toHaveBeenCalledWith("/v1/bundles/reconcile", {
+      method: "POST",
+      token: "tok",
+    });
+    // Success reload -- a 3rd call beyond the initial load + the reconcile itself.
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3));
+  });
+
+  it("shows a friendly error when reconcile fails, without reloading", async () => {
+    apiFetch
+      .mockResolvedValueOnce({ bundles: [bundle({ name: "core", enabled: true })], count: 1 })
+      .mockRejectedValueOnce(new Error("plugin-registry unreachable"));
+    render(<InstalledBundlesPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Reconcile/ }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("plugin-registry unreachable");
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("disables Reconcile with a login hint when logged out", async () => {
+    mockAuth = { token: "", role: "" };
+    apiFetch.mockResolvedValue({ bundles: [bundle({ name: "core", enabled: true })], count: 1 });
+    render(<InstalledBundlesPage />);
+
+    const btn = await screen.findByRole("button", { name: /Reconcile/ });
+    expect(btn.hasAttribute("disabled")).toBe(true);
+    expect(btn.getAttribute("title")).toBe("Log in as an admin to reconcile");
+  });
+
+  it("disables Reconcile with an admin-role hint when logged in but not admin", async () => {
+    mockAuth = { token: "tok", role: "member" };
+    apiFetch.mockResolvedValue({ bundles: [bundle({ name: "core", enabled: true })], count: 1 });
+    render(<InstalledBundlesPage />);
+
+    const btn = await screen.findByRole("button", { name: /Reconcile/ });
+    expect(btn.hasAttribute("disabled")).toBe(true);
+    expect(btn.getAttribute("title")).toBe("Admin role required");
   });
 });
 
