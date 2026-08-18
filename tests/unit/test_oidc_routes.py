@@ -158,6 +158,27 @@ async def test_oidc_callback_missing_code_raises_400(auth_route_mod):
 
 
 @pytest.mark.asyncio
+async def test_oidc_callback_id_token_missing_sub_raises_502(
+    auth_route_mod, monkeypatch
+):
+    # verify_id_token's own return type is Dict[str, Any] -- nothing in this
+    # route enforces the "sub" claim is present before indexing it, so a
+    # provider that ever omitted it used to raise a bare KeyError instead of
+    # a clean error. `from core.oidc import verify_id_token` already bound the
+    # name directly into auth_route_mod's namespace at import time (see the
+    # comment on test_oidc_callback_prefers_userinfo_claims_over_id_token
+    # below), so patch the route module's own attribute, not sys.modules.
+    monkeypatch.setattr(auth_route_mod, "verify_id_token", AsyncMock(return_value={}))
+    request = _FakeRequest(cookies={"oidc_state": "s1", "oidc_nonce": "n1"})
+
+    with pytest.raises(HTTPException) as exc:
+        await auth_route_mod.oidc_callback(
+            request, code="authcode", state="s1", error=None
+        )
+    assert exc.value.status_code == 502
+
+
+@pytest.mark.asyncio
 async def test_oidc_callback_success_mints_jwt_and_redirects_to_client(
     auth_route_mod,
 ):
