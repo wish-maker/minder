@@ -2566,3 +2566,420 @@ async def test_health_check_ollama_unavailable_is_degraded_not_down(monkeypatch)
     body = json.loads(response.body)
     assert body["status"] == "degraded"
     assert body["knowledge_bases"] == 1
+
+
+# ── routes/rag.py coverage gaps: KB/pipeline CRUD's PG-persist branches and ───
+# delete_knowledge_base/create_rag_pipeline/delete_rag_pipeline's bodies ──────
+# (73% coverage -- create_rag_pipeline and delete_rag_pipeline's actual bodies
+# were ENTIRELY untested, only their auth-gate/update siblings had coverage;
+# every CRUD route's `if state.PG_AVAILABLE:` try/except-warn branch was
+# likewise never exercised with PG_AVAILABLE=True).
+
+
+@pytest.mark.asyncio
+async def test_create_knowledge_base_saves_to_postgres_when_available(monkeypatch):
+    saved = {}
+
+    async def fake_save(kb_id, kb_data):
+        saved["kb_id"] = kb_id
+        saved["kb_data"] = kb_data
+
+    with _seed_state(knowledge_bases={}, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "save_kb_to_postgres", fake_save)
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(create_collection=lambda **kwargs: None),
+        )
+        resp = await rag_routes.create_knowledge_base(_KBCreate())
+
+    assert saved["kb_id"] == resp.id
+    assert saved["kb_data"]["name"] == "test-kb"
+
+
+@pytest.mark.asyncio
+async def test_create_knowledge_base_pg_save_failure_is_non_fatal(monkeypatch):
+    async def fake_save(kb_id, kb_data):
+        raise RuntimeError("db unreachable")
+
+    with _seed_state(knowledge_bases={}, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "save_kb_to_postgres", fake_save)
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(create_collection=lambda **kwargs: None),
+        )
+        resp = await rag_routes.create_knowledge_base(_KBCreate())
+
+    assert resp.name == "test-kb"  # PG failure logged, not raised
+
+
+def test_get_knowledge_base_404():
+    client = _rag_router_client()
+    with _seed_state(knowledge_bases={}):
+        resp = client.get("/v1/knowledge-bases/nope")
+    assert resp.status_code == 404
+
+
+def test_get_knowledge_base_returns_it():
+    client = _rag_router_client()
+    with _seed_state(knowledge_bases={"kb1": _kb("kb1")}):
+        resp = client.get("/v1/knowledge-bases/kb1")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "kb1"
+
+
+@pytest.mark.asyncio
+async def test_update_kb_saves_to_postgres_when_available(monkeypatch):
+    saved = {}
+
+    async def fake_save(kb_id, kb_data):
+        saved["kb_id"] = kb_id
+
+    kb = _kb_full("kb1")
+    with _seed_state(knowledge_bases={"kb1": kb}, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "save_kb_to_postgres", fake_save)
+        await rag_routes.update_knowledge_base(
+            "kb1", models.KnowledgeBaseUpdate(name="new"), {"sub": "1"}
+        )
+
+    assert saved["kb_id"] == "kb1"
+
+
+@pytest.mark.asyncio
+async def test_update_kb_pg_save_failure_is_non_fatal(monkeypatch):
+    async def fake_save(kb_id, kb_data):
+        raise RuntimeError("db unreachable")
+
+    kb = _kb_full("kb1")
+    with _seed_state(knowledge_bases={"kb1": kb}, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "save_kb_to_postgres", fake_save)
+        resp = await rag_routes.update_knowledge_base(
+            "kb1", models.KnowledgeBaseUpdate(name="new"), {"sub": "1"}
+        )
+
+    assert resp.name == "new"  # PG failure logged, not raised
+
+
+# ── DELETE /v1/knowledge-bases/{id}: entirely untested before this file ──────
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_base_404():
+    with _seed_state(knowledge_bases={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_knowledge_base("nope", {"sub": "1"})
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_base_success_drops_qdrant_collection(monkeypatch):
+    deleted = {}
+    kbs = {"kb1": _kb("kb1")}
+
+    with _seed_state(knowledge_bases=kbs, PG_AVAILABLE=False):
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(
+                delete_collection=lambda collection_name: deleted.update(
+                    {"collection_name": collection_name}
+                )
+            ),
+        )
+        resp = await rag_routes.delete_knowledge_base("kb1", {"sub": "1"})
+
+    assert resp == {"message": "Knowledge base deleted", "id": "kb1"}
+    assert deleted["collection_name"] == "kb1"
+    assert (
+        "kb1" not in kbs
+    )  # popped from the SAME dict object state.knowledge_bases held
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_base_tolerates_qdrant_failure(monkeypatch):
+    kbs = {"kb1": _kb("kb1")}
+
+    with _seed_state(knowledge_bases=kbs, PG_AVAILABLE=False):
+
+        def boom(collection_name):
+            raise ConnectionError("qdrant down")
+
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(delete_collection=boom),
+        )
+        resp = await rag_routes.delete_knowledge_base("kb1", {"sub": "1"})
+
+    assert resp["id"] == "kb1"  # Qdrant failure logged, not raised
+    assert "kb1" not in kbs
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_base_pg_delete_failure_is_non_fatal(monkeypatch):
+    kbs = {"kb1": _kb("kb1")}
+
+    async def boom(kb_id):
+        raise RuntimeError("db unreachable")
+
+    with _seed_state(knowledge_bases=kbs, PG_AVAILABLE=True):
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(delete_collection=lambda collection_name: None),
+        )
+        monkeypatch.setattr(rag_routes.state, "delete_kb_from_postgres", boom)
+        resp = await rag_routes.delete_knowledge_base("kb1", {"sub": "1"})
+
+    assert resp["id"] == "kb1"
+    assert "kb1" not in kbs
+
+
+# ── upload_document / list_documents: 404 branches ───────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_upload_document_404_unknown_kb():
+    with _seed_state(knowledge_bases={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.upload_document("nope", file=None, build_tree=False)
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_documents_404_unknown_kb():
+    with _seed_state(knowledge_bases={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.list_documents("nope")
+    assert exc_info.value.status_code == 404
+
+
+# ── delete_document: 404 branches + PG-persist branch ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_document_404_unknown_kb():
+    with _seed_state(knowledge_bases={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_document("nope", "doc1", {"sub": "1"})
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_document_404_when_no_chunks_match(monkeypatch):
+    kb = _kb("kb1")
+    with _seed_state(knowledge_bases={"kb1": kb}, PG_AVAILABLE=False):
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(count=lambda **kw: SimpleNamespace(count=0)),
+        )
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_document("kb1", "doc1", {"sub": "1"})
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_document_pg_save_failure_is_non_fatal(monkeypatch):
+    kb = _kb_full("kb1")
+
+    async def boom(kb_id, kb_data):
+        raise RuntimeError("db unreachable")
+
+    with _seed_state(knowledge_bases={"kb1": kb}, PG_AVAILABLE=True):
+        monkeypatch.setattr(
+            rag_routes.state,
+            "get_qdrant_client",
+            lambda: SimpleNamespace(
+                count=lambda **kw: SimpleNamespace(count=2),
+                delete=lambda **kw: None,
+            ),
+        )
+        monkeypatch.setattr(rag_routes, "invalidate_hybrid_index", lambda kb_id: None)
+        monkeypatch.setattr(rag_routes.state, "save_kb_to_postgres", boom)
+        resp = await rag_routes.delete_document("kb1", "doc1", {"sub": "1"})
+
+    assert resp == {"message": "Document deleted", "id": "doc1"}
+    assert kb["document_count"] == 2  # decremented despite the PG failure
+
+
+# ── create_rag_pipeline: entirely untested before this file ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_rag_pipeline_success():
+    with _seed_state(
+        rag_pipelines={}, knowledge_bases={"kb1": _kb("kb1")}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.create_rag_pipeline(
+            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"])
+        )
+        assert resp.pipeline_id in rag_routes.state.rag_pipelines
+
+    assert resp.name == "p"
+    assert resp.knowledge_base_ids == ["kb1"]
+
+
+@pytest.mark.asyncio
+async def test_create_rag_pipeline_unknown_kb_404():
+    with _seed_state(rag_pipelines={}, knowledge_bases={}, PG_AVAILABLE=False):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.create_rag_pipeline(
+                models.RAGPipelineCreate(name="p", knowledge_base_ids=["nope"])
+            )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_rag_pipeline_saves_to_postgres_when_available(monkeypatch):
+    saved = {}
+
+    async def fake_save(pipeline_id, data):
+        saved["pipeline_id"] = pipeline_id
+
+    with _seed_state(
+        rag_pipelines={}, knowledge_bases={"kb1": _kb("kb1")}, PG_AVAILABLE=True
+    ):
+        monkeypatch.setattr(rag_routes.state, "save_pipeline_to_postgres", fake_save)
+        resp = await rag_routes.create_rag_pipeline(
+            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"])
+        )
+
+    assert saved["pipeline_id"] == resp.pipeline_id
+
+
+@pytest.mark.asyncio
+async def test_create_rag_pipeline_pg_save_failure_is_non_fatal(monkeypatch):
+    async def boom(pipeline_id, data):
+        raise RuntimeError("db unreachable")
+
+    with _seed_state(
+        rag_pipelines={}, knowledge_bases={"kb1": _kb("kb1")}, PG_AVAILABLE=True
+    ):
+        monkeypatch.setattr(rag_routes.state, "save_pipeline_to_postgres", boom)
+        resp = await rag_routes.create_rag_pipeline(
+            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"])
+        )
+
+    assert resp.name == "p"  # PG failure logged, not raised
+
+
+# ── get_rag_pipeline: 404 + happy path ────────────────────────────────────────
+
+
+def test_get_rag_pipeline_404():
+    client = _rag_router_client()
+    with _seed_state(rag_pipelines={}):
+        resp = client.get("/v1/pipeline/nope")
+    assert resp.status_code == 404
+
+
+def test_get_rag_pipeline_returns_it():
+    client = _rag_router_client()
+    pipe = {
+        "id": "p1",
+        "name": "n",
+        "knowledge_base_ids": [],
+        "retrieval_config": {},
+        "generation_config": {},
+        "created_at": "2026-01-01T00:00:00Z",
+    }
+    with _seed_state(rag_pipelines={"p1": pipe}):
+        resp = client.get("/v1/pipeline/p1")
+    assert resp.status_code == 200
+    assert resp.json()["id"] == "p1"
+
+
+@pytest.mark.asyncio
+async def test_update_pipeline_saves_to_postgres_when_available(monkeypatch):
+    saved = {}
+
+    async def fake_save(pipeline_id, data):
+        saved["pipeline_id"] = pipeline_id
+
+    pipe = {"id": "p1", "name": "old", "knowledge_base_ids": [], "created_at": "x"}
+    with _seed_state(rag_pipelines={"p1": pipe}, knowledge_bases={}, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "save_pipeline_to_postgres", fake_save)
+        await rag_routes.update_rag_pipeline(
+            "p1", models.RAGPipelineUpdate(name="renamed"), {"sub": "1"}
+        )
+
+    assert saved["pipeline_id"] == "p1"
+
+
+@pytest.mark.asyncio
+async def test_update_pipeline_pg_save_failure_is_non_fatal(monkeypatch):
+    async def boom(pipeline_id, data):
+        raise RuntimeError("db unreachable")
+
+    pipe = {"id": "p1", "name": "old", "knowledge_base_ids": [], "created_at": "x"}
+    with _seed_state(rag_pipelines={"p1": pipe}, knowledge_bases={}, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "save_pipeline_to_postgres", boom)
+        resp = await rag_routes.update_rag_pipeline(
+            "p1", models.RAGPipelineUpdate(name="renamed"), {"sub": "1"}
+        )
+
+    assert resp["name"] == "renamed"  # PG failure logged, not raised
+
+
+# ── delete_rag_pipeline: entirely untested before this file ──────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_rag_pipeline_404():
+    with _seed_state(rag_pipelines={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_rag_pipeline("nope", {"sub": "1"})
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_rag_pipeline_success():
+    pipe = {"id": "p1", "name": "n", "knowledge_base_ids": [], "created_at": "x"}
+    pipelines = {"p1": pipe}
+    with _seed_state(rag_pipelines=pipelines, PG_AVAILABLE=False):
+        resp = await rag_routes.delete_rag_pipeline("p1", {"sub": "1"})
+
+    assert resp == {"message": "RAG pipeline deleted", "id": "p1"}
+    assert "p1" not in pipelines  # popped from the SAME dict object state held
+
+
+@pytest.mark.asyncio
+async def test_delete_rag_pipeline_pg_delete_failure_is_non_fatal(monkeypatch):
+    pipe = {"id": "p1", "name": "n", "knowledge_base_ids": [], "created_at": "x"}
+    pipelines = {"p1": pipe}
+
+    async def boom(pipeline_id):
+        raise RuntimeError("db unreachable")
+
+    with _seed_state(rag_pipelines=pipelines, PG_AVAILABLE=True):
+        monkeypatch.setattr(rag_routes.state, "delete_pipeline_from_postgres", boom)
+        resp = await rag_routes.delete_rag_pipeline("p1", {"sub": "1"})
+
+    assert resp["id"] == "p1"
+    assert "p1" not in pipelines
+
+
+# ── query_rag_pipeline: hybrid takes precedence over raptor (degraded note) ──
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_hybrid_precedence_over_raptor_records_degraded_note(
+    monkeypatch,
+):
+    async def fake_run_query(*, components, **kwargs):
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    monkeypatch.setattr(rag_routes, "BM25_AVAILABLE", True)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        resp = await rag_routes.query_rag_pipeline(
+            "p1", models.QueryRequest(question="hi?", hybrid=True, method="raptor")
+        )
+
+    assert resp.method_details["retrieval"] == "hybrid"
+    assert any("method=raptor ignored" in n for n in resp.method_details["degraded"])
