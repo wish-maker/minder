@@ -84,9 +84,14 @@ async def exchange_code_for_tokens(code: str) -> Dict[str, str]:
     already accepts without any extra client config.
     """
     discovery = await _discover()
+    token_endpoint = discovery.get("token_endpoint")
+    if not token_endpoint:
+        raise HTTPException(
+            status_code=502, detail="OIDC discovery document missing token_endpoint"
+        )
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
-            _internalize(discovery["token_endpoint"]),
+            _internalize(token_endpoint),
             headers=_AUTHELIA_FORWARDED_HEADERS,
             auth=(settings.MINDER_OIDC_CLIENT_ID, settings.MINDER_OIDC_CLIENT_SECRET),
             data={
@@ -116,9 +121,14 @@ async def verify_id_token(
     itself).
     Returns the verified claim set."""
     discovery = await _discover()
+    jwks_uri = discovery.get("jwks_uri")
+    if not jwks_uri:
+        raise HTTPException(
+            status_code=502, detail="OIDC discovery document missing jwks_uri"
+        )
     async with httpx.AsyncClient(timeout=10.0) as client:
         jwks_resp = await client.get(
-            _internalize(discovery["jwks_uri"]),
+            _internalize(jwks_uri),
             headers=_AUTHELIA_FORWARDED_HEADERS,
         )
     jwks_resp.raise_for_status()

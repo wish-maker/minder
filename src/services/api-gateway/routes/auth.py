@@ -182,7 +182,11 @@ async def oidc_callback(
     )
     userinfo = await fetch_userinfo(tokens["access_token"])
 
-    subject = claims["sub"]
+    subject = claims.get("sub")
+    if not subject:
+        raise HTTPException(
+            status_code=502, detail="OIDC identity token missing sub claim"
+        )
     username = (
         userinfo.get("preferred_username")
         or claims.get("preferred_username")

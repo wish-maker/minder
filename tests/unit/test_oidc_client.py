@@ -162,6 +162,23 @@ async def test_exchange_code_for_tokens_missing_tokens_raises_502(
     assert exc.value.status_code == 502
 
 
+@pytest.mark.asyncio
+async def test_exchange_code_for_tokens_discovery_missing_token_endpoint_raises_502(
+    oidc_mod, monkeypatch
+):
+    # A malformed/incomplete discovery document (e.g. Authelia returning an
+    # unexpected shape) used to raise a bare KeyError here instead of the same
+    # clean 502 every other malformed-response case in this module gets.
+    discovery = _FakeResponse(200, {})  # no token_endpoint key at all
+    client = _FakeAsyncClient(get_responses=[discovery])
+    _install_fake_client(oidc_mod, monkeypatch, client)
+
+    with pytest.raises(HTTPException) as exc:
+        await oidc_mod.exchange_code_for_tokens("authcode")
+    assert exc.value.status_code == 502
+    assert "token_endpoint" in exc.value.detail
+
+
 # ── verify_id_token ──────────────────────────────────────────────────────────
 
 
@@ -260,6 +277,23 @@ async def test_verify_id_token_bad_signature_raises_401(oidc_mod, monkeypatch):
     with pytest.raises(HTTPException) as exc:
         await oidc_mod.verify_id_token("idtok", "acctok", expected_nonce="n")
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_verify_id_token_discovery_missing_jwks_uri_raises_502(
+    oidc_mod, monkeypatch
+):
+    # Same class of malformed-discovery-document gap as
+    # test_exchange_code_for_tokens_discovery_missing_token_endpoint_raises_502,
+    # for the other _discover() consumer -- used to raise a bare KeyError.
+    discovery = _FakeResponse(200, {})  # no jwks_uri key at all
+    client = _FakeAsyncClient(get_responses=[discovery])
+    _install_fake_client(oidc_mod, monkeypatch, client)
+
+    with pytest.raises(HTTPException) as exc:
+        await oidc_mod.verify_id_token("idtok", "acctok", expected_nonce="n")
+    assert exc.value.status_code == 502
+    assert "jwks_uri" in exc.value.detail
 
 
 # ── fetch_userinfo ───────────────────────────────────────────────────────────
