@@ -264,6 +264,47 @@ def test_delete_rag_pipeline_requires_auth():
     assert resp.status_code == 401
 
 
+# create_knowledge_base/upload_document/create_rag_pipeline/query_rag_pipeline had
+# the same gap as delete above: no application-level auth in the handler itself,
+# only api-gateway's proxy layer gated them for callers going through it. Unlike
+# delete/update (idempotent-ish or metadata-only), these have real cost (Qdrant
+# writes, ingest, LLM generation) and can expose knowledge-base content, so a
+# direct-network caller had unauthenticated create/upload/query access.
+
+
+def test_create_knowledge_base_requires_auth():
+    client = _rag_router_client()
+    resp = client.post(
+        "/v1/knowledge-bases",
+        json={"name": "kb", "embedding_model": "nomic"},
+    )
+    assert resp.status_code == 401
+
+
+def test_upload_document_requires_auth():
+    client = _rag_router_client()
+    resp = client.post(
+        "/v1/knowledge-bases/kb1/upload",
+        files={"file": ("doc.txt", b"hello", "text/plain")},
+    )
+    assert resp.status_code == 401
+
+
+def test_create_rag_pipeline_requires_auth():
+    client = _rag_router_client()
+    resp = client.post(
+        "/v1/pipeline",
+        json={"name": "p", "knowledge_base_ids": ["kb1"]},
+    )
+    assert resp.status_code == 401
+
+
+def test_query_rag_pipeline_requires_auth():
+    client = _rag_router_client()
+    resp = client.post("/v1/pipeline/p1/query", json={"question": "hi"})
+    assert resp.status_code == 401
+
+
 # ── PATCH /v1/knowledge-bases/{id}: edit metadata without dropping documents ──
 # Previously renaming/re-describing a KB meant delete+recreate, which drops the
 # whole Qdrant collection. These prove the in-place metadata update, its auth

@@ -76,12 +76,15 @@ router = APIRouter()
     response_model=KnowledgeBaseResponse,
     include_in_schema=False,
 )  # deprecated unversioned alias
-async def create_knowledge_base(request: KnowledgeBaseCreate):
+async def create_knowledge_base(
+    request: KnowledgeBaseCreate,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """Create a new knowledge base.
 
     Served at both /v1/knowledge-bases and the legacy /knowledge-bases directly (and
     their deprecated singular /knowledge-base aliases) — not a redirect, which would
-    drop the method/body on non-GET clients (#147).
+    drop the method/body on non-GET clients (#147). JWT-gated like delete.
     """
     kb_id = str(uuid.uuid4())
 
@@ -319,13 +322,14 @@ async def upload_document(
     kb_id: str,
     file: UploadFile = File(...),
     build_tree: bool = Form(False),
+    current_user: dict = Depends(get_current_user_or_service),
 ):
     """Upload document to knowledge base.
 
     Served at both /v1/knowledge-bases/{kb_id}/upload and the legacy
     /knowledge-bases/{kb_id}/upload directly (and their deprecated singular
     /knowledge-base aliases) — not a redirect, which would drop the method/body on
-    non-GET clients (#147).
+    non-GET clients (#147). JWT-gated like delete.
 
     `build_tree` opts into RAPTOR tree construction (#487, docs/architecture/
     raptor-rag.md) on top of the normal flat chunks — off by default, since it
@@ -556,11 +560,14 @@ async def delete_document(
     tags=["Pipeline"],
     include_in_schema=False,
 )  # deprecated unversioned alias
-async def create_rag_pipeline(request: RAGPipelineCreate):
+async def create_rag_pipeline(
+    request: RAGPipelineCreate,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """Create a RAG pipeline.
 
     Served at both /v1/pipeline and the legacy /pipeline directly — not a redirect,
-    which would drop the method/body on non-GET clients (#147).
+    which would drop the method/body on non-GET clients (#147). JWT-gated like delete.
     """
     pipeline_id = str(uuid.uuid4())
 
@@ -728,12 +735,18 @@ async def delete_rag_pipeline(
     tags=["Pipeline"],
     include_in_schema=False,
 )  # deprecated unversioned alias
-async def query_rag_pipeline(pipeline_id: str, request: QueryRequest):
+async def query_rag_pipeline(
+    pipeline_id: str,
+    request: QueryRequest,
+    current_user: dict = Depends(get_current_user_or_service),
+):
     """Query a RAG pipeline.
 
     Served at both /v1/pipeline/{pipeline_id}/query and the legacy
     /pipeline/{pipeline_id}/query directly — not a redirect, which would drop the
-    method/body on non-GET clients (#147).
+    method/body on non-GET clients (#147). JWT-gated like delete — a query triggers
+    real retrieval + LLM-generation cost and can expose knowledge-base content, so
+    it gets the same treatment as the other mutating/costly routes in this file.
     """
     if pipeline_id not in state.rag_pipelines:
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
