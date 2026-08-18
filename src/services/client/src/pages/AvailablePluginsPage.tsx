@@ -436,7 +436,11 @@ export function AvailablePluginsPage() {
             "/v1/graph/recommendations?limit=5",
             { method: "POST", body: ids, token },
           );
-          setRecommendations(rec.recommendations);
+          // `?? []`: a response missing `recommendations` would otherwise set
+          // state to `undefined`, past this try/catch (no throw happens) and
+          // crashing later on `recommendations.length` -- the same failure
+          // shape HealthStrip.tsx hit for its own optional `services` key.
+          setRecommendations(rec.recommendations ?? []);
         } catch {
           // recommendations are a nice-to-have; ignore failures quietly
         }

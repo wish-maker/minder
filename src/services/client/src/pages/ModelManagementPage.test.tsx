@@ -1,13 +1,26 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ModelCard, PullModelForm, type ModelInfo } from "./ModelManagementPage";
+import {
+  ModelCard,
+  ModelManagementPage,
+  PullModelForm,
+  type ModelInfo,
+} from "./ModelManagementPage";
 
 const apiFetch = vi.fn();
 
 vi.mock("../lib/api", () => ({
   apiFetch: (...args: unknown[]) => apiFetch(...args),
   friendlyErrorMessage: (e: unknown) => (e instanceof Error ? e.message : "error"),
+}));
+
+let mockAuth = { token: "", role: "" };
+vi.mock("../lib/auth", () => ({
+  useAuth: () => mockAuth,
+}));
+vi.mock("../components/ConfirmDialog", () => ({
+  useConfirm: () => ({ confirm: vi.fn().mockResolvedValue(true), dialog: null }),
 }));
 
 function model(overrides: Partial<ModelInfo> = {}): ModelInfo {
@@ -199,5 +212,99 @@ describe("PullModelForm", () => {
     expect(
       screen.getByText("Log in as an admin to pull a model."),
     ).toBeTruthy();
+  });
+});
+
+// Routes apiFetch by path: the list, each ModelCard's eager detail fetch
+// (`/v1/models/{id}`), and any other call (pull/delete/test) just resolves
+// harmlessly unless a test overrides it via mockImplementationOnce.
+function routeApiFetch(items: ModelInfo[]) {
+  apiFetch.mockImplementation(async (path: string) => {
+    if (path === "/v1/models?limit=500") {
+      return { items, total: items.length, limit: 500, offset: 0 };
+    }
+    if (path.startsWith("/v1/models/") && !path.endsWith("/test")) {
+      return { id: path.split("/").pop(), details: {}, capabilities: [], status: "ready" };
+    }
+    return {};
+  });
+}
+
+describe("ModelManagementPage", () => {
+  afterEach(() => {
+    apiFetch.mockReset();
+    mockAuth = { token: "", role: "" };
+    cleanup();
+  });
+
+  it("shows an empty state when no models are pulled", async () => {
+    routeApiFetch([]);
+    render(<ModelManagementPage />);
+
+    await screen.findByText("No models pulled yet — use the form above.");
+  });
+
+  it("renders a ModelCard per pulled model", async () => {
+    routeApiFetch([model({ id: "a", name: "a" }), model({ id: "b", name: "b" })]);
+    render(<ModelManagementPage />);
+
+    await screen.findByText("a");
+    expect(screen.getByText("b")).toBeTruthy();
+  });
+
+  it("renders (does not crash) when the response omits `items` entirely", async () => {
+    apiFetch.mockResolvedValue({});
+    render(<ModelManagementPage />);
+
+    await screen.findByText("No models pulled yet — use the form above.");
+  });
+
+  it("filters the visible models by name, provider, or type and shows a match count", async () => {
+    routeApiFetch([
+      model({ id: "a", name: "llama3.2:latest" }),
+      model({ id: "b", name: "mistral:latest", provider: "ollama" }),
+    ]);
+    render(<ModelManagementPage />);
+    await screen.findByText("llama3.2:latest");
+
+    fireEvent.change(screen.getByLabelText("Filter models"), {
+      target: { value: "mistral" },
+    });
+
+    await screen.findByText("1 of 2");
+    expect(screen.queryByText("llama3.2:latest")).toBeNull();
+    expect(screen.getByText("mistral:latest")).toBeTruthy();
+  });
+
+  it("shows a no-match empty state when the filter matches nothing", async () => {
+    routeApiFetch([model()]);
+    render(<ModelManagementPage />);
+    await screen.findByText("llama3.2:latest");
+
+    fireEvent.change(screen.getByLabelText("Filter models"), {
+      target: { value: "does-not-exist" },
+    });
+
+    await screen.findByText('No pulled models match "does-not-exist".');
+  });
+
+  it("refreshes the list after a successful delete (admin)", async () => {
+    mockAuth = { token: "tok", role: "admin" };
+    routeApiFetch([model()]);
+    render(<ModelManagementPage />);
+    await screen.findByText("llama3.2:latest");
+
+    apiFetch.mockResolvedValueOnce({}); // the DELETE call itself
+    routeApiFetch([]); // reload() re-fetches an now-empty list
+    fireEvent.click(screen.getByRole("button", { name: "🗑 Delete" }));
+
+    await screen.findByText("No models pulled yet — use the form above.");
+  });
+
+  it("shows a friendly status message when the models fetch fails", async () => {
+    apiFetch.mockRejectedValue(new Error("model-management unreachable"));
+    render(<ModelManagementPage />);
+
+    await screen.findByText("model-management unreachable");
   });
 });

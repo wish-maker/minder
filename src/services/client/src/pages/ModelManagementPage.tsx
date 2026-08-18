@@ -320,8 +320,11 @@ export function ModelManagementPage() {
   // and delete refresh via reload() rather than local optimistic edits, so the
   // list (and each model's derived size/status) always reflects Ollama. #502
   const modelsRes = useAsyncResource((signal) =>
+    // `?? []`: a response omitting `items` would otherwise resolve `data` to
+    // `undefined`, past the `models !== null` guards below and crashing on
+    // `.length`/`.map` -- same failure shape as HealthStrip.tsx's `services`.
     apiFetch<Paginated<ModelInfo>>("/v1/models?limit=500", { signal }).then(
-      (r) => r.items,
+      (r) => r.items ?? [],
     ),
   );
   const models = modelsRes.data;
