@@ -10,3 +10,9 @@ piper-tts==1.7.0  # offline neural TTS (CPU/Pi-friendly, permissive voices) — 
 gtts==2.5.4  # Google TTS (online) - fallback for non-bundled languages
 SpeechRecognition==3.17.0
 httpx==0.28.1
+
+# Pulled in transitively (not our own direct deps) but resolve to versions with
+# open Trivy/GHSA findings unless pinned explicitly here -- see code-scanning
+# alerts under trivy-tts-stt / path "Python".
+msgpack>=1.2.1  # GHSA-6v7p-g79w-8964
+setuptools>=78.1.1  # CVE-2025-47273
