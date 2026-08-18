@@ -89,3 +89,68 @@ async def test_activate_license_uses_jwt_identity_not_request_body(monkeypatch):
         tier="pro",
     )
     assert result["status"] == "activated"
+
+
+# ── validate_license_endpoint: entirely untested before this file ────────────
+
+
+@pytest.mark.asyncio
+async def test_validate_license_endpoint_returns_validation_result(monkeypatch):
+    validate_license = AsyncMock(return_value={"valid": True, "tier": "pro"})
+    monkeypatch.setattr(licensing_routes, "validate_license", validate_license)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    request = licensing_routes.LicenseValidateRequest(
+        license_key="key-123", plugin_id="11111111-1111-1111-1111-111111111111"
+    )
+
+    result = await licensing_routes.validate_license_endpoint(
+        request, current_user={"sub": "caller-user"}
+    )
+
+    validate_license.assert_awaited_once_with(
+        license_key="key-123", plugin_id="11111111-1111-1111-1111-111111111111"
+    )
+    assert result == {"valid": True, "tier": "pro"}
+
+
+@pytest.mark.asyncio
+async def test_validate_license_endpoint_rejects_a_non_uuid_plugin_id(monkeypatch):
+    from fastapi import HTTPException
+
+    def fake_guard(pid):
+        raise HTTPException(status_code=404, detail="Plugin not found")
+
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", fake_guard)
+    request = licensing_routes.LicenseValidateRequest(
+        license_key="key-123", plugin_id="not-a-uuid"
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await licensing_routes.validate_license_endpoint(
+            request, current_user={"sub": "caller-user"}
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+# ── activate_license: exception branch ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_activate_license_maps_backend_error(monkeypatch):
+    create_license = AsyncMock(side_effect=RuntimeError("db unreachable"))
+    monkeypatch.setattr(licensing_routes, "create_license", create_license)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    request = licensing_routes.LicenseActivateRequest(
+        plugin_id="11111111-1111-1111-1111-111111111111", tier="pro"
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await licensing_routes.activate_license(
+            request, current_user={"sub": "caller-user"}
+        )
+
+    assert exc_info.value.status_code == 500
+    assert "db unreachable" not in str(exc_info.value.detail)
