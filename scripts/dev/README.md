@@ -119,6 +119,20 @@ shows up there — transfer + run it the same base64 way as
 `hantal_fix_docker_creds.py` above (`--dry-run` first to see what it would
 kill without touching anything).
 
+`scheduled-backup.ps1`: daily backup wrapper for hantal — runs `python -m
+scripts.setup backup` and logs the result to `logs/scheduled-backup.log`.
+Exists because hantal had NO scheduled backup at all (confirmed live
+2026-08-19: the newest backup on disk was 15 days stale) despite
+`scripts/setup/backup.py` itself working fine the whole time — nothing was
+ever wired up to call it on a schedule. Register once:
+```
+schtasks /Create /TN "MinderDailyBackup" /SC DAILY /ST 03:00 /F /TR ^
+  "powershell -NoProfile -ExecutionPolicy Bypass -File <repo>\scripts\dev\scheduled-backup.ps1"
+```
+Known limitation: without `/RU`+`/RP` this registers as "Interactive only" —
+it won't fire if the user isn't logged into an active session at 03:00. See
+the script's own header comment for why that's the accepted tradeoff here.
+
 If the dev host running this script has no direct tailnet route (a sandboxed
 container with no `/dev/net/tun`, so `tailscaled` runs in
 `--tun=userspace-networking` mode), set `HANTAL_SOCKS5=host:port` in `.env` to
