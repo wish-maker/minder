@@ -137,7 +137,14 @@ def test_missing_env_file_warns_and_counts_issue(
     assert "1 issue(s) found" in out
 
 
-def test_wrong_permissions_warns_and_counts_issue(clean_env, capfd):
+def test_wrong_permissions_warns_and_counts_issue(clean_env, monkeypatch, capfd):
+    # Forces the non-Windows branch explicitly -- this test's own assertions
+    # only hold there (Windows skips permission enforcement entirely, see
+    # test_windows_skips_permission_enforcement_without_flagging_an_issue
+    # below), so without this the test silently passed only by accident of
+    # which real OS happened to run pytest (always non-Windows in CI/this
+    # sandbox) and failed for real the first time it ran on Windows hantal.
+    monkeypatch.setattr(doctor, "os", _FakeOSName(doctor.os, "posix"))
     clean_env.chmod(0o644)
     doctor.run()
     out = capfd.readouterr().out
@@ -186,6 +193,7 @@ class _FakeOSStatFails:
     def __init__(self, real_os, stat_error):
         self._real = real_os
         self._stat_error = stat_error
+        self.name = "posix"  # force the non-Windows branch regardless of the real OS
 
     def stat(self, path):
         raise self._stat_error
@@ -195,6 +203,10 @@ class _FakeOSStatFails:
 
 
 def test_stat_oserror_reports_unknown_permissions(clean_env, monkeypatch, capfd):
+    # _FakeOSStatFails only overrides .stat(), not .name -- on a real Windows
+    # runner (hantal) doctor.os.name is genuinely "nt", so the Windows-skip
+    # branch would fire before this test's mocked os.stat() error path is
+    # ever reached. _FakeOSStatFails.name is set below to force non-Windows.
     monkeypatch.setattr(
         doctor, "os", _FakeOSStatFails(doctor.os, OSError("permission denied"))
     )
@@ -397,6 +409,9 @@ def test_no_version_drift_no_issue(clean_env, monkeypatch, capfd):
 
 
 def test_multiple_issues_sum_in_the_final_count(clean_env, monkeypatch, capfd):
+    # Forces the non-Windows branch -- this test's "wrong perms" leg of the
+    # count only fires there (see test_wrong_permissions_warns_and_counts_issue).
+    monkeypatch.setattr(doctor, "os", _FakeOSName(doctor.os, "posix"))
     monkeypatch.setattr(
         doctor.docker,
         "capture",
