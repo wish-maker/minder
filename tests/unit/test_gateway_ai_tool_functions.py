@@ -332,3 +332,88 @@ async def test_execute_function_success_envelope(ai_mod, monkeypatch):
         "status": "success",
         "timestamp": result["timestamp"],
     }
+
+
+@pytest.mark.asyncio
+async def test_execute_function_routes_json_body_to_params_for_get_tools(
+    ai_mod, monkeypatch
+):
+    """A real bug, found live 2026-08-19: a caller of POST /v1/ai/functions/{name}
+    (exactly how the OpenAI function-calling convention this endpoint's own
+    /functions/definitions schema implies would invoke it) sends arguments as a
+    JSON body -- but for a GET-method tool (get_weather, get_crypto_price,
+    get_fund_price, get_news), _call_plugin_tool only ever forwards `params`,
+    silently dropping `json_body` entirely. Before this fix, execute_function
+    always sent the caller's body as `json_body` regardless of the tool's
+    method, so every GET tool called the standard way forwarded ZERO arguments
+    downstream and 400'd. The internal chat-completions tool loop already
+    routes this correctly (see the `is_get` branch there); this endpoint must
+    match it."""
+    captured = {}
+
+    async def fake_get_tool_definitions():
+        return {
+            "tools": [
+                {
+                    "function": {"name": "get_weather"},
+                    "metadata": {
+                        "endpoint": "/v1/plugins/weather/actions/get_weather",
+                        "method": "GET",
+                    },
+                }
+            ]
+        }
+
+    async def fake_call_plugin_tool(metadata, *, json_body=None, params=None, **kwargs):
+        captured["json_body"] = json_body
+        captured["params"] = params
+        return {"temp_c": 22}
+
+    monkeypatch.setattr(ai_mod, "get_tool_definitions", fake_get_tool_definitions)
+    monkeypatch.setattr(ai_mod, "_call_plugin_tool", fake_call_plugin_tool)
+
+    result = await ai_mod.execute_function(
+        "get_weather", _FakeRequest(json_body={"location": "Istanbul"})
+    )
+
+    assert captured["params"] == {"location": "Istanbul"}
+    assert captured["json_body"] is None
+    assert result["result"] == {"temp_c": 22}
+
+
+@pytest.mark.asyncio
+async def test_execute_function_unwraps_a_parameters_envelope_for_get_tools(
+    ai_mod, monkeypatch
+):
+    """Some models wrap tool arguments as {"parameters": {...}} (see
+    _normalize_tool_args's own docstring) -- execute_function must unwrap that
+    the same way the chat-completions loop already does, not just for POST
+    tools but for the GET-routed params too."""
+    captured = {}
+
+    async def fake_get_tool_definitions():
+        return {
+            "tools": [
+                {
+                    "function": {"name": "get_weather"},
+                    "metadata": {
+                        "endpoint": "/v1/plugins/weather/actions/get_weather",
+                        "method": "GET",
+                    },
+                }
+            ]
+        }
+
+    async def fake_call_plugin_tool(metadata, *, json_body=None, params=None, **kwargs):
+        captured["params"] = params
+        return {}
+
+    monkeypatch.setattr(ai_mod, "get_tool_definitions", fake_get_tool_definitions)
+    monkeypatch.setattr(ai_mod, "_call_plugin_tool", fake_call_plugin_tool)
+
+    await ai_mod.execute_function(
+        "get_weather",
+        _FakeRequest(json_body={"parameters": {"location": "Tokyo"}}),
+    )
+
+    assert captured["params"] == {"location": "Tokyo"}
