@@ -191,10 +191,24 @@ async def execute_function(function_name: str, request: Request):
         body = await request.json()
     except Exception:
         body = {}
+    args = _normalize_tool_args(body)
+    # GET-method tools (#254 read-only actions) take their arguments as query
+    # params, not a JSON body -- _call_plugin_tool branches on metadata["method"]
+    # and only forwards `params` for GET requests, silently dropping `json_body`.
+    # This endpoint used to always send the caller's body as `json_body` and the
+    # URL's own query string as `params`, so every GET tool (get_weather,
+    # get_crypto_price, get_fund_price, get_news) called the standard way --
+    # POSTing the arguments as a JSON body, exactly how the OpenAI
+    # function-calling convention and this endpoint's own /functions/definitions
+    # schema imply -- silently forwarded ZERO arguments downstream and 400'd.
+    # The internal chat-completions tool loop already gets this right (see
+    # `is_get` below it); mirror the same routing here.
+    metadata = tool.get("metadata", {})
+    is_get = (metadata.get("method") or "POST").upper() == "GET"
     result = await _call_plugin_tool(
-        tool.get("metadata", {}),
-        json_body=body,
-        params=request.query_params,
+        metadata,
+        json_body=None if is_get else args,
+        params=args if is_get else request.query_params,
         auth_header=request.headers.get("Authorization"),
     )
     return {
