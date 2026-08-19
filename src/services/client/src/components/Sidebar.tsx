@@ -56,6 +56,7 @@ const SECTIONS: NavSection[] = [
       { to: "/platform", label: "Models", end: true },
       { to: "/platform/status", label: "Status" },
       { to: "/platform/voice", label: "Voice" },
+      { to: "/platform/backups", label: "Backups" },
     ],
   },
 ];
