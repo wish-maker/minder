@@ -109,10 +109,13 @@ integrity check — for each of postgres/redis/neo4j/snapshots, it verifies the 
 backup artifact exists, is recent enough (`BACKUP_MAX_AGE_HOURS`), is non-empty, and is
 a valid archive (`gzip -t`/`tar -tzf`). It catches the failure modes that silently rot
 backups: the cron stopped running, a dump got truncated, or an archive is corrupt. Wired
-into the Pi's crontab as a daily check:
+into the Pi's crontab as a daily check, 20 minutes after `backup-databases.sh`'s own
+`0 2 * * *` line — not the same minute, which races this check against a still-writing
+backup (caught live 2026-08-19: postgres backups were fine every day, but got reported
+"0B" because the check ran while `pg_dump | gzip > file` was still mid-write):
 
 ```cron
-0 2 * * * /root/minder/scripts/backup-test.sh --quick >> /root/minder/logs/backup-test.log 2>&1
+20 2 * * * /root/minder/scripts/backup-test.sh --quick >> /root/minder/logs/backup-test.log 2>&1
 ```
 
 Exit 0 = every latest backup present/recent/valid; exit 1 = at least one isn't. Unit

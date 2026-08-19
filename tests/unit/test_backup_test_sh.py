@@ -3,7 +3,7 @@
 The quick backup verifier must PASS only when the latest artifact of each kind
 (postgres/redis/neo4j/snapshot) exists, is recent, is non-empty, and is a valid
 archive — and FAIL loudly otherwise (missing / stale / truncated / corrupt), so
-the Pi's `0 2 * * * backup-test.sh --quick` cron does real work instead of the
+the Pi's `20 2 * * * backup-test.sh --quick` cron does real work instead of the
 silent `not found` no-op it was before. Runs the real script via bash against a
 temp backups dir.
 """
