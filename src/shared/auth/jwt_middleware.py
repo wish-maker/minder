@@ -18,8 +18,12 @@ from fastapi import Depends, HTTPException, Request
 # Configuration
 # ============================================================================
 
-# JWT_SECRET is required — fail-fast if not set
-JWT_SECRET = os.environ.get("JWT_SECRET")
+# JWT_SECRET is required — fail-fast if not set. Typed `str` (not `Optional[str]`)
+# via the `or ""` so mypy doesn't flag every jwt.encode/decode call below as
+# possibly passing None for the key argument -- PyJWT's type stubs (unlike
+# jose's) reject that at the type level, even though the `raise` two lines down
+# already guarantees this is non-empty by the time any of those calls run.
+JWT_SECRET: str = os.environ.get("JWT_SECRET") or ""
 if not JWT_SECRET:
     raise ValueError("JWT_SECRET must be set via environment variable")
 
