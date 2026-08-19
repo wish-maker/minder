@@ -48,24 +48,30 @@ _JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _MAX_JOBS_LISTED = 50
 
 
-def _resolve_within(base_dir: Path, filename: str) -> "Path | None":
-    """Join ``filename`` onto ``base_dir`` and verify the result actually
-    stays inside it, returning None otherwise.
+def _find_by_name(directory: Path, filename: str, glob_pattern: str) -> "Path | None":
+    """Resolve ``filename`` to a real path by matching it against
+    ``directory``'s own listing, rather than joining ``filename`` onto
+    ``directory`` directly.
 
-    Callers already validate ``filename`` against a fixed-format allowlist
-    regex (no ``/``, no ``..``) before this runs, which already makes
-    traversal impossible -- but CodeQL's path-injection dataflow analysis
-    doesn't credit a regex match as a sanitizer on its own. This is the
-    resolve+containment check its own query documentation recommends, so it
-    both clears that alert and adds real defense-in-depth if a future caller
-    ever reuses these helpers without an equivalent regex guard.
+    The untrusted string (``job_id``/``name``) is validated against a fixed-
+    format allowlist regex before this runs, which already makes traversal
+    impossible on its own -- but CodeQL's path-injection dataflow analysis
+    doesn't credit a regex match as clearing taint, and flagged even a
+    resolve()+relative_to() join-then-verify helper tried here first.
+    Matching against an enumerated, already-safe directory listing instead
+    means the
+    untrusted string never flows into a path-construction expression at all,
+    which sidesteps that class of finding rather than fighting its sanitizer
+    recognition.
     """
-    candidate = (base_dir / filename).resolve()
     try:
-        candidate.relative_to(base_dir.resolve())
-    except ValueError:
+        candidates = directory.glob(glob_pattern)
+    except OSError:
         return None
-    return candidate
+    for path in candidates:
+        if path.name == filename:
+            return path
+    return None
 
 
 def _now_iso() -> str:
@@ -109,7 +115,7 @@ def _write_job(jobs_dir: Path, job: dict) -> None:
 def _read_job(jobs_dir: Path, job_id: str) -> "dict | None":
     if not _JOB_ID_RE.match(job_id):
         return None
-    path = _resolve_within(jobs_dir, f"{job_id}.json")
+    path = _find_by_name(jobs_dir, f"{job_id}.json", "*.json")
     if path is None:
         return None
     try:
@@ -186,7 +192,7 @@ def build_backups_router(*, backups_dir=None, jobs_dir=None) -> APIRouter:
         control (the admin JWT already authorizes the action)."""
         if not _ARCHIVE_NAME_RE.match(name):
             raise HTTPException(status_code=404, detail="Backup archive not found")
-        archive_path = _resolve_within(b_dir, name)
+        archive_path = _find_by_name(b_dir, name, "minder-*.tar.gz")
         if archive_path is None or not archive_path.is_file():
             raise HTTPException(status_code=404, detail="Backup archive not found")
         if body.get("confirm_filename") != name:
