@@ -37,6 +37,14 @@ COMPOSE_ENV_FILE = REPO_ROOT / "docker" / ".env"
 # enabled, so the default start path + setup gate stay byte-identical. See
 # docs/architecture/bundles.md.
 BUNDLES_STATE = REPO_ROOT / "bundles.state.json"
+# Backup/restore job queue (#870): the plugin-registry web UI can't reach Docker
+# directly (docker-socket-proxy's allowlist deliberately excludes container-create
+# ops, #377/#378 — and `restore` needs `docker compose up`, which IS one). Instead
+# the registry only writes/reads small JSON job files here (bind-mounted rw); a
+# host-side cron job (`python -m scripts.setup backup-watch`, see backup_jobs.py)
+# picks them up and runs the real backup.py/restore.py with the same host-level
+# trust the CLI has always had. Secret-free (job metadata only, never credentials).
+BACKUP_JOBS_DIR = REPO_ROOT / "backup-jobs"
 # telegraf.conf: the tracked TEMPLATE is the seed; the gitignored RUNTIME copy is
 # what both containers mount, so the telegraf plugin writes its managed region to
 # the runtime file and never dirties the repo. Mirrors ENV_EXAMPLE→COMPOSE_ENV_FILE.

@@ -164,6 +164,24 @@ def ensure_bundles_state_file() -> None:
         pass
 
 
+def ensure_backup_jobs_dir() -> None:
+    """Seed ``backup-jobs/`` (#870) when absent, so it can be bind-mounted RW into
+    the registry for the backup/restore job-queue endpoints. Like
+    ensure_bundles_state_file, MUST run before ``compose up`` — a missing bind-mount
+    source becomes a docker-created empty directory owned by whatever ran `up`
+    (usually root), which the non-root registry appuser then can't write into.
+    Mode 0777 (not 0666 — this is a directory, needs the execute/traverse bit too)
+    because job files are secret-free JSON metadata (id/action/archive name/status
+    timestamps), never credentials. Idempotent: chmod runs every time so a stale
+    mode self-heals on the next `up`, same as the bundles-state file."""
+    jobs_dir = config.BACKUP_JOBS_DIR
+    try:
+        jobs_dir.mkdir(parents=True, exist_ok=True)
+        jobs_dir.chmod(0o777)
+    except OSError:
+        pass
+
+
 _OIDC_ISSUER_KEY = (
     config.REPO_ROOT
     / "docker"
@@ -689,6 +707,7 @@ def prepare_env() -> None:
     sync_compose_env()
     sync_telegraf_config()
     ensure_bundles_state_file()
+    ensure_backup_jobs_dir()
     ensure_oidc_issuer_key()
     render_authelia_config()
     render_users_database()

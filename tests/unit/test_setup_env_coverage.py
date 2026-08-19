@@ -216,6 +216,54 @@ def test_ensure_bundles_state_file_tolerates_oserror(monkeypatch, tmp_path):
     env.ensure_bundles_state_file()  # must not raise
 
 
+# ── ensure_backup_jobs_dir ───────────────────────────────────────────────────────
+
+
+def test_ensure_backup_jobs_dir_creates_when_absent(monkeypatch, tmp_path):
+    jobs_dir = tmp_path / "backup-jobs"
+    monkeypatch.setattr(env.config, "BACKUP_JOBS_DIR", jobs_dir)
+
+    env.ensure_backup_jobs_dir()
+
+    assert jobs_dir.is_dir()
+
+
+@_posix_perms_only
+def test_ensure_backup_jobs_dir_is_world_writable(monkeypatch, tmp_path):
+    jobs_dir = tmp_path / "backup-jobs"
+    monkeypatch.setattr(env.config, "BACKUP_JOBS_DIR", jobs_dir)
+
+    env.ensure_backup_jobs_dir()
+
+    assert (jobs_dir.stat().st_mode & 0o777) == 0o777
+
+
+def test_ensure_backup_jobs_dir_is_idempotent_over_existing_contents(
+    monkeypatch, tmp_path
+):
+    jobs_dir = tmp_path / "backup-jobs"
+    jobs_dir.mkdir()
+    existing = jobs_dir / "job-1.json"
+    existing.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(env.config, "BACKUP_JOBS_DIR", jobs_dir)
+
+    env.ensure_backup_jobs_dir()
+
+    assert existing.read_text(encoding="utf-8") == "{}"
+
+
+def test_ensure_backup_jobs_dir_tolerates_oserror(monkeypatch, tmp_path):
+    jobs_dir = tmp_path / "nonexistent-parent" / "backup-jobs"
+    monkeypatch.setattr(env.config, "BACKUP_JOBS_DIR", jobs_dir)
+
+    def _boom(self, *a, **k):
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(env.Path, "mkdir", _boom)
+
+    env.ensure_backup_jobs_dir()  # must not raise
+
+
 # ── ensure_oidc_issuer_key ─────────────────────────────────────────────────────
 
 

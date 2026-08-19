@@ -10,6 +10,7 @@ setup.bash.sh). An unknown command errors + prints help, mirroring the bash
 import sys
 
 from . import backup as backup_module
+from . import backup_jobs as backup_jobs_module
 from . import bundles as bundles_module
 from . import config
 from . import doctor as doctor_module
@@ -154,6 +155,12 @@ def main(argv: list[str]) -> int:
         pos = _positional(argv)
         archive = pos[1] if len(pos) > 1 else ""
         return restore_module.run(archive)
+    if cmd == "backup-watch":
+        # Post-port verb (#870, no bash equivalent): process pending backup/restore
+        # jobs the web UI enqueued into config.BACKUP_JOBS_DIR. Cron-invoked
+        # one-shot (see scripts/dev/README.md), not a daemon — mirrors
+        # scheduled-backup.ps1's shape.
+        return backup_jobs_module.run_pending()
     if cmd == "doctor":
         # setup.sh: cmd_doctor (no args).
         return doctor_module.run()
