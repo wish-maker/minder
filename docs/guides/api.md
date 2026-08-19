@@ -86,7 +86,10 @@ The gateway forwards these prefixes to the corresponding backend service:
 - `/v1/rag/*`         → RAG pipeline
 - `/v1/models/*`      → model management
 - `/v1/marketplace/*` → marketplace
-- `/v1/graph*`        → graph-rag
+- `/v1/graph/*`       → marketplace (plugin dependency graph — NOT graph-rag)
+- `/v1/graph-rag/*`   → graph-rag (its own routes are unprefixed, e.g. `/v1/graph/stats`
+  becomes `/v1/graph-rag/graph/stats` through the gateway — the `graph-rag/` segment
+  exists specifically so this doesn't collide with the line above)
 - `/v1/tts/*`, `/v1/stt/*` → TTS/STT
 
 #### Status (`/v1/status`)
@@ -347,11 +350,17 @@ GET /health
 
 #### Endpoints
 ```http
-POST /extract           # extract entities from text
-POST /construct-graph   # build/update the knowledge graph
-POST /retrieve          # graph-based retrieval
-POST /entity-context    # context for a given entity
+POST /v1/extract           # extract entities from text
+POST /v1/construct-graph   # build/update the knowledge graph
+POST /v1/retrieve          # graph-based retrieval
+POST /v1/entity-context    # context for a given entity
+GET  /v1/graph/stats       # node/relationship/entity-type counts
+GET  /v1/graph/documents   # list Document nodes in the graph
 ```
+> Unversioned aliases (`/extract`, `/construct-graph`, etc., no `/v1`) still work
+> for backward compatibility. Through the gateway, every one of these is reached
+> at `/v1/graph-rag/<path>` (e.g. `/v1/graph-rag/graph/stats`) — see the
+> Proxied routes note in the API Gateway section above for why.
 
 ---
 
