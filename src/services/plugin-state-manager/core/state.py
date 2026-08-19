@@ -9,7 +9,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import asyncpg
+import httpx
 from models.plugin_state import LicenseTier, PluginState
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,35 @@ class RequiredPluginError(Exception):
 
 class PluginNotFoundError(Exception):
     """Requested plugin has no state row"""
+
+
+async def plugin_exists_in_registry(plugin_name: str) -> bool:
+    """Whether ``plugin_name`` is a real, currently-registered plugin according to
+    plugin-registry itself (#751).
+
+    A marketplace-installed plugin that isn't listed in default_plugins.yml never
+    gets a bootstrap-created plugin_states row, so its first enable() call always
+    raises PluginNotFoundError -- 404ing forever even though plugin-registry has it
+    installed and running. The fix is to let enable_plugin_endpoint retry with
+    allow_create=True in that case, but ONLY after confirming with plugin-registry
+    that the plugin genuinely exists -- without this check, any caller could
+    enable() an arbitrary made-up plugin_name and get a real plugin_states row
+    materialized for a plugin that exists nowhere, which is exactly the "must 404,
+    not silently create a phantom plugin" guarantee allow_create=False was added
+    to provide.
+
+    Deliberately does NOT catch connection errors -- the caller must turn those
+    into a 503 (shared.errors.backend_http_error), never treat "plugin-registry is
+    unreachable" the same as "this plugin doesn't exist" (a false negative here
+    would incorrectly 404 a real plugin during a plugin-registry outage/restart).
+    """
+    url = f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/{plugin_name}"
+    # CATALOG_HTTP_TIMEOUT is really "fast internal read" timeout, not literally
+    # marketplace-catalog-only -- reused here rather than adding a near-duplicate
+    # setting for what's the same kind of call (a quick existence lookup).
+    async with httpx.AsyncClient(timeout=settings.CATALOG_HTTP_TIMEOUT) as client:
+        response = await client.get(url)
+    return response.status_code == 200
 
 
 async def get_plugin_state(

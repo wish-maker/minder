@@ -205,17 +205,85 @@ def test_enable_plugin_endpoint_returns_updated_state(state_mod, monkeypatch):
     assert resp.json()["state"] == "enabled"
 
 
-def test_enable_plugin_endpoint_maps_not_found_to_404(state_mod, monkeypatch):
-    async def fake_enable(conn, plugin_name, reason):
-        raise state_mod.PluginNotFoundError(f"{plugin_name} not found")
+def test_enable_plugin_endpoint_maps_not_found_to_404_when_registry_also_lacks_it(
+    state_mod, monkeypatch
+):
+    """A plugin unknown to BOTH plugin-state-manager and plugin-registry stays a
+    plain 404 -- the #751 retry only kicks in when plugin-registry confirms the
+    plugin genuinely exists. fake_enable deliberately SUCCEEDS when
+    allow_create=True is passed (mirroring core.state.enable_plugin's real
+    behavior, which doesn't itself know or care about registry existence) --
+    so this test only passes if the route's own existence-check guard is what
+    stops the retry from ever happening, not an accident of the mock."""
+    calls = []
+
+    async def fake_enable(conn, plugin_name, reason, allow_create=False):
+        calls.append(allow_create)
+        if not allow_create:
+            raise state_mod.PluginNotFoundError(f"{plugin_name} not found")
+        return _state_row(plugin_name=plugin_name, state="enabled")
+
+    async def fake_exists(plugin_name):
+        return False
 
     monkeypatch.setattr(state_mod, "enable_plugin", fake_enable)
+    monkeypatch.setattr(state_mod, "plugin_exists_in_registry", fake_exists)
 
     resp = _client_with_service_auth(state_mod.router).post(
         "/state/ghost/enable", json={}
     )
 
     assert resp.status_code == 404
+    assert calls == [False]  # retry with allow_create=True must never happen
+
+
+def test_enable_plugin_endpoint_auto_creates_when_registry_confirms_existence(
+    state_mod, monkeypatch
+):
+    """#751: a plugin with no state row yet, but that plugin-registry confirms is
+    real, gets a retry with allow_create=True instead of a permanent 404."""
+    calls = []
+
+    async def fake_enable(conn, plugin_name, reason, allow_create=False):
+        calls.append(allow_create)
+        if not allow_create:
+            raise state_mod.PluginNotFoundError(f"{plugin_name} not found")
+        return _state_row(plugin_name=plugin_name, state="enabled")
+
+    async def fake_exists(plugin_name):
+        assert plugin_name == "weather-plus"
+        return True
+
+    monkeypatch.setattr(state_mod, "enable_plugin", fake_enable)
+    monkeypatch.setattr(state_mod, "plugin_exists_in_registry", fake_exists)
+
+    resp = _client_with_service_auth(state_mod.router).post(
+        "/state/weather-plus/enable", json={}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["state"] == "enabled"
+    assert calls == [False, True]  # first call bare, retry with allow_create=True
+
+
+def test_enable_plugin_endpoint_503s_when_registry_unreachable(state_mod, monkeypatch):
+    """Plugin-registry being unreachable during the existence check must be a
+    retryable 503, never silently treated as either 'exists' or 'doesn't exist'."""
+
+    async def fake_enable(conn, plugin_name, reason, allow_create=False):
+        raise state_mod.PluginNotFoundError(f"{plugin_name} not found")
+
+    async def fake_exists(plugin_name):
+        raise ConnectionError("connection refused")
+
+    monkeypatch.setattr(state_mod, "enable_plugin", fake_enable)
+    monkeypatch.setattr(state_mod, "plugin_exists_in_registry", fake_exists)
+
+    resp = _client_with_service_auth(state_mod.router).post(
+        "/state/weather-plus/enable", json={}
+    )
+
+    assert resp.status_code == 503
 
 
 def test_enable_plugin_endpoint_maps_state_transition_error_to_409(
