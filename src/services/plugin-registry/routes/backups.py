@@ -40,7 +40,32 @@ _JOBS_DIR = Path("/app/backup-jobs")
 # between an admin-only-gated request and an arbitrary filesystem path.
 _ARCHIVE_NAME_RE = re.compile(r"^minder-\d{8}-\d{6}\.tar\.gz$")
 
+# job_id is always a uuid.uuid4().hex generated server-side (see _write_job's
+# callers) -- this is the analogous allowlist for the job-lookup path, same
+# rationale as _ARCHIVE_NAME_RE above.
+_JOB_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
 _MAX_JOBS_LISTED = 50
+
+
+def _resolve_within(base_dir: Path, filename: str) -> "Path | None":
+    """Join ``filename`` onto ``base_dir`` and verify the result actually
+    stays inside it, returning None otherwise.
+
+    Callers already validate ``filename`` against a fixed-format allowlist
+    regex (no ``/``, no ``..``) before this runs, which already makes
+    traversal impossible -- but CodeQL's path-injection dataflow analysis
+    doesn't credit a regex match as a sanitizer on its own. This is the
+    resolve+containment check its own query documentation recommends, so it
+    both clears that alert and adds real defense-in-depth if a future caller
+    ever reuses these helpers without an equivalent regex guard.
+    """
+    candidate = (base_dir / filename).resolve()
+    try:
+        candidate.relative_to(base_dir.resolve())
+    except ValueError:
+        return None
+    return candidate
 
 
 def _now_iso() -> str:
@@ -82,7 +107,11 @@ def _write_job(jobs_dir: Path, job: dict) -> None:
 
 
 def _read_job(jobs_dir: Path, job_id: str) -> "dict | None":
-    path = jobs_dir / f"{job_id}.json"
+    if not _JOB_ID_RE.match(job_id):
+        return None
+    path = _resolve_within(jobs_dir, f"{job_id}.json")
+    if path is None:
+        return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -157,7 +186,8 @@ def build_backups_router(*, backups_dir=None, jobs_dir=None) -> APIRouter:
         control (the admin JWT already authorizes the action)."""
         if not _ARCHIVE_NAME_RE.match(name):
             raise HTTPException(status_code=404, detail="Backup archive not found")
-        if not (b_dir / name).is_file():
+        archive_path = _resolve_within(b_dir, name)
+        if archive_path is None or not archive_path.is_file():
             raise HTTPException(status_code=404, detail="Backup archive not found")
         if body.get("confirm_filename") != name:
             raise HTTPException(

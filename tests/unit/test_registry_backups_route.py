@@ -142,6 +142,34 @@ def test_get_unknown_job_is_404(tmp_path):
     assert client.get("/v1/backups/jobs/does-not-exist").status_code == 404
 
 
+def test_get_job_rejects_path_traversal_in_job_id(tmp_path):
+    client, _, jobs_dir = _client(tmp_path)
+    # A real file the traversal attempts to reach, one level above jobs_dir.
+    secret = jobs_dir.parent / "secret.json"
+    secret.write_text('{"leaked": true}', encoding="utf-8")
+    r = client.get("/v1/backups/jobs/..%2Fsecret")
+    assert r.status_code == 404
+
+
+def test_read_job_rejects_path_traversal_in_job_id_directly(tmp_path):
+    """FastAPI's default (non-``:path``) converter already rejects a `/` in
+    a single path segment, so an HTTP-level request can never actually smuggle
+    ``../`` into ``job_id`` -- the test above 404s for that reason alone, not
+    because of _read_job's own validation. CodeQL's dataflow analysis doesn't
+    know about that routing-level restriction, and neither would any future
+    caller of _read_job that isn't behind this same route, so this exercises
+    the helper directly to prove IT, not just the router, rejects traversal.
+    """
+    mod = _load_route_module()
+    jobs_dir = tmp_path / "backup-jobs"
+    jobs_dir.mkdir()
+    secret = tmp_path / "secret.json"
+    secret.write_text('{"leaked": true}', encoding="utf-8")
+
+    assert mod._read_job(jobs_dir, "../secret") is None
+    assert mod._read_job(jobs_dir, "not-32-hex-chars") is None
+
+
 # ── POST /v1/backups/{name}/restore ──────────────────────────────────────────
 
 
