@@ -10,6 +10,7 @@ import { AuthCallbackPage } from "./pages/AuthCallbackPage";
 import { AvailableBundlesPage } from "./pages/AvailableBundlesPage";
 import { AvailablePluginsPage } from "./pages/AvailablePluginsPage";
 import { AvailableToolsPage } from "./pages/AvailableToolsPage";
+import { BackupsPage } from "./pages/BackupsPage";
 import { GraphExplorerPage } from "./pages/GraphExplorerPage";
 import { HomePage } from "./pages/HomePage";
 import { InstalledBundlesPage } from "./pages/InstalledBundlesPage";
@@ -112,6 +113,7 @@ export function App() {
                 <Route path="/platform" element={<ModelManagementPage />} />
                 <Route path="/platform/status" element={<StatusPage />} />
                 <Route path="/platform/voice" element={<VoicePage />} />
+                <Route path="/platform/backups" element={<BackupsPage />} />
 
                 {/* Old flat/pre-restructure routes, kept as redirects so existing
                   bookmarks/links still land somewhere sensible instead of the
