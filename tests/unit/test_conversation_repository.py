@@ -43,10 +43,12 @@ ConversationRepository = cr.ConversationRepository
 
 
 class _FakeConn:
-    """Simulates a single asyncpg connection over an in-memory turn list."""
+    """Simulates a single asyncpg connection over an in-memory turn list and
+    an in-memory conversation_shares mapping (conversation_id -> owner_user_id)."""
 
-    def __init__(self, turns, execute_result="", raises=None):
+    def __init__(self, turns, execute_result="", raises=None, shares=None):
         self._turns = turns
+        self._shares = dict(shares or {})
         self.last_query = ""
         self.execute_calls = []
         self._execute_result = execute_result
@@ -77,18 +79,49 @@ class _FakeConn:
             for t in rows[:max_turns]
         ]
 
+    async def fetchrow(self, query, *params):
+        self.last_query = query
+        if self._raises:
+            raise self._raises
+        if "conversation_shares" in query:
+            (conversation_id,) = params
+            owner = self._shares.get(conversation_id)
+            return {"owner_user_id": owner} if owner is not None else None
+        # is_owner's existence check against conversation_turns.
+        user_id, conversation_id = params
+        match = any(
+            t["user_id"] == user_id and t["conversation_id"] == conversation_id
+            for t in self._turns
+        )
+        return {"1": 1} if match else None
+
     async def execute(self, query, *params):
         if self._raises:
             raise self._raises
         self.last_query = query
         self.execute_calls.append(params)
+        if "INSERT INTO conversation_shares" in query:
+            conversation_id, owner_user_id = params
+            self._shares.setdefault(conversation_id, owner_user_id)
+        elif "INSERT INTO conversation_turns" in query:
+            user_id, conversation_id, question, answer, timestamp, metadata = params
+            self._turns.append(
+                {
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "question": question,
+                    "answer": answer,
+                    "timestamp": timestamp,
+                    "metadata": json.loads(metadata),
+                }
+            )
         return self._execute_result
 
 
 class _FakePool:
-    def __init__(self, turns=None, execute_result="", raises=None):
+    def __init__(self, turns=None, execute_result="", raises=None, shares=None):
         self._conn = _FakeConn(
-            turns or [], execute_result=execute_result, raises=raises
+            turns or [], execute_result=execute_result, raises=raises, shares=shares
         )
 
     def acquire(self):
@@ -248,6 +281,111 @@ class TestClearConversation:
         repo = ConversationRepository(pool)
         with pytest.raises(RuntimeError, match="Database operation failed"):
             asyncio.run(repo.clear_conversation("u", "c"))
+
+
+class TestSharing:
+    """#875: conversations are per-user by default -- these cover the explicit
+    opt-in that lets a second user continue one anyway."""
+
+    def test_is_owner_true_when_user_has_a_turn_in_this_conversation(self):
+        pool = _FakePool(_mk_turns(1))  # user_id="u", conversation_id="c"
+        repo = ConversationRepository(pool)
+        assert asyncio.run(repo.is_owner("u", "c")) is True
+
+    def test_is_owner_false_for_a_different_user(self):
+        pool = _FakePool(_mk_turns(1))
+        repo = ConversationRepository(pool)
+        assert asyncio.run(repo.is_owner("someone-else", "c")) is False
+
+    def test_is_owner_false_for_empty_ids(self):
+        pool = _FakePool(_mk_turns(1))
+        repo = ConversationRepository(pool)
+        assert asyncio.run(repo.is_owner("", "c")) is False
+        assert asyncio.run(repo.is_owner("u", "")) is False
+
+    def test_share_conversation_by_the_owner_succeeds(self):
+        pool = _FakePool(_mk_turns(1))
+        repo = ConversationRepository(pool)
+        assert asyncio.run(repo.share_conversation("u", "c")) is True
+        assert pool._conn._shares["c"] == "u"
+
+    def test_share_conversation_by_a_non_owner_raises_permission_error(self):
+        pool = _FakePool(_mk_turns(1))
+        repo = ConversationRepository(pool)
+        with pytest.raises(PermissionError):
+            asyncio.run(repo.share_conversation("intruder", "c"))
+        assert "c" not in pool._conn._shares
+
+    def test_share_conversation_is_idempotent(self):
+        pool = _FakePool(_mk_turns(1), shares={"c": "u"})
+        repo = ConversationRepository(pool)
+        # Already shared by "u" -- sharing again by the same owner is a no-op,
+        # not an error.
+        assert asyncio.run(repo.share_conversation("u", "c")) is True
+        assert pool._conn._shares["c"] == "u"
+
+    def test_share_conversation_rejects_empty_ids(self):
+        repo = ConversationRepository(_FakePool())
+        with pytest.raises(ValueError, match="user_id cannot be empty"):
+            asyncio.run(repo.share_conversation("", "c"))
+        with pytest.raises(ValueError, match="conversation_id cannot be empty"):
+            asyncio.run(repo.share_conversation("u", ""))
+
+    def test_resolve_storage_user_id_defaults_to_the_requester_when_unshared(self):
+        pool = _FakePool()
+        repo = ConversationRepository(pool)
+        resolved = asyncio.run(repo.resolve_storage_user_id("alice", "conv1"))
+        assert resolved == "alice"
+
+    def test_resolve_storage_user_id_returns_the_owner_once_shared(self):
+        pool = _FakePool(shares={"conv1": "alice"})
+        repo = ConversationRepository(pool)
+        # bob is asking, but conv1 was shared by alice -- his turns must land
+        # in (and read from) alice's bucket so they both see the same history.
+        resolved = asyncio.run(repo.resolve_storage_user_id("bob", "conv1"))
+        assert resolved == "alice"
+
+    def test_two_users_histories_stay_separate_until_shared(self):
+        """The core #875 fix, end to end through the repository: alice's and
+        bob's turns under the SAME conversation_id never mix unless alice
+        explicitly shares it."""
+        pool = _FakePool()
+        repo = ConversationRepository(pool)
+
+        alice_id = asyncio.run(
+            repo.resolve_storage_user_id("alice", "conv-shared-test")
+        )
+        asyncio.run(
+            repo.store_turn(alice_id, "conv-shared-test", "alice's question", "answer")
+        )
+        bob_id = asyncio.run(repo.resolve_storage_user_id("bob", "conv-shared-test"))
+        asyncio.run(
+            repo.store_turn(bob_id, "conv-shared-test", "bob's question", "answer")
+        )
+
+        # Unshared: alice's own lookup must not see bob's turn, and vice versa.
+        alice_history = asyncio.run(repo.get_history("alice", "conv-shared-test"))
+        assert [t["question"] for t in alice_history] == ["alice's question"]
+        bob_history = asyncio.run(repo.get_history("bob", "conv-shared-test"))
+        assert [t["question"] for t in bob_history] == ["bob's question"]
+
+        # alice shares it; bob's turns from now on land in alice's bucket, and
+        # he can see her (and now their shared) history.
+        asyncio.run(repo.share_conversation("alice", "conv-shared-test"))
+        bob_id_after_share = asyncio.run(
+            repo.resolve_storage_user_id("bob", "conv-shared-test")
+        )
+        assert bob_id_after_share == "alice"
+        asyncio.run(
+            repo.store_turn(
+                bob_id_after_share, "conv-shared-test", "bob's follow-up", "answer"
+            )
+        )
+        shared_history = asyncio.run(repo.get_history("alice", "conv-shared-test"))
+        assert [t["question"] for t in shared_history] == [
+            "alice's question",
+            "bob's follow-up",
+        ]
 
 
 class TestCleanupExpired:

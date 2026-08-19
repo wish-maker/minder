@@ -106,7 +106,7 @@ def _components(**overrides):
     return runner.RagComponents(**defaults)
 
 
-async def _run(components, request=None, generation_config=None):
+async def _run(components, request=None, generation_config=None, user_id="anonymous"):
     return await runner.run_query(
         pipeline={"knowledge_base_ids": ["kb1"]},
         pipeline_id="pipe1",
@@ -114,6 +114,7 @@ async def _run(components, request=None, generation_config=None):
         llm_model="llama3.2",
         generation_config=generation_config,
         components=components,
+        user_id=user_id,
     )
 
 
@@ -305,6 +306,9 @@ class _FakeConversationRepo:
         self._context = context
         self.stored = []
 
+    async def resolve_storage_user_id(self, requesting_user_id, conversation_id):
+        return requesting_user_id
+
     async def build_context(self, user_id, conversation_id, max_turns):
         return self._context
 
@@ -326,6 +330,9 @@ async def test_conversation_context_is_prepended_and_turn_is_stored():
 
 
 class _RaisingConversationRepo:
+    async def resolve_storage_user_id(self, requesting_user_id, conversation_id):
+        raise RuntimeError("db down")
+
     async def build_context(self, **kwargs):
         raise RuntimeError("db down")
 
@@ -341,6 +348,96 @@ async def test_conversation_repo_failures_are_swallowed_not_raised():
 
     # Both build_context and store_turn raised -- run_query must still complete.
     assert result["answer"] is not None
+
+
+class _BucketConversationRepo:
+    """Models real per-user storage buckets + optional sharing, so tests here
+    can prove #875's actual isolation/sharing semantics through run_query --
+    not just that build_context/store_turn get *called*."""
+
+    def __init__(self):
+        self.buckets = {}  # storage_user_id -> list of {"question", "answer"}
+        self.shares = {}  # conversation_id -> owner_user_id
+
+    async def resolve_storage_user_id(self, requesting_user_id, conversation_id):
+        return self.shares.get(conversation_id, requesting_user_id)
+
+    async def build_context(self, user_id, conversation_id, max_turns):
+        turns = self.buckets.get(user_id, [])
+        return "\n".join(f"Q:{t['question']} A:{t['answer']}" for t in turns)
+
+    async def store_turn(self, user_id, conversation_id, question, answer, **kwargs):
+        self.buckets.setdefault(user_id, []).append(
+            {"question": question, "answer": answer}
+        )
+
+    def share(self, owner_user_id, conversation_id):
+        self.shares[conversation_id] = owner_user_id
+
+
+@pytest.mark.asyncio
+async def test_two_users_conversation_histories_stay_separate_by_default():
+    """The core #875 fix: alice and bob using the SAME conversation_id must
+    not see each other's turns unless alice explicitly shares it."""
+    ollama = _FakeOllama()
+    repo = _BucketConversationRepo()
+    components = _components(ollama_manager=ollama, conversation_repository=repo)
+
+    await _run(
+        components,
+        _Request(conversation_id="conv-x", question="alice's question"),
+        user_id="alice",
+    )
+    await _run(
+        components,
+        _Request(conversation_id="conv-x", question="bob's question"),
+        user_id="bob",
+    )
+
+    # bob's turn must land in his own bucket, not alice's.
+    assert repo.buckets["alice"] == [
+        {"question": "alice's question", "answer": ollama._text}
+    ]
+    assert repo.buckets["bob"] == [
+        {"question": "bob's question", "answer": ollama._text}
+    ]
+
+    # A third question from alice must not see bob's turn in her context.
+    await _run(
+        components,
+        _Request(conversation_id="conv-x", question="alice again"),
+        user_id="alice",
+    )
+    assert "bob's question" not in ollama.last_context
+
+
+@pytest.mark.asyncio
+async def test_a_shared_conversation_is_reachable_by_a_second_user():
+    ollama = _FakeOllama()
+    repo = _BucketConversationRepo()
+    components = _components(ollama_manager=ollama, conversation_repository=repo)
+
+    await _run(
+        components,
+        _Request(conversation_id="conv-shared", question="alice's question"),
+        user_id="alice",
+    )
+    repo.share("alice", "conv-shared")
+
+    await _run(
+        components,
+        _Request(conversation_id="conv-shared", question="bob's follow-up"),
+        user_id="bob",
+    )
+
+    # Once shared, bob's turn lands in alice's bucket, and he saw her prior
+    # turn as context.
+    assert "alice's question" in ollama.last_context
+    assert repo.buckets["alice"] == [
+        {"question": "alice's question", "answer": ollama._text},
+        {"question": "bob's follow-up", "answer": ollama._text},
+    ]
+    assert "bob" not in repo.buckets
 
 
 # --- Self-RAG ------------------------------------------------------------------

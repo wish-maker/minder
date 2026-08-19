@@ -24,8 +24,13 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-# Conversational RAG is single-user today (see #45 / TODO in conversation repo).
-_DEFAULT_USER = "default"
+# Conversation history is scoped to the real authenticated user by default, with
+# an explicit opt-in to share a conversation_id as a collaborative thread (#875)
+# -- see ConversationRepository.resolve_storage_user_id/share_conversation. The
+# caller (routes/rag.py) passes current_user["sub"] as `user_id` below, which is
+# "internal-service" for the service-to-service token branch of
+# get_current_user_or_service -- a shared bucket for those is fine, they're not
+# real end users needing personal history.
 _MAX_TURNS = 3
 
 
@@ -53,12 +58,17 @@ class RagComponents:
     gen_timer: Any = None  # prometheus histogram (labels(...).time()) or None
 
 
-async def _load_conversation_context(repo, conversation_id) -> str:
+async def _load_conversation_context(repo, conversation_id, requesting_user_id) -> str:
     if not (conversation_id and repo):
         return ""
     try:
+        storage_user_id = await repo.resolve_storage_user_id(
+            requesting_user_id, conversation_id
+        )
         ctx = await repo.build_context(
-            user_id=_DEFAULT_USER, conversation_id=conversation_id, max_turns=_MAX_TURNS
+            user_id=storage_user_id,
+            conversation_id=conversation_id,
+            max_turns=_MAX_TURNS,
         )
         if ctx:
             logger.info(f"🔄 Loaded conversation context for {conversation_id}")
@@ -71,6 +81,7 @@ async def _load_conversation_context(repo, conversation_id) -> str:
 async def _store_conversation_turn(
     repo,
     conversation_id,
+    requesting_user_id,
     pipeline_id,
     question,
     answer,
@@ -81,8 +92,11 @@ async def _store_conversation_turn(
     if not (conversation_id and repo):
         return
     try:
+        storage_user_id = await repo.resolve_storage_user_id(
+            requesting_user_id, conversation_id
+        )
         await repo.store_turn(
-            user_id=_DEFAULT_USER,
+            user_id=storage_user_id,
             conversation_id=conversation_id,
             question=question,
             answer=answer,
@@ -107,8 +121,18 @@ async def run_query(
     llm_model: str,
     generation_config: Optional[Dict[str, Any]],
     components: RagComponents,
+    user_id: str = "anonymous",
 ) -> Dict[str, Any]:
-    """Execute one RAG query. Returns a dict of QueryResponse fields."""
+    """Execute one RAG query. Returns a dict of QueryResponse fields.
+
+    ``user_id`` (#875) is the REQUESTING caller's identity (the JWT `sub`, or
+    "anonymous" if a caller doesn't pass one -- kept as a safe default rather
+    than a required kwarg so any other/future caller of run_query that doesn't
+    care about conversation scoping isn't forced to thread one through). It's
+    resolved against ConversationRepository.resolve_storage_user_id, which
+    redirects to the conversation's owner if it's been explicitly shared,
+    otherwise scopes the conversation to this caller alone.
+    """
     question = request.question
     method = (getattr(request, "method", None) or "standard").lower()
     if method not in VALID_RAG_METHODS:
@@ -235,7 +259,9 @@ async def run_query(
 
     # Conversational RAG context.
     conv = await _load_conversation_context(
-        components.conversation_repository, getattr(request, "conversation_id", None)
+        components.conversation_repository,
+        getattr(request, "conversation_id", None),
+        user_id,
     )
     combined_context = ""
     if conv:
@@ -336,6 +362,7 @@ async def run_query(
     await _store_conversation_turn(
         components.conversation_repository,
         getattr(request, "conversation_id", None),
+        user_id,
         pipeline_id,
         question,
         answer_text,

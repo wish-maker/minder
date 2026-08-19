@@ -272,6 +272,83 @@ class ConversationRepository:
             logger.error(f"❌ Failed to clear conversation: {e}")
             raise RuntimeError(f"Database operation failed: {str(e)}")
 
+    async def is_owner(self, user_id: str, conversation_id: str) -> bool:
+        """Whether ``user_id`` has ever stored a turn under this conversation_id
+        directly (i.e. asked the first/any question in it under their own
+        identity, not via a share). Used to gate ``share_conversation`` -- only
+        someone who actually owns a conversation can mark it shared (#875)."""
+        if not user_id or not conversation_id:
+            return False
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT 1 FROM conversation_turns
+                WHERE user_id = $1 AND conversation_id = $2
+                LIMIT 1
+                """,
+                user_id,
+                conversation_id,
+            )
+        return row is not None
+
+    async def share_conversation(self, user_id: str, conversation_id: str) -> bool:
+        """Mark a conversation as shared so any authenticated user can continue
+        it (#875's optional half -- default scoping is per-user, this is the
+        explicit opt-in). Only the actual owner (see ``is_owner``) may do this.
+
+        Returns:
+            True once shared (idempotent -- sharing an already-shared
+            conversation is a no-op, not an error).
+
+        Raises:
+            PermissionError: ``user_id`` does not own ``conversation_id``.
+            ValueError: If required fields invalid.
+        """
+        if not user_id:
+            raise ValueError("user_id cannot be empty")
+        if not conversation_id:
+            raise ValueError("conversation_id cannot be empty")
+
+        if not await self.is_owner(user_id, conversation_id):
+            raise PermissionError(
+                f"user {user_id!r} does not own conversation {conversation_id!r}"
+            )
+
+        try:
+            async with self.db_pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO conversation_shares (conversation_id, owner_user_id)
+                    VALUES ($1, $2)
+                    ON CONFLICT (conversation_id) DO NOTHING
+                    """,
+                    conversation_id,
+                    user_id,
+                )
+            logger.info(f"🔗 Shared conversation: {user_id}:{conversation_id}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to share conversation: {e}")
+            raise RuntimeError(f"Database operation failed: {str(e)}")
+
+    async def resolve_storage_user_id(
+        self, requesting_user_id: str, conversation_id: str
+    ) -> str:
+        """The actual user_id a turn should be read from / written to for this
+        conversation_id (#875): the conversation's owner if it has been
+        explicitly shared (so every participant's turns land in, and are read
+        from, the same bucket), otherwise the requester's own identity
+        (private, per-user history -- the default).
+        """
+        if not conversation_id:
+            return requesting_user_id
+        async with self.db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT owner_user_id FROM conversation_shares WHERE conversation_id = $1",
+                conversation_id,
+            )
+        return row["owner_user_id"] if row is not None else requesting_user_id
+
     async def cleanup_expired(self) -> int:
         """
         Clean up expired conversations (older than TTL)

@@ -827,6 +827,7 @@ async def query_rag_pipeline(
             ),
             generation_config=pipeline.get("generation_config", {}),
             components=components,
+            user_id=current_user.get("sub", "anonymous"),
         )
     except state.GenerationError as e:
         # LLM backend failed to produce an answer — surface a real 503 rather than a
@@ -852,3 +853,47 @@ async def query_rag_pipeline(
         )
     result["method_details"] = method_details
     return QueryResponse(**result)
+
+
+@router.post(
+    "/v1/pipeline/{pipeline_id}/conversations/{conversation_id}/share",
+    tags=["Pipeline"],
+)
+async def share_conversation(
+    pipeline_id: str,
+    conversation_id: str,
+    current_user: dict = Depends(get_current_user_or_service),
+):
+    """Mark a conversation as a shared/collaborative thread (#875's optional
+    half of the per-user-by-default decision) -- after this, ANY authenticated
+    user who has (or is given) this conversation_id can continue it and see
+    the same history, instead of each caller's own private per-user history.
+
+    ``pipeline_id`` isn't actually needed by the share logic itself
+    (conversation_turns/conversation_shares are keyed by conversation_id
+    alone, not pipeline) -- kept in the URL purely for shape-consistency with
+    the query endpoint above, and it doubles as a cheap existence check.
+
+    Only the conversation's actual owner (whoever already has a turn stored
+    under this conversation_id) may share it -- prevents an arbitrary caller
+    from opting someone else's private conversation into being shared.
+    """
+    if pipeline_id not in state.rag_pipelines:
+        raise HTTPException(status_code=404, detail="RAG pipeline not found")
+    if state.conversation_repository is None:
+        raise HTTPException(
+            status_code=503, detail="Conversation history is not available"
+        )
+    try:
+        await state.conversation_repository.share_conversation(
+            user_id=current_user.get("sub", "anonymous"),
+            conversation_id=conversation_id,
+        )
+    except PermissionError:
+        # Same message regardless of "doesn't exist" vs "exists but isn't
+        # yours" -- no reason to let a caller distinguish the two.
+        raise HTTPException(
+            status_code=403,
+            detail="You can only share a conversation you started yourself",
+        )
+    return {"conversation_id": conversation_id, "shared": True}

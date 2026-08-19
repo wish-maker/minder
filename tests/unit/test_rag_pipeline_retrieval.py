@@ -2327,6 +2327,7 @@ async def test_query_pipeline_selects_parent_context_when_requested(monkeypatch)
             models.QueryRequest(
                 question="hi?", parent_context=True, hybrid=True, method="raptor"
             ),
+            current_user={"sub": "u1"},
         )
 
     assert _unwrap(captured["retrieve_fn"]) is rag_routes.retrieve_parent_child
@@ -2352,7 +2353,9 @@ async def test_query_pipeline_selects_hybrid_when_available(monkeypatch):
         rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
     ):
         resp = await rag_routes.query_rag_pipeline(
-            "p1", models.QueryRequest(question="hi?", hybrid=True)
+            "p1",
+            models.QueryRequest(question="hi?", hybrid=True),
+            current_user={"sub": "u1"},
         )
 
     assert _unwrap(captured["retrieve_fn"]) is rag_routes.retrieve_hybrid
@@ -2375,7 +2378,9 @@ async def test_query_pipeline_hybrid_falls_back_to_dense_without_bm25(monkeypatc
         rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
     ):
         resp = await rag_routes.query_rag_pipeline(
-            "p1", models.QueryRequest(question="hi?", hybrid=True)
+            "p1",
+            models.QueryRequest(question="hi?", hybrid=True),
+            current_user={"sub": "u1"},
         )
 
     assert _unwrap(captured["retrieve_fn"]) is rag_routes.retrieve_relevant_documents
@@ -2397,7 +2402,9 @@ async def test_query_pipeline_selects_raptor_collapsed_tree(monkeypatch):
         rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
     ):
         resp = await rag_routes.query_rag_pipeline(
-            "p1", models.QueryRequest(question="hi?", method="raptor")
+            "p1",
+            models.QueryRequest(question="hi?", method="raptor"),
+            current_user={"sub": "u1"},
         )
 
     retrieve_fn = captured["retrieve_fn"]
@@ -2426,6 +2433,7 @@ async def test_query_pipeline_binds_metadata_filter_and_echoes_it(monkeypatch):
                 question="hi?",
                 metadata_filter=models.MetadataFilter(source="handbook.pdf"),
             ),
+            current_user={"sub": "u1"},
         )
 
     retrieve_fn = captured["retrieve_fn"]
@@ -2450,7 +2458,9 @@ async def test_query_pipeline_generation_error_maps_to_503_with_its_own_message(
     ):
         with pytest.raises(Exception) as exc_info:
             await rag_routes.query_rag_pipeline(
-                "p1", models.QueryRequest(question="hi?")
+                "p1",
+                models.QueryRequest(question="hi?"),
+                current_user={"sub": "u1"},
             )
 
     assert exc_info.value.status_code == 503
@@ -2471,11 +2481,124 @@ async def test_query_pipeline_generation_error_default_detail_when_empty(
     ):
         with pytest.raises(Exception) as exc_info:
             await rag_routes.query_rag_pipeline(
-                "p1", models.QueryRequest(question="hi?")
+                "p1",
+                models.QueryRequest(question="hi?"),
+                current_user={"sub": "u1"},
             )
 
     assert exc_info.value.status_code == 503
     assert "LLM backend unavailable" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_passes_the_authenticated_users_id_to_run_query(
+    monkeypatch,
+):
+    """#875: run_query must be told WHO is actually asking (the JWT sub), not
+    a hardcoded/shared identity -- this is what makes per-user conversation
+    history separation possible in the first place."""
+    captured = {}
+
+    async def fake_run_query(*, user_id, **kwargs):
+        captured["user_id"] = user_id
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        await rag_routes.query_rag_pipeline(
+            "p1",
+            models.QueryRequest(question="hi?"),
+            current_user={"sub": "alice"},
+        )
+
+    assert captured["user_id"] == "alice"
+
+
+@pytest.mark.asyncio
+async def test_query_pipeline_defaults_user_id_to_anonymous_without_a_sub(
+    monkeypatch,
+):
+    captured = {}
+
+    async def fake_run_query(*, user_id, **kwargs):
+        captured["user_id"] = user_id
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "generation_config": {}}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        await rag_routes.query_rag_pipeline(
+            "p1", models.QueryRequest(question="hi?"), current_user={}
+        )
+
+    assert captured["user_id"] == "anonymous"
+
+
+# ── POST /v1/pipeline/{id}/conversations/{conversation_id}/share ────────────
+# #875's optional half: an explicit opt-in that lets a second user continue a
+# conversation the caller started, instead of each user's history staying
+# permanently siloed.
+
+
+class _FakeShareRepo:
+    def __init__(self, allow=True):
+        self._allow = allow
+        self.calls = []
+
+    async def share_conversation(self, user_id, conversation_id):
+        self.calls.append((user_id, conversation_id))
+        if not self._allow:
+            raise PermissionError(f"{user_id} does not own {conversation_id}")
+        return True
+
+
+@pytest.mark.asyncio
+async def test_share_conversation_404_for_unknown_pipeline():
+    with _seed_state(rag_pipelines={}):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.share_conversation(
+                "nope", "conv1", current_user={"sub": "alice"}
+            )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_share_conversation_503_without_a_conversation_repository():
+    with _seed_state(rag_pipelines={"p1": {}}, conversation_repository=None):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.share_conversation(
+                "p1", "conv1", current_user={"sub": "alice"}
+            )
+    assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_share_conversation_succeeds_for_the_owner():
+    repo = _FakeShareRepo(allow=True)
+    with _seed_state(rag_pipelines={"p1": {}}, conversation_repository=repo):
+        result = await rag_routes.share_conversation(
+            "p1", "conv1", current_user={"sub": "alice"}
+        )
+
+    assert result == {"conversation_id": "conv1", "shared": True}
+    assert repo.calls == [("alice", "conv1")]
+
+
+@pytest.mark.asyncio
+async def test_share_conversation_403_for_a_non_owner():
+    repo = _FakeShareRepo(allow=False)
+    with _seed_state(rag_pipelines={"p1": {}}, conversation_repository=repo):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.share_conversation(
+                "p1", "conv1", current_user={"sub": "intruder"}
+            )
+
+    assert exc_info.value.status_code == 403
 
 
 # ── GET /capabilities (system_routes.capabilities) ──────────────────────────
@@ -3019,7 +3142,9 @@ async def test_query_pipeline_hybrid_precedence_over_raptor_records_degraded_not
         rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
     ):
         resp = await rag_routes.query_rag_pipeline(
-            "p1", models.QueryRequest(question="hi?", hybrid=True, method="raptor")
+            "p1",
+            models.QueryRequest(question="hi?", hybrid=True, method="raptor"),
+            current_user={"sub": "u1"},
         )
 
     assert resp.method_details["retrieval"] == "hybrid"

@@ -39,3 +39,14 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
 
 CREATE INDEX IF NOT EXISTS idx_conversation_turns_lookup
 ON conversation_turns(user_id, conversation_id, timestamp DESC);
+
+-- Conversations are per-user by default (#875) -- a row here is the explicit
+-- opt-in for a conversation_id to become a shared/collaborative thread: every
+-- turn under this conversation_id is then read from and written to
+-- owner_user_id's bucket regardless of who's actually asking, instead of each
+-- participant's own private history.
+CREATE TABLE IF NOT EXISTS conversation_shares (
+    conversation_id VARCHAR(255) PRIMARY KEY,
+    owner_user_id VARCHAR(255) NOT NULL,
+    shared_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
