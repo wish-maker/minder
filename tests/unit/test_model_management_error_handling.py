@@ -21,9 +21,23 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from shared.auth.jwt_middleware import _rate_limit_store
+
 _SERVICE_DIR = (
     Path(__file__).resolve().parents[2] / "src" / "services" / "model-management"
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_store():
+    """#746 added @enforce_rate_limit to test_model, which keys its in-memory
+    store on user+path -- several tests below call the same path as the same
+    fake user, so without this a later test could spuriously inherit an
+    earlier test's count and trip the 429 it isn't testing for."""
+    _rate_limit_store.clear()
+    yield
+    _rate_limit_store.clear()
+
 
 _COLLISION_PRONE_NAMES = ("core", "routes", "models", "config")
 
@@ -61,7 +75,7 @@ class _NoopLogger:
         pass
 
 
-def _client(ollama_manager, *, as_admin=False):
+def _client(ollama_manager, *, as_admin=False, authenticated=True):
     models_api = _isolated_import("routes.models_api")
     app = FastAPI()
     app.include_router(
@@ -75,6 +89,21 @@ def _client(ollama_manager, *, as_admin=False):
         app.dependency_overrides[get_current_user_or_service] = lambda: {
             "sub": "test-admin",
             "role": "admin",
+        }
+    # #746: test_model now requires ANY authenticated user (not admin-only), via
+    # a plain get_current_user dependency -- overridden by default so every
+    # pre-existing test_model test (written before #746, none of which pass
+    # as_admin) keeps exercising the same 404/200/500 behavior it always did,
+    # just now as a logged-in regular user instead of an anonymous caller.
+    # authenticated=False leaves it un-overridden so a real (missing) auth
+    # header actually 401s, for the new unauthenticated-rejection test below.
+    if authenticated:
+        from shared.auth.jwt_middleware import get_current_user
+
+        app.dependency_overrides[get_current_user] = lambda: {
+            "sub": "test-user",
+            "username": "test-user",
+            "role": "user",
         }
     return TestClient(app, raise_server_exceptions=False)
 
@@ -400,6 +429,57 @@ def test_test_model_success_returns_result_verbatim():
 
     assert r.status_code == 200
     assert r.json()["response"] == "hello!"
+
+
+def test_test_model_requires_auth():
+    # #746: test_model used to have no auth dependency at all -- an
+    # unauthenticated caller must now be rejected before ever reaching ollama.
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(
+                side_effect=AssertionError("must not reach ollama when unauthenticated")
+            ),
+            "test_model": AsyncMock(
+                side_effect=AssertionError("must not reach ollama when unauthenticated")
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager, authenticated=False).post(
+        "/v1/models/llama3.2:latest/test", json={"prompt": "hi"}
+    )
+
+    assert r.status_code == 401
+
+
+def test_test_model_is_rate_limited_per_user():
+    # #746: no more than 5 test-generations per user per minute. The 6th call
+    # in the same window must 429 without ever reaching ollama.
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "llama3.2:latest"}]),
+            "test_model": AsyncMock(
+                return_value={
+                    "model": "llama3.2:latest",
+                    "prompt": "hi",
+                    "response": "hello!",
+                    "status": "success",
+                }
+            ),
+        },
+    )()
+    client = _client(ollama_manager)
+
+    for _ in range(5):
+        r = client.post("/v1/models/llama3.2:latest/test", json={"prompt": "hi"})
+        assert r.status_code == 200
+
+    r = client.post("/v1/models/llama3.2:latest/test", json={"prompt": "hi"})
+    assert r.status_code == 429
 
 
 # --- Unimplemented stubs (501) ------------------------------------------------

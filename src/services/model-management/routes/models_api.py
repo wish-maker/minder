@@ -4,7 +4,7 @@ Built via a factory with the Ollama manager, the in-memory cache dict, and the l
 injected by ``main`` — same pattern as the other services' route modules.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from models import (
     FineTuneRequest,
     ModelConstraints,
@@ -13,7 +13,11 @@ from models import (
     ModelTestRequest,
 )
 
-from shared.auth.jwt_middleware import require_role_or_service
+from shared.auth.jwt_middleware import (
+    enforce_rate_limit,
+    get_current_user,
+    require_role_or_service,
+)
 from shared.errors import backend_http_error
 from shared.models import PaginatedList
 
@@ -198,7 +202,13 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     @router.post(
         "/models/{model_id}/test", include_in_schema=False
     )  # deprecated unversioned alias
-    async def test_model(model_id: str, request: ModelTestRequest):
+    @enforce_rate_limit(max_requests=5, window_minutes=1)
+    async def test_model(
+        model_id: str,
+        request: ModelTestRequest,
+        http_request: Request,
+        current_user: dict = Depends(get_current_user),
+    ):
         """Quick test-prompt generation to verify a model works.
 
         Prompt is a JSON body (``{"prompt": "..."}``) rather than a query string (#145).
@@ -206,6 +216,16 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         Served at both /v1/models/{model_id}/test and the legacy path directly — the
         old path used a 301 redirect, which drops the method/body on non-GET clients
         (#147).
+
+        #746: this runs a real LLM generation -- the single most compute-expensive
+        thing this service exposes -- and used to have neither auth nor a rate limit
+        (deliberate in #474, for frictionless self-service trial). Still no role
+        requirement (any logged-in user, not just admin -- #474's self-service intent
+        stands), but no longer anonymous or unbounded. ``http_request`` (a plain
+        ``Request`` param, any name works -- enforce_rate_limit finds it by type, not
+        name) is required for the decorator to key the limit; matches the
+        Depends(get_current_user) + @enforce_rate_limit pairing already used for
+        trigger_plugin_collection in plugin-registry's routes/plugins.py.
         """
         try:
             # 404 for an unknown model instead of letting ollama's own 404 become
@@ -219,7 +239,9 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
                     status_code=404, detail=f"Model '{model_id}' not found"
                 )
             result = await ollama_manager.test_model(model_id, request.prompt)
-            logger.info(f"✅ Model tested: {model_id}")
+            logger.info(
+                f"✅ Model tested: {model_id} by {current_user.get('username', 'unknown')}"
+            )
             return result
         except HTTPException:
             raise
