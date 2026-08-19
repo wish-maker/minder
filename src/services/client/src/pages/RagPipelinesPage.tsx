@@ -174,9 +174,27 @@ export function QueryResultCard({
   response: QueryResponse;
   compact?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopyAnswer() {
+    if (!(await copyText(response.answer))) return;
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
   return (
     <>
-      <p className="mb-2 whitespace-pre-wrap">{response.answer}</p>
+      <div className="mb-2 flex items-start gap-2">
+        <p className="whitespace-pre-wrap">{response.answer}</p>
+        <button
+          onClick={handleCopyAnswer}
+          title="Copy answer"
+          aria-label="Copy answer"
+          className="shrink-0 rounded-md p-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        >
+          {copied ? "✓" : "📋"}
+        </button>
+      </div>
       <p className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
         <span className={`${badgeClass} ${confidenceBadgeColor(response.confidence)}`}>
           {Math.round(response.confidence * 100)}% confidence

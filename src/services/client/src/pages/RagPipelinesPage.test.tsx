@@ -126,6 +126,20 @@ describe("QueryResultCard", () => {
     expect(screen.getByText(/Method: standard/)).toBeTruthy();
   });
 
+  it("copies the answer text to the clipboard and shows a checkmark", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    render(<QueryResultCard response={queryResponse()} />);
+
+    fireEvent.click(screen.getByLabelText("Copy answer"));
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith("The refund policy allows 30 days."),
+    );
+    await screen.findByText("✓");
+    vi.unstubAllGlobals();
+  });
+
   it("shows a token count when present", () => {
     render(<QueryResultCard response={queryResponse({ tokens_used: 42 })} />);
     expect(screen.getByText(/\(42 tokens\)/)).toBeTruthy();
