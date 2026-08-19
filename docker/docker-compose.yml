@@ -850,6 +850,20 @@ services:
     # template by setup.sh (sync_telegraf_config) — the plugin rewrites it in-place
     # without dirtying the repo; telegraf watch_config (poll) picks it up.
     - ./services/telegraf/telegraf.runtime.conf:/app/telegraf-config/telegraf.conf:rw
+    # Backup/restore web UI (#870). Read-only listing of existing archives — the
+    # registry never touches backup CONTENTS, only names/sizes/timestamps for the
+    # GET /v1/backups listing.
+    - ../backups:/app/backups:ro
+    # Read-WRITE job queue: the registry only writes/reads small JSON job files
+    # here (never calls Docker for this feature) — a host-side cron job
+    # (`python -m scripts.setup backup-watch`) does the real backup/restore work.
+    # Deliberately NOT routed through docker-socket-proxy: restore needs `docker
+    # compose up` (container-create), which the proxy's allowlist excludes by
+    # design (#377/#378) — widening it for that would be host-takeover-equivalent
+    # privilege, not a narrow addition. setup seeds this dir 0777 before `up`
+    # (same bind-mount-footgun/non-root-write reasoning as bundles.state.json
+    # above); secret-free by design (job metadata only).
+    - ../backup-jobs:/app/backup-jobs:rw
     # PILLAR 1: Direct port access for dev/LAN/VPN + Traefik routing
     ports:
     - "127.0.0.1:8001:8001"

@@ -40,6 +40,8 @@ _HELP_TEMPLATE = """
 {bold}DATA MANAGEMENT{nc}
     backup                  Full backup: Postgres, Neo4j, InfluxDB, Qdrant, MinIO, .env
     restore [archive]       Restore from a backup archive (interactive if no path given)
+    backup-watch            Process pending backup/restore jobs from the web UI
+                            (cron-invoked; see scripts/dev/README.md)
     uninstall               Stop services, preserve data volumes
     uninstall --purge       Stop and DELETE all data (irreversible)
 

@@ -149,6 +149,29 @@ bash scripts/dev/tailscale_bootstrap.sh
 See `docs/development/tailscale-bridge.md` for the full explanation of why
 this is needed and what the script does step by step.
 
+`backup-watch` (a `scripts/setup` verb, not a script here — see
+`scripts/setup/backup_jobs.py`): processes pending backup/restore jobs the
+web UI (Platform → Backups) enqueues into `backup-jobs/`. Needed on EVERY host
+that exposes the backup/restore UI, alongside (not instead of) the existing
+daily `backup` schedule above — `backup-watch` is what makes the *web button*
+actually do anything; without it a triggered job just sits at `pending`
+forever. Cron-invoked one-shot (mirrors `scheduled-backup.ps1`'s own shape),
+not a daemon. Register on a Linux host (Pi) with cron, every minute:
+```bash
+* * * * * cd <repo> && python3 -m scripts.setup backup-watch >> logs/backup-watch.log 2>&1
+```
+**Must run as the same OS user that owns `backups/`/`backup-jobs/`** (whoever
+ran `setup.sh`/`docker compose up`, NOT root) — the registry's non-root
+`appuser` is uid 1000 inside its container, and bind mounts match by raw uid
+number with no remapping, so a job run by a different uid produces an archive
+`backup.py` itself chmods `0600` — unreadable by that same uid check when the
+registry later tries to list it. A root cron entry silently produces backups
+the web UI can't see. hantal (Windows/Task Scheduler, not cron) needs its own
+equivalent scheduled task calling `python -m scripts.setup backup-watch`
+every minute or so — not yet registered there as of #870 landing; do that by
+hand the same way `MinderDailyBackup` above was registered before relying on
+the web UI's restore button on that host.
+
 ## `remote_put.py` — transfer a real file to a dev host
 
 The base64-inline-through-a-shell-command trick the other scripts use for small

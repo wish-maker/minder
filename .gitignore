@@ -213,6 +213,11 @@ backups/**/*
 *.backup
 *.sql
 *.dump
+
+# Backup/restore web UI job queue (#870) — secret-free JSON job metadata, but
+# runtime state, not source; bind-mounted rw into plugin-registry.
+backup-jobs/
+backup-jobs/**/*
 # Exception: track the Postgres init script (infrastructure, not a dump). It is mounted
 # into postgres and creates all required databases on a clean install (apicurio fix).
 # This is the ONLY live infra SQL — keep it tracked.

@@ -260,6 +260,27 @@ async def proxy_to_containers(path: str, request: Request):
 
 
 # ============================================================================
+# Backups (plugin-registry's backup/restore job queue, #870)
+# ============================================================================
+
+
+@router.api_route("/v1/backups", methods=["GET", "POST"])
+async def proxy_to_backups_root(request: Request):
+    """Proxy /v1/backups (list archives, enqueue a backup job) to Plugin
+    Registry -- admin-gated there (not here), same split as containers/bundles."""
+    service_url = SERVICE_REGISTRY["plugin_registry"]
+    return await proxy_request(service_url, "v1/backups", request)
+
+
+@router.api_route("/v1/backups/{path:path}", methods=["GET", "POST"])
+async def proxy_to_backups(path: str, request: Request):
+    """Proxy /v1/backups/* (job listing/status, enqueue a restore job) to Plugin
+    Registry -- admin-gated there (not here), same split as containers/bundles."""
+    service_url = SERVICE_REGISTRY["plugin_registry"]
+    return await proxy_request(service_url, f"v1/backups/{path}", request)
+
+
+# ============================================================================
 # RAG Pipeline
 # ============================================================================
 

@@ -193,6 +193,12 @@ def test_doctor_takes_no_args(monkeypatch):
     assert calls == [((), {})]
 
 
+def test_backup_watch_takes_no_args(monkeypatch):
+    calls = _spy(monkeypatch, entry.backup_jobs_module, "run_pending")
+    entry.main(["backup-watch"])
+    assert calls == [((), {})]
+
+
 # ── stop ────────────────────────────────────────────────────────────────────────
 
 
