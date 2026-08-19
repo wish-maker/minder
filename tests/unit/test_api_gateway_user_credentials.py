@@ -8,15 +8,16 @@ Reuses test_oidc_user_provisioning.py's fake-asyncpg-pool pattern exactly
 create_user/verify_user_credentials live in the same module and share the
 same isolation needs.
 
-Also characterizes (does NOT endorse) the current pre-authentication
-account-state leak tracked in #717 (decision issue: #758): verify_user_credentials checks
-`is_active` BEFORE the bcrypt password check, so a disabled account gets a
-distinct 403 regardless of the password supplied, while a wrong password on
-an active account returns a generic None. That is a real, filed, decision-
-gated issue (whether a disabled account should get a distinct message at
-all is a UX tradeoff, not a bug to silently "fix" here) -- these tests only
-document what verify_user_credentials actually does today, so a future fix
-has a concrete baseline to change deliberately.
+Also covers the #717/#758 fix: #758's decision was a hybrid -- a WRONG
+password gets the same generic outcome (None) whether the account is active
+or disabled (closing the enumeration channel for anyone who doesn't already
+know the real password), while a CORRECT password on a disabled account
+still raises a distinct 403 (preserving the UX win for someone who legitimately
+owns the account). verify_user_credentials therefore runs checkpw() BEFORE the
+is_active check now, not after. A nonexistent username also still pays a
+bcrypt comparison (against a fixed dummy hash) before returning None, closing
+the separate timing side-channel #717 also flagged (a real username used to
+resolve measurably slower than a fake one).
 """
 
 import importlib.util
@@ -242,21 +243,64 @@ async def test_wrong_password_on_an_active_account_returns_none(auth_mod, monkey
 
 
 @pytest.mark.asyncio
-async def test_characterizes_the_717_leak_disabled_account_403_regardless_of_password(
+async def test_wrong_password_on_a_disabled_account_returns_none_not_403(
     auth_mod, monkeypatch
 ):
-    """Documents #717's current (pre-decision, see #758) behavior: ANY
-    password for a disabled account raises a distinct 403 -- the exact
-    opposite of the generic None a wrong password gets on an active account
-    (see the test above). This is what makes the account state enumerable
-    pre-auth. Not an endorsement -- update this test if/when #717/#758 is
-    resolved."""
+    """#717/#758 fix: a wrong password gets the SAME generic outcome (None)
+    regardless of whether the account is disabled -- an attacker with no
+    valid credentials can no longer distinguish "wrong password" from
+    "this account is disabled" (or even "this account doesn't exist", see
+    test_unknown_username_returns_none). Before the fix this raised a
+    distinct 403 for any password at all."""
+    row = _user_row("hunter2", is_active=False)
+    conn = _ScriptedConn({"WHERE username = $1": [row]})
+    _patch_pool(monkeypatch, auth_mod, conn)
+
+    result = await auth_mod.verify_user_credentials("alice", "totally-wrong-password")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_correct_password_on_a_disabled_account_still_raises_403(
+    auth_mod, monkeypatch
+):
+    """#717/#758 fix, other half: someone who DOES know the real password for
+    a disabled account still gets a distinct, actionable 403 -- the whole
+    point of the hybrid decision (#758) was to keep this UX win for a
+    legitimate account owner while closing the enumeration channel for
+    everyone else (see the test above)."""
     row = _user_row("hunter2", is_active=False)
     conn = _ScriptedConn({"WHERE username = $1": [row]})
     _patch_pool(monkeypatch, auth_mod, conn)
 
     with pytest.raises(HTTPException) as exc_info:
-        await auth_mod.verify_user_credentials("alice", "totally-wrong-password")
+        await auth_mod.verify_user_credentials("alice", "hunter2")
 
     assert exc_info.value.status_code == 403
     assert "disabled" in exc_info.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_unknown_username_still_pays_a_bcrypt_comparison(auth_mod, monkeypatch):
+    """#717's timing side-channel: a nonexistent username used to return
+    immediately (no bcrypt call), while a real username always paid the
+    bcrypt cost first -- a response-time difference that leaks username
+    existence. Verify the dummy-hash comparison actually runs on this path,
+    not just that the (unavoidably fast, in a unit test) wall-clock ends up
+    similar."""
+    conn = _ScriptedConn({"WHERE username = $1": [None]})
+    _patch_pool(monkeypatch, auth_mod, conn)
+    calls = []
+    real_checkpw = auth_mod.checkpw
+
+    def _spy_checkpw(password, hashed):
+        calls.append(hashed)
+        return real_checkpw(password, hashed)
+
+    monkeypatch.setattr(auth_mod, "checkpw", _spy_checkpw)
+
+    result = await auth_mod.verify_user_credentials("nobody", "whatever")
+
+    assert result is None
+    assert calls == [auth_mod._DUMMY_PASSWORD_HASH]

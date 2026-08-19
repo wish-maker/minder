@@ -132,6 +132,15 @@ async def create_user(username: str, email: str, password: str) -> Dict[str, Any
         raise HTTPException(status_code=409, detail="User already exists")
 
 
+# A fixed, valid bcrypt hash checked against a nonexistent username's supplied
+# password (#717/#758) purely to burn a comparable amount of CPU time to a real
+# checkpw() call -- the *point* is that the hash never matches anything, so the
+# timing side-channel that let an attacker infer "this username doesn't exist"
+# from a fast early-return closes without touching real user data. The
+# plaintext this hashes is irrelevant and never used for anything else.
+_DUMMY_PASSWORD_HASH = b"$2b$12$73L5glZkBcv3hD16E9x9.e6Gic5xXzqLHx7Ms7b3UDCFWITV9.VtK"
+
+
 async def verify_user_credentials(
     username: str, password: str
 ) -> Optional[Dict[str, Any]]:
@@ -144,6 +153,17 @@ async def verify_user_credentials(
 
     Returns:
         User data if credentials valid, None otherwise
+
+    Raises:
+        HTTPException(403): the password is CORRECT but the account is disabled.
+            Deliberately only reachable after a successful checkpw() (#717/#758)
+            -- a wrong password on a disabled account is indistinguishable from
+            a wrong password on any other account (both return None, the
+            caller's generic 401), so a caller with no valid credentials for an
+            account can never learn whether it's merely wrong-passworded or
+            actually disabled. Only someone who already knows the correct
+            password sees the distinct "disabled" message, which is exactly
+            the population that message is actually useful to.
     """
     pool = await get_pg_pool()
     async with pool.acquire() as conn:
@@ -156,26 +176,28 @@ async def verify_user_credentials(
             username,
         )
 
+        password_bytes = password.encode("utf-8")
+
         if row is None:
+            # Constant-time-ish: still pay a bcrypt comparison so a nonexistent
+            # username doesn't resolve measurably faster than a real one (#717).
+            checkpw(password_bytes, _DUMMY_PASSWORD_HASH)
             return None
 
         user = dict(row)
+        hash_bytes = user["password_hash"].encode("utf-8")
 
-        # Check if user is active
+        if not checkpw(password_bytes, hash_bytes):
+            return None
+
+        # Password is correct from here on -- safe to reveal account state.
         if not user["is_active"]:
             raise HTTPException(status_code=403, detail="User account is disabled")
 
-        # Verify password with bcrypt
-        password_bytes = password.encode("utf-8")
-        hash_bytes = user["password_hash"].encode("utf-8")
-
-        if checkpw(password_bytes, hash_bytes):
-            # Remove password hash before returning
-            del user["password_hash"]
-            logger.info(f"User authenticated: {username}")
-            return user
-
-        return None
+        # Remove password hash before returning
+        del user["password_hash"]
+        logger.info(f"User authenticated: {username}")
+        return user
 
 
 async def get_or_create_oidc_user(
