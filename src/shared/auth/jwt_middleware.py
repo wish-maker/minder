@@ -11,15 +11,19 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Dict, Optional
 
+import jwt
 from fastapi import Depends, HTTPException, Request
-from jose import jwt
 
 # ============================================================================
 # Configuration
 # ============================================================================
 
-# JWT_SECRET is required — fail-fast if not set
-JWT_SECRET = os.environ.get("JWT_SECRET")
+# JWT_SECRET is required — fail-fast if not set. Typed `str` (not `Optional[str]`)
+# via the `or ""` so mypy doesn't flag every jwt.encode/decode call below as
+# possibly passing None for the key argument -- PyJWT's type stubs (unlike
+# jose's) reject that at the type level, even though the `raise` two lines down
+# already guarantees this is non-empty by the time any of those calls run.
+JWT_SECRET: str = os.environ.get("JWT_SECRET") or ""
 if not JWT_SECRET:
     raise ValueError("JWT_SECRET must be set via environment variable")
 
@@ -73,7 +77,7 @@ def verify_jwt_token(token: str) -> Dict:
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError as e:
+    except jwt.InvalidTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 

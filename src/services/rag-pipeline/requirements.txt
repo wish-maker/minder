@@ -7,8 +7,12 @@ qdrant-client==1.19.0
 ollama==0.6.2
 pypdf==6.16.1
 python-multipart==0.0.32
-# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405)
-python-jose[cryptography]==3.5.0
+# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405).
+# PyJWT, not python-jose (#797): this service only ever verifies our own
+# HS256 session JWTs via jwt_middleware.py, never Authelia's OIDC RS256
+# tokens (that's api-gateway-only, core/oidc.py) -- so it doesn't need
+# python-jose's ecdsa/pyasn1/rsa transitive deps at all.
+PyJWT[crypto]==2.13.0
 prometheus-client==0.26.0
 langchain-text-splitters==1.1.2
 asyncpg==0.31.0

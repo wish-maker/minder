@@ -11,8 +11,12 @@ asyncpg==0.31.0
 # HTTP client
 httpx==0.28.1
 
-# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405)
-python-jose[cryptography]==3.5.0
+# Auth (shared.auth.jwt_middleware -- get_current_user_or_service, added for #405).
+# PyJWT, not python-jose (#797): this service only ever verifies our own
+# HS256 session JWTs via jwt_middleware.py, never Authelia's OIDC RS256
+# tokens (that's api-gateway-only, core/oidc.py) -- so it doesn't need
+# python-jose's ecdsa/pyasn1/rsa transitive deps at all.
+PyJWT[crypto]==2.13.0
 
 # Metrics
 prometheus-client==0.26.0

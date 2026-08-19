@@ -19,6 +19,12 @@ python-dotenv==1.2.3
 
 # Utilities
 python-multipart==0.0.32
+# BOTH JWT libraries, matching api-gateway/requirements.txt (#797): PyJWT for
+# shared.auth.jwt_middleware's HS256 session JWTs; python-jose stays because
+# api-gateway's core/oidc.py relies on its OIDC at_hash claim check, which
+# PyJWT has no equivalent for. This is the general dev/test requirements
+# file, so it needs both to import/test every service's code.
+PyJWT[crypto]==2.13.0
 python-jose[cryptography]==3.5.0
 
 # Monitoring

@@ -9,4 +9,7 @@ prometheus-client==0.26.0
 python-multipart==0.0.32
 email-validator==2.3.0
 neo4j==6.2.0
-python-jose[cryptography]==3.5.0
+# PyJWT, not python-jose (#797): this service only verifies our own HS256
+# session JWTs via shared.auth.jwt_middleware, never Authelia's OIDC RS256
+# tokens (api-gateway-only) -- doesn't need python-jose's ecdsa/pyasn1/rsa.
+PyJWT[crypto]==2.13.0
