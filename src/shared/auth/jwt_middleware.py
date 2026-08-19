@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Dict, Optional
 
+import jwt
 from fastapi import Depends, HTTPException, Request
-from jose import jwt
 
 # ============================================================================
 # Configuration
@@ -73,7 +73,7 @@ def verify_jwt_token(token: str) -> Dict:
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError as e:
+    except jwt.InvalidTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
 
 

@@ -11,6 +11,7 @@ imported directly with no isolation gymnastics.
 
 from types import SimpleNamespace
 
+import jwt
 import pytest
 from fastapi import HTTPException
 
@@ -48,11 +49,28 @@ def test_verify_rejects_an_expired_token(monkeypatch):
 
 
 def test_verify_rejects_a_token_signed_with_a_different_secret():
-    from jose import jwt as jose_jwt
+    token = jwt.encode({"sub": "u1"}, "a-totally-different-secret", algorithm="HS256")
 
-    token = jose_jwt.encode(
-        {"sub": "u1"}, "a-totally-different-secret", algorithm="HS256"
-    )
+    with pytest.raises(HTTPException) as exc_info:
+        jwt_mw.verify_jwt_token(token)
+    assert exc_info.value.status_code == 401
+
+
+def test_verify_rejects_a_token_signed_with_an_unexpected_algorithm():
+    """#797 migration: `algorithms=[JWT_ALGORITHM]` (HS256 only, by default)
+    must still be enforced -- a token signed with the SAME correct secret but
+    a DIFFERENT real HMAC algorithm (HS384, not in the allowed list) must
+    still be rejected. Sabotage-verified: widening verify_jwt_token's
+    `algorithms=` list to also include "HS384" makes this test fail exactly
+    as predicted (confirmed live while writing this fix, then reverted) --
+    this is the "algorithm confusion" class of JWT vulnerability an
+    unpinned/widened `algorithms=` list would reopen. (A "none"-algorithm
+    token is a separate, even more classic version of this same attack, but
+    isn't usable to test the point here -- PyJWT independently refuses to
+    decode one at all regardless of what's in `algorithms=`, confirmed
+    directly, so it can't distinguish a correctly- vs. incorrectly-pinned
+    list.)"""
+    token = jwt.encode({"sub": "u1"}, jwt_mw.JWT_SECRET, algorithm="HS384")
 
     with pytest.raises(HTTPException) as exc_info:
         jwt_mw.verify_jwt_token(token)

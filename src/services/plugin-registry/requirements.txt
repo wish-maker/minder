@@ -22,7 +22,11 @@ httpx==0.28.1
 prometheus-client==0.26.0
 
 # Utilities
-python-jose[cryptography]==3.5.0
+# PyJWT, not python-jose (#797): this service only ever verifies our own
+# HS256 session JWTs via shared.auth.jwt_middleware, never Authelia's OIDC
+# RS256 tokens (api-gateway-only) -- doesn't need python-jose's
+# ecdsa/pyasn1/rsa transitive deps.
+PyJWT[crypto]==2.13.0
 
 # Plugin-specific dependencies (TEFAS, time-series)
 tefas-crawler==0.6.0
