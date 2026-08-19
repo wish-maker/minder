@@ -79,9 +79,43 @@ Refresh takes **no body** — the current token is read from the `Authorization`
 
 The gateway forwards these prefixes to the corresponding backend service:
 
-- `/v1/plugins/*`  → plugin registry
-- `/v1/rag/*`      → RAG pipeline
-- `/v1/models/*`   → model management
+- `/v1/plugins/*`     → plugin registry
+- `/v1/bundles/*`     → plugin registry (see [Bundles](#bundles) below)
+- `/v1/containers/*`  → plugin registry (container log streaming; JWT-gated, see below)
+- `/v1/tools/*`       → plugin state manager
+- `/v1/rag/*`         → RAG pipeline
+- `/v1/models/*`      → model management
+- `/v1/marketplace/*` → marketplace
+- `/v1/graph*`        → graph-rag
+- `/v1/tts/*`, `/v1/stt/*` → TTS/STT
+
+#### Status (`/v1/status`)
+
+Native to the gateway, not a proxy — fans out to every core service's own
+`/health` over the internal Docker network and returns a combined view:
+
+```http
+GET /v1/status
+```
+```json
+{
+  "services": [
+    { "name": "api-gateway", "reachable": true, "status": "healthy", "version": "1.0.0" }
+  ]
+}
+```
+> `version` is a hardcoded string each service's own code carries, not derived
+> from the deployed image tag — don't treat it as a deployment-tracking signal.
+
+#### Container logs (`/v1/containers/{name}/logs`)
+
+```http
+GET /v1/containers/{name}/logs?tail=200
+Authorization: Bearer <token>
+```
+JWT-gated (log output can contain stack traces or accidentally-logged
+secrets); `{name}` is validated against a fixed allowlist of known service
+names, not an arbitrary string.
 
 #### AI / OpenWebUI integration (`/v1/ai`)
 ```http
@@ -122,6 +156,56 @@ Authorization: Bearer <token>
 > the registry on startup (`crypto`, `weather`, `news`, `tefas`, `network`, `telegraf`)
 > — listed at `GET /v1/plugins`. (The separate plugin-state-manager bootstrap
 > `default_plugins.yml` stays an empty stub.)
+
+#### Bundles
+
+Capability bundles group related services (`core`, `inference`, `rag`, `chat`,
+`monitoring`, `voice`, `graph-rag`) so they can be enabled/disabled together
+instead of one service at a time. Reads are open; all three write endpoints
+below require an **admin**-role token, not just any authenticated user.
+
+```http
+GET /v1/bundles
+```
+```json
+{
+  "bundles": [
+    { "name": "monitoring", "core": false, "enabled": false,
+      "claims": ["grafana", "prometheus", "..."],
+      "services": [{ "name": "grafana", "active": false, "claimants": "", "image": "grafana/grafana:..." }] }
+  ],
+  "orphaned": ["grafana", "prometheus"],
+  "count": 7
+}
+```
+> `orphaned` lists services claimed by NO currently-enabled bundle — a
+> declarative computation, not "currently running but shouldn't be". A
+> service can show up here even while its container happens to still be
+> running (e.g. right after a host restart brought it back via Docker's own
+> restart policy, bypassing bundle state) — `reconcile` below is what
+> actually converges live containers to match.
+
+```http
+POST /v1/bundles/{name}/enable
+Authorization: Bearer <token>
+```
+```http
+POST /v1/bundles/{name}/disable
+Authorization: Bearer <token>
+```
+> The `core` bundle can never be disabled (409) — it holds the services
+> everything else depends on (Postgres, Redis, Traefik, the gateway itself).
+> `disable` always stops the services being orphaned by this specific call
+> (no query param — that's a CLI-only concept, `bundle disable --stop-orphans`
+> in `scripts/setup`, unrelated to this endpoint).
+
+```http
+POST /v1/bundles/reconcile
+Authorization: Bearer <token>
+```
+Starts anything an enabled bundle claims but isn't running yet, and stops
+every currently-running service no enabled bundle claims — always both
+directions, admin-only, no query params.
 
 ---
 
