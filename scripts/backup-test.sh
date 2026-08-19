@@ -19,10 +19,14 @@
 # Exit 2 = usage error.
 #
 # Wired from the Pi's crontab:
-#   0 2 * * * /root/minder/scripts/backup-test.sh --quick >> /root/minder/logs/backup-test.log 2>&1
-# Lives in git (unlike the host-local backups/backup-databases.sh) precisely so
-# it can't silently vanish and turn the cron line into a no-op again — which is
-# exactly the bug this closes (#430).
+#   20 2 * * * /root/minder/scripts/backup-test.sh --quick >> /root/minder/logs/backup-test.log 2>&1
+# 20 minutes after backup-databases.sh's own `0 2 * * *` line (not the same
+# minute — that raced this check against a still-writing backup, caught live
+# 2026-08-19: postgres backups were fine every day, but got reported "0B"
+# because this ran while backup-databases.sh's `pg_dump | gzip > file` was
+# still mid-write). Also lives in git (like backup-databases.sh now does too)
+# precisely so it can't silently vanish and turn the cron line into a no-op
+# again — which is exactly the bug this closes (#430).
 set -u
 
 BACKUP_DIR="${MINDER_BACKUP_DIR:-/root/minder/backups}"
