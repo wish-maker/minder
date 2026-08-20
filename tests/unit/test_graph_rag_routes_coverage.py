@@ -109,7 +109,7 @@ class _FakeConstructor:
             "mentions_count": self._mentions_count,
         }
 
-    async def delete_document(self, document_id):
+    async def delete_document(self, document_id, owner_id):
         if self._delete_error:
             raise self._delete_error
         self.deleted_document_id = document_id
@@ -118,7 +118,7 @@ class _FakeConstructor:
             "relationships_deleted": 1,
         }
 
-    async def list_documents(self):
+    async def list_documents(self, owner_id):
         return []
 
 
@@ -129,17 +129,17 @@ class _FakeRetriever:
         self._error = error
         self._entities = entities or []
 
-    async def find_related_entities(self, entity_name, max_depth, limit):
+    async def find_related_entities(self, entity_name, owner_id, max_depth, limit):
         if self._error:
             raise self._error
         return self._related
 
-    async def get_entity_context(self, entity_name, context_window):
+    async def get_entity_context(self, entity_name, owner_id, context_window):
         if self._error:
             raise self._error
         return self._context_result
 
-    async def graph_search(self, query, limit):
+    async def graph_search(self, query, owner_id, limit):
         if self._error:
             raise self._error
         return self._entities
@@ -175,7 +175,7 @@ async def test_construct_handler_warns_when_not_every_entity_gets_linked(caplog)
     )
 
     result = await _api.construct_knowledge_graph_handler(
-        _kg_request(), extractor, constructor
+        _kg_request(), "owner-x", extractor, constructor
     )
 
     assert result.success is True
@@ -188,7 +188,7 @@ async def test_construct_handler_warns_when_not_every_entity_gets_linked(caplog)
 @pytest.mark.asyncio
 async def test_delete_document_graph_handler_503_when_constructor_missing():
     with pytest.raises(HTTPException) as exc:
-        await _api.delete_document_graph_handler("doc-1", None)
+        await _api.delete_document_graph_handler("doc-1", "owner-x", None)
     assert exc.value.status_code == 503
 
 
@@ -198,7 +198,7 @@ async def test_delete_document_graph_handler_success():
         delete_result={"entities_deleted": 3, "relationships_deleted": 2}
     )
 
-    result = await _api.delete_document_graph_handler("doc-1", constructor)
+    result = await _api.delete_document_graph_handler("doc-1", "owner-x", constructor)
 
     assert result == {
         "success": True,
@@ -214,7 +214,7 @@ async def test_delete_document_graph_handler_maps_backend_error():
     constructor = _FakeConstructor(delete_error=ConnectionRefusedError("neo4j down"))
 
     with pytest.raises(HTTPException) as exc:
-        await _api.delete_document_graph_handler("doc-1", constructor)
+        await _api.delete_document_graph_handler("doc-1", "owner-x", constructor)
     assert exc.value.status_code == 503
 
 
@@ -225,13 +225,13 @@ async def test_delete_document_graph_handler_maps_backend_error():
 async def test_list_graph_documents_handler_maps_backend_error(monkeypatch):
     constructor = _FakeConstructor()
 
-    async def boom():
+    async def boom(owner_id):
         raise ConnectionRefusedError("neo4j down")
 
     monkeypatch.setattr(constructor, "list_documents", boom)
 
     with pytest.raises(HTTPException) as exc:
-        await _api.list_graph_documents_handler(constructor)
+        await _api.list_graph_documents_handler("owner-x", constructor)
     assert exc.value.status_code == 503
 
 
@@ -245,7 +245,7 @@ async def test_retrieve_with_graph_handler_maps_backend_error():
 
     with pytest.raises(HTTPException) as exc:
         await _api.retrieve_with_graph_handler(
-            GraphRetrievalRequest(query="who is Acme?"), extractor, retriever
+            GraphRetrievalRequest(query="who is Acme?"), "owner-x", extractor, retriever
         )
     assert exc.value.status_code == 503
 
@@ -259,7 +259,7 @@ async def test_get_entity_context_handler_maps_generic_error_to_backend_error():
 
     with pytest.raises(HTTPException) as exc:
         await _api.get_entity_context_handler(
-            EntityContextRequest(entity_text="Acme"), retriever
+            EntityContextRequest(entity_text="Acme"), "owner-x", retriever
         )
     assert exc.value.status_code == 503
 
@@ -272,7 +272,7 @@ async def test_graph_search_handler_returns_matching_entities():
     retriever = _FakeRetriever(entities=[{"text": "Acme Corp", "label": "ORG"}])
 
     result = await _api.graph_search_handler(
-        GraphSearchRequest(query="acme"), retriever
+        GraphSearchRequest(query="acme"), "owner-x", retriever
     )
 
     assert result.success is True
@@ -285,7 +285,9 @@ async def test_graph_search_handler_maps_backend_error():
     retriever = _FakeRetriever(error=ConnectionRefusedError("neo4j down"))
 
     with pytest.raises(HTTPException) as exc:
-        await _api.graph_search_handler(GraphSearchRequest(query="acme"), retriever)
+        await _api.graph_search_handler(
+            GraphSearchRequest(query="acme"), "owner-x", retriever
+        )
     assert exc.value.status_code == 503
 
 
@@ -362,3 +364,86 @@ def test_graph_search_route_invokes_handler():
 
     assert resp.status_code == 200
     assert resp.json()["entity_count"] == 1
+
+
+# ── #782: the caller's identity (sub) is threaded to the graph layer as the
+# owner scope on every graph-touching route, so one tenant can never read or
+# mutate another's graph. These assert the route passes the AUTHENTICATED sub
+# (not a client-supplied value) through as owner_id.
+
+
+class _OwnerRecordingConstructor(_FakeConstructor):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.seen_owner = None
+
+    async def construct_graph(
+        self, document_id, owner_id, entities, relationships, **kw
+    ):
+        self.seen_owner = owner_id
+        return await super().construct_graph(document_id, entities, relationships, **kw)
+
+    async def delete_document(self, document_id, owner_id):
+        self.seen_owner = owner_id
+        return await super().delete_document(document_id, owner_id)
+
+    async def list_documents(self, owner_id):
+        self.seen_owner = owner_id
+        return await super().list_documents(owner_id)
+
+
+def _client_as(sub, constructor=None, retriever=None, extractor=None):
+    router = _api.build_graph_router(
+        entity_extractor=extractor or _FakeExtractor(),
+        graph_constructor=constructor or _FakeConstructor(),
+        graph_retriever=retriever or _FakeRetriever(),
+    )
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[_api.get_current_user_or_service] = lambda: {"sub": sub}
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def test_construct_route_scopes_to_authenticated_owner():
+    constructor = _OwnerRecordingConstructor(entity_ids=["Acme Corp"])
+    client = _client_as(
+        "alice",
+        constructor=constructor,
+        extractor=_FakeExtractor(entities=[{"text": "Acme Corp", "label": "ORG"}]),
+    )
+    resp = client.post(
+        "/v1/construct-graph", json={"document_id": "doc-1", "text": "Acme Corp"}
+    )
+    assert resp.status_code == 200
+    assert constructor.seen_owner == "alice"  # the JWT sub, not a body field
+
+
+def test_delete_and_list_routes_scope_to_authenticated_owner():
+    constructor = _OwnerRecordingConstructor(delete_result={})
+    client = _client_as("bob", constructor=constructor)
+
+    assert client.delete("/v1/graph/document/doc-1").status_code == 200
+    assert constructor.seen_owner == "bob"
+
+    assert client.get("/v1/graph/documents").status_code == 200
+    assert constructor.seen_owner == "bob"
+
+
+def test_graph_read_routes_require_auth():
+    # #782 made the previously-open reads (stats/documents/retrieve/entity-context/
+    # search) JWT-required, since per-tenant scoping needs to know the tenant.
+    router = _api.build_graph_router(
+        entity_extractor=_FakeExtractor(),
+        graph_constructor=_FakeConstructor(),
+        graph_retriever=_FakeRetriever(),
+    )
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app, raise_server_exceptions=False)
+    assert client.get("/v1/graph/stats").status_code == 401
+    assert client.get("/v1/graph/documents").status_code == 401
+    assert client.post("/v1/retrieve", json={"query": "x"}).status_code == 401
+    assert (
+        client.post("/v1/entity-context", json={"entity_text": "x"}).status_code == 401
+    )
+    assert client.post("/v1/graph/search", json={"query": "x"}).status_code == 401

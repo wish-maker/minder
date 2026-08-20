@@ -92,7 +92,10 @@ class FakeConn:
         if q.startswith("SELECT * FROM plugin_states"):
             return self.existing_state
         if "INSERT INTO plugin_states" in q:
-            name, state, tier = args
+            # #908: create_plugin_state now also passes enabled_at/disabled_at so
+            # a row materialized directly in ENABLED state (the #751 auto-create
+            # path) carries a non-null enabled_at like every other enabled row.
+            name, state, tier, enabled_at, disabled_at = args
             # Real asyncpg returns a uuid.UUID object for a UUID column and a raw
             # JSON *string* for a JSONB column (no codec is registered anywhere --
             # shared/db/pool.py calls plain asyncpg.create_pool()) -- NOT already
@@ -107,6 +110,8 @@ class FakeConn:
                 "state": state,
                 "license_tier": tier,
                 "config": "{}",
+                "enabled_at": enabled_at,
+                "disabled_at": disabled_at,
             }
             self.inserts.append(row)
             return row
@@ -150,6 +155,20 @@ async def test_enable_bootstrap_path_still_creates(state_mod):
     )
     assert row["state"] == state_mod.PluginState.ENABLED.value
     assert conn.inserts and conn.inserts[0]["plugin_name"] == "crypto"
+
+
+async def test_auto_create_on_enable_stamps_enabled_at(state_mod):
+    """#908: a plugin_states row materialized directly in ENABLED state (the
+    #751 first-enable auto-create path) must carry a non-null ``enabled_at``,
+    matching an installed→enabled transition -- not be silently left NULL and
+    inconsistent with every other enabled row."""
+    conn = FakeConn(default_required=None, existing_state=None)
+    row = await state_mod.enable_plugin(
+        conn, "crypto", reason="system_bootstrap", allow_create=True
+    )
+    assert row["state"] == state_mod.PluginState.ENABLED.value
+    assert row["enabled_at"] is not None
+    assert row["disabled_at"] is None
 
 
 async def test_disable_unknown_plugin_raises_not_found(state_mod):

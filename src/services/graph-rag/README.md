@@ -25,16 +25,26 @@ python -m pytest tests/unit/test_graph_rag_*.py
 
 | Method | Path | Notes |
 |--------|------|-------|
-| POST | `/v1/extract` | spaCy NER — return the entities (+ types) found in `text`, no graph write |
-| POST | `/v1/construct-graph` | Extract entities + relationships from `text` and persist them into Neo4j (optionally tagged with a `document_id`) |
-| POST | `/v1/retrieve` | Graph-aware retrieval for a query — pull the relevant entity subgraph as context |
-| POST | `/v1/entity-context` | The neighbourhood (linked entities/relationships) around a named entity |
-| POST | `/v1/graph/search` | Free-text entity search — case-insensitive `CONTAINS` match on entity text/label; returns `{text, label, description}` per hit (`limit` 1–50) |
-| GET | `/v1/graph/stats` | Graph overview: node / relationship / document / entity counts + the per-NER-label entity distribution (confirm a build populated the graph) |
-| GET | `/v1/graph/documents` | List the Document nodes (id / title / source / entity_count), newest first — browse what's built |
-| DELETE | `/v1/graph/document/{document_id}` | Remove all nodes/edges contributed by one document |
+| POST | `/v1/extract` | spaCy NER — return the entities (+ types) found in `text`, no graph write. **Open** (touches no graph) |
+| POST | `/v1/construct-graph` | Extract entities + relationships from `text` and persist them into Neo4j under a `document_id` (optional `kb_id` grouping). **JWT-required, owner-scoped** |
+| POST | `/v1/retrieve` | Graph-aware retrieval for a query — pull the relevant entity subgraph as context. **JWT-required, owner-scoped** |
+| POST | `/v1/entity-context` | The neighbourhood (linked entities/relationships) around a named entity. **JWT-required, owner-scoped** |
+| POST | `/v1/graph/search` | Free-text entity search — case-insensitive `CONTAINS` match on entity text/label; returns `{text, label, description}` per hit (`limit` 1–50). **JWT-required, owner-scoped** |
+| GET | `/v1/graph/stats` | Graph overview: node / relationship / document / entity counts + the per-NER-label entity distribution, **scoped to the caller**. **JWT-required** |
+| GET | `/v1/graph/documents` | List the caller's own Document nodes (id / title / source / kb_id / entity_count), newest first. **JWT-required, owner-scoped** |
+| DELETE | `/v1/graph/document/{document_id}` | Remove all nodes/edges contributed by one of the caller's documents (a doc owned by another tenant is a no-op). **JWT-required, owner-scoped** |
 
 Every route is served at both `/v1/...` and the legacy unversioned path.
+
+**Per-tenant scoping (#782):** every Document/Entity node carries an `owner_id`
+(the authenticated caller's JWT `sub`; the internal service token scopes to
+`internal-service`). Nodes are MERGEd on `owner_id`, so two tenants extracting the
+same term — or reusing the same `document_id` — get separate nodes, and every
+read/traversal/delete is confined to the caller's own graph. One tenant can't see,
+retrieve, or delete another's data. Because scoping needs to know the tenant, the
+graph reads (`stats`/`documents`/`retrieve`/`entity-context`/`search`) are now
+JWT-required (previously open). Pre-#782 nodes have no `owner_id` and are not
+visible under any owner — a clean cut-over, not an in-place migration.
 
 ## Layout
 
@@ -61,13 +71,12 @@ graph-rag/
 
 ## Storage & dependencies
 
-- **Neo4j** — the knowledge graph (shared with marketplace's dependency graph, but
-  different node labels). REQUIRED. Graph writes use `MERGE` so re-ingesting a
-  document is idempotent. The graph is a single global Neo4j space — there is no
-  per-knowledge-base or per-user partitioning of entities/documents. Entities
-  merge across documents by `(text, label)` regardless of who/what ingested
-  them, and any authenticated caller can list/delete any document (tracked:
-  [#628](https://github.com/wish-maker/minder/issues/628)).
+- **Neo4j** — the knowledge graph (shared Neo4j instance with marketplace's
+  dependency graph, but different node labels). REQUIRED. Graph writes use `MERGE`
+  so re-ingesting a document is idempotent. Entities/documents are **partitioned
+  per tenant** by `owner_id` (#782, resolving the isolation gap from #628): entities
+  merge across a single owner's documents by `(text, label, owner_id)`, never across
+  owners, and a caller can only ever list/retrieve/delete their own documents.
 - **spaCy** — the NER model; excluded from CI mypy (heavy lib false-positives).
 
 ## Error conventions

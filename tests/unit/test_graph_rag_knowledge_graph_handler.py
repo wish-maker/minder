@@ -121,21 +121,25 @@ class _FakeConstructor:
     async def construct_graph(
         self,
         document_id,
+        owner_id,
         entities,
         relationships,
         title=None,
         source=None,
         metadata=None,
+        kb_id=None,
     ):
         if self._construct_error:
             raise self._construct_error
         self.constructed_with = {
             "document_id": document_id,
+            "owner_id": owner_id,
             "entities": entities,
             "relationships": relationships,
             "title": title,
             "source": source,
             "metadata": metadata,
+            "kb_id": kb_id,
         }
         return {
             "entity_count": len(self._entity_ids),
@@ -143,7 +147,8 @@ class _FakeConstructor:
             "mentions_count": self._mentions_count,
         }
 
-    async def get_graph_statistics(self):
+    async def get_graph_statistics(self, owner_id):
+        self.stats_owner_id = owner_id
         if isinstance(self._stats, Exception):
             raise self._stats
         return self._stats or {
@@ -154,10 +159,19 @@ class _FakeConstructor:
             "entity_types": {"ORG": 2, "PERSON": 2},
         }
 
-    async def list_documents(self):
+    async def list_documents(self, owner_id):
+        self.list_owner_id = owner_id
         if isinstance(self._documents, Exception):
             raise self._documents
         return self._documents if self._documents is not None else []
+
+    async def delete_document(self, document_id, owner_id):
+        self.deleted_with = {"document_id": document_id, "owner_id": owner_id}
+        return {
+            "document_deleted": 1,
+            "relationships_deleted": 0,
+            "orphan_entities_deleted": 0,
+        }
 
 
 def _request():
@@ -171,7 +185,9 @@ async def test_entity_count_reflects_created_not_extracted_on_full_success():
     )
     constructor = _FakeConstructor(entity_ids=["Acme Corp"])
 
-    result = await construct_knowledge_graph_handler(_request(), extractor, constructor)
+    result = await construct_knowledge_graph_handler(
+        _request(), "owner-x", extractor, constructor
+    )
 
     assert result.success is True
     assert result.entity_count == 1
@@ -193,7 +209,9 @@ async def test_entity_count_reflects_committed_count_from_construct():
     # construct_graph committed 2 of the 3 (e.g. one deduped by #669 upstream).
     constructor = _FakeConstructor(entity_ids=["Acme Corp", "Jane Doe"])
 
-    result = await construct_knowledge_graph_handler(_request(), extractor, constructor)
+    result = await construct_knowledge_graph_handler(
+        _request(), "owner-x", extractor, constructor
+    )
 
     assert result.success is True
     assert result.entity_count == 2
@@ -216,7 +234,9 @@ async def test_construct_failure_aborts_instead_of_reporting_partial_success():
     )
 
     with pytest.raises(HTTPException) as exc:
-        await construct_knowledge_graph_handler(_request(), extractor, constructor)
+        await construct_knowledge_graph_handler(
+            _request(), "owner-x", extractor, constructor
+        )
     assert exc.value.status_code == 503
 
 
@@ -227,7 +247,9 @@ async def test_zero_entities_created_reports_zero_not_extracted_count():
     )
     constructor = _FakeConstructor(entity_ids=[])  # every entity write failed
 
-    result = await construct_knowledge_graph_handler(_request(), extractor, constructor)
+    result = await construct_knowledge_graph_handler(
+        _request(), "owner-x", extractor, constructor
+    )
 
     assert result.success is True
     assert result.entity_count == 0
@@ -311,7 +333,7 @@ async def test_graph_stats_handler_returns_overview():
             "entity_types": {"PERSON": 3, "ORG": 2},
         },
     )
-    result = await _api.get_graph_stats_handler(constructor)
+    result = await _api.get_graph_stats_handler("owner-x", constructor)
     assert result.success is True
     assert result.nodes == 7 and result.relationships == 4
     assert result.documents == 2 and result.entities == 5
@@ -323,7 +345,7 @@ async def test_graph_stats_handler_503_when_constructor_missing():
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc:
-        await _api.get_graph_stats_handler(None)
+        await _api.get_graph_stats_handler("owner-x", None)
     assert exc.value.status_code == 503
 
 
@@ -335,15 +357,30 @@ async def test_graph_stats_handler_maps_backend_error():
         entity_ids=[], stats=ConnectionRefusedError("neo4j down")
     )
     with pytest.raises(HTTPException) as exc:
-        await _api.get_graph_stats_handler(constructor)
+        await _api.get_graph_stats_handler("owner-x", constructor)
     # backend_http_error maps a connectivity failure to 503, not a raw 500.
     assert exc.value.status_code == 503
 
 
-def test_graph_stats_endpoint_is_open_read():
-    # A GET read is ungated (Authelia's job, #15) — unlike the mutating routes.
+def _auth_header():
+    """A valid Bearer header for a test user, signed with the unit-test JWT_SECRET
+    (tests/unit/conftest.py sets it), so the graph endpoints' owner-scoping (#782)
+    resolves a real ``sub``."""
+    from shared.auth.jwt_middleware import create_jwt_token
+
+    return {"Authorization": f"Bearer {create_jwt_token({'sub': 'owner-x'})}"}
+
+
+def test_graph_stats_endpoint_requires_auth():
+    # #782: stats is now owner-scoped, so it requires a JWT — a global count would
+    # leak other tenants' data volume. Unauthenticated → 401.
     client = _graph_router_client()
-    resp = client.get("/v1/graph/stats")
+    assert client.get("/v1/graph/stats").status_code == 401
+
+
+def test_graph_stats_endpoint_authed_returns_overview():
+    client = _graph_router_client()
+    resp = client.get("/v1/graph/stats", headers=_auth_header())
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
@@ -375,7 +412,7 @@ async def test_list_documents_handler_returns_documents_and_count():
         },
     ]
     result = await _api.list_graph_documents_handler(
-        _FakeConstructor(entity_ids=[], documents=docs)
+        "owner-x", _FakeConstructor(entity_ids=[], documents=docs)
     )
     assert result.success is True
     assert result.count == 2
@@ -386,7 +423,7 @@ async def test_list_documents_handler_returns_documents_and_count():
 @pytest.mark.asyncio
 async def test_list_documents_handler_empty_is_zero_count():
     result = await _api.list_graph_documents_handler(
-        _FakeConstructor(entity_ids=[], documents=[])
+        "owner-x", _FakeConstructor(entity_ids=[], documents=[])
     )
     assert result.success is True
     assert result.count == 0
@@ -398,13 +435,21 @@ async def test_list_documents_handler_503_when_constructor_missing():
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc:
-        await _api.list_graph_documents_handler(None)
+        await _api.list_graph_documents_handler("owner-x", None)
     assert exc.value.status_code == 503
 
 
-def test_list_documents_endpoint_is_open_read():
+def test_list_documents_endpoint_requires_auth():
+    # #782: was an open read that let any logged-in user enumerate every tenant's
+    # document titles/sources (and then delete them by id). Now JWT-required +
+    # owner-scoped. Unauthenticated → 401.
     client = _graph_router_client()
-    resp = client.get("/v1/graph/documents")
+    assert client.get("/v1/graph/documents").status_code == 401
+
+
+def test_list_documents_endpoint_authed_returns_list():
+    client = _graph_router_client()
+    resp = client.get("/v1/graph/documents", headers=_auth_header())
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
@@ -431,11 +476,13 @@ class _FakeRetrieverForQuery:
         self._context_result = context_result
         self.find_related_calls = []
 
-    async def find_related_entities(self, entity_name, max_depth, limit):
+    async def find_related_entities(self, entity_name, owner_id, max_depth, limit):
+        self.last_owner_id = owner_id
         self.find_related_calls.append(entity_name)
         return self._related_by_entity.get(entity_name, [])
 
-    async def get_entity_context(self, entity_name, context_window):
+    async def get_entity_context(self, entity_name, owner_id, context_window):
+        self.last_owner_id = owner_id
         return self._context_result
 
 
@@ -445,7 +492,7 @@ async def test_retrieve_with_graph_handler_returns_empty_when_no_entities_extrac
     retriever = _FakeRetrieverForQuery()
 
     result = await retrieve_with_graph_handler(
-        GraphRetrievalRequest(query="nothing here"), extractor, retriever
+        GraphRetrievalRequest(query="nothing here"), "owner-x", extractor, retriever
     )
 
     assert result.success is True
@@ -470,7 +517,10 @@ async def test_retrieve_with_graph_handler_dedupes_across_search_terms():
     )
 
     result = await retrieve_with_graph_handler(
-        GraphRetrievalRequest(query="who runs Apple and Tesla?"), extractor, retriever
+        GraphRetrievalRequest(query="who runs Apple and Tesla?"),
+        "owner-x",
+        extractor,
+        retriever,
     )
 
     assert result.entity_count == 2
@@ -486,7 +536,7 @@ async def test_retrieve_with_graph_handler_limits_to_top_5_search_terms():
     retriever = _FakeRetrieverForQuery()
 
     await retrieve_with_graph_handler(
-        GraphRetrievalRequest(query="seven things"), extractor, retriever
+        GraphRetrievalRequest(query="seven things"), "owner-x", extractor, retriever
     )
 
     assert retriever.find_related_calls == [f"Entity{i}" for i in range(5)]
@@ -500,7 +550,7 @@ async def test_get_entity_context_handler_404_when_entity_not_found():
 
     with pytest.raises(HTTPException) as exc:
         await get_entity_context_handler(
-            EntityContextRequest(entity_text="nope"), retriever
+            EntityContextRequest(entity_text="nope"), "owner-x", retriever
         )
     assert exc.value.status_code == 404
 
@@ -517,7 +567,9 @@ async def test_get_entity_context_handler_drops_related_when_include_neighbors_f
     )
 
     result = await get_entity_context_handler(
-        EntityContextRequest(entity_text="Acme", include_neighbors=False), retriever
+        EntityContextRequest(entity_text="Acme", include_neighbors=False),
+        "owner-x",
+        retriever,
     )
 
     assert result.entity == {"text": "Acme", "label": "ORG"}
@@ -537,7 +589,7 @@ async def test_get_entity_context_handler_includes_related_by_default():
     )
 
     result = await get_entity_context_handler(
-        EntityContextRequest(entity_text="Acme"), retriever
+        EntityContextRequest(entity_text="Acme"), "owner-x", retriever
     )
 
     assert result.related_entities == [{"text": "Alice", "label": "PERSON"}]

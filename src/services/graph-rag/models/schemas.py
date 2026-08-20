@@ -28,6 +28,14 @@ class KnowledgeGraphRequest(BaseModel):
     # text is nothing to build a graph from — reject both at the edge (#538).
     document_id: str = Field(..., min_length=1, description="Document identifier")
     text: str = Field(..., min_length=1, description="Document text for processing")
+    # #782: optional knowledge-base grouping key stored on the Document. The
+    # tenant/isolation boundary itself is the authenticated caller (owner_id,
+    # taken from the JWT `sub` in the route — NEVER from the request body, or a
+    # client could claim another tenant's scope); kb_id is a finer, owner-local
+    # grouping label a caller may filter their own documents by.
+    kb_id: Optional[str] = Field(
+        default=None, description="Optional knowledge-base grouping key (owner-local)"
+    )
     # Optional/None (not ""/"unknown"/{}) so an OMITTED field on a re-POST is
     # distinguishable from an explicit value: construct_graph COALESCEs None to the
     # previously-stored value instead of blanking it (#668 item 3).
@@ -149,6 +157,9 @@ class GraphDocument(BaseModel):
     id: str
     title: Optional[str] = None
     source: Optional[str] = None
+    kb_id: Optional[str] = Field(
+        default=None, description="Owner-local knowledge-base grouping key (#782)"
+    )
     created_at: Optional[str] = None
     entity_count: int = Field(default=0, description="Entities this document mentions")
 

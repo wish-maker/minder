@@ -81,8 +81,12 @@ def test_retrieve_returns_related_entities(live_stack, auth_token):
     # Ensure the graph is populated first.
     setup = _construct_graph(live_stack, auth_token)
     assert setup.status_code == 200, setup.text
+    # #782: /retrieve is now owner-scoped — send the SAME token as the construct
+    # above so the traversal runs within the same tenant's graph (an unauth call
+    # is 401; a different user's token would correctly find nothing).
     r = httpx.post(
         f"{live_stack.graph_rag_url}/retrieve",
+        headers={"Authorization": f"Bearer {auth_token}"},
         json={"query": "Who worked on the Analytical Engine?", "limit": 5},
         timeout=TIMEOUT,
     )
@@ -94,8 +98,10 @@ def test_entity_context_regression(live_stack, auth_token):
     """Regression: /entity-context used to 500 on a kwarg mismatch."""
     setup = _construct_graph(live_stack, auth_token)
     assert setup.status_code == 200, setup.text
+    # #782: entity-context is owner-scoped — same token as the construct above.
     r = httpx.post(
         f"{live_stack.graph_rag_url}/entity-context",
+        headers={"Authorization": f"Bearer {auth_token}"},
         json={
             "entity_text": "Ada Lovelace",
             "include_neighbors": True,

@@ -95,16 +95,30 @@ async def create_plugin_state(
     initial_state: PluginState = PluginState.INSTALLED,
     license_tier: LicenseTier = LicenseTier.COMMUNITY,
 ) -> Dict:
-    """Create new plugin state"""
+    """Create new plugin state.
+
+    Stamps ``enabled_at``/``disabled_at`` to match the transition semantics of
+    ``update_plugin_state`` (#908): a row materialized directly in ENABLED
+    state — the #751 auto-create-on-first-enable path — must carry a non-null
+    ``enabled_at``, exactly as an installed→enabled transition would, rather
+    than being silently left NULL and inconsistent with every other enabled
+    row. Naive-UTC, same as ``update_plugin_state`` (asyncpg rejects an aware
+    value on a naive ``timestamp`` column).
+    """
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    enabled_at = now if initial_state == PluginState.ENABLED else None
+    disabled_at = now if initial_state == PluginState.DISABLED else None
     row = await conn.fetchrow(
         """
-        INSERT INTO plugin_states (plugin_name, state, license_tier)
-        VALUES ($1, $2, $3)
+        INSERT INTO plugin_states (plugin_name, state, license_tier, enabled_at, disabled_at)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         """,
         plugin_name,
         initial_state.value,
         license_tier.value,
+        enabled_at,
+        disabled_at,
     )
     # A plain INSERT...RETURNING with no WHERE clause always returns exactly one row.
     result = _record_to_dict(row)
