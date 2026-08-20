@@ -59,6 +59,8 @@ def _load_middleware(*, rate_limit_enabled=True, rate_limit_per_minute=3, redis=
         CORS_ALLOWED_ORIGINS="*",
         RATE_LIMIT_ENABLED=rate_limit_enabled,
         RATE_LIMIT_PER_MINUTE=rate_limit_per_minute,
+        # #749: trusted-proxy CIDR allowlist parsed at module import.
+        TRUSTED_PROXY_CIDRS="127.0.0.0/8,10.0.0.0/8,172.16.0.0/12",
     )
     sys.modules["config"] = cfg
     sys.modules["core"] = ModuleType("core")
@@ -98,13 +100,31 @@ def _app(mod):
 class TestClientIp:
     def test_returns_the_connecting_peer_host(self):
         mod = _load_middleware()
-        request = SimpleNamespace(client=SimpleNamespace(host="10.0.0.5"))
+        request = SimpleNamespace(client=SimpleNamespace(host="10.0.0.5"), headers={})
         assert mod._client_ip(request) == "10.0.0.5"
 
     def test_falls_back_to_loopback_when_no_client(self):
         mod = _load_middleware()
-        request = SimpleNamespace(client=None)
+        request = SimpleNamespace(client=None, headers={})
         assert mod._client_ip(request) == "127.0.0.1"
+
+    def test_trusted_peer_resolves_real_client_from_xff(self):
+        # #749: Traefik (a trusted 172.16/12 peer) forwards the real client.
+        mod = _load_middleware()
+        request = SimpleNamespace(
+            client=SimpleNamespace(host="172.18.0.2"),
+            headers={"X-Forwarded-For": "198.51.100.7"},
+        )
+        assert mod._client_ip(request) == "198.51.100.7"
+
+    def test_untrusted_peer_ignores_forged_xff(self):
+        # #749: a direct (untrusted) connection can't spoof its IP via XFF.
+        mod = _load_middleware()
+        request = SimpleNamespace(
+            client=SimpleNamespace(host="203.0.113.9"),
+            headers={"X-Forwarded-For": "10.0.0.1"},
+        )
+        assert mod._client_ip(request) == "203.0.113.9"
 
 
 class TestRequestIdMiddleware:
