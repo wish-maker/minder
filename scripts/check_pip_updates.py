@@ -2,7 +2,7 @@
 """Check pinned Python dependencies across the services for available PyPI updates.
 
 Companion to the Docker image auto-update (#96 report) for the Python side (#34: track
-the plugin libs' — e.g. tefas-crawler, borsapy — versions too). Scans every
+the plugin libs' — e.g. tefas-crawler — versions too). Scans every
 ``src/**/requirements.txt``, reads each ``name[extras]==version`` pin, asks the PyPI
 JSON API for the latest stable release, and prints a Markdown report of what's
 outdated (classified patch/minor/major). Read-only; stdlib only (urllib) so it runs

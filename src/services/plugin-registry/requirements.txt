@@ -30,7 +30,9 @@ PyJWT[crypto]==2.13.0
 
 # Plugin-specific dependencies (TEFAS, time-series)
 tefas-crawler==0.6.0
-# Not imported by any current plugin, but deliberately pre-installed for a
-# planned future BIST plugin (see src/plugins/tefas/__init__.py's own
-# docstring) -- kept, unlike this issue's other genuinely-dead pins (#341).
-borsapy==0.11.0
+# borsapy was removed here (#750): it was NEVER imported by any Minder code
+# (the TEFAS plugin uses tefas-crawler above, not borsapy) -- a dead pin for a
+# never-built future BIST plugin. It hard-depends on pymupdf4llm/pymupdf, both
+# AGPL-3.0, which shipped those AGPL wheels into this image for zero functional
+# benefit. Re-introduce a de-AGPL'd data source only when a BIST plugin is
+# actually built, not before.
