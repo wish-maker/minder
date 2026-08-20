@@ -240,7 +240,9 @@ async def test_create_plugin_success_returns_response(monkeypatch):
         marketplace, "row_to_plugin_response", lambda row: {"echo": row}
     )
 
-    result = await marketplace.create_plugin(_PluginCreateStub())
+    result = await marketplace.create_plugin(
+        _PluginCreateStub(), current_user={"role": "service", "sub": "svc"}
+    )
 
     assert result == {"echo": fake_row}
     conn.fetchrow.assert_awaited_once()
@@ -307,7 +309,9 @@ async def test_update_plugin_no_updatable_fields_raises_422():
 
     with pytest.raises(Exception) as exc_info:
         await marketplace.update_plugin(
-            empty_update, plugin_id="11111111-1111-1111-1111-111111111111"
+            empty_update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "admin", "sub": "admin"},
         )
     assert exc_info.value.status_code == 422
 
@@ -325,7 +329,9 @@ async def test_update_plugin_success_binds_params_and_returns_response(monkeypat
 
     update = marketplace.PluginUpdate(display_name="New Name")
     result = await marketplace.update_plugin(
-        update, plugin_id="11111111-1111-1111-1111-111111111111"
+        update,
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"role": "admin", "sub": "admin"},
     )
 
     assert result == {"echo": fake_row}
@@ -349,7 +355,9 @@ async def test_update_plugin_serializes_jsonb_requires_services(monkeypatch):
 
     update = marketplace.PluginUpdate(requires_services=["ollama"])
     await marketplace.update_plugin(
-        update, plugin_id="11111111-1111-1111-1111-111111111111"
+        update,
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"role": "admin", "sub": "admin"},
     )
 
     args, _ = conn.fetchrow.call_args
@@ -368,7 +376,9 @@ async def test_update_plugin_404_when_row_not_found(monkeypatch):
     update = marketplace.PluginUpdate(display_name="New Name")
     with pytest.raises(Exception) as exc_info:
         await marketplace.update_plugin(
-            update, plugin_id="11111111-1111-1111-1111-111111111111"
+            update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "admin", "sub": "admin"},
         )
     assert exc_info.value.status_code == 404
 
@@ -389,7 +399,9 @@ async def test_update_plugin_can_change_name(monkeypatch):
 
     update = marketplace.PluginUpdate(name="new_name")
     result = await marketplace.update_plugin(
-        update, plugin_id="11111111-1111-1111-1111-111111111111"
+        update,
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"role": "admin", "sub": "admin"},
     )
 
     assert result == {"echo": fake_row}
@@ -417,6 +429,8 @@ async def test_update_plugin_name_collision_is_a_clean_409_not_a_500(monkeypatch
     update = marketplace.PluginUpdate(name="already_taken")
     with pytest.raises(Exception) as exc_info:
         await marketplace.update_plugin(
-            update, plugin_id="11111111-1111-1111-1111-111111111111"
+            update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "admin", "sub": "admin"},
         )
     assert exc_info.value.status_code == 409

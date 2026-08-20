@@ -58,6 +58,39 @@ CREATE TABLE IF NOT EXISTS marketplace_plugin_versions (
     UNIQUE(plugin_id, version)
 );
 
+-- Submission / review workflow (#402). Additive columns on marketplace_plugins:
+-- `origin` distinguishes machine-synced first-party listings ('first_party',
+-- auto-approved) from human developer submissions ('submitted', reviewed).
+-- submitted_by/reviewed_by are opaque JWT `sub` ids (no FK to a users table --
+-- same convention as marketplace_installations, whose FK to the dead
+-- marketplace_users table was the #434 bug).
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS submitted_by VARCHAR(255);
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255);
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS review_notes TEXT;
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP;
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP;
+ALTER TABLE marketplace_plugins
+    ADD COLUMN IF NOT EXISTS origin VARCHAR(20) NOT NULL DEFAULT 'first_party';
+
+-- Append-only audit trail: one row per submission-state transition (#402).
+CREATE TABLE IF NOT EXISTS marketplace_plugin_reviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    plugin_id UUID REFERENCES marketplace_plugins(id) ON DELETE CASCADE,
+    from_status VARCHAR(50),
+    to_status VARCHAR(50) NOT NULL,
+    actor VARCHAR(255) NOT NULL,
+    actor_role VARCHAR(50),
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_reviews_plugin
+    ON marketplace_plugin_reviews(plugin_id);
+
 -- Plugin tiers table
 CREATE TABLE IF NOT EXISTS marketplace_plugin_tiers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

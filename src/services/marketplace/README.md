@@ -29,12 +29,23 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x NEO4J_AUTH=neo4j/x \
 | `/v1/marketplace/installations` | `activate` an install, `me` (my installs) |
 | `/v1/marketplace/licenses` | Issue / `validate` license keys (HMAC, tiered) |
 | `/v1/marketplace/ai` | AI-tool catalog: `tools`, `sync` (pull module `AI_TOOLS` from the registry) |
+| `/v1/marketplace/submissions` | Submission/review workflow (`routes/submissions.py`, #402): `mine`, `{id}/submit` (developer); the review queue + `{id}/claim,approve,reject,archive` (admin) |
 | `/v1/graph` | Neo4j dependency graph: `dependencies`, `conflicts/{id}`, `recommendations` |
 
-The catalog is populated by `sync`, which reads module `AI_TOOLS` from
-plugin-registry using `SERVICE_SYNC_TOKEN` service-auth (#87). A NOT-NULL
-`display_name` importer bug used to silently empty the catalog — fixed; the sync
-now imports cleanly.
+The catalog is populated two ways. **First-party module plugins** are auto-synced
+by `sync`, which reads module `AI_TOOLS` from plugin-registry using
+`SERVICE_SYNC_TOKEN` service-auth (#87) and creates them already `approved`
+(`origin='first_party'`). **Developer submissions** (#402) instead go through a
+review workflow: `POST /v1/marketplace/plugins` from a *user* JWT creates a
+`draft` (`origin='submitted'`, `submitted_by=<sub>`), the developer `submit`s it,
+an admin `claim`s → `approve`s/`reject`s (rejection requires notes; the developer
+may edit and resubmit), and only an `approved` listing is publicly visible. Every
+transition is validated by the state machine in `core/review.py` (409 on an
+illegal move) and appended to the `marketplace_plugin_reviews` audit table. The
+service sync will not overwrite an `origin='submitted'` row (409), so a
+name-collision can't let auto-sync clobber a human submission.
+(Phase 1 = this backend + state machine + admin review; the developer submission
+UX in the client SPA and versioned re-submission are the deferred Phase 2/3 of #402.)
 
 ## Layout
 

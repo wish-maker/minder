@@ -23,8 +23,17 @@ class DistributionType(str, Enum):
 
 
 class PluginStatus(str, Enum):
-    """Plugin status in marketplace"""
+    """Plugin status in marketplace.
 
+    #402 submission lifecycle: DRAFT -> SUBMITTED -> IN_REVIEW -> APPROVED
+    (publicly visible) / REJECTED (with notes; may resubmit) ; ARCHIVED (delist).
+    APPROVED is the publicly-visible state (existing read paths key on it);
+    PENDING is the legacy pre-#402 value, kept for back-compat.
+    """
+
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    IN_REVIEW = "in_review"
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -121,6 +130,11 @@ class PluginResponse(BaseModel):
         pattern="^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
     )
     requires_services: List[str] = Field(default_factory=list)
+    # #402 submission/review metadata (opaque JWT `sub` ids; None on legacy rows).
+    origin: str = "first_party"
+    submitted_by: Optional[str] = None
+    reviewed_by: Optional[str] = None
+    review_notes: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

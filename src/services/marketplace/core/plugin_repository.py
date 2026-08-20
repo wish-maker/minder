@@ -27,7 +27,8 @@ PLUGIN_COLUMNS = """id, name, display_name, description, author,
                  repository_url, distribution_type, docker_image,
                  current_version, pricing_model, base_tier, status,
                  featured, download_count, rating_average, rating_count,
-                 created_at, updated_at, published_at, developer_id, category_id, requires_services"""
+                 created_at, updated_at, published_at, developer_id, category_id, requires_services,
+                 origin, submitted_by, reviewed_by, review_notes"""
 
 
 def row_to_plugin_response(row) -> PluginResponse:
@@ -58,6 +59,10 @@ def row_to_plugin_response(row) -> PluginResponse:
         developer_id=str(row["developer_id"]) if row["developer_id"] else None,
         category_id=str(row["category_id"]) if row["category_id"] else None,
         requires_services=json.loads(row["requires_services"] or "[]"),
+        origin=row["origin"] if "origin" in row else "first_party",
+        submitted_by=row["submitted_by"] if "submitted_by" in row else None,
+        reviewed_by=row["reviewed_by"] if "reviewed_by" in row else None,
+        review_notes=row["review_notes"] if "review_notes" in row else None,
     )
 
 
