@@ -1282,6 +1282,19 @@ async def test_ingest_document_raises_400_when_no_text_extracted(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ingest_document_raises_415_for_unsupported_binary_content(monkeypatch):
+    """#900: a real PNG (or any content matching no registered extractor)
+    must be cleanly rejected at ingest time, not silently latin-1-decoded
+    into garbage and embedded."""
+    monkeypatch.setattr(ingestion, "chunk_text", _fake_chunk_text)
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+    with pytest.raises(Exception) as exc_info:
+        await ingestion.ingest_document("kb-1", _fake_kb(), "image.png", png_bytes)
+    assert exc_info.value.status_code == 415
+
+
+@pytest.mark.asyncio
 async def test_ingest_document_raises_503_when_embedding_backend_unavailable(
     monkeypatch,
 ):
