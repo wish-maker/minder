@@ -258,6 +258,43 @@ def _sweep_stale_keys(store: Dict[str, list], now: float) -> None:
         del store[key]
 
 
+def resolve_caller_identity(request: Request) -> Optional[str]:
+    """Best-effort real caller identity from this request's own Authorization
+    header (#894/#901).
+
+    ``request.state.user`` -- what ``enforce_rate_limit`` used to key on --
+    is never set inside a downstream service's own process; only api-gateway's
+    ``routes/proxy.py`` sets it, and only on ITS OWN ``Request`` object, which
+    never propagates across the network to whatever service actually handles
+    the proxied call. Every rate-limited route in every service (model-
+    management's ``test_model``, plugin-registry's endpoints, ...) therefore
+    always fell through to the IP-address branch below -- silently turning
+    every "per-user" limit into one bucket shared by every real user behind
+    the gateway (confirmed live: a second user got 429'd on their very first
+    request, blocked by a first user's unrelated quota).
+
+    Decodes the JWT directly out of the request's own header instead, the
+    same way ``get_current_user``/``verify_jwt_token`` do -- this works
+    identically in api-gateway and in every downstream service, since each
+    request carries its own Authorization header end to end. Returns None
+    (not a raise) for a missing/malformed/invalid token -- this is a
+    best-effort identity lookup for rate-limit KEYING, not an auth check;
+    callers fall back to IP-based limiting exactly as before when it returns
+    None, so an unauthenticated route (e.g. login/register, which by
+    definition has no token yet) is unaffected.
+    """
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header[len("Bearer ") :]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.InvalidTokenError:
+        return None
+    identity = payload.get("sub") or payload.get("username")
+    return str(identity) if identity else None
+
+
 def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
     """
     Rate limiting decorator - uses in-memory store
@@ -290,12 +327,11 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
                 # No request object, skip rate limiting
                 return await func(*args, **kwargs)
 
-            # Get user identifier
-            current_user = getattr(request.state, "user", None)
-            if current_user:
-                user_id = current_user.get("username", "anonymous")
-            else:
-                # Fallback to IP address
+            # Get user identifier -- the real caller's identity if this
+            # request carries a valid JWT (#894), else fall back to IP
+            # address (unauthenticated routes, or an invalid/missing token).
+            user_id = resolve_caller_identity(request)
+            if not user_id:
                 user_id = request.client.host if request.client else "anonymous"
 
             # Check rate limit

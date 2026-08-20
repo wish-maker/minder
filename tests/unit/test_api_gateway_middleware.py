@@ -175,3 +175,53 @@ class TestRateLimitMiddleware:
         client = _app(mod)
         for _ in range(5):
             assert client.get("/v1/whoami").status_code == 200
+
+
+class TestRateLimitKeyIsIpPlusUser:
+    """#901: two distinct authenticated users behind the same source IP must
+    not share one global-limiter bucket. TestClient always presents the same
+    peer host, so this exercises the real "same IP, different JWT" scenario
+    directly, no faking needed."""
+
+    def test_two_different_users_get_separate_budgets(self):
+        from shared.auth.jwt_middleware import create_jwt_token
+
+        redis = _FakeRedis()
+        mod = _load_middleware(rate_limit_per_minute=1, redis=redis)
+        client = _app(mod)
+
+        token_a = create_jwt_token({"sub": "user-a", "username": "alice"})
+        token_b = create_jwt_token({"sub": "user-b", "username": "bob"})
+
+        r1 = client.get("/v1/whoami", headers={"Authorization": f"Bearer {token_a}"})
+        assert r1.status_code == 200
+        r2 = client.get("/v1/whoami", headers={"Authorization": f"Bearer {token_a}"})
+        assert r2.status_code == 429  # user A exhausted their own budget
+
+        # Same TestClient (same source IP) -- user B must get a fresh budget.
+        r3 = client.get("/v1/whoami", headers={"Authorization": f"Bearer {token_b}"})
+        assert r3.status_code == 200
+        assert any(k.endswith(":user-a") for k in redis._counts)
+        assert any(k.endswith(":user-b") for k in redis._counts)
+
+    def test_anonymous_requests_still_key_by_ip_alone(self):
+        redis = _FakeRedis()
+        mod = _load_middleware(rate_limit_per_minute=1, redis=redis)
+        client = _app(mod)
+
+        assert client.get("/v1/whoami").status_code == 200
+        assert client.get("/v1/whoami").status_code == 429
+        # Exactly one bucket, no ":user-..." suffix -- pure IP keying preserved.
+        assert len(redis._counts) == 1
+
+    def test_a_malformed_token_degrades_to_ip_only_keying(self):
+        redis = _FakeRedis()
+        mod = _load_middleware(rate_limit_per_minute=1, redis=redis)
+        client = _app(mod)
+
+        r1 = client.get(
+            "/v1/whoami", headers={"Authorization": "Bearer not-a-real-jwt"}
+        )
+        assert r1.status_code == 200
+        r2 = client.get("/v1/whoami", headers={"Authorization": "Bearer also-not-real"})
+        assert r2.status_code == 429  # same IP-only bucket both times

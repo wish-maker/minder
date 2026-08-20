@@ -17,14 +17,23 @@ from fastapi import HTTPException, Request
 from starlette.datastructures import Headers
 from starlette.types import Scope
 
-from shared.auth.jwt_middleware import _rate_limit_store, enforce_rate_limit
+from shared.auth.jwt_middleware import (
+    _rate_limit_store,
+    create_jwt_token,
+    enforce_rate_limit,
+)
 
 
-def _fake_request(path: str = "/test", client_host: str = "1.2.3.4") -> Request:
+def _fake_request(
+    path: str = "/test", client_host: str = "1.2.3.4", token: str = None
+) -> Request:
+    headers = {}
+    if token:
+        headers["authorization"] = f"Bearer {token}"
     scope: Scope = {
         "type": "http",
         "path": path,
-        "headers": Headers({}).raw,
+        "headers": Headers(headers).raw,
         "client": (client_host, 12345),
     }
     return Request(scope)
@@ -94,3 +103,69 @@ async def test_limit_is_keyed_per_path_not_global():
     assert await handler(request=_fake_request(path="/b")) == "ok"
     with pytest.raises(HTTPException):
         await handler(request=_fake_request(path="/a"))
+
+
+# --- #894: the limit must be keyed by the REAL caller, not the shared -------
+# gateway IP every downstream service sees on every proxied request.
+
+
+@pytest.mark.asyncio
+async def test_two_different_authenticated_users_get_separate_budgets():
+    """The core #894 regression: request.state.user is never set inside a
+    downstream service's own process (only api-gateway sets it, on ITS OWN
+    Request object) -- so this used to always fall through to the IP
+    fallback, meaning two different real users behind the same gateway IP
+    shared one bucket. A second user must NOT be blocked by a first user's
+    unrelated quota."""
+
+    @enforce_rate_limit(max_requests=1, window_minutes=1)
+    async def handler(*, request: Request):
+        return "ok"
+
+    token_a = create_jwt_token({"sub": "user-a", "username": "alice"})
+    token_b = create_jwt_token({"sub": "user-b", "username": "bob"})
+
+    # Same source IP for both -- proves the key is the decoded identity, not
+    # request.client.host.
+    assert (
+        await handler(request=_fake_request(client_host="10.0.0.1", token=token_a))
+        == "ok"
+    )
+    with pytest.raises(HTTPException):
+        await handler(request=_fake_request(client_host="10.0.0.1", token=token_a))
+
+    # User B, same IP, first request -- must succeed, not inherit A's quota.
+    assert (
+        await handler(request=_fake_request(client_host="10.0.0.1", token=token_b))
+        == "ok"
+    )
+
+
+@pytest.mark.asyncio
+async def test_falls_back_to_ip_when_no_token_present():
+    """An unauthenticated route (e.g. login/register, which by definition has
+    no token yet) must keep its existing IP-based behavior unchanged."""
+
+    @enforce_rate_limit(max_requests=1, window_minutes=1)
+    async def handler(*, request: Request):
+        return "ok"
+
+    assert await handler(request=_fake_request(client_host="9.9.9.9")) == "ok"
+    with pytest.raises(HTTPException):
+        await handler(request=_fake_request(client_host="9.9.9.9"))
+
+
+@pytest.mark.asyncio
+async def test_falls_back_to_ip_for_an_invalid_token():
+    """A malformed/garbage bearer token must not crash the rate limiter --
+    it degrades to the IP fallback exactly like no token at all."""
+
+    @enforce_rate_limit(max_requests=1, window_minutes=1)
+    async def handler(*, request: Request):
+        return "ok"
+
+    req1 = _fake_request(client_host="8.8.8.8", token="not-a-real-jwt")
+    req2 = _fake_request(client_host="8.8.8.8", token="also-not-real")
+    assert await handler(request=req1) == "ok"
+    with pytest.raises(HTTPException):
+        await handler(request=req2)

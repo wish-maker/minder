@@ -22,6 +22,7 @@ from config import settings
 if "/app/src" not in sys.path:
     sys.path.insert(0, "/app/src")
 
+from shared.auth.jwt_middleware import resolve_caller_identity  # noqa: E402
 from shared.metrics import (  # noqa: E402
     http_request_duration_seconds,
     http_requests_in_progress,
@@ -43,6 +44,19 @@ def _client_ip(request: Request) -> str:
     """
     client = request.client
     return client.host if client else "127.0.0.1"
+
+
+def _rate_limit_key(request: Request) -> str:
+    """#901: key by (IP, real caller identity) when the request carries a
+    valid JWT, so distinct authenticated users behind the same IP/NAT no
+    longer share one global-limiter bucket -- falls back to IP-only for an
+    unauthenticated request (e.g. login/register, which by definition has no
+    token yet), exactly as before. Uses the same best-effort JWT decode
+    `enforce_rate_limit` was just fixed to use for the same reason (#894).
+    """
+    ip = _client_ip(request)
+    identity = resolve_caller_identity(request)
+    return f"{ip}:{identity}" if identity else ip
 
 
 def register_middleware(app: FastAPI) -> None:
@@ -115,7 +129,7 @@ def register_middleware(app: FastAPI) -> None:
             # the window's first request sees 1 (and we stamp the 60s TTL then).
             # No read-modify-write, so no race. Fail open if Redis is unreachable.
             try:
-                key = f"ratelimit:{_client_ip(request)}"
+                key = f"ratelimit:{_rate_limit_key(request)}"
                 count = await run_in_threadpool(redis_client.incr, key)
                 if count == 1:
                     await run_in_threadpool(redis_client.expire, key, 60)
