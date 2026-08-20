@@ -204,6 +204,24 @@ async def test_add_dependency_rejects_unknown_dependency_type():
     assert ran["n"] == 0  # rejected before touching the DB
 
 
+# --- get_dependent_plugins (#748) -------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_dependent_plugins_queries_the_reverse_depends_on_direction():
+    client = neo4j_client_mod.Neo4jClient(password="test")
+    capture = {}
+    expected = [{"plugin_id": "network", "name": "Network", "type": "requires"}]
+    session = _FakeSession(capture, result=_FakeResult(data_value=expected))
+    client.driver.session = MagicMock(return_value=session)
+
+    result = await client.get_dependent_plugins("telegraf")
+
+    assert result == expected
+    assert "(other:Plugin)-[r:DEPENDS_ON]->(p:Plugin" in capture["query"]
+    assert capture["kwargs"] == {"plugin_id": "telegraf"}
+
+
 # --- find_conflicting_plugins ------------------------------------------------------
 
 

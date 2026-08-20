@@ -232,6 +232,26 @@ class Neo4jClient:
             result = await session.run(query, plugin_id=plugin_id)
             return await result.data()
 
+    async def get_dependent_plugins(self, plugin_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all plugins that depend on the given plugin (reverse of
+        get_plugin_dependencies -- the "who needs me" direction, #748).
+
+        Args:
+            plugin_id: Plugin to query
+
+        Returns:
+            List of dependent plugins
+        """
+        query = """
+        MATCH (other:Plugin)-[r:DEPENDS_ON]->(p:Plugin {id: $plugin_id})
+        RETURN other.id as plugin_id, other.display_name as name, r.dependency_type as type
+        """
+
+        async with self.driver.session() as session:
+            result = await session.run(query, plugin_id=plugin_id)
+            return await result.data()
+
     async def find_conflicting_plugins(self, plugin_id: str) -> List[Dict[str, Any]]:
         """
         Find plugins that conflict with the given plugin

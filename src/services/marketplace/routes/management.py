@@ -1,11 +1,17 @@
 # services/marketplace/routes/management.py
+import logging
+
 from core.database import get_pool
+from core.neo4j_client import Neo4jClient, get_neo4j_client
 from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.installation import InstallationResponse
 
 from config import settings
 from shared.auth.jwt_middleware import get_current_user, require_role
+from shared.errors import backend_http_error, is_connectivity_error
+
+logger = logging.getLogger("minder.marketplace.management")
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
@@ -161,8 +167,19 @@ async def uninstall_plugin(
 async def enable_plugin(
     plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
+    neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
-    """Enable the authenticated user's plugin (identity from JWT, #147/C7)."""
+    """Enable the authenticated user's plugin (identity from JWT, #147/C7).
+
+    #748: the plugin dependency graph (Neo4j DEPENDS_ON) used to be purely
+    informational -- a real runtime dependency (e.g. "network" reads
+    plugin_instances["telegraf"] directly) could be silently unmet with zero
+    warning. This resolves the FULL transitive dependency chain and makes
+    sure every one of them is enabled for this user first. A dependency this
+    user never installed at all can't be silently auto-installed on their
+    behalf (that would bypass their own install choice) -- rejected with a
+    clear error naming it instead.
+    """
     user_id = current_user["sub"]
     pool = await get_pool()
 
@@ -179,6 +196,10 @@ async def enable_plugin(
 
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
+
+        auto_enabled_dependencies = await _ensure_dependencies_enabled(
+            conn, user_id, plugin_id, neo4j
+        )
 
         # Enable
         await conn.execute(
@@ -190,15 +211,101 @@ async def enable_plugin(
             existing["id"],
         )
 
-        return {"status": "enabled", "plugin_id": plugin_id}
+        return {
+            "status": "enabled",
+            "plugin_id": plugin_id,
+            "auto_enabled_dependencies": auto_enabled_dependencies,
+        }
+
+
+async def _ensure_dependencies_enabled(
+    conn, user_id: str, plugin_id: str, neo4j: Neo4jClient
+) -> list:
+    """Enable every transitive DEPENDS_ON dependency of `plugin_id` that this
+    user has installed but not yet enabled (#748). Returns the display names
+    of whichever dependencies actually got flipped from disabled to enabled.
+
+    Raises HTTPException(409) if any dependency has no installation row at
+    all for this user -- auto-INSTALLING on their behalf would bypass their
+    own choice, so this only ever auto-*enables* an already-installed row.
+
+    A Neo4j connectivity failure degrades to "no known dependencies" (logged,
+    not raised) rather than blocking enable entirely -- the dependency graph
+    is a safety net on top of enable/disable's real job (toggling
+    marketplace_installations), not a precondition for it; a Neo4j outage
+    shouldn't make core plugin management unusable. A non-connectivity error
+    (a real bug in the query) still surfaces as a 500 -- only reachability
+    degrades gracefully.
+    """
+    try:
+        dependencies = await neo4j.get_dependency_chain(plugin_id)
+    except Exception as e:
+        if not is_connectivity_error(e):
+            raise backend_http_error(e, "Dependency graph lookup")
+        logger.warning(
+            f"Neo4j unreachable while checking dependencies for {plugin_id}; "
+            f"proceeding without dependency auto-enable: {e}"
+        )
+        return []
+    if not dependencies:
+        return []
+
+    dep_ids = [d["plugin_id"] for d in dependencies]
+    dep_rows = await conn.fetch(
+        """
+        SELECT plugin_id, enabled FROM marketplace_installations
+        WHERE user_id = $1 AND plugin_id = ANY($2::uuid[])
+        """,
+        user_id,
+        dep_ids,
+    )
+    installed_by_id = {str(r["plugin_id"]): r for r in dep_rows}
+
+    missing = [d for d in dependencies if d["plugin_id"] not in installed_by_id]
+    if missing:
+        names = ", ".join(d.get("name") or d["plugin_id"] for d in missing)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot enable: required dependency not installed: {names}. "
+                "Install it first, then try enabling again."
+            ),
+        )
+
+    auto_enabled = []
+    for dep in dependencies:
+        row = installed_by_id[dep["plugin_id"]]
+        if not row["enabled"]:
+            await conn.execute(
+                """
+                UPDATE marketplace_installations
+                SET enabled = TRUE, last_updated_at = NOW()
+                WHERE user_id = $1 AND plugin_id = $2
+                """,
+                user_id,
+                dep["plugin_id"],
+            )
+            auto_enabled.append(dep.get("name") or dep["plugin_id"])
+    return auto_enabled
 
 
 @router.post("/{plugin_id}/disable")
 async def disable_plugin(
     plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
+    neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
-    """Disable the authenticated user's plugin (identity from JWT, #147/C7)."""
+    """Disable the authenticated user's plugin (identity from JWT, #147/C7).
+
+    #748: rejected with 409 if another of this user's plugins is enabled and
+    directly depends on this one (Neo4j DEPENDS_ON graph). enable_plugin's own
+    transitive auto-enable keeps the invariant "an enabled plugin's every
+    dependency is enabled" true going forward, so a direct (one-hop) check
+    here is sufficient to catch a violation regardless of how deep the real
+    dependency chain goes -- if some plugin two hops up were enabled, its own
+    direct dependency (one hop up from this one) would already have been
+    auto-enabled alongside it, and IT is what this check catches.
+    """
     user_id = current_user["sub"]
     pool = await get_pool()
 
@@ -215,6 +322,51 @@ async def disable_plugin(
 
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
+
+        # A Neo4j connectivity failure degrades to "no known dependents"
+        # (logged, not raised) rather than blocking disable entirely -- same
+        # rationale as _ensure_dependencies_enabled above: the dependency
+        # graph is a safety net on top of disable's real job, not a
+        # precondition for it (found live: the e2e harness deliberately
+        # doesn't wire marketplace to Neo4j, per conftest.py's docstring, and
+        # this call was unguarded until CI caught it as a raw 500 -- then,
+        # after adding error handling, as an unhelpful 503 that made a
+        # Neo4j hiccup block plugin management entirely). A non-connectivity
+        # error (a real bug in the query) still surfaces as a 500.
+        try:
+            dependents = await neo4j.get_dependent_plugins(plugin_id)
+        except Exception as e:
+            if not is_connectivity_error(e):
+                raise backend_http_error(e, "Dependency graph lookup")
+            logger.warning(
+                f"Neo4j unreachable while checking dependents for {plugin_id}; "
+                f"proceeding without dependent-blocking check: {e}"
+            )
+            dependents = []
+        if dependents:
+            dependent_ids = [d["plugin_id"] for d in dependents]
+            blocking_rows = await conn.fetch(
+                """
+                SELECT plugin_id FROM marketplace_installations
+                WHERE user_id = $1 AND plugin_id = ANY($2::uuid[]) AND enabled = TRUE
+                """,
+                user_id,
+                dependent_ids,
+            )
+            blocking_ids = {str(r["plugin_id"]) for r in blocking_rows}
+            blocking_names = [
+                d.get("name") or d["plugin_id"]
+                for d in dependents
+                if d["plugin_id"] in blocking_ids
+            ]
+            if blocking_names:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Cannot disable: still-enabled plugin(s) depend on this "
+                        "one: " + ", ".join(blocking_names)
+                    ),
+                )
 
         # Disable
         await conn.execute(
