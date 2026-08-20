@@ -167,40 +167,38 @@ def test_uninstall_removes_it_from_my_installations(live_stack, plugin_id, auth_
     assert plugin_id not in [i["plugin_id"] for i in r.json()["installations"]]
 
 
-def test_activate_license_succeeds_for_a_real_user(live_stack, plugin_id, auth_token):
-    """Regression test for the identical #434 dead-FK bug, missed on
-    marketplace_licenses when it was fixed for marketplace_installations:
-    POST /v1/marketplace/licenses/activate 500'd for every real user_id
-    (only the seeded "admin" row satisfied the now-dropped FK to the dead
-    marketplace_users table). Only manifests with a real asyncpg round-trip,
-    which this E2E test (unlike a mocked unit test) actually performs."""
+def test_activate_license_is_admin_gated_for_a_normal_user(
+    live_stack, plugin_id, auth_token
+):
+    """#622: license activation is now admin-gated — a normal user (auth_token
+    is a plain role='user' JWT from /register) can no longer self-mint a license
+    at any tier for free. Expect 403.
+
+    (The #434 dead-FK regression this originally guarded is now fixed at the
+    schema level — the FK to the dead marketplace_users table is dropped — and
+    create_license's real DB round-trip is exercised in the unit suite; the
+    successful-activation path is only reachable by an admin/service caller,
+    which this user-token-only E2E harness can't mint.)"""
     r = httpx.post(
         f"{live_stack.gateway_url}/v1/marketplace/licenses/activate",
         headers={"Authorization": f"Bearer {auth_token}"},
         json={"plugin_id": plugin_id, "tier": "pro"},
         timeout=15.0,
     )
-    assert r.status_code == 200, r.text
-    assert r.json()["status"] == "activated"
-    assert r.json()["license"]["plugin_id"] == plugin_id
+    assert r.status_code == 403, r.text
 
 
-def test_activated_license_is_listed_for_the_user(live_stack, plugin_id, auth_token):
-    headers = {"Authorization": f"Bearer {auth_token}"}
-    httpx.post(
-        f"{live_stack.gateway_url}/v1/marketplace/licenses/activate",
-        headers=headers,
-        json={"plugin_id": plugin_id, "tier": "pro"},
-        timeout=15.0,
-    )
+def test_user_can_list_own_licenses(live_stack, auth_token):
+    """The license list stays JWT-scoped and accessible to a normal user (it
+    returns only the caller's own licenses — empty here since a normal user
+    can't self-activate any more, #622)."""
     r = httpx.get(
         f"{live_stack.gateway_url}/v1/marketplace/licenses",
-        headers=headers,
+        headers={"Authorization": f"Bearer {auth_token}"},
         timeout=10.0,
     )
     assert r.status_code == 200, r.text
-    matches = [lic for lic in r.json()["licenses"] if lic["plugin_id"] == plugin_id]
-    assert len(matches) == 1, r.json()
+    assert "licenses" in r.json() and "count" in r.json()
 
 
 def test_my_installations_requires_auth(live_stack):

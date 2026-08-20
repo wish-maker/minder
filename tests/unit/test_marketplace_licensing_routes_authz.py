@@ -137,6 +137,45 @@ async def test_validate_license_endpoint_rejects_a_non_uuid_plugin_id(monkeypatc
 # ── activate_license: exception branch ────────────────────────────────────────
 
 
+# ── #622: activate is admin-gated (no unrestricted self-service tier grant) ───
+
+
+def _activate_route_dependency():
+    """The dependency callable FastAPI resolves for POST /activate — i.e. the
+    require_role_or_service('admin') gate the route is now wired with (#622)."""
+    route = next(
+        r
+        for r in licensing_routes.router.routes
+        if getattr(r, "path", "").endswith("/activate")
+        and "POST" in (getattr(r, "methods", None) or set())
+    )
+    # A single Depends on the endpoint's `current_user` param.
+    return route.dependant.dependencies[0].call
+
+
+@pytest.mark.asyncio
+async def test_activate_gate_rejects_a_plain_user(monkeypatch):
+    """A role='user' JWT can no longer self-activate a license (was: any tier,
+    free). The gate raises 403 before the handler runs (#622)."""
+    from fastapi import HTTPException
+
+    gate = _activate_route_dependency()
+    with pytest.raises(HTTPException) as exc:
+        await gate(user={"sub": "normal-user", "role": "user"})
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_activate_gate_allows_admin_and_service(monkeypatch):
+    gate = _activate_route_dependency()
+    admin = await gate(user={"sub": "an-admin", "role": "admin"})
+    assert admin["sub"] == "an-admin"
+    # The internal service token is accepted unconditionally (matches the
+    # require_role_or_service model used elsewhere).
+    svc = await gate(user={"sub": "internal-service", "role": "service"})
+    assert svc["role"] == "service"
+
+
 @pytest.mark.asyncio
 async def test_activate_license_maps_backend_error(monkeypatch):
     create_license = AsyncMock(side_effect=RuntimeError("db unreachable"))
