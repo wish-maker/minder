@@ -59,7 +59,12 @@ def _isolated_import(*module_paths: str):
 class _FakeConn:
     def __init__(self, plugin_row=None, existing_row=None, dep_rows=None):
         self._plugin_row = plugin_row
-        self._existing_row = existing_row
+        # Mutable, evolving record -- #892's install_plugin fix issues
+        # multiple statements against the SAME row within one call (write
+        # enabled=FALSE, run the dependency check, flip to enabled=TRUE), so
+        # a frozen snapshot re-returned by every fetchrow wouldn't reflect
+        # that; this needs to actually mutate across the call.
+        self._installation = dict(existing_row) if existing_row else None
         # Rows returned for the #748 dependency/dependent lookup `fetch()`
         # calls -- keyed by plugin_id so both enable's (dependency) and
         # disable's (dependent) queries can share one fake conn.
@@ -69,8 +74,32 @@ class _FakeConn:
     async def fetchrow(self, query, *args):
         if "FROM marketplace_plugins" in query:
             return self._plugin_row
+        if "INSERT INTO marketplace_installations" in query:
+            user_id, plugin_id = args
+            self._installation = {
+                "id": uuid.uuid4(),
+                "user_id": user_id,
+                "plugin_id": plugin_id,
+                "version": None,
+                "status": "installed",
+                "enabled": False,
+                "config_json": None,
+                "installed_at": datetime.now(timezone.utc),
+                "last_updated_at": datetime.now(timezone.utc),
+            }
+            return dict(self._installation)
+        if "UPDATE marketplace_installations" in query and "RETURNING" in query:
+            if self._installation is None:
+                return None
+            if "enabled = TRUE" in query:
+                self._installation["enabled"] = True
+            elif "enabled = FALSE" in query:
+                self._installation["enabled"] = False
+            if "status = 'installed'" in query:
+                self._installation["status"] = "installed"
+            return dict(self._installation)
         if "FROM marketplace_installations" in query and "SELECT *" in query:
-            return self._existing_row
+            return dict(self._installation) if self._installation else None
         return None
 
     async def fetch(self, query, *args):
@@ -85,6 +114,15 @@ class _FakeConn:
         if "enabled = TRUE" in query:
             rows = [r for r in rows if r["enabled"]]
         return rows
+
+    async def fetchval(self, query, *args):
+        # install_plugin's MAX_PLUGINS_PER_USER cap check (fresh-install
+        # branch only) -- 0 so it never blocks these #892 tests, which are
+        # about the dependency check, not the cap (see
+        # test_marketplace_install_plugin.py for cap-specific coverage).
+        if "COUNT(*) FROM marketplace_installations" in query:
+            return 0
+        return None
 
     async def execute(self, query, *args):
         self.executed.append((query, args))
@@ -173,9 +211,104 @@ async def test_install_plugin_404_when_plugin_does_not_exist(monkeypatch):
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
     with pytest.raises(HTTPException) as exc:
-        await management.install_plugin(plugin_id, current_user={"sub": "4"})
+        await management.install_plugin(
+            current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+        )
 
     assert exc.value.status_code == 404
+
+
+# --- install_plugin: #892 dependency enforcement -----------------------------
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_fresh_install_lands_enabled_when_no_dependency(
+    monkeypatch,
+):
+    plugin_id = str(uuid.uuid4())
+    conn = _FakeConn(plugin_row={"id": plugin_id}, existing_row=None)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+
+    result = await management.install_plugin(
+        current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+    )
+
+    assert result.enabled is True
+    assert result.status == "installed"
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_rejects_when_dependency_never_installed(monkeypatch):
+    plugin_id = str(uuid.uuid4())
+    dep_id = str(uuid.uuid4())
+    conn = _FakeConn(plugin_row={"id": plugin_id}, existing_row=None)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(dependencies=[{"plugin_id": dep_id, "name": "telegraf"}])
+
+    with pytest.raises(HTTPException) as exc:
+        await management.install_plugin(
+            current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=neo4j
+        )
+
+    assert exc.value.status_code == 409
+    assert "telegraf" in exc.value.detail
+    # The row must never have been left enabled by the failed install.
+    assert conn._installation["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_succeeds_and_auto_enables_installed_dependency(
+    monkeypatch,
+):
+    plugin_id = str(uuid.uuid4())
+    dep_id = str(uuid.uuid4())
+    conn = _FakeConn(
+        plugin_row={"id": plugin_id},
+        existing_row=None,
+        dep_rows=[_dep_installation_row(dep_id, enabled=False)],
+    )
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(dependencies=[{"plugin_id": dep_id, "name": "telegraf"}])
+
+    result = await management.install_plugin(
+        current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=neo4j
+    )
+
+    assert result.enabled is True
+    # The dependency itself gets auto-enabled too (mirrors /enable's own
+    # behavior, since install now runs the same check).
+    assert any(
+        "SET enabled = TRUE" in q and args == ("4", dep_id) for q, args in conn.executed
+    )
+
+
+@pytest.mark.asyncio
+async def test_install_plugin_reinstall_rejects_when_dependency_disabled_since(
+    monkeypatch,
+):
+    """Re-installing (e.g. after a prior uninstall) an already-known plugin
+    must run the SAME dependency check as a fresh install -- #892 found this
+    branch was the OTHER unconditional-enable path."""
+    plugin_id = str(uuid.uuid4())
+    dep_id = str(uuid.uuid4())
+    existing = _installation_row(plugin_id, status="uninstalled", enabled=False)
+    conn = _FakeConn(
+        plugin_row={"id": plugin_id},
+        existing_row=existing,
+        dep_rows=[_dep_installation_row(dep_id, enabled=False)],
+    )
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(dependencies=[{"plugin_id": dep_id, "name": "telegraf"}])
+    # No installation row for the dependency at all -- must reject.
+    conn._dep_rows = {}
+
+    with pytest.raises(HTTPException) as exc:
+        await management.install_plugin(
+            current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=neo4j
+        )
+
+    assert exc.value.status_code == 409
+    assert conn._installation["enabled"] is False
 
 
 # --- uninstall_plugin ----------------------------------------------------------
@@ -188,7 +321,9 @@ async def test_uninstall_plugin_404_when_not_installed(monkeypatch):
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
     with pytest.raises(HTTPException) as exc:
-        await management.uninstall_plugin(plugin_id, current_user={"sub": "4"})
+        await management.uninstall_plugin(
+            plugin_id=plugin_id, current_user={"sub": "4"}
+        )
 
     assert exc.value.status_code == 404
 
@@ -200,7 +335,9 @@ async def test_uninstall_plugin_success_updates_status(monkeypatch):
     conn = _FakeConn(existing_row=existing)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
-    result = await management.uninstall_plugin(plugin_id, current_user={"sub": "4"})
+    result = await management.uninstall_plugin(
+        plugin_id=plugin_id, current_user={"sub": "4"}
+    )
 
     assert result == {"status": "uninstalled", "plugin_id": plugin_id}
     query, args = conn.executed[0]
@@ -219,7 +356,7 @@ async def test_enable_plugin_404_when_not_installed(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await management.enable_plugin(
-            plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
+            plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
         )
 
     assert exc.value.status_code == 404
@@ -233,7 +370,7 @@ async def test_enable_plugin_success_updates_enabled(monkeypatch):
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
     result = await management.enable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
     )
 
     assert result == {
@@ -261,7 +398,7 @@ async def test_enable_plugin_degrades_gracefully_when_neo4j_unreachable(
     neo4j = _FakeNeo4j(raises=ConnectionError("Neo4j unreachable"))
 
     result = await management.enable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert result == {
@@ -285,7 +422,7 @@ async def test_enable_plugin_still_500s_on_a_non_connectivity_neo4j_error(
 
     with pytest.raises(HTTPException) as exc:
         await management.enable_plugin(
-            plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+            plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
         )
 
     assert exc.value.status_code == 500
@@ -307,7 +444,7 @@ async def test_enable_plugin_auto_enables_a_disabled_dependency(monkeypatch):
     neo4j = _FakeNeo4j(dependencies=[{"plugin_id": dep_id, "name": "telegraf"}])
 
     result = await management.enable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert result["auto_enabled_dependencies"] == ["telegraf"]
@@ -332,7 +469,7 @@ async def test_enable_plugin_does_not_touch_an_already_enabled_dependency(
     neo4j = _FakeNeo4j(dependencies=[{"plugin_id": dep_id, "name": "telegraf"}])
 
     result = await management.enable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert result["auto_enabled_dependencies"] == []
@@ -351,7 +488,7 @@ async def test_enable_plugin_rejects_when_dependency_never_installed(monkeypatch
 
     with pytest.raises(HTTPException) as exc:
         await management.enable_plugin(
-            plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+            plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
         )
 
     assert exc.value.status_code == 409
@@ -382,7 +519,7 @@ async def test_enable_plugin_auto_enables_a_transitive_dependency_chain(monkeypa
     )
 
     result = await management.enable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert set(result["auto_enabled_dependencies"]) == {"b", "c"}
@@ -399,7 +536,7 @@ async def test_disable_plugin_404_when_not_installed(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await management.disable_plugin(
-            plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
+            plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
         )
 
     assert exc.value.status_code == 404
@@ -413,7 +550,7 @@ async def test_disable_plugin_success_updates_enabled(monkeypatch):
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
     result = await management.disable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=_FakeNeo4j()
     )
 
     assert result == {"status": "disabled", "plugin_id": plugin_id}
@@ -439,7 +576,7 @@ async def test_disable_plugin_degrades_gracefully_when_neo4j_unreachable(
     neo4j = _FakeNeo4j(raises=ConnectionError("Neo4j unreachable"))
 
     result = await management.disable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert result == {"status": "disabled", "plugin_id": plugin_id}
@@ -459,7 +596,7 @@ async def test_disable_plugin_still_500s_on_a_non_connectivity_neo4j_error(
 
     with pytest.raises(HTTPException) as exc:
         await management.disable_plugin(
-            plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+            plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
         )
 
     assert exc.value.status_code == 500
@@ -482,7 +619,7 @@ async def test_disable_plugin_blocked_by_an_enabled_dependent(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         await management.disable_plugin(
-            plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+            plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
         )
 
     assert exc.value.status_code == 409
@@ -506,7 +643,7 @@ async def test_disable_plugin_allowed_when_dependent_exists_but_disabled(
     neo4j = _FakeNeo4j(dependents=[{"plugin_id": dependent_id, "name": "network"}])
 
     result = await management.disable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert result == {"status": "disabled", "plugin_id": plugin_id}
@@ -525,7 +662,7 @@ async def test_disable_plugin_allowed_when_dependent_never_installed_by_this_use
     neo4j = _FakeNeo4j(dependents=[{"plugin_id": dependent_id, "name": "network"}])
 
     result = await management.disable_plugin(
-        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        plugin_id=plugin_id, current_user={"sub": "4"}, neo4j=neo4j
     )
 
     assert result == {"status": "disabled", "plugin_id": plugin_id}

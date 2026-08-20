@@ -18,8 +18,9 @@ router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
 @router.post("/{plugin_id}/install", response_model=InstallationResponse)
 async def install_plugin(
-    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
+    plugin_id: str = Depends(valid_plugin_id),
+    neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
     """Install a plugin for the authenticated user.
 
@@ -30,6 +31,19 @@ async def install_plugin(
     UUID columns as uuid.UUID objects, and InstallationResponse.plugin_id is a `str`
     field -- pydantic v2 does not coerce UUID -> str, so this 500'd on response
     serialization for every install until fixed (#402, found live on hantal).
+
+    #892: install used to unconditionally set `enabled=TRUE` on both branches
+    below, completely bypassing #748's dependency enforcement -- the single
+    most common real-world path (install a plugin) could land an enabled
+    plugin whose dependency was never installed, the exact invariant #748
+    exists to prevent. Both branches now write the row with `enabled=FALSE`
+    first, run the SAME `_ensure_dependencies_enabled` check `/enable`
+    already runs, and only flip to `enabled=TRUE` if it passes -- 409ing
+    (naming the missing dependency) otherwise, same as `/enable`. The common
+    case (no unmet dependency) still lands enabled immediately, unchanged.
+    A 409 here leaves the row installed-but-disabled rather than rolling
+    back the install entirely -- once the missing dependency is installed,
+    the same install call (or a plain `/enable`) completes it.
     """
     user_id = current_user["sub"]
     pool = await get_pool()
@@ -54,26 +68,39 @@ async def install_plugin(
         )
 
         if existing:
-            # Update if exists
+            # Update if exists -- enabled=FALSE until the dependency check
+            # below passes (#892).
             await conn.execute(
                 """
                 UPDATE marketplace_installations
-                SET status = 'installed', enabled = TRUE, last_updated_at = NOW()
+                SET status = 'installed', enabled = FALSE, last_updated_at = NOW()
                 WHERE id = $1
                 """,
                 existing["id"],
             )
 
+            await _ensure_dependencies_enabled(conn, user_id, plugin_id, neo4j)
+
+            updated = await conn.fetchrow(
+                """
+                UPDATE marketplace_installations
+                SET enabled = TRUE, last_updated_at = NOW()
+                WHERE id = $1
+                RETURNING id, user_id, plugin_id, version, status, enabled, config_json, installed_at, last_updated_at
+                """,
+                existing["id"],
+            )
+
             return InstallationResponse(
-                id=str(existing["id"]),
-                user_id=existing["user_id"],
-                plugin_id=str(existing["plugin_id"]),
-                version=existing["version"],
-                status="installed",
-                enabled=True,
-                config_json=existing["config_json"],
-                installed_at=existing["installed_at"],
-                last_updated_at=existing["last_updated_at"],
+                id=str(updated["id"]),
+                user_id=updated["user_id"],
+                plugin_id=str(updated["plugin_id"]),
+                version=updated["version"],
+                status=updated["status"],
+                enabled=updated["enabled"],
+                config_json=updated["config_json"],
+                installed_at=updated["installed_at"],
+                last_updated_at=updated["last_updated_at"],
             )
 
         # Cap installs per user (MAX_PLUGINS_PER_USER) -- was defined in config but
@@ -97,11 +124,12 @@ async def install_plugin(
                 ),
             )
 
-        # Create new installation
+        # Create new installation -- enabled=FALSE until the dependency check
+        # below passes (#892).
         row = await conn.fetchrow(
             """
             INSERT INTO marketplace_installations (user_id, plugin_id, status, enabled)
-            VALUES ($1, $2, 'installed', TRUE)
+            VALUES ($1, $2, 'installed', FALSE)
             RETURNING id, user_id, plugin_id, version, status, enabled, config_json, installed_at, last_updated_at
             """,
             user_id,
@@ -112,6 +140,18 @@ async def install_plugin(
         await conn.execute(
             "UPDATE marketplace_plugins SET download_count = download_count + 1 WHERE id = $1",
             plugin_id,
+        )
+
+        await _ensure_dependencies_enabled(conn, user_id, plugin_id, neo4j)
+
+        row = await conn.fetchrow(
+            """
+            UPDATE marketplace_installations
+            SET enabled = TRUE, last_updated_at = NOW()
+            WHERE id = $1
+            RETURNING id, user_id, plugin_id, version, status, enabled, config_json, installed_at, last_updated_at
+            """,
+            row["id"],
         )
 
         return InstallationResponse(
@@ -129,8 +169,8 @@ async def install_plugin(
 
 @router.delete("/{plugin_id}/uninstall")
 async def uninstall_plugin(
-    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
+    plugin_id: str = Depends(valid_plugin_id),
 ):
     """Uninstall the authenticated user's plugin (identity from JWT, #147/C7)."""
     user_id = current_user["sub"]
@@ -165,8 +205,8 @@ async def uninstall_plugin(
 
 @router.post("/{plugin_id}/enable")
 async def enable_plugin(
-    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
+    plugin_id: str = Depends(valid_plugin_id),
     neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
     """Enable the authenticated user's plugin (identity from JWT, #147/C7).
@@ -291,8 +331,8 @@ async def _ensure_dependencies_enabled(
 
 @router.post("/{plugin_id}/disable")
 async def disable_plugin(
-    plugin_id: str = Depends(valid_plugin_id),
     current_user: dict = Depends(get_current_user),
+    plugin_id: str = Depends(valid_plugin_id),
     neo4j: Neo4jClient = Depends(get_neo4j_client),
 ):
     """Disable the authenticated user's plugin (identity from JWT, #147/C7).
@@ -383,10 +423,10 @@ async def disable_plugin(
 
 @router.get("/{plugin_id}/installations")
 async def get_plugin_installations(
+    current_user: dict = Depends(require_role("admin")),
     plugin_id: str = Depends(valid_plugin_id),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    current_user: dict = Depends(require_role("admin")),
 ):
     """Get a plugin's installations, paginated (#147/C6).
 
