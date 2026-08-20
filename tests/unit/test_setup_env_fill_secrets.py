@@ -53,6 +53,31 @@ def test_prints_the_plaintext_once_when_freshly_generated(_env_paths, capsys):
 
 
 def test_stays_silent_on_a_later_run_once_already_set(_env_paths, capsys):
+    # A real, correctly-shaped gen_secret(32) value (64 lowercase hex chars) --
+    # #916 tightened _looks_like_a_real_secret() to also flag obviously-fake
+    # values (wrong length / non-hex / low-diversity) for regeneration, so this
+    # test now uses a value that genuinely passes that check, rather than the
+    # arbitrary human-typed string it used before. See
+    # test_regenerates_an_obviously_fake_already_set_value below for the new
+    # behavior on a value that does NOT look real.
+    real_looking_value = env.gen_secret(32)
+    _env_paths.write_text(
+        f"MINDER_AUTHELIA_ADMIN_PASSWORD={real_looking_value}\n", encoding="utf-8"
+    )
+
+    env.fill_env_secrets()
+
+    out = capsys.readouterr().out
+    assert "Authelia Admin Password" not in out
+    assert env.get("MINDER_AUTHELIA_ADMIN_PASSWORD") == real_looking_value
+
+
+def test_regenerates_an_obviously_fake_already_set_value(_env_paths, capsys):
+    """#916: a value that's already set but is obviously not real
+    gen_secret() output (wrong length here; see test_setup_env_coverage.py
+    for the non-hex and low-diversity cases) is no longer treated as "the
+    user's real custom secret" -- it gets regenerated just like an empty
+    or literal-placeholder value would."""
     _env_paths.write_text(
         "MINDER_AUTHELIA_ADMIN_PASSWORD=already-set-value\n", encoding="utf-8"
     )
@@ -60,8 +85,8 @@ def test_stays_silent_on_a_later_run_once_already_set(_env_paths, capsys):
     env.fill_env_secrets()
 
     out = capsys.readouterr().out
-    assert "Authelia Admin Password" not in out
-    assert env.get("MINDER_AUTHELIA_ADMIN_PASSWORD") == "already-set-value"
+    assert "Authelia Admin Password" in out
+    assert env.get("MINDER_AUTHELIA_ADMIN_PASSWORD") != "already-set-value"
 
 
 @_posix_perms_only

@@ -73,6 +73,53 @@ def test_gen_secret_is_random_across_calls():
     assert env.gen_secret(16) != env.gen_secret(16)
 
 
+# ── _looks_like_a_real_secret (#916) ────────────────────────────────────────────
+
+
+def test_looks_like_a_real_secret_accepts_real_gen_secret_output():
+    assert env._looks_like_a_real_secret(env.gen_secret(32), "32") is True
+
+
+def test_looks_like_a_real_secret_accepts_a_real_prefixed_value():
+    assert (
+        env._looks_like_a_real_secret(f"neo4j/{env.gen_secret(16)}", "16:neo4j/")
+        is True
+    )
+
+
+def test_looks_like_a_real_secret_rejects_all_zeros():
+    """The exact live bug found on one real dev host: 68 zero characters for
+    a spec expecting gen_secret(64)'s 128-char hex output."""
+    assert env._looks_like_a_real_secret("0" * 68, "64") is False
+    # Also reject a same-length-as-real all-zeros value, independent of the
+    # wrong-length check above -- this is what the diversity check catches.
+    assert env._looks_like_a_real_secret("0" * 128, "64") is False
+
+
+def test_looks_like_a_real_secret_rejects_a_human_readable_placeholder():
+    """The exact live bug found on the other real dev host."""
+    assert (
+        env._looks_like_a_real_secret(
+            "minder_jwt_secret_key_2026_secure_random_string_1234567890", "64"
+        )
+        is False
+    )
+
+
+def test_looks_like_a_real_secret_rejects_non_hex_even_at_the_right_length():
+    fake = "g" * 128  # right length for spec "64", but 'g' isn't a hex digit
+    assert env._looks_like_a_real_secret(fake, "64") is False
+
+
+def test_looks_like_a_real_secret_rejects_low_diversity_at_the_right_length():
+    fake = "ab" * 64  # right length, valid hex, only 2 distinct digits
+    assert env._looks_like_a_real_secret(fake, "64") is False
+
+
+def test_looks_like_a_real_secret_rejects_wrong_length():
+    assert env._looks_like_a_real_secret(env.gen_secret(16), "32") is False
+
+
 # ── sync_compose_env ───────────────────────────────────────────────────────────
 
 
@@ -496,14 +543,37 @@ def test_fill_env_secrets_appends_when_key_entirely_absent(_secrets_env):
 
 
 def test_fill_env_secrets_silent_noop_when_fully_populated(_secrets_env, capfd):
+    # A real gen_secret(8)-shaped value (16 lowercase hex chars), matching the
+    # fixture's spec -- #916 tightened fill_env_secrets to also regenerate an
+    # obviously-fake already-set value (wrong length/non-hex/low-diversity),
+    # so this "fully populated, stay silent" case now needs a value that
+    # genuinely passes that check. See
+    # test_fill_env_secrets_regenerates_an_obviously_fake_value below for the
+    # new behavior on a value that doesn't.
+    real_looking_value = env.gen_secret(8)
+    _secrets_env.write_text(
+        f"POSTGRES_PASSWORD={real_looking_value}\n", encoding="utf-8"
+    )
+
+    env.fill_env_secrets()
+
+    assert capfd.readouterr().out == ""
+    assert env.get("POSTGRES_PASSWORD") == real_looking_value
+
+
+def test_fill_env_secrets_regenerates_an_obviously_fake_value(_secrets_env):
+    """#916: an already-set value that's obviously not real gen_secret()
+    output (wrong length here) is no longer treated as "the user's real
+    custom secret" -- it gets regenerated like an empty/placeholder value."""
     _secrets_env.write_text(
         "POSTGRES_PASSWORD=already-a-real-secret\n", encoding="utf-8"
     )
 
     env.fill_env_secrets()
 
-    assert capfd.readouterr().out == ""
-    assert env.get("POSTGRES_PASSWORD") == "already-a-real-secret"
+    value = env.get("POSTGRES_PASSWORD")
+    assert value != "already-a-real-secret"
+    assert len(value) == 16
 
 
 def test_fill_env_secrets_prefixed_spec_bare_prefix_counts_as_unset(

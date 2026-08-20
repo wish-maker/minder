@@ -65,6 +65,57 @@ SECRET_SPEC = {
 # Values matching this (case-sensitive substring) are treated as unset placeholders.
 _PLACEHOLDER_RE = re.compile(r"CHANGEME|REPLACE_ME|change-this-to|my-super-secret")
 
+# gen_secret() only ever emits lowercase hex.
+_HEX_RE = re.compile(r"^[0-9a-f]+$")
+
+
+def _looks_like_a_real_secret(value: str, spec: str) -> bool:
+    """True if `value` plausibly came from gen_secret() per `spec` ("length[:format]"),
+    rather than being a placeholder that slipped past _PLACEHOLDER_RE's literal-string
+    check (#916: an all-zeros 68-char JWT_SECRET and a 60-char human-readable
+    placeholder string -- neither containing any of _PLACEHOLDER_RE's substrings,
+    and NEITHER the correct length for gen_secret(64)'s 128-char output -- both
+    stayed live and unrotated on two real dev hosts).
+
+    Three independent red flags, checked on the hex portion only (the `fmt` prefix
+    for a prefixed spec like NEO4J_AUTH's "neo4j/" is a fixed literal, not part of
+    the randomness, so it's stripped before any check runs):
+
+    - wrong length for `spec` -- gen_secret(N) always emits exactly 2*N hex chars;
+      both real placeholders above were also the wrong length, so this alone
+      would have caught them.
+    - not actually hex (gen_secret() output is always [0-9a-f]) -- catches a
+      human-readable placeholder like "minder_jwt_secret_key_2026_..." outright
+      even in the (unobserved so far) case where one happens to be the right length.
+    - too few distinct hex digits for its length to plausibly be
+      secrets.token_hex() output -- catches a degenerate low-entropy value like
+      64 zero characters, which passes the pure-hex check on its own.
+
+    This is intentionally stricter than the old bare-placeholder-substring check:
+    an arbitrary hand-typed value that happens to be non-hex-shaped is no longer
+    treated as "the user's real custom secret, leave it alone" -- it's now
+    indistinguishable from a placeholder that just doesn't happen to contain
+    "CHANGEME". fill_env_secrets()'s own #57 live-stack guard is the actual
+    safety net against clobbering something in place on a running deployment;
+    this function only decides whether a value NEEDS regenerating, not whether
+    it's currently SAFE to.
+    """
+    length_str, _, fmt = spec.partition(":")
+    length = int(length_str)
+    hex_part = value[len(fmt) :] if fmt and value.startswith(fmt) else value
+    if len(hex_part) != 2 * length:
+        return False
+    if not _HEX_RE.match(hex_part):
+        return False
+    # secrets.token_hex(N) for any real N used in SECRET_SPEC (>=8) draws from all
+    # 16 hex digits essentially uniformly; requiring at least half of them present
+    # catches a degenerate repeated/low-diversity value without false-flagging a
+    # short-but-genuinely-random secret.
+    if len(set(hex_part)) < min(8, len(hex_part) // 2):
+        return False
+    return True
+
+
 # _sync_compose_env's DO-NOT-EDIT banner (config.sh printf block): "# " + 76 '='.
 _COMPOSE_ENV_BANNER = (
     "# " + "=" * 76,
@@ -489,6 +540,7 @@ def fill_env_secrets() -> None:
                 or value == ""
                 or _PLACEHOLDER_RE.search(value)
                 or (fmt and value == fmt)
+                or not _looks_like_a_real_secret(value, spec)
             ):
                 to_fill.append(key)
 
