@@ -100,16 +100,26 @@ class _FakeConn:
 class _FakeNeo4j:
     """Fake Neo4jClient for #748's dependency-graph checks. Defaults to "no
     dependencies/dependents" so every pre-#748 test continues to exercise the
-    exact same enable/disable behavior unmodified."""
+    exact same enable/disable behavior unmodified.
 
-    def __init__(self, dependencies=None, dependents=None):
+    ``raises``: simulate Neo4j being unreachable (found live in CI -- the e2e
+    harness deliberately doesn't wire marketplace to a real Neo4j, per
+    conftest.py's docstring, and the driver call was unguarded until CI caught
+    it with an unclean 500)."""
+
+    def __init__(self, dependencies=None, dependents=None, raises=None):
         self._dependencies = dependencies or []
         self._dependents = dependents or []
+        self._raises = raises
 
     async def get_dependency_chain(self, plugin_id):
+        if self._raises:
+            raise self._raises
         return self._dependencies
 
     async def get_dependent_plugins(self, plugin_id):
+        if self._raises:
+            raise self._raises
         return self._dependents
 
 
@@ -234,6 +244,24 @@ async def test_enable_plugin_success_updates_enabled(monkeypatch):
     query, args = conn.executed[0]
     assert "SET enabled = TRUE" in query
     assert args == (existing["id"],)
+
+
+@pytest.mark.asyncio
+async def test_enable_plugin_neo4j_unreachable_is_a_clean_503_not_a_crash(
+    monkeypatch,
+):
+    plugin_id = str(uuid.uuid4())
+    existing = _installation_row(plugin_id, enabled=False)
+    conn = _FakeConn(existing_row=existing)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(raises=ConnectionError("Neo4j unreachable"))
+
+    with pytest.raises(HTTPException) as exc:
+        await management.enable_plugin(
+            plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        )
+
+    assert exc.value.status_code == 503
 
 
 # --- enable_plugin: #748 dependency auto-enable ---------------------------------
@@ -365,6 +393,24 @@ async def test_disable_plugin_success_updates_enabled(monkeypatch):
     query, args = conn.executed[0]
     assert "SET enabled = FALSE" in query
     assert args == (existing["id"],)
+
+
+@pytest.mark.asyncio
+async def test_disable_plugin_neo4j_unreachable_is_a_clean_503_not_a_crash(
+    monkeypatch,
+):
+    plugin_id = str(uuid.uuid4())
+    existing = _installation_row(plugin_id, enabled=True)
+    conn = _FakeConn(existing_row=existing)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(raises=ConnectionError("Neo4j unreachable"))
+
+    with pytest.raises(HTTPException) as exc:
+        await management.disable_plugin(
+            plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+        )
+
+    assert exc.value.status_code == 503
 
 
 # --- disable_plugin: #748 dependent-blocking -----------------------------------

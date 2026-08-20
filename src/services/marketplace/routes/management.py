@@ -7,6 +7,7 @@ from models.installation import InstallationResponse
 
 from config import settings
 from shared.auth.jwt_middleware import get_current_user, require_role
+from shared.errors import backend_http_error
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
@@ -224,7 +225,10 @@ async def _ensure_dependencies_enabled(
     all for this user -- auto-INSTALLING on their behalf would bypass their
     own choice, so this only ever auto-*enables* an already-installed row.
     """
-    dependencies = await neo4j.get_dependency_chain(plugin_id)
+    try:
+        dependencies = await neo4j.get_dependency_chain(plugin_id)
+    except Exception as e:
+        raise backend_http_error(e, "Dependency graph lookup")
     if not dependencies:
         return []
 
@@ -301,7 +305,15 @@ async def disable_plugin(
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
 
-        dependents = await neo4j.get_dependent_plugins(plugin_id)
+        # A Neo4j connectivity failure here must not 500 uncleanly -- mirrors
+        # routes/graph_dependencies.py's existing try/except-around-the-driver-
+        # call pattern (found live: the e2e harness deliberately doesn't wire
+        # marketplace to Neo4j, per conftest.py's docstring, and this call was
+        # unguarded until CI caught it).
+        try:
+            dependents = await neo4j.get_dependent_plugins(plugin_id)
+        except Exception as e:
+            raise backend_http_error(e, "Dependency graph lookup")
         if dependents:
             dependent_ids = [d["plugin_id"] for d in dependents]
             blocking_rows = await conn.fetch(
