@@ -11,8 +11,15 @@ import json
 from pathlib import Path
 
 from core import plugin_config as cfgmod
-from core.database import load_plugin_config, update_plugin_in_database
+from core.database import (
+    find_plugin_name_by_stable_id,
+    get_marketplace_plugin_id,
+    load_plugin_config,
+    rename_plugin_row,
+    update_plugin_in_database,
+)
 from core.marketplace_sync import sync_plugin_ai_tools
+from core.plugin_identity import read_stable_id
 from core.state import logger, plugin_instances, plugins_db
 from models import PluginInfo
 
@@ -41,6 +48,19 @@ async def load_plugin_from_module(plugin_dir: Path):
     plugin_name = plugin_dir.name
 
     try:
+        # #747: if this directory carries a committed .plugin_id marker and a
+        # plugins row already exists under a DIFFERENT name with that same
+        # stable_id, the directory was renamed since the last load -- carry
+        # the existing row forward under its new name (preserving its
+        # persisted marketplace_plugin_id and everything else) instead of
+        # leaving it behind as an orphan while a fresh row gets created
+        # below under the new name.
+        stable_id = read_stable_id(plugin_dir)
+        if stable_id:
+            previous_name = await find_plugin_name_by_stable_id(stable_id)
+            if previous_name and previous_name != plugin_name:
+                await rename_plugin_row(previous_name, plugin_name)
+
         # Import plugin module using importlib
         import importlib
 
@@ -156,6 +176,7 @@ async def load_plugin_from_module(plugin_dir: Path):
                         if plugin_info.databases
                         else None
                     ),
+                    stable_id=stable_id,
                 )
             except Exception:
                 await plugin_instance.shutdown()
@@ -181,7 +202,12 @@ async def load_plugin_from_module(plugin_dir: Path):
             # live: every module plugin was syncing with an empty description and no
             # author because this wasn't threaded through, even though metadata has
             # both right here) so the marketplace catalog isn't just placeholders.
-            await sync_plugin_ai_tools(
+            #
+            # marketplace_plugin_id (#747): whatever this plugin last resolved to,
+            # if anything -- lets sync reconcile that SAME row by id (renaming it
+            # in place if `plugin_name` changed) instead of searching by the
+            # current name, which is what let a renamed plugin's row go stale.
+            resolved_marketplace_id = await sync_plugin_ai_tools(
                 plugin_name,
                 plugin_dir,
                 module_ai_tools=getattr(plugin_instance, "AI_TOOLS", None),
@@ -189,7 +215,17 @@ async def load_plugin_from_module(plugin_dir: Path):
                 author=metadata.author,
                 databases=metadata.databases,
                 plugin_dependencies=metadata.dependencies,
+                marketplace_plugin_id=await get_marketplace_plugin_id(plugin_name),
             )
+            if resolved_marketplace_id:
+                try:
+                    await update_plugin_in_database(
+                        plugin_name, marketplace_plugin_id=resolved_marketplace_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to persist marketplace_plugin_id for {plugin_name}: {e}"
+                    )
 
     except Exception as e:
         logger.error(f"Failed to load plugin from {plugin_dir}: {e}")

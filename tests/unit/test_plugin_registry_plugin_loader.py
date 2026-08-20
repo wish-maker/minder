@@ -94,6 +94,15 @@ def plugin_loader(monkeypatch):
     monkeypatch.setattr(mod, "load_plugin_config", AsyncMock(return_value={}))
     monkeypatch.setattr(mod.cfgmod, "apply_effective", lambda *a, **k: None)
     monkeypatch.setattr(mod, "sync_plugin_ai_tools", AsyncMock(return_value=None))
+    # #747: stable-id/rename-detection plumbing -- Path("testplugin") has no
+    # real .plugin_id marker (read_stable_id returns None for it), so
+    # find_plugin_name_by_stable_id/rename_plugin_row are never reached by
+    # these tests, but get_marketplace_plugin_id IS called unconditionally.
+    monkeypatch.setattr(
+        mod, "find_plugin_name_by_stable_id", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(mod, "rename_plugin_row", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "get_marketplace_plugin_id", AsyncMock(return_value=None))
 
     try:
         yield mod
@@ -234,6 +243,111 @@ async def test_load_plugin_falls_back_to_a_register_method_when_no_dunder_all(
         sys.modules.pop("plugins.noall", None)
         plugin_loader.plugins_db.pop("noall", None)
         plugin_loader.plugin_instances.pop("noall", None)
+
+
+class TestPluginRenameDetection:
+    """#747: a plugin directory carrying a committed .plugin_id marker that
+    matches an EXISTING row under a DIFFERENT name means the directory was
+    renamed since the last load -- the existing row must be carried forward
+    (renamed in place), not left orphaned while a fresh one gets created
+    under the new name."""
+
+    def _setup(self, monkeypatch, tmp_path, new_name, marker="stable-id-123\n"):
+        mod = _fresh_import("core.plugin_loader")
+        plugin_dir = tmp_path / new_name
+        plugin_dir.mkdir()
+        (plugin_dir / "__init__.py").write_text("")
+        if marker is not None:
+            (plugin_dir / ".plugin_id").write_text(marker)
+
+        fake_plugins_pkg = ModuleType("plugins")
+        fake_plugin_module = ModuleType(f"plugins.{new_name}")
+        fake_plugin_module.__all__ = ["_FakePlugin"]
+        fake_plugin_module._FakePlugin = _FakePlugin
+        sys.modules["plugins"] = fake_plugins_pkg
+        sys.modules[f"plugins.{new_name}"] = fake_plugin_module
+
+        monkeypatch.setattr(mod, "load_plugin_config", AsyncMock(return_value={}))
+        monkeypatch.setattr(mod.cfgmod, "apply_effective", lambda *a, **k: None)
+        monkeypatch.setattr(mod, "sync_plugin_ai_tools", AsyncMock(return_value=None))
+        monkeypatch.setattr(
+            mod, "update_plugin_in_database", AsyncMock(return_value=None)
+        )
+        monkeypatch.setattr(
+            mod, "get_marketplace_plugin_id", AsyncMock(return_value=None)
+        )
+        return mod, plugin_dir
+
+    def _teardown(self, mod, name):
+        sys.modules.pop("plugins", None)
+        sys.modules.pop(f"plugins.{name}", None)
+        mod.plugins_db.pop(name, None)
+        mod.plugin_instances.pop(name, None)
+
+    async def test_detects_a_rename_and_carries_the_row_forward(
+        self, monkeypatch, tmp_path
+    ):
+        mod, plugin_dir = self._setup(monkeypatch, tmp_path, "new_plugin_name")
+        rename_calls = []
+
+        async def fake_find(stable_id):
+            assert stable_id == "stable-id-123"
+            return "old_plugin_name"
+
+        async def fake_rename(old_name, new_name):
+            rename_calls.append((old_name, new_name))
+
+        monkeypatch.setattr(mod, "find_plugin_name_by_stable_id", fake_find)
+        monkeypatch.setattr(mod, "rename_plugin_row", fake_rename)
+
+        try:
+            await mod.load_plugin_from_module(plugin_dir)
+            assert rename_calls == [("old_plugin_name", "new_plugin_name")]
+        finally:
+            self._teardown(mod, "new_plugin_name")
+
+    async def test_no_rename_fires_when_stable_id_already_matches_current_name(
+        self, monkeypatch, tmp_path
+    ):
+        """A normal boot (no rename) -- the row is ALREADY under the current
+        name, so rename_plugin_row must not fire even though a stable_id
+        lookup does happen."""
+        mod, plugin_dir = self._setup(monkeypatch, tmp_path, "same_name")
+        rename_calls = []
+
+        async def fake_find(stable_id):
+            return "same_name"  # already correct -- no rename happened
+
+        async def fake_rename(old_name, new_name):
+            rename_calls.append((old_name, new_name))
+
+        monkeypatch.setattr(mod, "find_plugin_name_by_stable_id", fake_find)
+        monkeypatch.setattr(mod, "rename_plugin_row", fake_rename)
+
+        try:
+            await mod.load_plugin_from_module(plugin_dir)
+            assert rename_calls == []
+        finally:
+            self._teardown(mod, "same_name")
+
+    async def test_no_marker_file_skips_rename_detection_entirely(
+        self, monkeypatch, tmp_path
+    ):
+        """A plugin directory with no .plugin_id (not yet backfilled) has no
+        stable_id to look up -- find_plugin_name_by_stable_id must never be
+        called for it, matching the documented "no marker = no
+        rename-tracking, sync exactly as before" behavior."""
+        mod, plugin_dir = self._setup(
+            monkeypatch, tmp_path, "no_marker_plugin", marker=None
+        )
+        find_spy = AsyncMock(return_value=None)
+        monkeypatch.setattr(mod, "find_plugin_name_by_stable_id", find_spy)
+
+        try:
+            await mod.load_plugin_from_module(plugin_dir)
+            find_spy.assert_not_awaited()
+        finally:
+            self._teardown(mod, "no_marker_plugin")
 
 
 class TestLoadPluginsFromDisk:

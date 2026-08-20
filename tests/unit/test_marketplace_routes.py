@@ -371,3 +371,52 @@ async def test_update_plugin_404_when_row_not_found(monkeypatch):
             update, plugin_id="11111111-1111-1111-1111-111111111111"
         )
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_can_change_name(monkeypatch):
+    """#747: plugin-registry's id-based sync reconciles a renamed plugin's
+    row in place, including its `name` -- this is the field that actually
+    makes that reconciliation land instead of leaving `name` stale forever."""
+    fake_row = {"id": "plugin-1", "name": "new_name"}
+    conn = _FakeConn(row=fake_row)
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+    monkeypatch.setattr(
+        marketplace, "row_to_plugin_response", lambda row: {"echo": row}
+    )
+
+    update = marketplace.PluginUpdate(name="new_name")
+    result = await marketplace.update_plugin(
+        update, plugin_id="11111111-1111-1111-1111-111111111111"
+    )
+
+    assert result == {"echo": fake_row}
+    args, _ = conn.fetchrow.call_args
+    query = args[0]
+    assert "name = $1" in query
+    assert args[1] == "new_name"
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_name_collision_is_a_clean_409_not_a_500(monkeypatch):
+    """marketplace_plugins.name is UNIQUE NOT NULL -- renaming to a name a
+    DIFFERENT plugin already has is a real conflict, not a bad request or an
+    unhandled 500 (#747)."""
+    import asyncpg
+
+    conn = _FakeConn()
+    conn.fetchrow = AsyncMock(
+        side_effect=asyncpg.UniqueViolationError("duplicate key value")
+    )
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+
+    update = marketplace.PluginUpdate(name="already_taken")
+    with pytest.raises(Exception) as exc_info:
+        await marketplace.update_plugin(
+            update, plugin_id="11111111-1111-1111-1111-111111111111"
+        )
+    assert exc_info.value.status_code == 409

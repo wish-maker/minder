@@ -72,6 +72,10 @@ class PluginCreate(BaseModel):
 class PluginUpdate(BaseModel):
     """Model for updating a plugin"""
 
+    # #747: lets plugin-registry's id-based sync reconcile a plugin's catalog
+    # row in place when its (stable-id-tracked) directory has been renamed,
+    # instead of `name` only ever being set once at creation and going stale.
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
     display_name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     author: Optional[str] = Field(None, max_length=100)

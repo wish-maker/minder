@@ -249,11 +249,98 @@ async def test_update_plugin_in_database_noop_when_nothing_valid_to_update(
 
 
 @pytest.mark.asyncio
+async def test_update_plugin_in_database_allows_stable_id_and_marketplace_plugin_id(
+    fake_pool,
+):
+    """#747: both new columns must be settable through the same upsert path
+    every other plugin field already goes through."""
+    await database.update_plugin_in_database(
+        "weather", stable_id="abc-123", marketplace_plugin_id="mkt-uuid-1"
+    )
+
+    fake_pool.execute.assert_awaited_once()
+    query, *params = fake_pool.execute.call_args.args
+    assert "stable_id" in query
+    assert "marketplace_plugin_id" in query
+    assert params == ["weather", "abc-123", "mkt-uuid-1"]
+
+
+@pytest.mark.asyncio
 async def test_update_plugin_in_database_reraises_on_failure(fake_pool):
     fake_pool.execute = AsyncMock(side_effect=ConnectionError("db down"))
 
     with pytest.raises(ConnectionError):
         await database.update_plugin_in_database("weather", status="enabled")
+
+
+# --- find_plugin_name_by_stable_id / rename_plugin_row / -------------------
+# --- get_marketplace_plugin_id (#747) ---------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_find_plugin_name_by_stable_id_returns_the_current_name(fake_pool):
+    fake_pool.fetchrow = AsyncMock(return_value={"name": "weather"})
+
+    result = await database.find_plugin_name_by_stable_id("some-stable-id")
+
+    assert result == "weather"
+    args, _ = fake_pool.fetchrow.call_args
+    assert "stable_id" in args[0]
+    assert args[1] == "some-stable-id"
+
+
+@pytest.mark.asyncio
+async def test_find_plugin_name_by_stable_id_returns_none_when_no_row(fake_pool):
+    fake_pool.fetchrow = AsyncMock(return_value=None)
+
+    result = await database.find_plugin_name_by_stable_id("unknown-stable-id")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_find_plugin_name_by_stable_id_short_circuits_on_falsy_input(
+    fake_pool,
+):
+    result = await database.find_plugin_name_by_stable_id("")
+
+    assert result is None
+    fake_pool.fetchrow.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rename_plugin_row_updates_name_in_place(fake_pool):
+    await database.rename_plugin_row("old_name", "new_name")
+
+    fake_pool.execute.assert_awaited_once()
+    query, *params = fake_pool.execute.call_args.args
+    assert "UPDATE plugins SET name" in query
+    assert params == ["new_name", "old_name"]
+
+
+@pytest.mark.asyncio
+async def test_rename_plugin_row_is_a_noop_when_names_match(fake_pool):
+    await database.rename_plugin_row("same_name", "same_name")
+
+    fake_pool.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_marketplace_plugin_id_returns_the_persisted_value(fake_pool):
+    fake_pool.fetchrow = AsyncMock(return_value={"marketplace_plugin_id": "mkt-uuid-1"})
+
+    result = await database.get_marketplace_plugin_id("weather")
+
+    assert result == "mkt-uuid-1"
+
+
+@pytest.mark.asyncio
+async def test_get_marketplace_plugin_id_returns_none_when_no_row(fake_pool):
+    fake_pool.fetchrow = AsyncMock(return_value=None)
+
+    result = await database.get_marketplace_plugin_id("weather")
+
+    assert result is None
 
 
 # --- load_plugin_config / save_plugin_config --------------------------------
