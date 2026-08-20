@@ -1,4 +1,6 @@
 # services/marketplace/routes/management.py
+import logging
+
 from core.database import get_pool
 from core.neo4j_client import Neo4jClient, get_neo4j_client
 from core.validation import valid_plugin_id
@@ -7,7 +9,9 @@ from models.installation import InstallationResponse
 
 from config import settings
 from shared.auth.jwt_middleware import get_current_user, require_role
-from shared.errors import backend_http_error
+from shared.errors import backend_http_error, is_connectivity_error
+
+logger = logging.getLogger("minder.marketplace.management")
 
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
@@ -224,11 +228,25 @@ async def _ensure_dependencies_enabled(
     Raises HTTPException(409) if any dependency has no installation row at
     all for this user -- auto-INSTALLING on their behalf would bypass their
     own choice, so this only ever auto-*enables* an already-installed row.
+
+    A Neo4j connectivity failure degrades to "no known dependencies" (logged,
+    not raised) rather than blocking enable entirely -- the dependency graph
+    is a safety net on top of enable/disable's real job (toggling
+    marketplace_installations), not a precondition for it; a Neo4j outage
+    shouldn't make core plugin management unusable. A non-connectivity error
+    (a real bug in the query) still surfaces as a 500 -- only reachability
+    degrades gracefully.
     """
     try:
         dependencies = await neo4j.get_dependency_chain(plugin_id)
     except Exception as e:
-        raise backend_http_error(e, "Dependency graph lookup")
+        if not is_connectivity_error(e):
+            raise backend_http_error(e, "Dependency graph lookup")
+        logger.warning(
+            f"Neo4j unreachable while checking dependencies for {plugin_id}; "
+            f"proceeding without dependency auto-enable: {e}"
+        )
+        return []
     if not dependencies:
         return []
 
@@ -305,15 +323,26 @@ async def disable_plugin(
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
 
-        # A Neo4j connectivity failure here must not 500 uncleanly -- mirrors
-        # routes/graph_dependencies.py's existing try/except-around-the-driver-
-        # call pattern (found live: the e2e harness deliberately doesn't wire
-        # marketplace to Neo4j, per conftest.py's docstring, and this call was
-        # unguarded until CI caught it).
+        # A Neo4j connectivity failure degrades to "no known dependents"
+        # (logged, not raised) rather than blocking disable entirely -- same
+        # rationale as _ensure_dependencies_enabled above: the dependency
+        # graph is a safety net on top of disable's real job, not a
+        # precondition for it (found live: the e2e harness deliberately
+        # doesn't wire marketplace to Neo4j, per conftest.py's docstring, and
+        # this call was unguarded until CI caught it as a raw 500 -- then,
+        # after adding error handling, as an unhelpful 503 that made a
+        # Neo4j hiccup block plugin management entirely). A non-connectivity
+        # error (a real bug in the query) still surfaces as a 500.
         try:
             dependents = await neo4j.get_dependent_plugins(plugin_id)
         except Exception as e:
-            raise backend_http_error(e, "Dependency graph lookup")
+            if not is_connectivity_error(e):
+                raise backend_http_error(e, "Dependency graph lookup")
+            logger.warning(
+                f"Neo4j unreachable while checking dependents for {plugin_id}; "
+                f"proceeding without dependent-blocking check: {e}"
+            )
+            dependents = []
         if dependents:
             dependent_ids = [d["plugin_id"] for d in dependents]
             blocking_rows = await conn.fetch(

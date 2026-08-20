@@ -247,21 +247,48 @@ async def test_enable_plugin_success_updates_enabled(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_enable_plugin_neo4j_unreachable_is_a_clean_503_not_a_crash(
+async def test_enable_plugin_degrades_gracefully_when_neo4j_unreachable(
     monkeypatch,
 ):
+    """A Neo4j connectivity failure must not block enable entirely -- the
+    dependency graph is a safety net on top of enable's real job, not a
+    precondition for it (found live: this used to be a raw 500, then an
+    unhelpful 503 that made a Neo4j hiccup block plugin management)."""
     plugin_id = str(uuid.uuid4())
     existing = _installation_row(plugin_id, enabled=False)
     conn = _FakeConn(existing_row=existing)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
     neo4j = _FakeNeo4j(raises=ConnectionError("Neo4j unreachable"))
 
+    result = await management.enable_plugin(
+        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+    )
+
+    assert result == {
+        "status": "enabled",
+        "plugin_id": plugin_id,
+        "auto_enabled_dependencies": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_enable_plugin_still_500s_on_a_non_connectivity_neo4j_error(
+    monkeypatch,
+):
+    """Only reachability degrades gracefully -- a real bug in the query
+    still surfaces as a 500, not silently swallowed."""
+    plugin_id = str(uuid.uuid4())
+    existing = _installation_row(plugin_id, enabled=False)
+    conn = _FakeConn(existing_row=existing)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(raises=ValueError("malformed Cypher result"))
+
     with pytest.raises(HTTPException) as exc:
         await management.enable_plugin(
             plugin_id, current_user={"sub": "4"}, neo4j=neo4j
         )
 
-    assert exc.value.status_code == 503
+    assert exc.value.status_code == 500
 
 
 # --- enable_plugin: #748 dependency auto-enable ---------------------------------
@@ -396,21 +423,46 @@ async def test_disable_plugin_success_updates_enabled(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_disable_plugin_neo4j_unreachable_is_a_clean_503_not_a_crash(
+async def test_disable_plugin_degrades_gracefully_when_neo4j_unreachable(
     monkeypatch,
 ):
+    """A Neo4j connectivity failure must not block disable entirely -- same
+    rationale as the enable-side test above (found live: this used to be a
+    raw 500, then an unhelpful 503 that made a Neo4j hiccup block plugin
+    management -- exactly what e2e's test_disable_then_enable_round_trip
+    caught, since that harness deliberately doesn't wire marketplace to a
+    real Neo4j, per conftest.py's docstring)."""
     plugin_id = str(uuid.uuid4())
     existing = _installation_row(plugin_id, enabled=True)
     conn = _FakeConn(existing_row=existing)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
     neo4j = _FakeNeo4j(raises=ConnectionError("Neo4j unreachable"))
 
+    result = await management.disable_plugin(
+        plugin_id, current_user={"sub": "4"}, neo4j=neo4j
+    )
+
+    assert result == {"status": "disabled", "plugin_id": plugin_id}
+
+
+@pytest.mark.asyncio
+async def test_disable_plugin_still_500s_on_a_non_connectivity_neo4j_error(
+    monkeypatch,
+):
+    """Only reachability degrades gracefully -- a real bug in the query
+    still surfaces as a 500, not silently swallowed."""
+    plugin_id = str(uuid.uuid4())
+    existing = _installation_row(plugin_id, enabled=True)
+    conn = _FakeConn(existing_row=existing)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+    neo4j = _FakeNeo4j(raises=ValueError("malformed Cypher result"))
+
     with pytest.raises(HTTPException) as exc:
         await management.disable_plugin(
             plugin_id, current_user={"sub": "4"}, neo4j=neo4j
         )
 
-    assert exc.value.status_code == 503
+    assert exc.value.status_code == 500
 
 
 # --- disable_plugin: #748 dependent-blocking -----------------------------------
