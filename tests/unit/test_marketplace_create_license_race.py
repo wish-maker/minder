@@ -16,6 +16,7 @@ per-file convention for marketplace's core/licensing.py.
 """
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -81,6 +82,16 @@ class _FakeConn:
         return None
 
     async def execute(self, query, *args):
+        # Real asyncpg validates that every `$N` placeholder in the SQL text has
+        # a corresponding bound arg -- a fake that skips this check is exactly
+        # how #917 (UPDATE referenced $3-$6 but only 4 args were bound) shipped
+        # with green unit tests despite being a live 500 on every re-activation.
+        placeholders = {int(n) for n in re.findall(r"\$(\d+)", query)}
+        if placeholders and max(placeholders) > len(args):
+            raise asyncpg.exceptions.PostgresSyntaxError(
+                f"could not determine data type of parameter $1 "
+                f"(query references up to ${max(placeholders)}, only {len(args)} bound)"
+            )
         self.updates.append(args)
 
 
