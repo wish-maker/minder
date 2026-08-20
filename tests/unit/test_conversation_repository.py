@@ -137,6 +137,12 @@ class _FakeConn:
                     "metadata": json.loads(metadata),
                 }
             )
+        elif "DELETE FROM conversation_shares" in query:
+            live = {t["conversation_id"] for t in self._turns}
+            self._shares = {k: v for k, v in self._shares.items() if k in live}
+        elif "DELETE FROM conversation_owners" in query:
+            live = {t["conversation_id"] for t in self._turns}
+            self._owners = {k: v for k, v in self._owners.items() if k in live}
         return self._execute_result
 
 
@@ -489,11 +495,50 @@ class TestCleanupExpired:
         pool = _FakePool(execute_result="DELETE 0")
         repo = ConversationRepository(pool, default_ttl_days=30)
         asyncio.run(repo.cleanup_expired())
-        [params] = pool._conn.execute_calls
-        assert params == (30,)
+        turns_delete_params = pool._conn.execute_calls[0]
+        assert turns_delete_params == (30,)
 
     def test_wraps_a_database_failure_as_runtimeerror(self):
         pool = _FakePool(raises=ConnectionError("db down"))
         repo = ConversationRepository(pool)
         with pytest.raises(RuntimeError, match="Database operation failed"):
             asyncio.run(repo.cleanup_expired())
+
+    def test_also_prunes_orphaned_owner_and_share_rows(self):
+        """#923: conversation_owners/conversation_shares rows for a
+        conversation_id with no remaining conversation_turns row (already
+        expired-and-deleted) must be cleaned up too, or they grow unbounded
+        forever."""
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": "live-conv",
+                "question": "q",
+                "answer": "a",
+                "timestamp": 1,
+                "metadata": {},
+            }
+        ]
+        pool = _FakePool(
+            turns,
+            execute_result="DELETE 0",
+            owners={"live-conv": "alice", "orphan-conv": "bob"},
+            shares={"orphan-conv": "bob"},
+        )
+        repo = ConversationRepository(pool)
+
+        asyncio.run(repo.cleanup_expired())
+
+        assert pool._conn._owners == {"live-conv": "alice"}
+        assert pool._conn._shares == {}
+
+    def test_cleanup_still_runs_the_owner_and_share_deletes_when_nothing_is_orphaned(
+        self,
+    ):
+        pool = _FakePool(execute_result="DELETE 0", owners={}, shares={})
+        repo = ConversationRepository(pool)
+
+        asyncio.run(repo.cleanup_expired())
+
+        # turns delete + shares delete + owners delete
+        assert len(pool._conn.execute_calls) == 3

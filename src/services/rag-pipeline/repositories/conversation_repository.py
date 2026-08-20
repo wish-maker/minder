@@ -388,6 +388,12 @@ class ConversationRepository:
         """
         Clean up expired conversations (older than TTL)
 
+        Also drops any `conversation_owners`/`conversation_shares` row whose
+        conversation_id no longer has a matching `conversation_turns` row
+        (#893's first-owner/sharing tables would otherwise grow unbounded
+        forever, one row pair per conversation ever started or shared, with
+        nothing ever reclaiming them once that conversation's turns expire).
+
         Returns:
             Number of turns deleted
 
@@ -403,6 +409,23 @@ class ConversationRepository:
                     """,
                     self.default_ttl_days,
                 )
+                async with conn.transaction():
+                    await conn.execute(
+                        """
+                        DELETE FROM conversation_shares
+                        WHERE conversation_id NOT IN (
+                            SELECT DISTINCT conversation_id FROM conversation_turns
+                        )
+                        """
+                    )
+                    await conn.execute(
+                        """
+                        DELETE FROM conversation_owners
+                        WHERE conversation_id NOT IN (
+                            SELECT DISTINCT conversation_id FROM conversation_turns
+                        )
+                        """
+                    )
 
             # Parse result to get deleted count
             deleted_count = int(result.split()[-1]) if result else 0
