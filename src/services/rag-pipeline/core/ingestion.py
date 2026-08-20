@@ -30,7 +30,7 @@ from domain import raptor
 from fastapi import HTTPException
 from models import DocumentInfo, DocumentUploadResponse
 from qdrant_client.models import FieldCondition, Filter, MatchValue, PointStruct
-from rag.text_utils import chunk_text, extract_text_from_file
+from rag.text_utils import UnsupportedContentError, chunk_text, extract_text_from_file
 
 logger = logging.getLogger("minder.rag-pipeline")
 
@@ -113,14 +113,19 @@ async def ingest_document(
     kb_id: str, kb: Dict, filename: str, content: bytes, build_tree: bool = False
 ) -> DocumentUploadResponse:
     """Extract, chunk, embed, and store one uploaded document's content into
-    `kb_id`'s Qdrant collection. Raises HTTPException(400) if no text could be
-    extracted, HTTPException(503) if the embedding backend is unreachable.
+    `kb_id`'s Qdrant collection. Raises HTTPException(415) if the content
+    doesn't match any registered structured extractor (#900), HTTPException(400)
+    if no text could be extracted, HTTPException(503) if the embedding backend
+    is unreachable.
 
     `build_tree` opts into RAPTOR tree construction (#487) on top of the normal
     flat chunks — see docs/architecture/raptor-rag.md. Skipped (not an error)
     below domain.raptor.MIN_CHUNKS_FOR_TREE chunks; nothing meaningful to
     cluster in a tiny document."""
-    text = await extract_text_from_file(content, filename)
+    try:
+        text = await extract_text_from_file(content, filename)
+    except UnsupportedContentError as e:
+        raise HTTPException(status_code=415, detail=str(e))
 
     chunks = chunk_text(
         text, chunk_size=kb["chunk_size"], chunk_overlap=kb["chunk_overlap"]
