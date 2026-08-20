@@ -6,7 +6,7 @@ from core.validation import ensure_valid_plugin_id
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator
 
-from shared.auth.jwt_middleware import get_current_user
+from shared.auth.jwt_middleware import get_current_user, require_role_or_service
 from shared.errors import backend_http_error
 from shared.models.tiers import normalize_tier
 
@@ -62,9 +62,22 @@ async def validate_license_endpoint(
 
 @router.post("/activate")
 async def activate_license(
-    request: LicenseActivateRequest, current_user: dict = Depends(get_current_user)
+    request: LicenseActivateRequest,
+    current_user: dict = Depends(require_role_or_service("admin")),
 ):
-    """Activate a license for the authenticated user (identity from JWT, #147/C7)."""
+    """Activate a license for the authenticated caller (identity from JWT, #147/C7).
+
+    #622: gated to admin (or the internal service token) via
+    ``require_role_or_service("admin")``. Before this, ANY authenticated user
+    could self-mint an active license at ANY tier (community/pro/enterprise) for
+    free — `create_license` performs no payment/entitlement check whatsoever, so
+    a plain user could grant themselves enterprise. There is no payment processor
+    anywhere in the codebase; until a real billing/entitlement model is decided
+    (the open questions on #622), the contained fix is to stop unrestricted
+    self-service tier activation by requiring admin — matching how model
+    pull/delete and bundle enable/disable are gated elsewhere. A `role == "user"`
+    JWT now gets 403; admins and the service principal are unaffected.
+    """
     # Same UUID guard as validate (#574): a non-UUID plugin_id would otherwise hit
     # the UUID column and 500 (sanitized, via backend_http_error below) instead of a
     # clean 404.
