@@ -58,8 +58,8 @@ async def create_license(
                         await conn.execute(
                             """
                             UPDATE marketplace_licenses
-                            SET tier = $3, license_key = $4, valid_until = $5, updated_at = NOW()
-                            WHERE id = $6
+                            SET tier = $1, license_key = $2, valid_until = $3, updated_at = NOW()
+                            WHERE id = $4
                             """,
                             tier,
                             license_key,

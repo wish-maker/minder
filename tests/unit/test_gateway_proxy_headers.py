@@ -516,6 +516,13 @@ _ROUTE_CASES = [
         "v1/tools/weather/execute",
         False,
     ),
+    (
+        "proxy_to_licensing",
+        {"path": "plugins/weather/license/tier"},
+        "plugin_state_manager",
+        "v1/licensing/plugins/weather/license/tier",
+        False,
+    ),
 ]
 
 

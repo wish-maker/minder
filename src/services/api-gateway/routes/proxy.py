@@ -485,3 +485,14 @@ async def proxy_to_tools(path: str, request: Request):
     _require_jwt_for_writes(request)
     service_url = SERVICE_REGISTRY["plugin_state_manager"]
     return await proxy_request(service_url, f"v1/tools/{path}", request)
+
+
+@router.api_route("/v1/licensing/{path:path}", methods=["GET", "POST", "PATCH"])
+async def proxy_to_licensing(path: str, request: Request):
+    """Proxy /v1/licensing/* (per-plugin required-tier lookup/validate/update) to
+    Plugin State Manager (routes/licensing.py, mounted there under this exact
+    prefix) -- previously had no gateway rule at all, making it unreachable
+    from outside the docker network (#918)."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["plugin_state_manager"]
+    return await proxy_request(service_url, f"v1/licensing/{path}", request)
