@@ -403,6 +403,121 @@ def test_delete_model_requires_admin():
     assert r.status_code in (401, 403)
 
 
+# --- #895: model_id tag normalization -----------------------------------------
+# Ollama canonicalizes an untagged pull ("all-minilm") to "all-minilm:latest" in
+# its own store; get/delete/test/register's existing-check all used to compare
+# the caller's raw model_id against the list with exact string equality, so a
+# model pulled without an explicit tag became unreachable by the name it was
+# pulled with.
+
+
+def test_get_model_resolves_a_bare_name_to_its_tagged_entry():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "all-minilm:latest"}]),
+            "show_model": AsyncMock(return_value={"family": "minilm"}),
+        },
+    )()
+
+    r = _client(ollama_manager).get("/v1/models/all-minilm")
+
+    assert r.status_code == 200
+    assert r.json()["details"]["family"] == "minilm"
+
+
+def test_delete_model_resolves_a_bare_name_to_its_tagged_entry():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "all-minilm:latest"}]),
+            "delete_model": AsyncMock(return_value={"status": "success"}),
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).delete("/v1/models/all-minilm")
+
+    assert r.status_code == 200
+
+
+def test_test_model_resolves_a_bare_name_to_its_tagged_entry():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "all-minilm:latest"}]),
+            "test_model": AsyncMock(
+                return_value={
+                    "model": "all-minilm",
+                    "response": "ok",
+                    "status": "success",
+                }
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager).post(
+        "/v1/models/all-minilm/test", json={"prompt": "hi"}
+    )
+
+    assert r.status_code == 200
+
+
+def test_register_model_bare_name_already_exists_is_200_not_re_pulled():
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "all-minilm:latest"}]),
+            "pull_model": AsyncMock(
+                side_effect=AssertionError("must not re-pull an already-existing model")
+            ),
+        },
+    )()
+
+    r = _client(ollama_manager, as_admin=True).post(
+        "/v1/models", json={"model_id": "all-minilm"}
+    )
+
+    assert r.status_code == 200
+    assert r.json()["status"] == "already_exists"
+
+
+def test_get_model_does_not_mangle_an_already_tagged_id():
+    """A model_id that already carries a tag must never get ":latest" appended
+    on top of it -- "foo:v2" must match only "foo:v2", not be turned into
+    "foo:v2:latest" and fail to match anything."""
+    ollama_manager = type(
+        "M",
+        (),
+        {
+            "list_models": AsyncMock(return_value=[{"model": "foo:v2"}]),
+            "show_model": AsyncMock(return_value={}),
+        },
+    )()
+
+    r = _client(ollama_manager).get("/v1/models/foo:v2")
+
+    assert r.status_code == 200
+
+
+def test_get_model_a_bare_name_does_not_match_a_differently_tagged_entry():
+    """Normalizing must not become overly permissive -- a bare "foo" lookup
+    should resolve to "foo:latest" specifically, not match an unrelated
+    "foo:v2" entry that happens to share the same base name."""
+    ollama_manager = type(
+        "M",
+        (),
+        {"list_models": AsyncMock(return_value=[{"model": "foo:v2"}])},
+    )()
+
+    r = _client(ollama_manager).get("/v1/models/foo")
+
+    assert r.status_code == 404
+
+
 # --- test_model success path (POST /v1/models/{model_id}/test) --------------
 
 
