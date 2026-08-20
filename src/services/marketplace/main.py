@@ -121,6 +121,7 @@ from routes.management import router as management_router  # noqa: E402
 
 # Include routers
 from routes.marketplace import router as marketplace_router  # noqa: E402
+from routes.submissions import router as submissions_router  # noqa: E402
 
 app.include_router(marketplace_router)
 app.include_router(management_router)
@@ -128,3 +129,4 @@ app.include_router(installations_router)
 app.include_router(ai_tools_router)
 app.include_router(licensing_router)
 app.include_router(graph_dependencies_router)
+app.include_router(submissions_router)

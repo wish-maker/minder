@@ -1,6 +1,7 @@
 # services/marketplace/routes/marketplace.py
 import json
 import uuid
+from datetime import datetime
 from typing import Any, List, Optional
 
 import asyncpg
@@ -15,7 +16,13 @@ from core.plugin_repository import (
 )
 from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
-from models.plugin import PluginCreate, PluginListResponse, PluginResponse, PluginUpdate
+from models.plugin import (
+    PluginCreate,
+    PluginListResponse,
+    PluginResponse,
+    PluginStatus,
+    PluginUpdate,
+)
 
 from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
@@ -143,12 +150,24 @@ async def create_plugin(
     current_user: dict = Depends(get_current_user_or_service),
 ):
     """
-    Create a new plugin in marketplace
+    Create a new plugin in marketplace.
 
-    This endpoint is used internally by the plugin registry to
-    automatically register plugins when they are loaded.
+    Two distinct callers (#402):
+    - the plugin registry (internal **service** token) auto-registering a
+      first-party module plugin → created `approved` + `origin='first_party'`,
+      as before (these bypass human review by design).
+    - a **user** JWT (a developer) → created as a `draft` submission
+      (`origin='submitted'`, `submitted_by=<sub>`) that must go through the
+      review flow (routes/submissions.py) before it can become visible. This
+      closes the prior gap where ANY authenticated user could POST a listing
+      that was silently auto-approved and publicly visible immediately.
     """
     pool = await get_pool()
+
+    is_service = current_user.get("role") == "service"
+    status = "approved" if is_service else PluginStatus.DRAFT.value
+    origin = "first_party" if is_service else "submitted"
+    submitted_by = None if is_service else current_user.get("sub")
 
     try:
         async with pool.acquire() as conn:
@@ -162,10 +181,11 @@ async def create_plugin(
                     id, name, display_name, description, author, author_email,
                     repository_url, distribution_type, docker_image,
                     pricing_model, base_tier, status, developer_id, category_id,
-                    requires_services,
+                    requires_services, origin, submitted_by, submitted_at,
                     download_count, rating_count, featured, created_at, updated_at
                 ) VALUES (
-                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, 0, 0, FALSE, NOW(), NOW()
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb,
+                    $16, $17, $18, 0, 0, FALSE, NOW(), NOW()
                 )
                 RETURNING {PLUGIN_COLUMNS}
                 """,
@@ -180,10 +200,15 @@ async def create_plugin(
                 plugin_data.docker_image,
                 plugin_data.pricing_model.value,
                 plugin_data.base_tier,
-                "approved",  # Auto-approve internally created plugins
+                status,
                 plugin_data.developer_id,
                 plugin_data.category_id,
                 json.dumps(plugin_data.requires_services),
+                origin,
+                submitted_by,
+                # submitted_at: stamped now for a draft submission; null for the
+                # service auto-register path.
+                None if is_service else datetime.utcnow(),
             )
 
             return row_to_plugin_response(row)
@@ -258,6 +283,25 @@ async def update_plugin(
     pool = await get_pool()
     try:
         async with pool.acquire() as conn:
+            # #402 §6.6: the plugin-registry auto-sync updates first-party
+            # listings in place via this endpoint (service token). It must NOT
+            # clobber a HUMAN developer submission (`origin='submitted'`) that
+            # happens to share a name — a rename/reconcile could otherwise
+            # silently overwrite someone's under-review submission. A real admin
+            # JWT may still edit any row; only the service principal is fenced.
+            if current_user.get("role") == "service":
+                existing = await conn.fetchrow(
+                    "SELECT origin FROM marketplace_plugins WHERE id = $1",
+                    plugin_id,
+                )
+                if existing is not None and existing["origin"] == "submitted":
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "Refusing to overwrite a developer submission "
+                            "(origin='submitted') from the service sync path"
+                        ),
+                    )
             row = await conn.fetchrow(query, *params, plugin_id)
     except asyncpg.UniqueViolationError:
         # #747: a renamed plugin's id-based sync could collide with a

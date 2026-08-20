@@ -91,7 +91,9 @@ async def test_create_plugin_db_failure_does_not_leak_exception_text(monkeypatch
     monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_BoomPool()))
 
     with pytest.raises(Exception) as exc_info:
-        await marketplace.create_plugin(_PluginCreateStub())
+        await marketplace.create_plugin(
+            _PluginCreateStub(), current_user={"role": "service", "sub": "svc"}
+        )
 
     assert exc_info.value.status_code == 503
     assert _SECRET not in str(exc_info.value.detail)
