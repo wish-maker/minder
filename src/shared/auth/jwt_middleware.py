@@ -14,6 +14,8 @@ from typing import Dict, Optional
 import jwt
 from fastapi import Depends, HTTPException, Request
 
+from shared.net.trusted_proxy import resolve_client_ip
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -332,7 +334,13 @@ def enforce_rate_limit(max_requests: int = 10, window_minutes: int = 1):
             # address (unauthenticated routes, or an invalid/missing token).
             user_id = resolve_caller_identity(request)
             if not user_id:
-                user_id = request.client.host if request.client else "anonymous"
+                # #749: the IP fallback (unauthenticated routes, e.g.
+                # login/register) must be the REAL client, not the proxy hop we
+                # connected to -- otherwise every caller behind Traefik shares
+                # one bucket. resolve_client_ip honours X-Forwarded-For only from
+                # a trusted-proxy CIDR (TRUSTED_PROXY_CIDRS env), so it can't be
+                # spoofed on a direct connection.
+                user_id = resolve_client_ip(request) or "anonymous"
 
             # Check rate limit
             key = f"{user_id}:{request.url.path}"

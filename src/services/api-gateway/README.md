@@ -27,9 +27,15 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
   Authelia OIDC/SSO flow (`/v1/auth/oidc/login` → callback → the SAME Minder JWT
   shape, so nothing downstream changes). A disabled account → 403.
 - **Rate limiting** (`core/middleware.py`): Redis-backed fixed-window
-  (`RATE_LIMIT_PER_MINUTE`, default 60), keyed by client IP, **fail-open** (Redis
-  down → requests pass). Over the limit → **429** with the standard
-  `{"detail": ...}` body + a `Retry-After` header (#541).
+  (`RATE_LIMIT_PER_MINUTE`, default 60), keyed by the **real client IP** (+ the
+  JWT caller identity when present, #901), **fail-open** (Redis down → requests
+  pass). Over the limit → **429** with the standard `{"detail": ...}` body + a
+  `Retry-After` header (#541). The real client IP is recovered from
+  `X-Forwarded-For` via a **trusted-proxy CIDR allowlist** (`TRUSTED_PROXY_CIDRS`,
+  #749): XFF is honoured only when the connecting peer is inside a trusted CIDR,
+  so a forged header on a direct connection can't spoof the key (`shared/net/
+  trusted_proxy.py`). Behind Traefik the peer is always the proxy, so without
+  this every caller collapsed into one shared bucket.
 - **Proxy** (`routes/proxy.py`): httpx passthrough to the downstreams. Reads
   (GET) are open (Authelia's job at the edge, #15); **writes (POST/PUT/DELETE/
   PATCH) require a valid JWT** (`_require_jwt_for_writes`, #47). Path prefixes:
@@ -73,6 +79,7 @@ api-gateway/
 ## Configuration (`config.py`, env-overridable)
 
 - `RATE_LIMIT_ENABLED` (default true), `RATE_LIMIT_PER_MINUTE` (60), `RATE_LIMIT_BURST` (100).
+- `TRUSTED_PROXY_CIDRS` (#749) — comma-separated CIDR allowlist of trusted reverse proxies; `X-Forwarded-For` is honoured only from a peer inside these ranges. Default trusts loopback + RFC1918 (Docker's dynamic bridge pool; `minder-network` has no pinned subnet). Tighten to Traefik's exact subnet in a fixed-network deployment.
 - `CORS_ALLOWED_ORIGINS` (default `*` — the gateway is the public surface). Pairing a
   wildcard origin with `allow_credentials=True` is refused: the shared CORS helper
   (`shared/utils/cors.py`) forces `allow_credentials=False` whenever origins include `*`,
