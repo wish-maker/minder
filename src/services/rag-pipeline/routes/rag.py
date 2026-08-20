@@ -5,7 +5,7 @@ import functools
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 
 from core import state
 from core.ingestion import group_documents, ingest_document
@@ -22,6 +22,7 @@ from models import (
     DocumentInfo,
     DocumentUploadResponse,
     KnowledgeBaseCreate,
+    KnowledgeBaseDeleteConfirm,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdate,
     QueryRequest,
@@ -253,6 +254,15 @@ async def update_knowledge_base(
     )
 
 
+def _dependent_pipelines(kb_id: str) -> List[dict]:
+    """Every currently-loaded pipeline that references `kb_id` (#896/#899)."""
+    return [
+        {"pipeline_id": pid, "name": p.get("name", "")}
+        for pid, p in state.rag_pipelines.items()
+        if kb_id in (p.get("knowledge_base_ids") or [])
+    ]
+
+
 @router.delete("/v1/knowledge-bases/{kb_id}", tags=["Knowledge Base"])
 @router.delete(
     "/knowledge-bases/{kb_id}",
@@ -265,6 +275,7 @@ async def update_knowledge_base(
 )  # deprecated unversioned alias
 async def delete_knowledge_base(
     kb_id: str,
+    confirm: Optional[KnowledgeBaseDeleteConfirm] = None,
     current_user: dict = Depends(get_current_user_or_service),
 ):
     """Delete a knowledge base: its Qdrant collection, its PostgreSQL row, and the
@@ -273,9 +284,49 @@ async def delete_knowledge_base(
     Served at both /v1/knowledge-bases/{kb_id} and the legacy /knowledge-bases/{kb_id}
     directly (and their deprecated singular /knowledge-base aliases) — not a
     redirect, which would drop the method/body on non-GET clients (#147).
+
+    #896/#899: deleting a KB that still has dependent pipelines used to
+    succeed unconditionally, orphaning them (their subsequent queries then
+    crashed with a leaked KeyError-shaped 500 -- see query_rag_pipeline's own
+    KB-existence guard below). Now blocked by default: a caller with no
+    dependents, or with a confirmation naming EXACTLY the current dependent
+    set, may proceed (cascade-deleting those pipelines first); anyone else
+    gets a 409 listing what would be deleted.
     """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    dependents = _dependent_pipelines(kb_id)
+    if dependents:
+        dependent_ids = {d["pipeline_id"] for d in dependents}
+        confirmed_ids = set(
+            confirm.confirm_delete_pipeline_ids if confirm is not None else []
+        )
+        if confirmed_ids != dependent_ids:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": (
+                        f"{len(dependents)} pipeline(s) depend on this knowledge "
+                        "base and will be deleted if you proceed. Resubmit with "
+                        "confirm_delete_pipeline_ids naming exactly these "
+                        "pipeline ids to confirm."
+                    ),
+                    "dependent_pipelines": dependents,
+                },
+            )
+        for dependent_id in dependent_ids:
+            if state.PG_AVAILABLE:
+                try:
+                    await state.delete_pipeline_from_postgres(dependent_id)
+                except Exception as e:
+                    logger.warning(
+                        f"⚠️  Failed to delete dependent pipeline from PostgreSQL: {e}"
+                    )
+            state.rag_pipelines.pop(dependent_id, None)
+            logger.info(
+                f"✅ Deleted dependent RAG pipeline (KB cascade): {dependent_id}"
+            )
 
     # Drop the Qdrant collection (best-effort — may already be gone).
     try:
@@ -752,6 +803,25 @@ async def query_rag_pipeline(
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
     pipeline = state.rag_pipelines[pipeline_id]
+    # #896: normal KB delete is now blocked while a pipeline still depends on
+    # it (see delete_knowledge_base), but this guards any pipeline that was
+    # already orphaned before that fix shipped (or by some other race) --
+    # without it, core/retrieval.py's `state.knowledge_bases[first_kb_id]`
+    # raises a raw KeyError that leaked straight to the client as a 500 with
+    # the kb_id as the detail string.
+    missing_kb_ids = [
+        kb_id
+        for kb_id in pipeline.get("knowledge_base_ids", [])
+        if kb_id not in state.knowledge_bases
+    ]
+    if missing_kb_ids:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This pipeline's knowledge base no longer exists "
+                f"({', '.join(missing_kb_ids)}) -- delete this pipeline."
+            ),
+        )
     # Retrieval strategy is chosen here as a drop-in retrieve variant (same signature)
     # so the runner/methods stay retrieval-agnostic (#45). parent_context > hybrid >
     # raptor > dense. The runner can't see this choice, so record it (and any silent

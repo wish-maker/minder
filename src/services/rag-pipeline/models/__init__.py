@@ -71,6 +71,19 @@ class KnowledgeBaseResponse(BaseModel):
     created_at: str
 
 
+class KnowledgeBaseDeleteConfirm(BaseModel):
+    """Optional confirmation body for DELETE /v1/knowledge-bases/{kb_id}
+    (#896/#899). Only required when pipelines still reference the KB -- the
+    caller must name EXACTLY the current set of dependent pipeline ids
+    (mirrors plugin-registry's backups.py restore endpoint, which requires an
+    exact `confirm_filename` match rather than a bare yes/no -- a stale or
+    partial confirmation is rejected, not partially honored, so a pipeline
+    created between the first 409 and the confirmed retry can't be silently
+    swept into the cascade)."""
+
+    confirm_delete_pipeline_ids: List[str] = Field(default_factory=list)
+
+
 class RAGPipelineCreate(BaseModel):
     """RAG Pipeline creation request"""
 

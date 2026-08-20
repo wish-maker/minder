@@ -264,6 +264,87 @@ def test_delete_rag_pipeline_requires_auth():
     assert resp.status_code == 401
 
 
+# ── #896/#899: KB delete blocked by dependent pipelines + confirm-to-cascade ──
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_with_no_dependents_succeeds_immediately():
+    kb = _kb("kb1")
+    with _seed_state(knowledge_bases={"kb1": kb}, rag_pipelines={}, PG_AVAILABLE=False):
+        resp = await rag_routes.delete_knowledge_base("kb1", None, {"sub": "1"})
+    assert resp == {"message": "Knowledge base deleted", "id": "kb1"}
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_with_dependent_pipeline_without_confirmation_409s():
+    kb = _kb("kb1")
+    pipe = {"id": "p1", "name": "my-pipe", "knowledge_base_ids": ["kb1"]}
+    with _seed_state(
+        knowledge_bases={"kb1": kb}, rag_pipelines={"p1": pipe}, PG_AVAILABLE=False
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_knowledge_base("kb1", None, {"sub": "1"})
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["dependent_pipelines"] == [
+        {"pipeline_id": "p1", "name": "my-pipe"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_with_stale_confirmation_409s_with_current_list():
+    kb = _kb("kb1")
+    pipe = {"id": "p1", "name": "my-pipe", "knowledge_base_ids": ["kb1"]}
+    with _seed_state(
+        knowledge_bases={"kb1": kb}, rag_pipelines={"p1": pipe}, PG_AVAILABLE=False
+    ):
+        stale_confirm = models.KnowledgeBaseDeleteConfirm(
+            confirm_delete_pipeline_ids=["some-other-id"]
+        )
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_knowledge_base("kb1", stale_confirm, {"sub": "1"})
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["dependent_pipelines"] == [
+        {"pipeline_id": "p1", "name": "my-pipe"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delete_kb_with_exact_confirmation_cascades_and_succeeds():
+    kb = _kb("kb1")
+    pipe = {"id": "p1", "name": "my-pipe", "knowledge_base_ids": ["kb1"]}
+    with _seed_state(
+        knowledge_bases={"kb1": kb}, rag_pipelines={"p1": pipe}, PG_AVAILABLE=False
+    ):
+        confirm = models.KnowledgeBaseDeleteConfirm(confirm_delete_pipeline_ids=["p1"])
+        resp = await rag_routes.delete_knowledge_base("kb1", confirm, {"sub": "1"})
+        assert resp == {"message": "Knowledge base deleted", "id": "kb1"}
+        assert "p1" not in rag_routes.state.rag_pipelines
+        assert "kb1" not in rag_routes.state.knowledge_bases
+
+
+@pytest.mark.asyncio
+async def test_query_orphaned_pipeline_returns_clean_error_not_leaked_500():
+    """A pipeline whose KB no longer exists (pre-existing orphan, or a race)
+    must fail cleanly, not with core/retrieval.py's raw KeyError leaking as a
+    500 whose detail is just the missing kb_id string."""
+    pipe = {
+        "id": "p1",
+        "name": "orphan",
+        "knowledge_base_ids": ["kb-does-not-exist"],
+        "retrieval_config": {},
+        "generation_config": {},
+    }
+    with _seed_state(
+        knowledge_bases={}, rag_pipelines={"p1": pipe}, PG_AVAILABLE=False
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.query_rag_pipeline(
+                "p1", models.QueryRequest(question="hi"), {"sub": "1"}
+            )
+    assert exc_info.value.status_code == 409
+    assert "kb-does-not-exist" in exc_info.value.detail
+
+
 # create_knowledge_base/upload_document/create_rag_pipeline/query_rag_pipeline had
 # the same gap as delete above: no application-level auth in the handler itself,
 # only api-gateway's proxy layer gated them for callers going through it. Unlike
