@@ -138,13 +138,14 @@ async def test_find_related_entities_with_relationship_type_passes_correct_param
 
     retriever = _make_retriever(monkeypatch, run_fn)
     result = await retriever.find_related_entities(
-        "Alice", relationship_type="WORKS_WITH", limit=5
+        "Alice", owner_id="owner-x", relationship_type="WORKS_WITH", limit=5
     )
 
     assert captured["params"] == {
         "entity_name": "Alice",
         "rel_type": "WORKS_WITH",
         "limit": 5,
+        "owner_id": "owner-x",
     }
     assert result == [
         {"text": "Bob", "label": "PERSON", "predicate": "WORKS_WITH", "type": "SVO"}
@@ -159,7 +160,9 @@ async def test_find_related_entities_without_type_uses_multihop_query(monkeypatc
         return _FakeResult([_FakeRecord(entity="Acme Corp", label="ORG")])
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.find_related_entities("apple", max_depth=3, limit=10)
+    result = await retriever.find_related_entities(
+        "apple", owner_id="owner-x", max_depth=3, limit=10
+    )
 
     # Multi-hop traversal only follows RELATES_TO -- the #248-adjacent fix that
     # stopped a Document node (from an untyped `-[*..]-` traversal) from leaking
@@ -201,7 +204,9 @@ async def test_find_related_entities_multihop_query_excludes_the_start_entity(
         )
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.find_related_entities("apple", max_depth=2, limit=10)
+    result = await retriever.find_related_entities(
+        "apple", owner_id="owner-x", max_depth=2, limit=10
+    )
 
     assert "WITH nodes(path) as entities, e.text as start_text" in captured["query"]
     assert "WHERE entity.text <> start_text" in captured["query"]
@@ -222,10 +227,14 @@ async def test_find_related_entities_clamps_out_of_range_max_depth(monkeypatch):
         return _FakeResult([])
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    await retriever.find_related_entities("apple", max_depth=999, limit=10)
+    await retriever.find_related_entities(
+        "apple", owner_id="owner-x", max_depth=999, limit=10
+    )
     assert "RELATES_TO*1..4" in captured["query"]
 
-    await retriever.find_related_entities("apple", max_depth=0, limit=10)
+    await retriever.find_related_entities(
+        "apple", owner_id="owner-x", max_depth=0, limit=10
+    )
     assert "RELATES_TO*1..1" in captured["query"]
 
 
@@ -234,7 +243,7 @@ async def test_find_related_entities_degrades_to_empty_list_on_error(monkeypatch
         raise RuntimeError("neo4j down")
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.find_related_entities("Alice")
+    result = await retriever.find_related_entities("Alice", owner_id="owner-x")
 
     assert result == []  # never raises
 
@@ -247,7 +256,7 @@ async def test_get_entity_context_reports_not_found(monkeypatch):
         return _FakeResult([])  # entity_query's .single() -> None
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.get_entity_context("nonexistent")
+    result = await retriever.get_entity_context("nonexistent", owner_id="owner-x")
 
     assert result == {"error": "Entity not found"}
 
@@ -268,7 +277,9 @@ async def test_get_entity_context_assembles_entity_related_and_documents(monkeyp
         return _FakeResult([_FakeRecord(doc_id="doc-1", title="Report")])
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.get_entity_context("Alice", context_window=2)
+    result = await retriever.get_entity_context(
+        "Alice", owner_id="owner-x", context_window=2
+    )
 
     assert result["entity"] == {
         "text": "Alice",
@@ -287,7 +298,7 @@ async def test_get_entity_context_degrades_to_error_dict_on_exception(monkeypatc
         raise RuntimeError("neo4j down")
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.get_entity_context("Alice")
+    result = await retriever.get_entity_context("Alice", owner_id="owner-x")
 
     assert "error" in result  # never raises
 
@@ -302,7 +313,7 @@ async def test_graph_search_parses_matches(monkeypatch):
         )
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.graph_search("apple", limit=3)
+    result = await retriever.graph_search("apple", owner_id="owner-x", limit=3)
 
     assert result == [{"text": "Apple Inc", "label": "ORG", "description": "a company"}]
 
@@ -312,7 +323,7 @@ async def test_graph_search_degrades_to_empty_list_on_error(monkeypatch):
         raise RuntimeError("neo4j down")
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.graph_search("apple")
+    result = await retriever.graph_search("apple", owner_id="owner-x")
 
     assert result == []
 
@@ -369,7 +380,7 @@ class _FakeConstructTx:
 
     async def run(self, query, **kwargs):
         self.calls.append((query, kwargs))
-        if "MENTIONS]->(e:Entity)" in query and "RETURN e.text AS text" in query:
+        if "MENTIONS]->(e:Entity" in query and "RETURN e.text AS text" in query:
             return _FakeConstructResult(
                 records=[{"text": t, "label": lbl} for t, lbl in self._prev]
             )
@@ -419,7 +430,12 @@ async def test_construct_graph_document_merge_uses_coalesce(monkeypatch):
     upsert COALESCEs the request value against the stored one."""
     constructor, tx = _make_construct_constructor(monkeypatch)
     await constructor.construct_graph(
-        document_id="doc-1", entities=[], relationships=[], title="Final", source="up"
+        document_id="doc-1",
+        owner_id="owner-x",
+        entities=[],
+        relationships=[],
+        title="Final",
+        source="up",
     )
     doc_merge = next(q for q, _ in tx.calls if "MERGE (d:Document" in q)
     assert "ON MATCH SET" in doc_merge
@@ -438,6 +454,7 @@ async def test_construct_graph_full_replaces_edges_before_rebuild(monkeypatch):
     )
     await constructor.construct_graph(
         document_id="doc-1",
+        owner_id="owner-x",
         entities=[{"text": "Acme", "label": "ORG"}],
         relationships=[],
         title="T",
@@ -458,6 +475,7 @@ async def test_construct_graph_returns_committed_counts(monkeypatch):
     constructor, tx = _make_construct_constructor(monkeypatch)
     result = await constructor.construct_graph(
         document_id="doc-1",
+        owner_id="owner-x",
         entities=[
             {"text": "Acme", "label": "ORG"},
             {"text": "Bob", "label": "PERSON"},
@@ -575,7 +593,7 @@ async def test_delete_document_runs_in_a_single_transaction(monkeypatch):
     constructor, tx, session = _make_constructor_for_delete(
         monkeypatch, mentioned=[], rels_deleted=0, docs_deleted=1, orphan_map={}
     )
-    await constructor.delete_document("doc-1")
+    await constructor.delete_document("doc-1", owner_id="owner-x")
     assert session.execute_write_called is True
 
 
@@ -592,7 +610,7 @@ async def test_delete_document_only_checks_entities_this_document_touched(monkey
         orphan_map={("Alice", "PERSON"): 1, ("Acme Corp", "ORG"): 0},
     )
 
-    result = await constructor.delete_document("doc-1")
+    result = await constructor.delete_document("doc-1", owner_id="owner-x")
 
     assert set(tx.entity_orphan_check_calls) == set(mentioned)
     assert result == {
@@ -606,7 +624,7 @@ async def test_delete_document_with_no_mentioned_entities_checks_nothing(monkeyp
     constructor, tx, session = _make_constructor_for_delete(
         monkeypatch, mentioned=[], rels_deleted=0, docs_deleted=1, orphan_map={}
     )
-    result = await constructor.delete_document("doc-1")
+    result = await constructor.delete_document("doc-1", owner_id="owner-x")
 
     assert tx.entity_orphan_check_calls == []
     assert result["orphan_entities_deleted"] == 0
@@ -629,14 +647,18 @@ async def test_graph_search_parses_entities_and_passes_query_and_limit(monkeypat
         )
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    result = await retriever.graph_search("musk", limit=7)
+    result = await retriever.graph_search("musk", owner_id="owner-x", limit=7)
 
     # Cypher param is "search_term", not "query" -- AsyncSession.run's own
     # first positional parameter is ALSO named "query", so a Cypher param
     # named "query" collides and crashes every real call (the bug this test
     # guards against; the fake _FakeSession.run's own signature now matches
     # the real driver's, so this test would fail again if that regressed).
-    assert captured["params"] == {"search_term": "musk", "limit": 7}
+    assert captured["params"] == {
+        "search_term": "musk",
+        "limit": 7,
+        "owner_id": "owner-x",
+    }
     # Case-insensitive CONTAINS on both text and label.
     assert "toLower(e.text) CONTAINS toLower($search_term)" in captured["query"]
     assert "toLower(e.label) CONTAINS toLower($search_term)" in captured["query"]
@@ -651,7 +673,7 @@ async def test_graph_search_swallows_errors_returns_empty(monkeypatch):
         raise RuntimeError("neo4j down")
 
     retriever = _make_retriever(monkeypatch, run_fn)
-    assert await retriever.graph_search("anything") == []
+    assert await retriever.graph_search("anything", owner_id="owner-x") == []
 
 
 # --- core/graph_constructor.py: get_graph_statistics / list_documents ----------
@@ -681,9 +703,9 @@ async def test_get_graph_statistics_returns_counts_and_entity_type_breakdown(
             return _FakeResult(
                 [{"label": "ORG", "count": 2}, {"label": "PERSON", "count": 1}]
             )
-        if "MATCH (e:Entity) RETURN count(e)" in query:
+        if "count(e)" in query:
             return _FakeResult([{"count": 3}])
-        if "MATCH (d:Document) RETURN count(d)" in query:
+        if "count(d)" in query:
             return _FakeResult([{"count": 2}])
         if "RETURN count(r) as count" in query:
             return _FakeResult([{"count": 5}])
@@ -692,7 +714,7 @@ async def test_get_graph_statistics_returns_counts_and_entity_type_breakdown(
         raise AssertionError(f"unexpected query: {query}")
 
     constructor = _make_stats_constructor(monkeypatch, run_fn)
-    stats = await constructor.get_graph_statistics()
+    stats = await constructor.get_graph_statistics(owner_id="owner-x")
 
     assert stats == {
         "nodes": 10,
@@ -710,7 +732,7 @@ async def test_get_graph_statistics_zero_counts_on_an_empty_graph(monkeypatch):
         return _FakeResult([])
 
     constructor = _make_stats_constructor(monkeypatch, run_fn)
-    stats = await constructor.get_graph_statistics()
+    stats = await constructor.get_graph_statistics(owner_id="owner-x")
 
     assert stats == {
         "nodes": 0,
@@ -731,6 +753,7 @@ async def test_list_documents_stringifies_neo4j_datetime_and_keeps_none(monkeypa
                     "id": "d1",
                     "title": "T1",
                     "source": "s1",
+                    "kb_id": "kb1",
                     "created_at": datetime(2026, 1, 1),
                     "entity_count": 3,
                 },
@@ -738,6 +761,7 @@ async def test_list_documents_stringifies_neo4j_datetime_and_keeps_none(monkeypa
                     "id": "d2",
                     "title": "T2",
                     "source": "s2",
+                    "kb_id": None,
                     "created_at": None,
                     "entity_count": 0,
                 },
@@ -745,7 +769,7 @@ async def test_list_documents_stringifies_neo4j_datetime_and_keeps_none(monkeypa
         )
 
     constructor = _make_stats_constructor(monkeypatch, run_fn)
-    docs = await constructor.list_documents()
+    docs = await constructor.list_documents(owner_id="owner-x")
 
     assert docs[0]["created_at"] == "2026-01-01 00:00:00"  # real object -> str
     assert docs[1]["created_at"] is None  # None stays None, not "None"
@@ -757,4 +781,4 @@ async def test_list_documents_empty_graph_returns_empty_list(monkeypatch):
         return _FakeResult([])
 
     constructor = _make_stats_constructor(monkeypatch, run_fn)
-    assert await constructor.list_documents() == []
+    assert await constructor.list_documents(owner_id="owner-x") == []

@@ -29,21 +29,31 @@ from shared.metrics import (  # noqa: E402
     http_requests_total,
     route_template,
 )
+from shared.net.trusted_proxy import (  # noqa: E402
+    parse_trusted_cidrs,
+    resolve_client_ip,
+)
 from shared.utils.cors import add_cors_from_string  # noqa: E402
 
 logger = logging.getLogger("minder.api-gateway")
 
+# Parsed once at import — the trusted-proxy CIDR allowlist (#749). Behind Traefik
+# the connecting peer is always the proxy, so keying rate limits on it collapses
+# every real caller into one bucket; resolve_client_ip peels trusted hops off
+# X-Forwarded-For to recover the real client, and ignores XFF entirely on an
+# untrusted (direct) connection so it can't be spoofed.
+_TRUSTED_PROXY_CIDRS = parse_trusted_cidrs(settings.TRUSTED_PROXY_CIDRS)
+
 
 def _client_ip(request: Request) -> str:
-    """Client IP used as the rate-limit key.
+    """Real client IP used as the rate-limit key (#749).
 
     Replaces slowapi's get_remote_address (the only thing slowapi was used for — its
-    Limiter was instantiated but never actually applied to any route). Returns the
-    connecting peer's host; behind Traefik that is whatever ProxyHeaders resolves
-    request.client to, unchanged from the previous behaviour.
+    Limiter was instantiated but never actually applied to any route). Was the raw
+    connecting peer, which behind Traefik is always the proxy's own IP; now resolves
+    the real client via the trusted-proxy CIDR allowlist.
     """
-    client = request.client
-    return client.host if client else "127.0.0.1"
+    return resolve_client_ip(request, _TRUSTED_PROXY_CIDRS)
 
 
 def _rate_limit_key(request: Request) -> str:

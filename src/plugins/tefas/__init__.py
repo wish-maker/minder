@@ -10,8 +10,7 @@ no double-counting.
 Source: the ``tefas-crawler`` library (in the registry image). It's synchronous and
 TEFAS rate-limits/robot-checks automated access, so fetches run in a worker thread and
 fail soft (a blocked/empty fetch logs a warning and returns nothing rather than
-crashing the collection loop). ``borsapy`` is also available in the image (BIST/forex
-funds — a yfinance-like API) for a future BIST plugin.
+crashing the collection loop).
 
 Config is managed centrally over the API (CONFIG_SCHEMA — GET/PUT
 /v1/plugins/tefas/config):
