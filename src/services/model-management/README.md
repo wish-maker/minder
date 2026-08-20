@@ -27,7 +27,7 @@ python -m pytest tests/unit/test_model_management_*.py
 | POST | `/v1/models` | Pull a model — body `{"model_id": "..."}` → **201**. Rejects a custom registry host (**422**) — only the default Ollama library, optionally namespaced (e.g. `namespace/model:tag`), is supported (#679). Concurrent pulls capped via `MAX_CONCURRENT_MODEL_PULLS` |
 | GET | `/v1/models/{model_id}` | Inspect one model (details from Ollama) |
 | DELETE | `/v1/models/{model_id}` | Delete a model |
-| POST | `/v1/models/{model_id}/test` | Smoke-test: send a prompt, return the completion |
+| POST | `/v1/models/{model_id}/test` | Smoke-test: send a prompt, return the completion. Requires auth (any role) + rate-limited 5/min per user (#746) |
 | POST | `/v1/models/{model_id}/constraints` | **501 — not implemented** (#145) |
 | GET | `/v1/models/{model_id}/metrics` | **501 — not implemented** (#145) |
 | POST | `/v1/models/fine-tune` | **501 — not implemented** (#145) |
@@ -59,8 +59,10 @@ model-management/
   disk-space check; the default serializes pulls entirely so unbounded
   concurrent downloads can't race to fill the shared Ollama volume.
 
-No secrets — this service holds no auth of its own (writes are JWT-gated at the
-api-gateway proxy, #47).
+No secrets. Writes are JWT-gated at the api-gateway proxy (#47) — except `test_model`
+(the most compute-expensive endpoint here), which also carries its own direct
+`get_current_user` dependency + a 5-requests/minute-per-user rate limit (#746), as
+defense-in-depth beyond the gateway's own check.
 
 ## Error conventions
 

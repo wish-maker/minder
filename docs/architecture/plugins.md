@@ -157,12 +157,22 @@ Two distinct, easily-confused relationships a plugin can declare, both surfaced 
 
 Marketplace persists the edges in **Neo4j** (`DEPENDS_ON`/`RECOMMENDS`/`CONFLICTS_WITH`
 relationships, keyed by `dependency_type` — `requires`/`suggests`/`conflicts_with`) and exposes
-them read-only:
+them for direct querying:
 
 ```bash
 GET /v1/graph/dependencies/{plugin_id}   # direct + transitive deps (BFS depth)
 GET /v1/graph/conflicts/{plugin_id}      # declared conflicts
 ```
+
+The graph is no longer read-only-in-effect: `install`/`enable`/`disable` (`routes/management.py`)
+actively consult it. `install`/`enable` resolve the full transitive dependency chain and
+auto-enable any dependency the user already has installed-but-disabled, rejecting (409, naming
+the missing one) if a dependency was never installed at all — auto-*installing* it on the user's
+behalf would bypass their own choice, so this only ever auto-*enables* an existing row. `disable`
+is rejected (409, naming the blocker) if another of the user's still-enabled plugins directly
+depends on the one being disabled. A Neo4j connectivity failure degrades gracefully on both
+paths — logged, not raised — rather than blocking plugin management over an unreachable
+secondary safety net.
 
 A plugin's card on **Available Plugins** has a collapsible **"Dependencies & conflicts"** panel
 (lazy-fetched on first expand) rendering **"Depends on: telegraf"** / **"Conflicts with: ..."**,
