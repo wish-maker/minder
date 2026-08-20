@@ -31,9 +31,10 @@ RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt || \
     pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt
 
-# Plugin-specific deps (tefas-crawler, borsapy) are pinned in requirements.txt
-# above — no separate install step. influxdb-client was removed (#341): it's
-# never actually imported (plugins write to InfluxDB via raw httpx
+# Plugin-specific deps (tefas-crawler) are pinned in requirements.txt above — no
+# separate install step. borsapy was removed (#750): a dead pin nothing imported,
+# and its AGPL pymupdf transitive was a licensing risk. influxdb-client was
+# removed (#341): never imported (plugins write to InfluxDB via raw httpx
 # line-protocol calls instead).
 
 # Copy application code

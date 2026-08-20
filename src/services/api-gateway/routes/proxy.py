@@ -134,7 +134,15 @@ async def proxy_request(
         for k, v in request.headers.items()
         if k.lower() not in _STRIPPED_REQUEST_HEADERS
     }
-    headers["X-Forwarded-For"] = request.client.host if request.client else "unknown"
+    # #749: APPEND this hop's peer to the incoming X-Forwarded-For chain rather
+    # than clobbering it -- the old overwrite threw away Traefik's original
+    # client entry, leaving downstream services with only the gateway's own IP
+    # and no way to recover the real caller. Preserving + appending yields the
+    # standard "client, traefik, gateway" chain, which the downstream shared
+    # trusted-proxy resolver peels back to the real client.
+    peer = request.client.host if request.client else "unknown"
+    incoming_xff = request.headers.get("X-Forwarded-For")
+    headers["X-Forwarded-For"] = f"{incoming_xff}, {peer}" if incoming_xff else peer
     headers["X-Request-ID"] = request.state.request_id
 
     # multi_items() (not the plain Mapping .items() that a bare QueryParams

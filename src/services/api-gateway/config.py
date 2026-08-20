@@ -36,6 +36,20 @@ class Settings(MinderBaseSettings):
     # unchanged from the prior hardcoded value; CI overrides it, production doesn't.
     AUTH_RATE_LIMIT_PER_MINUTE: int = 10
 
+    # #749: comma-separated CIDR allowlist of trusted reverse proxies. The
+    # gateway (and every downstream service, via shared.net.trusted_proxy) only
+    # honours X-Forwarded-For when the immediate peer falls inside one of these
+    # ranges -- otherwise it uses the peer address as-is, so a forged XFF on a
+    # direct connection can't spoof the rate-limit key / logged client IP. The
+    # default trusts loopback (the gateway's own 127.0.0.1:8000 host-port path)
+    # + RFC1918 (Docker's dynamic bridge pool, since minder-network has no pinned
+    # subnet to pin an exact Traefik IP to). Read straight from the env var of
+    # the same name by the shared helper; declared here so it's a documented,
+    # discoverable setting on the gateway.
+    TRUSTED_PROXY_CIDRS: str = (
+        "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+    )
+
     # Application
     API_VERSION: str = "v1"
     APP_VERSION: str = "1.0.0"
