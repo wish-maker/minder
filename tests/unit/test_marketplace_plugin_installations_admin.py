@@ -150,3 +150,32 @@ def test_admin_can_list_installations(monkeypatch):
     body = resp.json()
     assert body["total"] == 2
     assert {i["user_id"] for i in body["installations"]} == {"4", "7"}
+
+
+# --- #897: auth must be checked before path-param validation -----------------
+#
+# FastAPI resolves a route's Depends() in declaration order. With a malformed
+# (non-UUID) plugin_id, valid_plugin_id's own validation fails -- if that
+# dependency is declared BEFORE the auth one, an unauthenticated request with
+# a garbage plugin_id got 404 (from valid_plugin_id) instead of 401, breaking
+# the "no Authorization header always -> 401" invariant this codebase holds
+# everywhere else. Exercises the REAL router (no auth override) against each
+# affected route with a syntactically invalid plugin_id.
+
+
+def test_installations_malformed_plugin_id_with_no_auth_is_401_not_404(monkeypatch):
+    client = _client(monkeypatch, rows=[])
+    resp = client.get("/v1/marketplace/plugins/not-a-uuid/installations")
+    assert resp.status_code == 401
+
+
+def test_install_malformed_plugin_id_with_no_auth_is_401_not_404(monkeypatch):
+    client = _client(monkeypatch, rows=[])
+    resp = client.post("/v1/marketplace/plugins/not-a-uuid/install")
+    assert resp.status_code == 401
+
+
+def test_enable_malformed_plugin_id_with_no_auth_is_401_not_404(monkeypatch):
+    client = _client(monkeypatch, rows=[])
+    resp = client.post("/v1/marketplace/plugins/not-a-uuid/enable")
+    assert resp.status_code == 401

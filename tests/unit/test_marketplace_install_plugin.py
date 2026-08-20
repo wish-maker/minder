@@ -65,10 +65,25 @@ class _FakeConn:
     async def fetchrow(self, query, *args):
         if "FROM marketplace_plugins" in query:
             return self._plugin_row
-        if "FROM marketplace_installations" in query and "SELECT *" in query:
-            return self._existing_row
         if "INSERT INTO marketplace_installations" in query:
             return self._insert_row
+        if "UPDATE marketplace_installations" in query and "RETURNING" in query:
+            # #892: install_plugin's own dependency check (_ensure_dependencies_
+            # enabled) flips the row to enabled=TRUE via an UPDATE...RETURNING
+            # after writing it with enabled=FALSE first -- these tests default
+            # to a dependency-free _FakeNeo4j (see install_plugin() call sites
+            # below), so the check always passes; return whichever row this
+            # conn was constructed with, enabled.
+            base = (
+                self._insert_row if self._insert_row is not None else self._existing_row
+            )
+            if base is None:
+                return None
+            updated = dict(base)
+            updated["enabled"] = True
+            return updated
+        if "FROM marketplace_installations" in query and "SELECT *" in query:
+            return self._existing_row
         return None
 
     async def fetchval(self, query, *args):
@@ -79,11 +94,24 @@ class _FakeConn:
     async def execute(self, query, *args):
         return None
 
+    async def fetch(self, query, *args):
+        return []
+
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, *exc):
         return False
+
+
+class _FakeNeo4j:
+    """No declared dependencies -- #892's install_plugin dependency check is
+    exercised for real (with actual dependencies) in
+    test_marketplace_management_lifecycle.py; this file's own tests predate
+    #748/#892 and only need the check to be a no-op pass-through."""
+
+    async def get_dependency_chain(self, plugin_id):
+        return []
 
 
 class _FakeAcquire:
@@ -130,7 +158,9 @@ async def test_new_installation_does_not_500_on_uuid_plugin_id(monkeypatch):
     conn = _FakeConn(plugin_row, existing_row=None, insert_row=insert_row)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
-    result = await management.install_plugin(plugin_id, current_user={"sub": "4"})
+    result = await management.install_plugin(
+        current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+    )
 
     assert result.plugin_id == plugin_id
     assert result.status == "installed"
@@ -144,7 +174,9 @@ async def test_reinstall_existing_does_not_500_on_uuid_plugin_id(monkeypatch):
     conn = _FakeConn(plugin_row, existing_row=existing_row, insert_row=None)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
-    result = await management.install_plugin(plugin_id, current_user={"sub": "4"})
+    result = await management.install_plugin(
+        current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+    )
 
     assert result.plugin_id == plugin_id
     assert result.enabled is True
@@ -163,7 +195,9 @@ async def test_install_rejected_once_user_hits_max_plugins_per_user(monkeypatch)
     from fastapi import HTTPException
 
     with pytest.raises(HTTPException) as exc:
-        await management.install_plugin(plugin_id, current_user={"sub": "4"})
+        await management.install_plugin(
+            current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+        )
 
     assert exc.value.status_code == 409
     assert "limit" in exc.value.detail.lower()
@@ -180,7 +214,9 @@ async def test_install_allowed_when_under_max_plugins_per_user(monkeypatch):
     )
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
-    result = await management.install_plugin(plugin_id, current_user={"sub": "4"})
+    result = await management.install_plugin(
+        current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+    )
 
     assert result.status == "installed"
 
@@ -203,6 +239,8 @@ async def test_reinstall_of_existing_plugin_is_not_capped_by_max_plugins_per_use
     )
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
-    result = await management.install_plugin(plugin_id, current_user={"sub": "4"})
+    result = await management.install_plugin(
+        current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+    )
 
     assert result.status == "installed"
