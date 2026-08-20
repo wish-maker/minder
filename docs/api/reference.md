@@ -540,9 +540,9 @@ Every route below also has a legacy unversioned alias kept for compatibility
 | POST | `/v1/retrieve` | Graph-based retrieval over entity relationships |
 | POST | `/v1/entity-context` | Retrieve context / neighbors around an entity |
 | POST | `/v1/graph/search` | Free-text search the graph for entities whose `text` or `label` matches `query` (case-insensitive `CONTAINS`); returns `{text, label, description}` per hit, `limit` 1–50 (default 5) |
-| GET | `/v1/graph/stats` | Graph overview — total node / relationship / document / entity counts + the per-NER-label entity distribution (`entity_types`); confirms a `construct-graph` populated the graph. Open read |
-| GET | `/v1/graph/documents` | List the Document nodes (id / title / source / created_at / entity_count), newest first — browse what's built. Open read |
-| DELETE | `/v1/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (shared entities kept). Idempotent: returns 200 with zero counts if the document is absent (graph-rag queries Neo4j directly, so there's no 404) |
+| GET | `/v1/graph/stats` | Graph overview — total node / relationship / document / entity counts + the per-NER-label entity distribution (`entity_types`); confirms a `construct-graph` populated the graph. Scoped to the caller's own graph (owner_id from the JWT); requires a valid JWT (#782) |
+| GET | `/v1/graph/documents` | List the Document nodes (id / title / source / created_at / entity_count) in the caller's own graph, newest first — browse what's built. Requires a valid JWT (#782) |
+| DELETE | `/v1/graph/document/{document_id}` | Delete a document's graph — its relationships, Document node, and orphaned entities (entities still referenced by another of the caller's own documents are kept). Scoped to the caller's own graph — a document_id owned by a different caller is treated as absent, not a permission error (#782). Idempotent: returns 200 with zero counts if the document is absent for this caller |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
 
