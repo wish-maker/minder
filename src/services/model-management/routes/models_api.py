@@ -22,6 +22,21 @@ from shared.errors import backend_http_error
 from shared.models import PaginatedList
 
 
+def _normalize_model_id(model_id: str) -> str:
+    """Ollama canonicalizes an untagged pull ("all-minilm") to "all-minilm:latest"
+    in its own store (#895) -- a bare name with no ":" tag separator is normalized
+    to its ":latest"-qualified form so lookups/comparisons against Ollama's list
+    match regardless of whether the caller included a tag. Already-tagged ids
+    ("llama3.2:8b") pass through unchanged."""
+    return model_id if ":" in model_id else f"{model_id}:latest"
+
+
+def _model_matches(entry: dict, model_id: str) -> bool:
+    """True if an Ollama list entry's own name matches `model_id`, tag-normalized
+    on both sides (#895)."""
+    return _normalize_model_id(entry.get("model", "")) == _normalize_model_id(model_id)
+
+
 def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
     router = APIRouter(tags=["Models"])
 
@@ -98,7 +113,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         model_id = request.model_id
         try:
             for model in await ollama_manager.list_models():
-                if model.get("model") == model_id:
+                if _model_matches(model, model_id):
                     logger.warning(f"Model {model_id} already exists locally")
                     response.status_code = 200
                     return {
@@ -133,7 +148,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         """
         try:
             exists = any(
-                m.get("model") == model_id for m in await ollama_manager.list_models()
+                _model_matches(m, model_id) for m in await ollama_manager.list_models()
             )
             if not exists:
                 # 404 for an unknown model instead of the old blanket 503 — distinguish
@@ -178,7 +193,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
         """
         try:
             exists = any(
-                m.get("model") == model_id for m in await ollama_manager.list_models()
+                _model_matches(m, model_id) for m in await ollama_manager.list_models()
             )
             if not exists:
                 raise HTTPException(
@@ -232,7 +247,7 @@ def build_models_router(*, ollama_manager, models, logger) -> APIRouter:
             # a blanket 503 that leaks the raw message (#532) — mirrors get_model
             # / delete_model (#145).
             exists = any(
-                m.get("model") == model_id for m in await ollama_manager.list_models()
+                _model_matches(m, model_id) for m in await ollama_manager.list_models()
             )
             if not exists:
                 raise HTTPException(
