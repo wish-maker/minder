@@ -42,13 +42,25 @@ cr = _load()
 ConversationRepository = cr.ConversationRepository
 
 
-class _FakeConn:
-    """Simulates a single asyncpg connection over an in-memory turn list and
-    an in-memory conversation_shares mapping (conversation_id -> owner_user_id)."""
+class _FakeTransaction:
+    """No-op async context manager standing in for asyncpg's conn.transaction()."""
 
-    def __init__(self, turns, execute_result="", raises=None, shares=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeConn:
+    """Simulates a single asyncpg connection over an in-memory turn list, an
+    in-memory conversation_shares mapping, and an in-memory conversation_owners
+    mapping (conversation_id -> owner_user_id, first-write-wins -- #893)."""
+
+    def __init__(self, turns, execute_result="", raises=None, shares=None, owners=None):
         self._turns = turns
         self._shares = dict(shares or {})
+        self._owners = dict(owners or {})
         self.last_query = ""
         self.execute_calls = []
         self._execute_result = execute_result
@@ -59,6 +71,9 @@ class _FakeConn:
 
     async def __aexit__(self, *exc):
         return False
+
+    def transaction(self):
+        return _FakeTransaction()
 
     async def fetch(self, query, user_id, conversation_id, max_turns):
         self.last_query = query
@@ -87,13 +102,17 @@ class _FakeConn:
             (conversation_id,) = params
             owner = self._shares.get(conversation_id)
             return {"owner_user_id": owner} if owner is not None else None
-        # is_owner's existence check against conversation_turns.
-        user_id, conversation_id = params
-        match = any(
-            t["user_id"] == user_id and t["conversation_id"] == conversation_id
-            for t in self._turns
+        if "conversation_owners" in query:
+            (conversation_id,) = params
+            owner = self._owners.get(conversation_id)
+            return {"owner_user_id": owner} if owner is not None else None
+        # is_owner's backward-compat fallback: earliest conversation_turns row.
+        (conversation_id,) = params
+        matches = sorted(
+            (t for t in self._turns if t["conversation_id"] == conversation_id),
+            key=lambda t: t["timestamp"],
         )
-        return {"1": 1} if match else None
+        return {"owner_user_id": matches[0]["user_id"]} if matches else None
 
     async def execute(self, query, *params):
         if self._raises:
@@ -103,6 +122,9 @@ class _FakeConn:
         if "INSERT INTO conversation_shares" in query:
             conversation_id, owner_user_id = params
             self._shares.setdefault(conversation_id, owner_user_id)
+        elif "INSERT INTO conversation_owners" in query:
+            conversation_id, owner_user_id = params
+            self._owners.setdefault(conversation_id, owner_user_id)
         elif "INSERT INTO conversation_turns" in query:
             user_id, conversation_id, question, answer, timestamp, metadata = params
             self._turns.append(
@@ -119,9 +141,15 @@ class _FakeConn:
 
 
 class _FakePool:
-    def __init__(self, turns=None, execute_result="", raises=None, shares=None):
+    def __init__(
+        self, turns=None, execute_result="", raises=None, shares=None, owners=None
+    ):
         self._conn = _FakeConn(
-            turns or [], execute_result=execute_result, raises=raises, shares=shares
+            turns or [],
+            execute_result=execute_result,
+            raises=raises,
+            shares=shares,
+            owners=owners,
         )
 
     def acquire(self):
@@ -205,19 +233,27 @@ class TestStoreTurn:
         repo = ConversationRepository(pool)
         stored = asyncio.run(repo.store_turn("u", "c", "q", "a", metadata={"k": "v"}))
         assert stored is True
-        [params] = pool._conn.execute_calls
-        assert params[0] == "u"
-        assert params[1] == "c"
-        assert params[2] == "q"
-        assert params[3] == "a"
-        assert json.loads(params[5]) == {"k": "v"}
+        # store_turn now also records first-ownership (#893) -- the turn
+        # insert is the second of the two execute() calls.
+        _owner_params, turn_params = pool._conn.execute_calls
+        assert turn_params[0] == "u"
+        assert turn_params[1] == "c"
+        assert turn_params[2] == "q"
+        assert turn_params[3] == "a"
+        assert json.loads(turn_params[5]) == {"k": "v"}
+
+    def test_records_first_ownership_alongside_the_turn(self):
+        pool = _FakePool()
+        repo = ConversationRepository(pool)
+        asyncio.run(repo.store_turn("u", "c", "q", "a"))
+        assert pool._conn._owners == {"c": "u"}
 
     def test_defaults_metadata_to_an_empty_object(self):
         pool = _FakePool()
         repo = ConversationRepository(pool)
         asyncio.run(repo.store_turn("u", "c", "q", "a"))
-        [params] = pool._conn.execute_calls
-        assert json.loads(params[5]) == {}
+        _owner_params, turn_params = pool._conn.execute_calls
+        assert json.loads(turn_params[5]) == {}
 
     def test_wraps_a_database_failure_as_runtimeerror(self):
         pool = _FakePool(raises=ConnectionError("db down"))
@@ -386,6 +422,56 @@ class TestSharing:
             "alice's question",
             "bob's follow-up",
         ]
+
+    def test_a_later_user_reusing_the_same_conversation_id_cannot_hijack_ownership(
+        self,
+    ):
+        """#893: alice starts conversation_id X first. bob later legitimately
+        starts his OWN private thread under the same client-supplied id X
+        (allowed, per-user-private-by-default). bob must NOT be able to claim
+        ownership just because he also has a turn stored under X -- only
+        alice, the true first-writer, may share it."""
+        pool = _FakePool()
+        repo = ConversationRepository(pool)
+
+        asyncio.run(repo.store_turn("alice", "conv-X", "alice's first question", "a"))
+        asyncio.run(repo.store_turn("bob", "conv-X", "bob's own question", "a"))
+
+        assert asyncio.run(repo.is_owner("alice", "conv-X")) is True
+        assert asyncio.run(repo.is_owner("bob", "conv-X")) is False
+
+        with pytest.raises(PermissionError):
+            asyncio.run(repo.share_conversation("bob", "conv-X"))
+        assert "conv-X" not in pool._conn._shares
+
+        assert asyncio.run(repo.share_conversation("alice", "conv-X")) is True
+        assert pool._conn._shares["conv-X"] == "alice"
+
+    def test_is_owner_falls_back_to_earliest_turn_when_no_owners_row_exists(self):
+        """Pre-migration data: conversation_turns rows exist with no
+        corresponding conversation_owners row yet (#893's backward-compat path)."""
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": "legacy-conv",
+                "question": "q0",
+                "answer": "a0",
+                "timestamp": 0,
+                "metadata": {},
+            },
+            {
+                "user_id": "bob",
+                "conversation_id": "legacy-conv",
+                "question": "q1",
+                "answer": "a1",
+                "timestamp": 1,
+                "metadata": {},
+            },
+        ]
+        pool = _FakePool(turns)
+        repo = ConversationRepository(pool)
+        assert asyncio.run(repo.is_owner("alice", "legacy-conv")) is True
+        assert asyncio.run(repo.is_owner("bob", "legacy-conv")) is False
 
 
 class TestCleanupExpired:
