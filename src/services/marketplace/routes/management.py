@@ -16,6 +16,39 @@ logger = logging.getLogger("minder.marketplace.management")
 router = APIRouter(prefix="/v1/marketplace/plugins", tags=["Plugin Management"])
 
 
+async def _get_installation(conn, user_id: str, plugin_id: str):
+    """The caller's installation row for `plugin_id`, or None. Was the exact
+    same `SELECT * FROM marketplace_installations WHERE user_id = $1 AND
+    plugin_id = $2` copy-pasted verbatim at the top of install/uninstall/
+    enable/disable -- one place to change if the lookup itself ever needs to,
+    with zero behavior change today."""
+    return await conn.fetchrow(
+        """
+        SELECT * FROM marketplace_installations
+        WHERE user_id = $1 AND plugin_id = $2
+        """,
+        user_id,
+        plugin_id,
+    )
+
+
+def _to_installation_response(row) -> InstallationResponse:
+    """asyncpg returns UUID columns as `uuid.UUID`; `InstallationResponse`'s
+    id/plugin_id fields are `str` and pydantic v2 doesn't coerce -- both
+    branches of install_plugin built this same mapping by hand (#402)."""
+    return InstallationResponse(
+        id=str(row["id"]),
+        user_id=row["user_id"],
+        plugin_id=str(row["plugin_id"]),
+        version=row["version"],
+        status=row["status"],
+        enabled=row["enabled"],
+        config_json=row["config_json"],
+        installed_at=row["installed_at"],
+        last_updated_at=row["last_updated_at"],
+    )
+
+
 @router.post("/{plugin_id}/install", response_model=InstallationResponse)
 async def install_plugin(
     current_user: dict = Depends(get_current_user),
@@ -58,14 +91,7 @@ async def install_plugin(
             raise HTTPException(status_code=404, detail="Plugin not found")
 
         # Check if already installed
-        existing = await conn.fetchrow(
-            """
-            SELECT * FROM marketplace_installations
-            WHERE user_id = $1 AND plugin_id = $2
-            """,
-            user_id,
-            plugin_id,
-        )
+        existing = await _get_installation(conn, user_id, plugin_id)
 
         if existing:
             # Update if exists -- enabled=FALSE until the dependency check
@@ -91,17 +117,7 @@ async def install_plugin(
                 existing["id"],
             )
 
-            return InstallationResponse(
-                id=str(updated["id"]),
-                user_id=updated["user_id"],
-                plugin_id=str(updated["plugin_id"]),
-                version=updated["version"],
-                status=updated["status"],
-                enabled=updated["enabled"],
-                config_json=updated["config_json"],
-                installed_at=updated["installed_at"],
-                last_updated_at=updated["last_updated_at"],
-            )
+            return _to_installation_response(updated)
 
         # Cap installs per user (MAX_PLUGINS_PER_USER) -- was defined in config but
         # never enforced anywhere, so a single user could install every plugin in
@@ -154,17 +170,7 @@ async def install_plugin(
             row["id"],
         )
 
-        return InstallationResponse(
-            id=str(row["id"]),
-            user_id=row["user_id"],
-            plugin_id=str(row["plugin_id"]),
-            version=row["version"],
-            status=row["status"],
-            enabled=row["enabled"],
-            config_json=row["config_json"],
-            installed_at=row["installed_at"],
-            last_updated_at=row["last_updated_at"],
-        )
+        return _to_installation_response(row)
 
 
 @router.delete("/{plugin_id}/uninstall")
@@ -178,14 +184,7 @@ async def uninstall_plugin(
 
     async with pool.acquire() as conn:
         # Check if installed
-        existing = await conn.fetchrow(
-            """
-            SELECT * FROM marketplace_installations
-            WHERE user_id = $1 AND plugin_id = $2
-            """,
-            user_id,
-            plugin_id,
-        )
+        existing = await _get_installation(conn, user_id, plugin_id)
 
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
@@ -225,14 +224,7 @@ async def enable_plugin(
 
     async with pool.acquire() as conn:
         # Check if installed
-        existing = await conn.fetchrow(
-            """
-            SELECT * FROM marketplace_installations
-            WHERE user_id = $1 AND plugin_id = $2
-            """,
-            user_id,
-            plugin_id,
-        )
+        existing = await _get_installation(conn, user_id, plugin_id)
 
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
@@ -351,14 +343,7 @@ async def disable_plugin(
 
     async with pool.acquire() as conn:
         # Check if installed
-        existing = await conn.fetchrow(
-            """
-            SELECT * FROM marketplace_installations
-            WHERE user_id = $1 AND plugin_id = $2
-            """,
-            user_id,
-            plugin_id,
-        )
+        existing = await _get_installation(conn, user_id, plugin_id)
 
         if not existing:
             raise HTTPException(status_code=404, detail="Plugin not installed")
