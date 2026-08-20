@@ -22,29 +22,38 @@ import json
 import sys
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 _PSM = Path(__file__).resolve().parents[2] / "src" / "services" / "plugin-state-manager"
 
 
+_STATE_MOD_KEYS = ("core", "core.state", "models", "models.plugin_state", "config")
+
+
 @pytest.fixture
 def state_mod():
-    """Import plugin-state-manager's core.state in isolation, then restore globals."""
+    """Import plugin-state-manager's core.state in isolation, then restore globals.
+
+    "config" joined this reset set once core/state.py started doing
+    `from config import settings` (#751, plugin_exists_in_registry) -- without
+    it, a bare "config" module cached in sys.modules from whichever OTHER
+    service's test ran first in this pytest process (every service has its own
+    top-level config.py, all sharing that same bare module name) gets reused
+    here instead of plugin-state-manager's own, and CATALOG_HTTP_TIMEOUT/
+    PLUGIN_REGISTRY_URL resolve against the wrong Settings subclass.
+    """
     saved_path = list(sys.path)
-    saved_modules = {
-        k: sys.modules[k]
-        for k in ("core", "core.state", "models", "models.plugin_state")
-        if k in sys.modules
-    }
-    for k in ("core", "core.state", "models", "models.plugin_state"):
+    saved_modules = {k: sys.modules[k] for k in _STATE_MOD_KEYS if k in sys.modules}
+    for k in _STATE_MOD_KEYS:
         sys.modules.pop(k, None)
     sys.path.insert(0, str(_PSM))
     try:
         yield importlib.import_module("core.state")
     finally:
         sys.path[:] = saved_path
-        for k in ("core", "core.state", "models", "models.plugin_state"):
+        for k in _STATE_MOD_KEYS:
             sys.modules.pop(k, None)
         sys.modules.update(saved_modules)
 
@@ -354,3 +363,50 @@ async def test_resolve_dependencies_raises_on_circular_dependency(state_mod):
 
     with pytest.raises(ValueError, match="Circular dependency"):
         await state_mod.resolve_dependencies(conn, "a")
+
+
+class _FakeRegistryResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+class _FakeRegistryClient:
+    def __init__(self, status_code):
+        self._status_code = status_code
+        self.requested_url = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    async def get(self, url):
+        self.requested_url = url
+        return _FakeRegistryResponse(self._status_code)
+
+
+async def test_plugin_exists_in_registry_true_for_200(state_mod):
+    fake_client = _FakeRegistryClient(200)
+    with patch.object(state_mod.httpx, "AsyncClient", return_value=fake_client):
+        assert await state_mod.plugin_exists_in_registry("weather-plus") is True
+    assert fake_client.requested_url.endswith("/v1/plugins/weather-plus")
+
+
+async def test_plugin_exists_in_registry_false_for_404(state_mod):
+    fake_client = _FakeRegistryClient(404)
+    with patch.object(state_mod.httpx, "AsyncClient", return_value=fake_client):
+        assert await state_mod.plugin_exists_in_registry("ghost") is False
+
+
+async def test_plugin_exists_in_registry_propagates_connection_errors(state_mod):
+    """A plugin-registry outage must raise, not resolve to False -- the caller
+    (routes/state.py) is what turns this into a 503, never a silent 404."""
+
+    class _BrokenClient(_FakeRegistryClient):
+        async def get(self, url):
+            raise ConnectionError("connection refused")
+
+    with patch.object(state_mod.httpx, "AsyncClient", return_value=_BrokenClient(200)):
+        with pytest.raises(ConnectionError):
+            await state_mod.plugin_exists_in_registry("weather-plus")

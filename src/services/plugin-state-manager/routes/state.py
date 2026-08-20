@@ -17,6 +17,7 @@ from core.state import (
     get_dependent_plugins,
     get_plugin_state,
     list_plugin_states,
+    plugin_exists_in_registry,
     resolve_dependencies,
 )
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,6 +31,7 @@ from models.plugin_state import (
 )
 
 from shared.auth.jwt_middleware import get_current_user_or_service
+from shared.errors import backend_http_error
 from shared.pagination import paginate
 
 logger = logging.getLogger(__name__)
@@ -113,6 +115,11 @@ async def enable_plugin_endpoint(
     - Checks if plugin is required
     - Validates state transitions
     - Updates state to enabled
+
+    #751: a plugin with no state row yet (never in default_plugins.yml's bootstrap
+    list) gets ONE retry with allow_create=True, but only after plugin-registry
+    itself confirms the plugin exists -- see plugin_exists_in_registry's docstring
+    for why that check matters.
     """
     db = await get_db_pool()
 
@@ -120,6 +127,26 @@ async def enable_plugin_endpoint(
         async with db.acquire() as conn:
             state = await enable_plugin(conn, plugin_name, request.reason)
             return PluginStateResponse(**state)
+    except PluginNotFoundError:
+        try:
+            exists = await plugin_exists_in_registry(plugin_name)
+        except Exception as e:
+            logger.error(
+                f"Could not verify plugin {plugin_name!r} with plugin-registry: {e}"
+            )
+            raise backend_http_error(e, "Plugin existence check")
+        if not exists:
+            raise HTTPException(
+                status_code=404, detail=f"Plugin {plugin_name} not found"
+            )
+        try:
+            async with db.acquire() as conn:
+                state = await enable_plugin(
+                    conn, plugin_name, request.reason, allow_create=True
+                )
+                return PluginStateResponse(**state)
+        except Exception as e:
+            raise _http_from_domain_error("enable", plugin_name, e)
     except Exception as e:
         raise _http_from_domain_error("enable", plugin_name, e)
 
