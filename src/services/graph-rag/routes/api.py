@@ -32,6 +32,19 @@ from shared.errors import backend_http_error
 logger = logging.getLogger(__name__)
 
 
+def _owner_id(current_user: dict) -> str:
+    """The tenant scope for #782 — the authenticated caller's stable identity.
+
+    A user JWT carries ``sub``; the internal service token resolves to
+    ``sub="internal-service"`` (its own scope). Guaranteed present by
+    get_current_user_or_service, but default defensively so a token missing
+    ``sub`` can never silently collapse into another tenant's (empty) scope."""
+    owner = current_user.get("sub")
+    if not owner:
+        raise HTTPException(status_code=401, detail="Token is missing a subject (sub)")
+    return str(owner)
+
+
 async def extract_entities_handler(
     request: EntityExtractionRequest, entity_extractor: EntityExtractor
 ) -> EntityExtractionResponse:
@@ -61,6 +74,7 @@ async def extract_entities_handler(
 
 async def construct_knowledge_graph_handler(
     request: KnowledgeGraphRequest,
+    owner_id: str,
     entity_extractor: EntityExtractor,
     graph_constructor: KnowledgeGraphConstructor,
 ) -> KnowledgeGraphResponse:
@@ -81,11 +95,13 @@ async def construct_knowledge_graph_handler(
         # preserved — the committed counts below are exactly what's in Neo4j).
         result = await graph_constructor.construct_graph(
             document_id=request.document_id,
+            owner_id=owner_id,
             entities=extraction_result["entities"],
             relationships=extraction_result["relationships"],
             title=request.title,
             source=request.source,
             metadata=request.metadata,
+            kb_id=request.kb_id,
         )
         entity_count = result["entity_count"]
         if result["mentions_count"] < entity_count:
@@ -109,13 +125,18 @@ async def construct_knowledge_graph_handler(
 
 async def delete_document_graph_handler(
     document_id: str,
+    owner_id: str,
     graph_constructor: KnowledgeGraphConstructor,
 ):
-    """Delete a document's knowledge-graph nodes/relationships from Neo4j."""
+    """Delete a document's knowledge-graph nodes/relationships from Neo4j.
+
+    #782: owner-scoped — deleting a document_id that exists only under another
+    tenant is a no-op (``document_deleted == 0``), so a caller can't remove
+    another tenant's graph by guessing/enumerating ids."""
     if graph_constructor is None:
         raise HTTPException(status_code=503, detail="graph constructor not initialized")
     try:
-        counts = await graph_constructor.delete_document(document_id)
+        counts = await graph_constructor.delete_document(document_id, owner_id)
         return {"success": True, "document_id": document_id, **counts}
     except Exception as e:
         logger.error(f"❌ Failed to delete document graph {document_id}: {e}")
@@ -123,14 +144,15 @@ async def delete_document_graph_handler(
 
 
 async def list_graph_documents_handler(
+    owner_id: str,
     graph_constructor: KnowledgeGraphConstructor,
 ) -> GraphDocumentsResponse:
-    """List the Document nodes in the graph so a caller can browse/pick one (e.g. to
-    delete) without knowing its id up front."""
+    """List the caller's own Document nodes so they can browse/pick one (e.g. to
+    delete) without knowing its id up front. #782: owner-scoped."""
     if graph_constructor is None:
         raise HTTPException(status_code=503, detail="graph constructor not initialized")
     try:
-        documents = await graph_constructor.list_documents()
+        documents = await graph_constructor.list_documents(owner_id)
         return GraphDocumentsResponse(
             success=True, documents=documents, count=len(documents)
         )
@@ -140,15 +162,17 @@ async def list_graph_documents_handler(
 
 
 async def get_graph_stats_handler(
+    owner_id: str,
     graph_constructor: KnowledgeGraphConstructor,
 ) -> GraphStatsResponse:
-    """Overview of the knowledge graph: node/relationship/document/entity counts +
-    the per-NER-label entity distribution, so a caller can confirm a construct-graph
-    actually populated the graph and see what it holds."""
+    """Overview of the caller's knowledge graph: node/relationship/document/entity
+    counts + the per-NER-label entity distribution, so a caller can confirm a
+    construct-graph actually populated their graph and see what it holds. #782:
+    owner-scoped — counts never include other tenants' data."""
     if graph_constructor is None:
         raise HTTPException(status_code=503, detail="graph constructor not initialized")
     try:
-        stats = await graph_constructor.get_graph_statistics()
+        stats = await graph_constructor.get_graph_statistics(owner_id)
         return GraphStatsResponse(success=True, **stats)
     except Exception as e:
         logger.error(f"❌ Failed to get graph statistics: {e}")
@@ -157,6 +181,7 @@ async def get_graph_stats_handler(
 
 async def retrieve_with_graph_handler(
     request: GraphRetrievalRequest,
+    owner_id: str,
     entity_extractor: EntityExtractor,
     graph_retriever: GraphRetriever,
 ) -> GraphRetrievalResponse:
@@ -197,6 +222,7 @@ async def retrieve_with_graph_handler(
         for term in search_terms[:5]:  # Limit to top 5 entities
             entities = await graph_retriever.find_related_entities(
                 entity_name=term,
+                owner_id=owner_id,
                 max_depth=request.traversal_depth,
                 limit=request.limit,
             )
@@ -224,12 +250,14 @@ async def retrieve_with_graph_handler(
 
 
 async def get_entity_context_handler(
-    request: EntityContextRequest, graph_retriever: GraphRetriever
+    request: EntityContextRequest, owner_id: str, graph_retriever: GraphRetriever
 ) -> EntityContextResponse:
-    """Handle entity context retrieval requests"""
+    """Handle entity context retrieval requests (#782: owner-scoped)."""
     try:
         context_result = await graph_retriever.get_entity_context(
-            entity_name=request.entity_text, context_window=request.context_window
+            entity_name=request.entity_text,
+            owner_id=owner_id,
+            context_window=request.context_window,
         )
 
         if "error" in context_result:
@@ -258,16 +286,16 @@ async def get_entity_context_handler(
 
 
 async def graph_search_handler(
-    request: GraphSearchRequest, graph_retriever: GraphRetriever
+    request: GraphSearchRequest, owner_id: str, graph_retriever: GraphRetriever
 ) -> GraphSearchResponse:
     """Handle free-text entity search over the knowledge graph.
 
     Exposes GraphRetriever.graph_search, which was implemented but wired to no route
     — a ready capability for "search the graph for entities matching X" (matches on
-    entity text OR label, case-insensitive)."""
+    entity text OR label, case-insensitive). #782: owner-scoped."""
     try:
         entities = await graph_retriever.graph_search(
-            request.query, limit=request.limit
+            request.query, owner_id=owner_id, limit=request.limit
         )
         return GraphSearchResponse(
             success=True,
@@ -337,7 +365,7 @@ def build_graph_router(
         non-GET clients (#147).
         """
         return await construct_knowledge_graph_handler(
-            request, entity_extractor, graph_constructor
+            request, _owner_id(current_user), entity_extractor, graph_constructor
         )
 
     @router.delete("/v1/graph/document/{document_id}", tags=["Knowledge Graph"])
@@ -355,8 +383,13 @@ def build_graph_router(
         Served at both /v1/graph/document/{document_id} and the legacy
         /graph/document/{document_id} directly — the old path used a 301 redirect,
         which drops the method/body on non-GET clients (#147).
+
+        #782: scoped to the caller — deleting a document owned by another tenant
+        is a no-op, never an error, and never touches their graph.
         """
-        return await delete_document_graph_handler(document_id, graph_constructor)
+        return await delete_document_graph_handler(
+            document_id, _owner_id(current_user), graph_constructor
+        )
 
     @router.get(
         "/v1/graph/stats",
@@ -369,13 +402,18 @@ def build_graph_router(
         tags=["Knowledge Graph"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def get_graph_stats():
-        """Overview of the knowledge graph (counts + entity-type distribution).
+    async def get_graph_stats(
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
+        """Overview of the caller's knowledge graph (counts + entity-type
+        distribution).
 
-        Served at both /v1/graph/stats and the legacy /graph/stats. A read, so it's
-        open at the gateway (Authelia's job, #15) like the other GETs.
+        Served at both /v1/graph/stats and the legacy /graph/stats. #782: now
+        requires a JWT and is scoped to the caller — a global count would leak the
+        existence/volume of other tenants' data, so per-tenant scoping requires
+        knowing the tenant.
         """
-        return await get_graph_stats_handler(graph_constructor)
+        return await get_graph_stats_handler(_owner_id(current_user), graph_constructor)
 
     @router.get(
         "/v1/graph/documents",
@@ -388,10 +426,16 @@ def build_graph_router(
         tags=["Knowledge Graph"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def list_graph_documents():
-        """List the Document nodes in the graph (browse what's built). A read → open
-        at the gateway like the other GETs."""
-        return await list_graph_documents_handler(graph_constructor)
+    async def list_graph_documents(
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
+        """List the caller's own Document nodes (browse what they've built). #782:
+        now requires a JWT and is scoped to the caller — this endpoint used to let
+        any logged-in user enumerate every tenant's document titles/sources and
+        then delete them by id."""
+        return await list_graph_documents_handler(
+            _owner_id(current_user), graph_constructor
+        )
 
     @router.post(
         "/v1/retrieve",
@@ -404,15 +448,21 @@ def build_graph_router(
         tags=["Graph Retrieval"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def retrieve_with_graph(request: GraphRetrievalRequest):
+    async def retrieve_with_graph(
+        request: GraphRetrievalRequest,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Graph-based retrieval for RAG enhancement.
 
         Served at both /v1/retrieve and the legacy /retrieve directly — the old
         /retrieve used a 301 redirect, which drops the method/body on non-GET
         clients (#147).
+
+        #782: scoped to the caller — traversal only ever visits the caller's own
+        entities, so retrieval can't surface another tenant's graph.
         """
         return await retrieve_with_graph_handler(
-            request, entity_extractor, graph_retriever
+            request, _owner_id(current_user), entity_extractor, graph_retriever
         )
 
     @router.post(
@@ -426,14 +476,21 @@ def build_graph_router(
         tags=["Entity Context"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def get_entity_context(request: EntityContextRequest):
+    async def get_entity_context(
+        request: EntityContextRequest,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Get detailed context for an entity.
 
         Served at both /v1/entity-context and the legacy /entity-context directly —
         the old /entity-context used a 301 redirect, which drops the method/body on
         non-GET clients (#147).
+
+        #782: scoped to the caller — resolves the entity only within their graph.
         """
-        return await get_entity_context_handler(request, graph_retriever)
+        return await get_entity_context_handler(
+            request, _owner_id(current_user), graph_retriever
+        )
 
     @router.post(
         "/v1/graph/search",
@@ -446,10 +503,15 @@ def build_graph_router(
         tags=["Knowledge Graph"],
         include_in_schema=False,  # deprecated unversioned alias
     )
-    async def graph_search(request: GraphSearchRequest):
+    async def graph_search(
+        request: GraphSearchRequest,
+        current_user: dict = Depends(get_current_user_or_service),
+    ):
         """Free-text search the knowledge graph for entities whose text or label
         matches the query (case-insensitive). Exposes the previously-unwired
-        GraphRetriever.graph_search capability."""
-        return await graph_search_handler(request, graph_retriever)
+        GraphRetriever.graph_search capability. #782: scoped to the caller."""
+        return await graph_search_handler(
+            request, _owner_id(current_user), graph_retriever
+        )
 
     return router
