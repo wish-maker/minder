@@ -50,3 +50,18 @@ CREATE TABLE IF NOT EXISTS conversation_shares (
     owner_user_id VARCHAR(255) NOT NULL,
     shared_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+-- The real first-writer of a conversation_id (#893) -- a client-supplied,
+-- globally-namespaced string with no per-user uniqueness, so a SECOND user
+-- can legitimately store their own private turn under the SAME conversation_id
+-- another user already started (per-user-private-by-default, #875). Ownership
+-- must therefore be recorded atomically at the true first write (store_turn's
+-- `ON CONFLICT (conversation_id) DO NOTHING` below -- whoever's insert lands
+-- first wins the row, every later writer's insert is a no-op), not derived
+-- after the fact from "has this user ever written here," which any later
+-- writer would also satisfy.
+CREATE TABLE IF NOT EXISTS conversation_owners (
+    conversation_id VARCHAR(255) PRIMARY KEY,
+    owner_user_id VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

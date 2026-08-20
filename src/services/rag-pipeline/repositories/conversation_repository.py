@@ -107,18 +107,37 @@ class ConversationRepository:
 
         try:
             async with self.db_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO conversation_turns (user_id, conversation_id, question, answer, timestamp, metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                    """,
-                    user_id,
-                    conversation_id,
-                    question,
-                    answer,
-                    timestamp,
-                    metadata_json,
-                )
+                async with conn.transaction():
+                    # #893: record the true first-writer of this conversation_id,
+                    # atomically, at the moment of the first-ever turn stored under
+                    # it -- ON CONFLICT DO NOTHING means whichever writer's insert
+                    # lands first wins this row; every later writer's insert (e.g.
+                    # a second user legitimately starting their own private thread
+                    # under the same client-supplied id, #875) is a no-op that
+                    # leaves the true first-writer recorded. is_owner() reads this
+                    # instead of "has this user ever written here," which any
+                    # later writer would also satisfy.
+                    await conn.execute(
+                        """
+                        INSERT INTO conversation_owners (conversation_id, owner_user_id)
+                        VALUES ($1, $2)
+                        ON CONFLICT (conversation_id) DO NOTHING
+                        """,
+                        conversation_id,
+                        user_id,
+                    )
+                    await conn.execute(
+                        """
+                        INSERT INTO conversation_turns (user_id, conversation_id, question, answer, timestamp, metadata)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                        """,
+                        user_id,
+                        conversation_id,
+                        question,
+                        answer,
+                        timestamp,
+                        metadata_json,
+                    )
 
             logger.debug(f"💾 Stored conversation turn: {user_id}:{conversation_id}")
             return True
@@ -273,23 +292,39 @@ class ConversationRepository:
             raise RuntimeError(f"Database operation failed: {str(e)}")
 
     async def is_owner(self, user_id: str, conversation_id: str) -> bool:
-        """Whether ``user_id`` has ever stored a turn under this conversation_id
-        directly (i.e. asked the first/any question in it under their own
-        identity, not via a share). Used to gate ``share_conversation`` -- only
-        someone who actually owns a conversation can mark it shared (#875)."""
+        """Whether ``user_id`` is the TRUE first-writer of this conversation_id
+        (#893) -- i.e. the one recorded in ``conversation_owners`` at the
+        moment of the very first turn ever stored under it, not merely
+        "has ever stored a turn here" (which a later, unrelated user who
+        legitimately started their own private thread under the same
+        client-supplied id would also satisfy -- see #875's per-user-private
+        default). Used to gate ``share_conversation`` -- only the real owner
+        may mark a conversation shared.
+
+        Falls back to the earliest ``conversation_turns`` row's user_id when
+        no ``conversation_owners`` row exists yet -- covers a conversation
+        whose turns were stored before this table existed. Not race-prone:
+        by the time anyone calls share, at least one turn already exists and
+        conversation_turns is read-only here.
+        """
         if not user_id or not conversation_id:
             return False
         async with self.db_pool.acquire() as conn:
             row = await conn.fetchrow(
-                """
-                SELECT 1 FROM conversation_turns
-                WHERE user_id = $1 AND conversation_id = $2
-                LIMIT 1
-                """,
-                user_id,
+                "SELECT owner_user_id FROM conversation_owners WHERE conversation_id = $1",
                 conversation_id,
             )
-        return row is not None
+            if row is None:
+                row = await conn.fetchrow(
+                    """
+                    SELECT user_id AS owner_user_id FROM conversation_turns
+                    WHERE conversation_id = $1
+                    ORDER BY timestamp ASC
+                    LIMIT 1
+                    """,
+                    conversation_id,
+                )
+        return row is not None and row["owner_user_id"] == user_id
 
     async def share_conversation(self, user_id: str, conversation_id: str) -> bool:
         """Mark a conversation as shared so any authenticated user can continue

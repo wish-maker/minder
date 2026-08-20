@@ -874,9 +874,13 @@ async def share_conversation(
     alone, not pipeline) -- kept in the URL purely for shape-consistency with
     the query endpoint above, and it doubles as a cheap existence check.
 
-    Only the conversation's actual owner (whoever already has a turn stored
-    under this conversation_id) may share it -- prevents an arbitrary caller
-    from opting someone else's private conversation into being shared.
+    Only the conversation's actual owner -- the TRUE first-writer under this
+    conversation_id, recorded atomically at the moment of the first-ever turn
+    (#893; NOT "anyone who has ever stored a turn here," which a later user
+    legitimately starting their own private thread under the same
+    client-supplied id would also satisfy) -- may share it. Prevents an
+    arbitrary caller from opting someone else's private conversation into
+    being shared, or hijacking ownership of one they didn't start.
     """
     if pipeline_id not in state.rag_pipelines:
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
