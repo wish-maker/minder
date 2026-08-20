@@ -107,9 +107,16 @@ async def sync_plugin_ai_tools(
     author: Optional[str] = None,
     databases: Optional[List[str]] = None,
     plugin_dependencies: Optional[List[str]] = None,
-):
+    marketplace_plugin_id: Optional[str] = None,
+) -> Optional[str]:
     """
     Sync a plugin's marketplace catalog entry (and, if it has any, its AI tools).
+
+    Returns the marketplace plugin id this plugin resolved to (whether newly
+    created, found by name, or updated via `marketplace_plugin_id`), or None
+    on failure -- callers persist this locally (#747) so the NEXT sync can
+    correlate by id instead of by name, which is what let a renamed plugin's
+    row go stale while a duplicate got created under its new name.
 
     This function is called when a plugin is loaded. It used to bail out
     entirely -- never even creating a marketplace row -- for any plugin with
@@ -140,6 +147,10 @@ async def sync_plugin_ai_tools(
             that field is for backend services, not sibling plugins). Synced
             as "requires" edges in the marketplace's plugin-dependency graph
             (#484) -- see _sync_plugin_dependencies.
+        marketplace_plugin_id: this plugin's previously-persisted marketplace
+            id, if any (#747) -- passed through to get_or_create_marketplace_plugin
+            so it can update that SAME row by id (including a changed name)
+            instead of searching by the current name.
     """
     try:
         # Load a plugin manifest if one exists (manifest plugins).
@@ -183,20 +194,22 @@ async def sync_plugin_ai_tools(
         }
 
         # Get or create plugin in marketplace
-        plugin_id = await get_or_create_marketplace_plugin(plugin_name, manifest)
+        plugin_id = await get_or_create_marketplace_plugin(
+            plugin_name, manifest, existing_marketplace_id=marketplace_plugin_id
+        )
 
         if not plugin_id:
             logger.warning(
                 f"Could not get/create marketplace plugin ID for {plugin_name}"
             )
-            return
+            return None
 
         if plugin_dependencies:
             await _sync_plugin_dependencies(plugin_id, plugin_name, plugin_dependencies)
 
         if not raw_tools:
             logger.debug(f"No AI tools to sync for {plugin_name}")
-            return
+            return plugin_id
 
         # Call marketplace sync API
         response = await _mkt_request(
@@ -220,8 +233,11 @@ async def sync_plugin_ai_tools(
                 f"Failed to sync AI tools for {plugin_name}: {response.status_code}"
             )
 
+        return plugin_id
+
     except Exception as e:
         logger.error(f"Error syncing AI tools for {plugin_name}: {e}")
+        return None
 
 
 async def _resolve_or_create_bare_marketplace_plugin_id(
@@ -315,9 +331,9 @@ async def _reconcile_marketplace_plugin(
     description: str,
     author: str,
     requires_services: List[str],
-) -> None:
-    """Push the plugin's current display_name/description/author/requires_services
-    onto an already-existing marketplace row.
+) -> bool:
+    """Push the plugin's current name/display_name/description/author/
+    requires_services onto an already-existing marketplace row.
 
     Found live: 4 first-party plugins were created under the old sync code
     (before description/author were threaded through at all) and stayed
@@ -326,12 +342,24 @@ async def _reconcile_marketplace_plugin(
     id without ever writing the caller's (correct) metadata back (#402
     point 4). Best-effort -- a failed PUT here shouldn't block the AI-tool
     sync that follows, so log and move on rather than raising.
+
+    Including `name` here (#747) is what actually reconciles a rename: when
+    this is reached via get_or_create_marketplace_plugin's id-based path
+    (a persisted marketplace_plugin_id from a previous sync), `plugin_name`
+    may be DIFFERENT from what marketplace currently has on file for this
+    row -- this PUT is what updates it in place instead of leaving it stale.
+
+    Returns True on a successful reconcile, False otherwise (including if
+    `plugin_id` no longer resolves to a real row, e.g. manually deleted on
+    marketplace's side) -- the caller decides what to do with a False, e.g.
+    fall back to creating a fresh row.
     """
     try:
         response = await _mkt_request(
             "PUT",
             f"{MARKETPLACE_URL}/v1/marketplace/plugins/{plugin_id}",
             json={
+                "name": plugin_name,
                 "display_name": display_name,
                 "description": description,
                 "author": author,
@@ -339,17 +367,20 @@ async def _reconcile_marketplace_plugin(
             },
             headers=_service_headers(),
         )
-        if response.status_code != 200:
-            logger.warning(
-                f"Failed to reconcile marketplace metadata for {plugin_name}: "
-                f"{response.status_code}"
-            )
+        if response.status_code == 200:
+            return True
+        logger.warning(
+            f"Failed to reconcile marketplace metadata for {plugin_name}: "
+            f"{response.status_code}"
+        )
+        return False
     except Exception as e:
         logger.warning(f"Error reconciling marketplace metadata for {plugin_name}: {e}")
+        return False
 
 
 async def get_or_create_marketplace_plugin(
-    plugin_name: str, manifest: dict
+    plugin_name: str, manifest: dict, existing_marketplace_id: Optional[str] = None
 ) -> Optional[str]:
     """
     Get existing plugin ID from marketplace or create a new entry
@@ -357,6 +388,14 @@ async def get_or_create_marketplace_plugin(
     Args:
         plugin_name: Name of the plugin
         manifest: Plugin manifest dictionary
+        existing_marketplace_id: this plugin's marketplace id from a previous
+            sync, if plugin-registry has one persisted for it (#747). When
+            given, reconciles that SAME row by id (updating `name` too, so a
+            rename lands in place) instead of searching by the current name
+            -- which is what let a renamed plugin's row go stale while a
+            duplicate got created under its new name. Falls through to the
+            name-search-or-create path below if the id no longer resolves
+            (e.g. manually deleted on marketplace's side).
 
     Returns:
         Plugin UUID or None if failed
@@ -379,6 +418,27 @@ async def get_or_create_marketplace_plugin(
             display_name = plugin_name.replace("_", " ").replace("-", " ").title()
         author = manifest.get("author", "Unknown")
         requires_services = manifest.get("databases") or []
+
+        # #747: reconcile by the persisted id FIRST, before ever searching by
+        # name -- this is what actually fixes the rename bug (a stale `name`
+        # search can never find a row whose name just changed). Only falls
+        # through to the name-based path below if the id no longer resolves.
+        if existing_marketplace_id:
+            reconciled = await _reconcile_marketplace_plugin(
+                existing_marketplace_id,
+                plugin_name,
+                display_name,
+                description,
+                author,
+                requires_services,
+            )
+            if reconciled:
+                return existing_marketplace_id
+            logger.warning(
+                f"Persisted marketplace id {existing_marketplace_id!r} for "
+                f"{plugin_name!r} no longer resolves -- falling back to "
+                "name-based lookup/create"
+            )
 
         # Search for an existing plugin by name
         search_response = await _mkt_request(

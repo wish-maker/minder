@@ -3,6 +3,7 @@ import json
 import uuid
 from typing import Any, List, Optional
 
+import asyncpg
 from core.database import get_pool
 from core.plugin_repository import PLUGIN_COLUMNS
 from core.plugin_repository import get_featured_plugins as _get_featured_plugins_page
@@ -22,6 +23,7 @@ from shared.errors import backend_http_error
 # Fields a PUT /plugins/{id} may change (whitelist → safe to interpolate as column
 # names; values always go through bound parameters).
 _PLUGIN_UPDATABLE = {
+    "name",
     "display_name",
     "description",
     "author",
@@ -254,8 +256,18 @@ async def update_plugin(
     )
 
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(query, *params, plugin_id)
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(query, *params, plugin_id)
+    except asyncpg.UniqueViolationError:
+        # #747: a renamed plugin's id-based sync could collide with a
+        # DIFFERENT plugin that already has the new name -- a real conflict,
+        # not a bad request, and better than a raw 500 (name is UNIQUE NOT
+        # NULL on marketplace_plugins).
+        raise HTTPException(
+            status_code=409,
+            detail=f"A plugin named {updates.get('name')!r} already exists",
+        )
 
     if not row:
         raise HTTPException(status_code=404, detail="Plugin not found")

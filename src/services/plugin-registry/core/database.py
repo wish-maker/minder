@@ -151,6 +151,8 @@ async def update_plugin_in_database(plugin_name: str, **updates):
             "capabilities",
             "data_sources",
             "databases",
+            "stable_id",
+            "marketplace_plugin_id",
         }
         valid_updates = {k: v for k, v in updates.items() if k in allowed_columns}
 
@@ -192,6 +194,52 @@ async def update_plugin_in_database(plugin_name: str, **updates):
         # 200 success response regardless of whether the DB write actually
         # happened. Re-raise so callers can convert it into an honest error.
         raise
+
+
+async def find_plugin_name_by_stable_id(stable_id: str):
+    """The CURRENT `name` of the plugin row carrying this stable_id, or None
+    if no row has it yet (#747). Used to detect a directory rename: a plugin
+    whose committed `.plugin_id` marker matches a row persisted under a
+    DIFFERENT name than the one it's loading under right now."""
+    if not stable_id:
+        return None
+    pool = await get_postgres_connection()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT name FROM plugins WHERE stable_id = $1", stable_id
+        )
+    return row["name"] if row else None
+
+
+async def rename_plugin_row(old_name: str, new_name: str) -> None:
+    """Rename an existing plugin row in place (#747) -- carries forward
+    marketplace_plugin_id/config/everything else already persisted under
+    `old_name`, instead of leaving it behind as an orphan while a fresh row
+    gets created under `new_name` on the next upsert.
+
+    A no-op (not an error) if `old_name == new_name` -- callers only invoke
+    this after already confirming the two differ, but staying safe here
+    costs nothing.
+    """
+    if old_name == new_name:
+        return
+    pool = await get_postgres_connection()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE plugins SET name = $1 WHERE name = $2", new_name, old_name
+        )
+    logger.info(f"Renamed plugin row (stable_id match): {old_name} -> {new_name}")
+
+
+async def get_marketplace_plugin_id(plugin_name: str):
+    """The marketplace catalog id this plugin was last resolved to, or None
+    if it has never successfully synced (#747)."""
+    pool = await get_postgres_connection()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT marketplace_plugin_id FROM plugins WHERE name = $1", plugin_name
+        )
+    return row["marketplace_plugin_id"] if row else None
 
 
 async def load_plugin_config(plugin_name: str) -> dict:

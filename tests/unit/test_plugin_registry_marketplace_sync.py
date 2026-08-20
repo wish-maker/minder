@@ -325,6 +325,105 @@ async def test_multi_sentence_description_gets_a_real_short_headline(
     assert body["display_name"] == "Current weather and forecasts"
 
 
+# --- existing_marketplace_id / id-based reconcile path (#747) -------------
+
+
+@pytest.mark.asyncio
+async def test_existing_marketplace_id_reconciles_by_id_no_name_search(
+    tmp_path, monkeypatch
+):
+    """When plugin-registry already has a persisted marketplace id for this
+    plugin, sync must reconcile that SAME row by id -- no GET .../search
+    call at all -- so a rename lands on the existing row instead of the
+    name-based path potentially creating a duplicate."""
+    calls = []
+
+    async def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if method == "PUT":
+            return _FakeResponse(200, {"id": "persisted-id"})
+        return _FakeResponse(200, {"tools_imported": 1})  # /ai/sync
+
+    monkeypatch.setattr(
+        marketplace_sync, "_mkt_request", AsyncMock(side_effect=fake_request)
+    )
+
+    result = await marketplace_sync.sync_plugin_ai_tools(
+        "renamed_plugin",
+        tmp_path,
+        module_ai_tools=[{"name": "do_thing", "description": "x"}],
+        description="A plugin that got renamed.",
+        author="Minder Team",
+        marketplace_plugin_id="persisted-id",
+    )
+
+    assert result == "persisted-id"
+    search_calls = [c for c in calls if c[1].endswith("/plugins/search")]
+    assert search_calls == []
+    put_calls = [c for c in calls if c[0] == "PUT"]
+    assert len(put_calls) == 1
+    assert put_calls[0][1].endswith("/v1/marketplace/plugins/persisted-id")
+    assert put_calls[0][2]["json"]["name"] == "renamed_plugin"
+
+
+@pytest.mark.asyncio
+async def test_existing_marketplace_id_falls_back_to_name_search_if_stale(
+    tmp_path, monkeypatch
+):
+    """The persisted id no longer resolves on marketplace's side (e.g.
+    manually deleted) -- must fall back to the ordinary name-search-or-create
+    path rather than silently doing nothing or crashing."""
+    calls = []
+
+    async def fake_request(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        if method == "PUT":
+            return _FakeResponse(404, {"detail": "Plugin not found"})
+        if method == "GET":
+            return _FakeResponse(200, {"plugins": []})
+        if url.endswith("/v1/marketplace/plugins"):
+            return _FakeResponse(201, {"id": "brand-new-id"})
+        return _FakeResponse(200, {"tools_imported": 1})
+
+    monkeypatch.setattr(
+        marketplace_sync, "_mkt_request", AsyncMock(side_effect=fake_request)
+    )
+
+    result = await marketplace_sync.sync_plugin_ai_tools(
+        "some_plugin",
+        tmp_path,
+        module_ai_tools=[{"name": "do_thing", "description": "x"}],
+        description="x",
+        author="y",
+        marketplace_plugin_id="stale-deleted-id",
+    )
+
+    assert result == "brand-new-id"
+    create_calls = [
+        c for c in calls if c[0] == "POST" and c[1].endswith("/v1/marketplace/plugins")
+    ]
+    assert len(create_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_no_marketplace_plugin_id_uses_the_ordinary_name_path(
+    tmp_path, captured_requests
+):
+    """No persisted id at all (first-ever sync, or predates #747) -- must
+    behave exactly as before: search by name, no PUT-by-id attempted."""
+    result = await marketplace_sync.sync_plugin_ai_tools(
+        "brand_new_plugin",
+        tmp_path,
+        module_ai_tools=[{"name": "do_thing", "description": "x"}],
+        description="x",
+        author="y",
+    )
+
+    assert result == "fake-plugin-id"
+    put_calls = [c for c in captured_requests if c[0] == "PUT"]
+    assert put_calls == []
+
+
 def test_to_marketplace_tool_passes_declared_required_tier_through():
     """#663: a tool-declared required_tier must survive the flat-shape
     normalization so the marketplace importer can persist it (it was dropped

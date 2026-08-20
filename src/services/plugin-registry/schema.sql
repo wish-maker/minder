@@ -17,6 +17,19 @@ CREATE TABLE IF NOT EXISTS plugins (
     registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- #747: a plugin's own stable identity (from its directory's committed
+-- .plugin_id marker -- see core/plugin_identity.py), independent of `name`
+-- (the directory name itself, which changes if the directory is renamed).
+-- Lets a rename be detected (same stable_id, different name) and reconciled
+-- in place instead of leaving an orphaned row under the old name.
+-- marketplace_plugin_id is the marketplace catalog row this plugin was last
+-- resolved to, persisted so subsequent syncs can update it by id instead of
+-- searching (and possibly re-creating) by name.
+ALTER TABLE plugins ADD COLUMN IF NOT EXISTS stable_id VARCHAR(64);
+ALTER TABLE plugins ADD COLUMN IF NOT EXISTS marketplace_plugin_id VARCHAR(64);
+CREATE INDEX IF NOT EXISTS idx_plugins_stable_id ON plugins (stable_id)
+    WHERE stable_id IS NOT NULL;
+
 -- Central plugin configuration set over the API (persisted overrides of a plugin's
 -- CONFIG_SCHEMA defaults/env; applied to the running instance without a restart).
 CREATE TABLE IF NOT EXISTS plugin_configs (

@@ -192,7 +192,7 @@ async def test_sync_reads_a_yaml_manifest_from_disk(tmp_path, monkeypatch):
     )
     captured = {}
 
-    async def fake_get_or_create(plugin_name, manifest):
+    async def fake_get_or_create(plugin_name, manifest, existing_marketplace_id=None):
         captured["manifest"] = manifest
         return "plugin-id"
 
@@ -219,7 +219,7 @@ async def test_sync_reads_a_json_manifest_from_disk(tmp_path, monkeypatch):
     )
     captured = {}
 
-    async def fake_get_or_create(plugin_name, manifest):
+    async def fake_get_or_create(plugin_name, manifest, existing_marketplace_id=None):
         captured["manifest"] = manifest
         return "plugin-id"
 
@@ -246,7 +246,7 @@ async def test_sync_returns_early_when_plugin_id_could_not_be_obtained(
 ):
     calls = {"n": 0}
 
-    async def fake_get_or_create(plugin_name, manifest):
+    async def fake_get_or_create(plugin_name, manifest, existing_marketplace_id=None):
         calls["n"] += 1
         return None
 
