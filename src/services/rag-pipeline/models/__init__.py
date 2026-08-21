@@ -1,5 +1,6 @@
 """Pydantic request/response models for the RAG Pipeline API."""
 
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -264,3 +265,15 @@ class ChunkInfo(BaseModel):
 
     chunk_index: int
     text: str
+
+
+class ConversationSummary(BaseModel):
+    """One entry in a caller's own conversation history list -- enough to
+    show a picklist without fetching every turn. Strictly scoped to
+    conversations the caller actually started (see
+    ConversationRepository.list_owned_conversations); a conversation someone
+    else owns and merely shared with the caller is deliberately excluded."""
+
+    conversation_id: str
+    last_activity: datetime
+    snippet: str

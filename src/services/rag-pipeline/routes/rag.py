@@ -19,6 +19,7 @@ from domain.retrievers.hybrid import BM25_AVAILABLE
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from models import (
     ChunkInfo,
+    ConversationSummary,
     DocumentInfo,
     DocumentUploadResponse,
     KnowledgeBaseCreate,
@@ -971,3 +972,36 @@ async def share_conversation(
             detail="You can only share a conversation you started yourself",
         )
     return {"conversation_id": conversation_id, "shared": True}
+
+
+@router.get(
+    "/v1/conversations/mine",
+    response_model=PaginatedList[ConversationSummary],
+    tags=["Pipeline"],
+)
+async def list_my_conversations(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user_or_service),
+):
+    """List the caller's own conversation history (#402-roadmap follow-up):
+    previously a client could only continue a thread it already knew the
+    ``conversation_id`` for, with no way to browse past ones. Not nested
+    under a pipeline id -- a conversation isn't actually scoped to one (the
+    underlying tables are keyed by ``conversation_id`` alone), so requiring
+    one here would be an artificial constraint on top of the real data model.
+
+    Scoped strictly to conversations the caller started (see
+    ``ConversationRepository.list_owned_conversations``) -- a conversation
+    shared WITH the caller by someone else is intentionally not listed here.
+    """
+    if state.conversation_repository is None:
+        raise HTTPException(
+            status_code=503, detail="Conversation history is not available"
+        )
+    items, total = await state.conversation_repository.list_owned_conversations(
+        owner_user_id=current_user.get("sub", "anonymous"),
+        limit=limit,
+        offset=offset,
+    )
+    return PaginatedList.from_page(items, total=total, limit=limit, offset=offset)

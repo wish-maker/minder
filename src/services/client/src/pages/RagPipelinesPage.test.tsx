@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../lib/api";
@@ -402,6 +403,41 @@ describe("QueryPanel", () => {
     expect((screen.getByLabelText("Question") as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("pre-fills continue-conversation mode from an initialConversationId (ConversationsPage hand-off)", async () => {
+    apiFetch.mockResolvedValue(queryResponse({ answer: "resumed answer" }));
+    render(
+      <QueryPanel
+        pipelineId="p-1"
+        token="tok"
+        capabilities={caps}
+        onGone={vi.fn()}
+        initialConversationId="conv-abc"
+      />,
+    );
+
+    expect(
+      screen.getByText(/Continuing a conversation from your history/),
+    ).toBeTruthy();
+    // The Advanced retrieval options section starts open, and "Continue
+    // conversation" is already checked -- no extra clicks needed.
+    expect((screen.getByLabelText(/Continue conversation/) as HTMLInputElement).checked).toBe(
+      true,
+    );
+
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "next question" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    await screen.findByText("Q: next question");
+
+    expect(apiFetch.mock.calls[0][1].body.conversation_id).toBe("conv-abc");
+  });
+
+  it("does not show the continuing hint or pre-check the box without an initialConversationId", () => {
+    render(<QueryPanel pipelineId="p-1" token="tok" capabilities={caps} onGone={vi.fn()} />);
+    expect(
+      screen.queryByText(/Continuing a conversation from your history/),
+    ).toBeNull();
+  });
+
   it("resets the conversation thread on demand", async () => {
     apiFetch.mockResolvedValue(queryResponse());
     render(<QueryPanel pipelineId="p-1" token="tok" capabilities={caps} onGone={vi.fn()} />);
@@ -665,7 +701,11 @@ describe("RagPipelinesPage", () => {
       if (path === "/v1/rag/decision-stats") return Promise.resolve(null);
       throw new Error(`unexpected path ${path}`);
     });
-    render(<RagPipelinesPage />);
+    render(
+      <MemoryRouter>
+        <RagPipelinesPage />
+      </MemoryRouter>,
+    );
 
     expect(await screen.findByText("Support pipeline")).toBeTruthy();
   });
@@ -678,7 +718,11 @@ describe("RagPipelinesPage", () => {
       if (path === "/v1/rag/decision-stats") return Promise.reject(new ApiError("not found", 404));
       throw new Error(`unexpected path ${path}`);
     });
-    render(<RagPipelinesPage />);
+    render(
+      <MemoryRouter>
+        <RagPipelinesPage />
+      </MemoryRouter>,
+    );
 
     await screen.findByText(/No pipelines created yet/);
     // The whole page loaded fine despite decision-stats failing.
@@ -687,7 +731,11 @@ describe("RagPipelinesPage", () => {
 
   it("shows a friendly error status when the initial load fails", async () => {
     apiFetch.mockRejectedValue(new Error("rag-pipeline unreachable"));
-    render(<RagPipelinesPage />);
+    render(
+      <MemoryRouter>
+        <RagPipelinesPage />
+      </MemoryRouter>,
+    );
 
     await screen.findByText("rag-pipeline unreachable");
   });
@@ -704,7 +752,11 @@ describe("RagPipelinesPage", () => {
       if (path === "/v1/rag/decision-stats") return Promise.resolve(null);
       throw new Error(`unexpected path ${path}`);
     });
-    render(<RagPipelinesPage />);
+    render(
+      <MemoryRouter>
+        <RagPipelinesPage />
+      </MemoryRouter>,
+    );
     await screen.findByText("Support");
 
     fireEvent.change(screen.getByLabelText("Filter pipelines"), { target: { value: "sal" } });
@@ -726,11 +778,40 @@ describe("RagPipelinesPage", () => {
       if (path === "/v1/rag/decision-stats") return Promise.resolve(null);
       throw new Error(`unexpected path ${path}`);
     });
-    render(<RagPipelinesPage />);
+    render(
+      <MemoryRouter>
+        <RagPipelinesPage />
+      </MemoryRouter>,
+    );
     await screen.findByText("Support");
 
     fireEvent.change(screen.getByLabelText("Filter pipelines"), { target: { value: "nope" } });
 
     await screen.findByText('No pipelines match "nope".');
+  });
+
+  it("shows a continuing-conversation banner and pre-fills it into every pipeline's Query panel from a conversation_id query param", async () => {
+    apiFetch.mockImplementation((path: string) => {
+      if (path.startsWith("/v1/rag/knowledge-bases")) return Promise.resolve({ items: [] });
+      if (path === "/v1/rag/capabilities") return Promise.resolve(caps);
+      if (path.startsWith("/v1/rag/pipeline?")) return Promise.resolve({ items: [pipeline()] });
+      if (path === "/v1/rag/decision-stats") return Promise.resolve(null);
+      throw new Error(`unexpected path ${path}`);
+    });
+    render(
+      <MemoryRouter initialEntries={["/rag/pipelines?conversation_id=conv-xyz"]}>
+        <RagPipelinesPage />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Support pipeline");
+    // Both the page-level banner and the pipeline card's own QueryPanel hint
+    // share this phrase -- at least one of each.
+    expect(
+      screen.getAllByText(/Continuing a conversation from your history/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      (screen.getByLabelText(/Continue conversation/) as HTMLInputElement).checked,
+    ).toBe(true);
   });
 });
