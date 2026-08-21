@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { useConfirm } from "../components/ConfirmDialog";
+import { InfoCallout } from "../components/InfoCallout";
 import { PageHeader } from "../components/PageHeader";
 import { StatusLine } from "../components/StatusLine";
 import { ApiError, apiFetch, friendlyErrorMessage } from "../lib/api";
@@ -371,11 +373,16 @@ export function QueryPanel({
   token,
   capabilities,
   onGone,
+  initialConversationId,
 }: {
   pipelineId: string;
   token: string;
   capabilities: Capabilities | null;
   onGone: () => void;
+  /** Pre-fills "Continue conversation" with an existing conversation_id
+   * (from ConversationsPage's "Continue →" hand-off) instead of the panel
+   * generating a fresh one for a brand-new thread. */
+  initialConversationId?: string | null;
 }) {
   const questionId = useId();
   const topKId = useId();
@@ -388,8 +395,12 @@ export function QueryPanel({
   const [compress, setCompress] = useState(false);
   const [hybrid, setHybrid] = useState(false);
   const [parentContext, setParentContext] = useState(false);
-  const [continueConversation, setContinueConversation] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [continueConversation, setContinueConversation] = useState(
+    Boolean(initialConversationId),
+  );
+  const [conversationId, setConversationId] = useState<string | null>(
+    initialConversationId ?? null,
+  );
   const [sourceFilter, setSourceFilter] = useState("");
   const [status, setStatus] = useState("");
   const [result, setResult] = useState<QueryResponse | null>(null);
@@ -472,6 +483,12 @@ export function QueryPanel({
       <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
         <span aria-hidden="true">🔎</span> Query
       </h3>
+      {initialConversationId && (
+        <p className={`mb-2 text-xs ${mutedTextClass}`}>
+          Continuing a conversation from your history — ask your next
+          question below.
+        </p>
+      )}
       <form onSubmit={handleSubmit}>
         <fieldset disabled={!token} className="flex flex-col gap-3">
           <div>
@@ -543,7 +560,10 @@ export function QueryPanel({
             </div>
           </div>
 
-          <details className="rounded-md border border-gray-100 px-3 py-2 dark:border-gray-800">
+          <details
+            className="rounded-md border border-gray-100 px-3 py-2 dark:border-gray-800"
+            open={Boolean(initialConversationId) || undefined}
+          >
             <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
               Advanced retrieval options
               {advancedActiveCount > 0 && (
@@ -711,6 +731,7 @@ export function PipelineCard({
   onDeleted,
   onUpdated,
   confirm,
+  initialConversationId,
 }: {
   pipeline: RagPipeline;
   token: string;
@@ -718,6 +739,7 @@ export function PipelineCard({
   onDeleted: (id: string) => void;
   onUpdated: (pipeline: RagPipeline) => void;
   confirm: ReturnType<typeof useConfirm>["confirm"];
+  initialConversationId?: string | null;
 }) {
   const [status, setStatus] = useState("");
   const [copied, setCopied] = useState(false);
@@ -854,6 +876,7 @@ export function PipelineCard({
         token={token}
         capabilities={capabilities}
         onGone={() => onDeleted(pipeline.id)}
+        initialConversationId={initialConversationId}
       />
     </section>
   );
@@ -930,6 +953,12 @@ export function AutoRouterStatsCard({ stats }: { stats: DecisionStats | null }) 
 export function RagPipelinesPage() {
   const { token } = useAuth();
   const { confirm, dialog } = useConfirm();
+  const [searchParams] = useSearchParams();
+  // From ConversationsPage's "Continue →" hand-off -- a conversation isn't
+  // scoped to any one pipeline (the underlying tables key on conversation_id
+  // alone), so this is threaded into EVERY pipeline card below rather than
+  // one specific pipeline; whichever the caller actually queries continues it.
+  const continueConversationId = searchParams.get("conversation_id");
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
   const [decisionStats, setDecisionStats] = useState<DecisionStats | null>(null);
@@ -990,6 +1019,12 @@ export function RagPipelinesPage() {
         ask it questions using Minder's own retrieval methods — this is
         separate from OpenWebUI's own disconnected Knowledge feature.
       </p>
+      {continueConversationId && (
+        <InfoCallout icon="💬">
+          Continuing a conversation from your history — open the Query panel
+          on the pipeline you asked it through and send your next question.
+        </InfoCallout>
+      )}
       <RetrievalMethodsReference />
       <AutoRouterStatsCard stats={decisionStats} />
       <StatusLine isError={isError}>{status}</StatusLine>
@@ -1032,6 +1067,7 @@ export function RagPipelinesPage() {
           onDeleted={handlePipelineDeleted}
           onUpdated={handlePipelineUpdated}
           confirm={confirm}
+          initialConversationId={continueConversationId}
         />
       ))}
     </>

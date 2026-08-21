@@ -10,7 +10,7 @@ This is a repository layer component for data access.
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +325,82 @@ class ConversationRepository:
                     conversation_id,
                 )
         return row is not None and row["owner_user_id"] == user_id
+
+    async def list_owned_conversations(
+        self, owner_user_id: str, limit: int = 20, offset: int = 0
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """List conversations OWNED (first-written, per ``is_owner``) by
+        ``owner_user_id``, most recently active first.
+
+        Returns ``(items, total)`` where each item is
+        ``{"conversation_id", "last_activity", "snippet"}`` (the most recent
+        turn's question, for a picklist-style display) and ``total`` is the
+        pre-slice count of this user's owned conversations.
+
+        Deliberately scoped to ``conversation_owners.owner_user_id`` rather
+        than ``conversation_turns.user_id`` -- the latter is the *storage*
+        identity (which for a shared conversation is the owner's id
+        regardless of who actually asked, per ``resolve_storage_user_id``),
+        not "conversations this caller started." A participant in a
+        conversation someone else shared with them will not see it here;
+        this lists only what the caller themselves began.
+
+        Raises:
+            ValueError: If required fields invalid.
+            RuntimeError: If database operation fails.
+        """
+        if not owner_user_id:
+            raise ValueError("owner_user_id cannot be empty")
+        if limit <= 0:
+            raise ValueError(f"limit must be positive, got {limit}")
+        if offset < 0:
+            raise ValueError(f"offset must be non-negative, got {offset}")
+
+        try:
+            async with self.db_pool.acquire() as conn:
+                total = await conn.fetchval(
+                    "SELECT COUNT(*) FROM conversation_owners WHERE owner_user_id = $1",
+                    owner_user_id,
+                )
+                rows = await conn.fetch(
+                    """
+                    SELECT co.conversation_id AS conversation_id,
+                           latest.timestamp AS last_activity,
+                           latest.question AS snippet
+                    FROM conversation_owners co
+                    JOIN LATERAL (
+                        SELECT ct.question, ct.timestamp
+                        FROM conversation_turns ct
+                        WHERE ct.conversation_id = co.conversation_id
+                        ORDER BY ct.timestamp DESC
+                        LIMIT 1
+                    ) latest ON TRUE
+                    WHERE co.owner_user_id = $1
+                    ORDER BY latest.timestamp DESC
+                    LIMIT $2 OFFSET $3
+                    """,
+                    owner_user_id,
+                    limit,
+                    offset,
+                )
+
+            items = [
+                {
+                    "conversation_id": row["conversation_id"],
+                    "last_activity": row["last_activity"],
+                    "snippet": row["snippet"][:200],
+                }
+                for row in rows
+            ]
+
+            logger.debug(
+                f"📖 Listed {len(items)}/{total} owned conversations for {owner_user_id}"
+            )
+            return items, int(total or 0)
+
+        except Exception as e:
+            logger.error(f"❌ Failed to list owned conversations: {e}")
+            raise RuntimeError(f"Database operation failed: {str(e)}")
 
     async def share_conversation(self, user_id: str, conversation_id: str) -> bool:
         """Mark a conversation as shared so any authenticated user can continue

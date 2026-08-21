@@ -23,6 +23,7 @@ const SECTIONS: NavSection[] = [
       { to: "/rag", label: "Knowledge Bases", end: true },
       { to: "/rag/pipelines", label: "Pipelines" },
       { to: "/rag/graph", label: "Graph" },
+      { to: "/rag/conversations", label: "Conversations" },
     ],
   },
   {

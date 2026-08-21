@@ -11,6 +11,7 @@ import { AvailableBundlesPage } from "./pages/AvailableBundlesPage";
 import { AvailablePluginsPage } from "./pages/AvailablePluginsPage";
 import { AvailableToolsPage } from "./pages/AvailableToolsPage";
 import { BackupsPage } from "./pages/BackupsPage";
+import { ConversationsPage } from "./pages/ConversationsPage";
 import { GraphExplorerPage } from "./pages/GraphExplorerPage";
 import { HomePage } from "./pages/HomePage";
 import { InstalledBundlesPage } from "./pages/InstalledBundlesPage";
@@ -70,6 +71,7 @@ export function App() {
                 <Route path="/rag" element={<KnowledgeBasesPage />} />
                 <Route path="/rag/pipelines" element={<RagPipelinesPage />} />
                 <Route path="/rag/graph" element={<GraphExplorerPage />} />
+                <Route path="/rag/conversations" element={<ConversationsPage />} />
 
                 <Route
                   path="/plugins"

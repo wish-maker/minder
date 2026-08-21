@@ -75,8 +75,35 @@ class _FakeConn:
     def transaction(self):
         return _FakeTransaction()
 
-    async def fetch(self, query, user_id, conversation_id, max_turns):
+    async def fetch(self, query, *params):
         self.last_query = query
+        if self._raises:
+            raise self._raises
+        if "conversation_owners" in query and "LATERAL" in query.upper():
+            # list_owned_conversations: one row per owned conversation_id,
+            # carrying its most-recent turn as (last_activity, snippet).
+            owner_user_id, limit, offset = params
+            rows = []
+            for conversation_id, owner in self._owners.items():
+                if owner != owner_user_id:
+                    continue
+                conv_turns = [
+                    t for t in self._turns if t["conversation_id"] == conversation_id
+                ]
+                if not conv_turns:
+                    continue
+                latest = max(conv_turns, key=lambda t: t["timestamp"])
+                rows.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "last_activity": latest["timestamp"],
+                        "snippet": latest["question"],
+                    }
+                )
+            rows.sort(key=lambda r: r["last_activity"], reverse=True)
+            return rows[offset : offset + limit]
+
+        user_id, conversation_id, max_turns = params
         rows = [
             t
             for t in self._turns
@@ -93,6 +120,15 @@ class _FakeConn:
             }
             for t in rows[:max_turns]
         ]
+
+    async def fetchval(self, query, *params):
+        self.last_query = query
+        if self._raises:
+            raise self._raises
+        if "COUNT(*)" in query.upper() and "conversation_owners" in query:
+            (owner_user_id,) = params
+            return sum(1 for owner in self._owners.values() if owner == owner_user_id)
+        return None
 
     async def fetchrow(self, query, *params):
         self.last_query = query
@@ -478,6 +514,141 @@ class TestSharing:
         repo = ConversationRepository(pool)
         assert asyncio.run(repo.is_owner("alice", "legacy-conv")) is True
         assert asyncio.run(repo.is_owner("bob", "legacy-conv")) is False
+
+
+class TestListOwnedConversations:
+    """The #402-roadmap follow-up: a caller can browse their own past
+    conversations instead of only continuing one whose id they already
+    know."""
+
+    def test_rejects_empty_owner_user_id(self):
+        repo = ConversationRepository(_FakePool())
+        with pytest.raises(ValueError, match="owner_user_id cannot be empty"):
+            asyncio.run(repo.list_owned_conversations(""))
+
+    def test_rejects_non_positive_limit(self):
+        repo = ConversationRepository(_FakePool())
+        with pytest.raises(ValueError, match="limit must be positive"):
+            asyncio.run(repo.list_owned_conversations("alice", limit=0))
+
+    def test_rejects_negative_offset(self):
+        repo = ConversationRepository(_FakePool())
+        with pytest.raises(ValueError, match="offset must be non-negative"):
+            asyncio.run(repo.list_owned_conversations("alice", offset=-1))
+
+    def test_returns_only_conversations_the_caller_owns_newest_first(self):
+        """alice owns conv-a and conv-b; bob owns conv-c. alice's list must
+        show only her two, most-recently-active first -- never bob's, even
+        though all three conversations coexist in the same table."""
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": "conv-a",
+                "question": "alice q1",
+                "answer": "a1",
+                "timestamp": 1,
+                "metadata": {},
+            },
+            {
+                "user_id": "alice",
+                "conversation_id": "conv-b",
+                "question": "alice q2 (most recent)",
+                "answer": "a2",
+                "timestamp": 5,
+                "metadata": {},
+            },
+            {
+                "user_id": "bob",
+                "conversation_id": "conv-c",
+                "question": "bob q1",
+                "answer": "a3",
+                "timestamp": 3,
+                "metadata": {},
+            },
+        ]
+        pool = _FakePool(
+            turns, owners={"conv-a": "alice", "conv-b": "alice", "conv-c": "bob"}
+        )
+        repo = ConversationRepository(pool)
+
+        items, total = asyncio.run(repo.list_owned_conversations("alice"))
+
+        assert total == 2
+        assert [i["conversation_id"] for i in items] == ["conv-b", "conv-a"]
+        assert items[0]["snippet"] == "alice q2 (most recent)"
+
+    def test_excludes_a_conversation_merely_shared_with_the_caller(self):
+        """bob participates in alice's shared conversation (his turns land
+        in alice's storage bucket per resolve_storage_user_id), but bob never
+        OWNS it -- it must not appear in bob's own list."""
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": "conv-shared",
+                "question": "alice started this",
+                "answer": "a",
+                "timestamp": 1,
+                "metadata": {},
+            },
+        ]
+        pool = _FakePool(
+            turns,
+            owners={"conv-shared": "alice"},
+            shares={"conv-shared": "alice"},
+        )
+        repo = ConversationRepository(pool)
+
+        items, total = asyncio.run(repo.list_owned_conversations("bob"))
+        assert items == []
+        assert total == 0
+
+    def test_respects_limit_and_offset(self):
+        owners = {f"conv-{i}": "alice" for i in range(5)}
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": f"conv-{i}",
+                "question": f"q{i}",
+                "answer": "a",
+                "timestamp": i,
+                "metadata": {},
+            }
+            for i in range(5)
+        ]
+        pool = _FakePool(turns, owners=owners)
+        repo = ConversationRepository(pool)
+
+        items, total = asyncio.run(
+            repo.list_owned_conversations("alice", limit=2, offset=1)
+        )
+        assert total == 5
+        # newest-first overall: conv-4, conv-3, conv-2, conv-1, conv-0 ->
+        # offset=1, limit=2 skips conv-4 and returns the next two.
+        assert [i["conversation_id"] for i in items] == ["conv-3", "conv-2"]
+
+    def test_snippet_is_truncated_to_200_chars(self):
+        long_question = "x" * 500
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": "conv-a",
+                "question": long_question,
+                "answer": "a",
+                "timestamp": 1,
+                "metadata": {},
+            }
+        ]
+        pool = _FakePool(turns, owners={"conv-a": "alice"})
+        repo = ConversationRepository(pool)
+
+        items, _total = asyncio.run(repo.list_owned_conversations("alice"))
+        assert len(items[0]["snippet"]) == 200
+
+    def test_wraps_a_database_failure_as_runtimeerror(self):
+        pool = _FakePool(raises=ConnectionError("db down"))
+        repo = ConversationRepository(pool)
+        with pytest.raises(RuntimeError, match="Database operation failed"):
+            asyncio.run(repo.list_owned_conversations("alice"))
 
 
 class TestCleanupExpired:
