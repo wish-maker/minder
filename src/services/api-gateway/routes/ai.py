@@ -6,8 +6,9 @@ Provides OpenAI-compatible API for tool calling
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import httpx
 from core.auth import get_current_user_required
@@ -28,11 +29,107 @@ _tools_cache_time: Optional[float] = None
 CACHE_TTL = 60  # seconds
 
 
+def _slugify_pipeline_name(name: str) -> str:
+    """Turn a pipeline's display name into a safe function-name suffix.
+
+    Lowercases, collapses any run of non-alphanumeric characters into a single
+    underscore, and strips leading/trailing underscores -- e.g. "My KB!" ->
+    "my_kb". Falls back to "pipeline" if nothing alphanumeric survives, so
+    `ask_<slug>` is never a degenerate `ask_`.
+    """
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return slug or "pipeline"
+
+
+async def _fetch_pipeline_function_defs() -> List[Dict]:
+    """Synthesize one OpenAI function-calling definition per RAG pipeline,
+    each callable as ``ask_<slug>`` and dispatched to that pipeline's own
+    ``POST /v1/pipeline/{id}/query`` on rag-pipeline.
+
+    This is the chat<->RAG bridge: it lets OpenWebUI's own function-calling
+    reach Minder's RAG pipelines the same way it already reaches plugin
+    tools, without OpenWebUI (which talks to Ollama directly) needing to
+    know rag-pipeline exists. Deliberately a separate source merged into
+    get_tool_definitions()'s result below -- a RAG pipeline isn't a plugin
+    action, so it stays out of the plugin/marketplace tool-aggregation path
+    entirely; only the final list is shared.
+
+    Failure here (rag-pipeline unreachable, bad response) degrades to no
+    pipeline tools offered, exactly like get_tool_definitions()'s own
+    fallback -- it must never be the reason /functions/definitions 500s.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.RAG_PIPELINE_URL}/v1/pipeline",
+                params={"limit": 200},
+                timeout=5.0,
+            )
+            response.raise_for_status()
+            pipelines = response.json().get("items", [])
+    except Exception as e:
+        logger.error(f"Failed to fetch RAG pipelines for tool definitions: {e}")
+        return []
+
+    defs: List[Dict] = []
+    seen_slugs: set = set()
+    for pipeline in pipelines:
+        pipeline_id = pipeline.get("id")
+        if not pipeline_id:
+            continue
+        name = pipeline.get("name") or pipeline_id
+        slug = _slugify_pipeline_name(name)
+        if slug in seen_slugs:
+            # Two pipelines can share a slugified name (e.g. "Docs" vs
+            # "docs!") -- disambiguate with an id suffix rather than
+            # silently dropping one of them from the tool list.
+            slug = f"{slug}_{pipeline_id[:8]}"
+        seen_slugs.add(slug)
+        defs.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": f"ask_{slug}",
+                    "description": f"Ask a question using the '{name}' knowledge base.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "The question to ask.",
+                            }
+                        },
+                        "required": ["question"],
+                    },
+                },
+                "metadata": {
+                    "endpoint": f"/v1/pipeline/{pipeline_id}/query",
+                    "method": "POST",
+                    # _call_plugin_tool defaults to PLUGIN_REGISTRY_URL; this
+                    # metadata-driven override is what lets the very same
+                    # dispatch helper reach a pipeline on rag-pipeline instead.
+                    "base_url": settings.RAG_PIPELINE_URL,
+                    # The query response is the full QueryResponse envelope
+                    # (answer/sources/confidence/...); a chat tool call wants
+                    # just the answer text, not sources echoed back verbatim.
+                    "result_field": "answer",
+                    "kind": "rag_pipeline",
+                },
+            }
+        )
+    return defs
+
+
 async def get_tool_definitions() -> Dict:
     """
-    Fetch tool definitions from Plugin Registry
+    Fetch tool definitions from Plugin Registry, merged with a synthesized
+    "ask this RAG pipeline" definition per pipeline (see
+    _fetch_pipeline_function_defs).
 
-    Returns cached definitions if available, otherwise fetches fresh.
+    Returns cached definitions if available, otherwise fetches fresh. Both
+    sources share the one cache/TTL below rather than each inventing its
+    own -- a pipeline rename/add/remove becomes visible to OpenWebUI on the
+    same cadence a plugin tool change already does.
     """
     global _tools_cache, _tools_cache_time
 
@@ -52,9 +149,11 @@ async def get_tool_definitions() -> Dict:
                 f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/ai/tools", timeout=5.0
             )
             response.raise_for_status()
-            _tools_cache = response.json()
-            _tools_cache_time = current_time
-            return _tools_cache
+            plugin_tools = response.json().get("tools", [])
+        pipeline_tools = await _fetch_pipeline_function_defs()
+        _tools_cache = {"tools": plugin_tools + pipeline_tools}
+        _tools_cache_time = current_time
+        return _tools_cache
     except Exception as e:
         logger.error(f"Failed to fetch tool definitions: {e}")
 
@@ -145,15 +244,24 @@ async def _call_plugin_tool(
     params=None,
     auth_header: Optional[str] = None,
 ) -> Dict:
-    """Proxy a tool invocation to its plugin endpoint on the Plugin Registry.
+    """Proxy a tool invocation to its endpoint -- Plugin Registry by default, or
+    another service when ``metadata["base_url"]`` overrides it (used by the
+    RAG-pipeline tools synthesized in _fetch_pipeline_function_defs).
 
-    Forwards the caller's ``Authorization`` header so JWT-gated plugin actions run
+    Forwards the caller's ``Authorization`` header so JWT-gated actions run
     as the calling user (auth model: propagate the user's JWT). Raises on HTTP error.
+
+    ``metadata["result_field"]``, when set, narrows the JSON response down to
+    ``{field: value}`` instead of returning it whole -- a RAG pipeline query
+    response carries sources/confidence/etc. alongside the answer text, which
+    a chat tool call has no use for and would otherwise dump into the model's
+    context verbatim.
     """
     target_url = metadata.get("endpoint")
     if not target_url:
         raise HTTPException(status_code=500, detail="tool missing endpoint metadata")
-    url = f"{settings.PLUGIN_REGISTRY_URL}{target_url}"
+    base_url = metadata.get("base_url", settings.PLUGIN_REGISTRY_URL)
+    url = f"{base_url}{target_url}"
     method = metadata.get("method", "POST")
     headers = {"Authorization": auth_header} if auth_header else {}
     async with httpx.AsyncClient() as client:
@@ -166,7 +274,11 @@ async def _call_plugin_tool(
                 url, json=json_body or {}, headers=headers, timeout=60.0
             )
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+    result_field = metadata.get("result_field")
+    if result_field:
+        return {result_field: data.get(result_field)}
+    return data
 
 
 @router.post("/functions/{function_name}")
@@ -205,12 +317,27 @@ async def execute_function(function_name: str, request: Request):
     # `is_get` below it); mirror the same routing here.
     metadata = tool.get("metadata", {})
     is_get = (metadata.get("method") or "POST").upper() == "GET"
-    result = await _call_plugin_tool(
-        metadata,
-        json_body=None if is_get else args,
-        params=args if is_get else request.query_params,
-        auth_header=request.headers.get("Authorization"),
-    )
+    try:
+        result = await _call_plugin_tool(
+            metadata,
+            json_body=None if is_get else args,
+            params=args if is_get else request.query_params,
+            auth_header=request.headers.get("Authorization"),
+        )
+    except httpx.HTTPStatusError as e:
+        # A downstream 4xx here most commonly means the tool's target moved
+        # or disappeared since the cached definition was fetched -- most
+        # notably a RAG pipeline deleted/renamed within the last CACHE_TTL
+        # seconds now 404s on rag-pipeline. Surface that cleanly instead of
+        # letting it bubble into a raw 500 (this endpoint had no error
+        # handling at all before, for any tool).
+        status = e.response.status_code
+        detail = e.response.text.strip()[:500] or f"tool '{function_name}' failed"
+        raise HTTPException(status_code=status if status < 500 else 502, detail=detail)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise backend_http_error(e, f"Tool execution ({function_name})")
     return {
         "result": result,
         "status": "success",

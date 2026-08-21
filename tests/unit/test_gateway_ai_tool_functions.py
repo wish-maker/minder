@@ -40,7 +40,10 @@ def ai_mod():
     names = ("config", "core", "core.auth")
     saved = {n: sys.modules.get(n) for n in names}
     cfg = ModuleType("config")
-    cfg.settings = SimpleNamespace(PLUGIN_REGISTRY_URL="http://reg:8001")
+    cfg.settings = SimpleNamespace(
+        PLUGIN_REGISTRY_URL="http://reg:8001",
+        RAG_PIPELINE_URL="http://rag:8004",
+    )
     sys.modules["config"] = cfg
     sys.modules["core"] = ModuleType("core")
     fake_core_auth = ModuleType("core.auth")
@@ -77,10 +80,20 @@ class _FakeResponse:
 
 
 class _FakeAsyncClient:
-    def __init__(self, get_response=None, post_response=None, raises=None):
+    def __init__(
+        self,
+        get_response=None,
+        post_response=None,
+        raises=None,
+        get_responses_by_url_prefix=None,
+    ):
         self._get_response = get_response
         self._post_response = post_response
         self._raises = raises
+        # get_tool_definitions now fetches two URLs (plugin-registry tools +
+        # rag-pipeline pipelines); tests that care about both responses at
+        # once pass this instead of the single get_response fallback.
+        self._get_responses_by_url_prefix = get_responses_by_url_prefix or {}
         self.get_calls = []
         self.post_calls = []
 
@@ -94,6 +107,9 @@ class _FakeAsyncClient:
         self.get_calls.append((url, kwargs))
         if self._raises:
             raise self._raises
+        for prefix, resp in self._get_responses_by_url_prefix.items():
+            if url.startswith(prefix):
+                return resp
         return self._get_response
 
     async def post(self, url, **kwargs):
@@ -112,13 +128,18 @@ def _patch_httpx(monkeypatch, ai_mod, client):
 
 @pytest.mark.asyncio
 async def test_fetches_fresh_when_no_cache(ai_mod, monkeypatch):
+    # get_tool_definitions now fetches both plugin-registry tools AND
+    # rag-pipeline's pipeline list (merged into one cached result) -- the
+    # pipeline fetch's response here has no "items" key, so it contributes
+    # zero pipeline-derived tools and the merged result is just the plugin
+    # tools, unchanged from before this feature existed.
     fake_client = _FakeAsyncClient(get_response=_FakeResponse({"tools": ["a"]}))
     _patch_httpx(monkeypatch, ai_mod, fake_client)
 
     result = await ai_mod.get_tool_definitions()
 
     assert result == {"tools": ["a"]}
-    assert len(fake_client.get_calls) == 1
+    assert len(fake_client.get_calls) == 2
 
 
 @pytest.mark.asyncio
@@ -150,7 +171,7 @@ async def test_refetches_once_the_ttl_expires(ai_mod, monkeypatch):
     result = await ai_mod.get_tool_definitions()
 
     assert result == {"tools": ["fresh"]}
-    assert len(fake_client.get_calls) == 1
+    assert len(fake_client.get_calls) == 2
 
 
 @pytest.mark.asyncio
@@ -417,3 +438,223 @@ async def test_execute_function_unwraps_a_parameters_envelope_for_get_tools(
     )
 
     assert captured["params"] == {"location": "Tokyo"}
+
+
+# --- _slugify_pipeline_name ---------------------------------------------------
+
+
+def test_slugify_lowercases_and_collapses_symbols(ai_mod):
+    assert ai_mod._slugify_pipeline_name("My KB!") == "my_kb"
+
+
+def test_slugify_falls_back_when_nothing_alphanumeric_survives(ai_mod):
+    assert ai_mod._slugify_pipeline_name("!!!") == "pipeline"
+
+
+# --- _fetch_pipeline_function_defs (RAG pipeline chat-tool bridge) ----------
+
+
+@pytest.mark.asyncio
+async def test_fetch_pipeline_function_defs_builds_one_ask_tool_per_pipeline(
+    ai_mod, monkeypatch
+):
+    fake_client = _FakeAsyncClient(
+        get_response=_FakeResponse(
+            {
+                "items": [
+                    {"id": "pipe-1", "name": "Docs KB"},
+                    {"id": "pipe-2", "name": "Support Tickets"},
+                ]
+            }
+        )
+    )
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    defs = await ai_mod._fetch_pipeline_function_defs()
+
+    names = [d["function"]["name"] for d in defs]
+    assert names == ["ask_docs_kb", "ask_support_tickets"]
+    first = defs[0]
+    assert first["function"]["parameters"]["required"] == ["question"]
+    assert first["metadata"] == {
+        "endpoint": "/v1/pipeline/pipe-1/query",
+        "method": "POST",
+        "base_url": "http://rag:8004",
+        "result_field": "answer",
+        "kind": "rag_pipeline",
+    }
+
+
+@pytest.mark.asyncio
+async def test_fetch_pipeline_function_defs_disambiguates_colliding_slugs(
+    ai_mod, monkeypatch
+):
+    fake_client = _FakeAsyncClient(
+        get_response=_FakeResponse(
+            {
+                "items": [
+                    {"id": "pipe-1", "name": "Docs"},
+                    {"id": "pipe-22222222", "name": "docs!"},
+                ]
+            }
+        )
+    )
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    defs = await ai_mod._fetch_pipeline_function_defs()
+
+    names = {d["function"]["name"] for d in defs}
+    assert names == {"ask_docs", "ask_docs_pipe-222"}
+
+
+@pytest.mark.asyncio
+async def test_fetch_pipeline_function_defs_degrades_to_empty_on_fetch_failure(
+    ai_mod, monkeypatch
+):
+    fake_client = _FakeAsyncClient(raises=httpx.ConnectError("rag-pipeline down"))
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    defs = await ai_mod._fetch_pipeline_function_defs()
+
+    assert defs == []
+
+
+# --- get_tool_definitions: merged plugin + pipeline tools --------------------
+
+
+@pytest.mark.asyncio
+async def test_get_tool_definitions_merges_plugin_and_pipeline_tools(
+    ai_mod, monkeypatch
+):
+    fake_client = _FakeAsyncClient(
+        get_responses_by_url_prefix={
+            "http://reg:8001": _FakeResponse(
+                {"tools": [{"function": {"name": "get_weather"}}]}
+            ),
+            "http://rag:8004": _FakeResponse(
+                {"items": [{"id": "pipe-1", "name": "Docs"}]}
+            ),
+        }
+    )
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    result = await ai_mod.get_tool_definitions()
+
+    names = [t["function"]["name"] for t in result["tools"]]
+    assert names == ["get_weather", "ask_docs"]
+
+
+# --- _call_plugin_tool: base_url and result_field overrides ------------------
+
+
+@pytest.mark.asyncio
+async def test_call_plugin_tool_honors_base_url_override(ai_mod, monkeypatch):
+    fake_client = _FakeAsyncClient(post_response=_FakeResponse({"answer": "42"}))
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    await ai_mod._call_plugin_tool(
+        {"endpoint": "/v1/pipeline/pipe-1/query", "base_url": "http://rag:8004"},
+        json_body={"question": "what is it"},
+    )
+
+    url, _kwargs = fake_client.post_calls[0]
+    assert url == "http://rag:8004/v1/pipeline/pipe-1/query"
+
+
+@pytest.mark.asyncio
+async def test_call_plugin_tool_narrows_to_result_field(ai_mod, monkeypatch):
+    fake_client = _FakeAsyncClient(
+        post_response=_FakeResponse(
+            {"answer": "the answer", "sources": ["a", "b"], "confidence": 0.9}
+        )
+    )
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    result = await ai_mod._call_plugin_tool(
+        {"endpoint": "/v1/pipeline/pipe-1/query", "result_field": "answer"},
+        json_body={"question": "what is it"},
+    )
+
+    assert result == {"answer": "the answer"}
+
+
+# --- execute_function: RAG-pipeline tool dispatch + stale-pipeline errors ---
+
+
+@pytest.mark.asyncio
+async def test_execute_function_dispatches_a_pipeline_ask_tool(ai_mod, monkeypatch):
+    captured = {}
+
+    async def fake_get_tool_definitions():
+        return {
+            "tools": [
+                {
+                    "function": {"name": "ask_docs"},
+                    "metadata": {
+                        "endpoint": "/v1/pipeline/pipe-1/query",
+                        "method": "POST",
+                        "base_url": "http://rag:8004",
+                        "result_field": "answer",
+                        "kind": "rag_pipeline",
+                    },
+                }
+            ]
+        }
+
+    async def fake_call_plugin_tool(metadata, *, json_body=None, **kwargs):
+        captured["metadata"] = metadata
+        captured["json_body"] = json_body
+        return {"answer": "42"}
+
+    monkeypatch.setattr(ai_mod, "get_tool_definitions", fake_get_tool_definitions)
+    monkeypatch.setattr(ai_mod, "_call_plugin_tool", fake_call_plugin_tool)
+
+    result = await ai_mod.execute_function(
+        "ask_docs", _FakeRequest(json_body={"question": "what is the answer"})
+    )
+
+    assert captured["json_body"] == {"question": "what is the answer"}
+    assert captured["metadata"]["base_url"] == "http://rag:8004"
+    assert result["result"] == {"answer": "42"}
+
+
+@pytest.mark.asyncio
+async def test_execute_function_surfaces_a_clean_error_for_a_stale_pipeline(
+    ai_mod, monkeypatch
+):
+    """A pipeline deleted/renamed since the last cache refresh 404s downstream
+    on rag-pipeline -- this must reach the caller as a clean 404, not an
+    unhandled httpx.HTTPStatusError bubbling into a raw 500 (execute_function
+    had no error handling at all before this)."""
+
+    async def fake_get_tool_definitions():
+        return {
+            "tools": [
+                {
+                    "function": {"name": "ask_docs"},
+                    "metadata": {
+                        "endpoint": "/v1/pipeline/stale-id/query",
+                        "method": "POST",
+                        "base_url": "http://rag:8004",
+                        "kind": "rag_pipeline",
+                    },
+                }
+            ]
+        }
+
+    class _FakeErrResponse:
+        status_code = 404
+        text = "RAG pipeline not found"
+
+    async def fake_call_plugin_tool(*args, **kwargs):
+        raise httpx.HTTPStatusError("404", request=None, response=_FakeErrResponse())
+
+    monkeypatch.setattr(ai_mod, "get_tool_definitions", fake_get_tool_definitions)
+    monkeypatch.setattr(ai_mod, "_call_plugin_tool", fake_call_plugin_tool)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ai_mod.execute_function(
+            "ask_docs", _FakeRequest(json_body={"question": "x"})
+        )
+    assert exc_info.value.status_code == 404
+    assert "not found" in exc_info.value.detail
