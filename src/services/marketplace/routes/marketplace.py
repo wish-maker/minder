@@ -1,7 +1,6 @@
 # services/marketplace/routes/marketplace.py
 import json
 import uuid
-from datetime import datetime
 from typing import Any, List, Optional
 
 import asyncpg
@@ -24,8 +23,20 @@ from models.plugin import (
     PluginUpdate,
 )
 
-from shared.auth.jwt_middleware import get_current_user_or_service
+from shared.auth.jwt_middleware import (
+    get_current_user_optional,
+    get_current_user_or_service,
+)
 from shared.errors import backend_http_error
+
+# Statuses visible to an unauthenticated/non-privileged caller: the
+# publicly-approved catalog, plus the legacy pre-#402 auto-approved value
+# ("pending") kept for back-compat. draft/submitted/in_review/rejected are a
+# submission's own developer's business (see routes/submissions.py's
+# `/mine` and admin-only review queue) and must never be readable by anyone
+# else — otherwise the #402 review gate is trivially bypassed by just asking
+# for the unapproved status directly.
+_PUBLIC_STATUSES = {"approved", "pending"}
 
 # Fields a PUT /plugins/{id} may change (whitelist → safe to interpolate as column
 # names; values always go through bound parameters).
@@ -98,6 +109,7 @@ async def list_plugins(
     category: Optional[str] = None,
     pricing_model: Optional[str] = None,
     status: Optional[str] = "approved",
+    current_user: Optional[dict] = Depends(get_current_user_optional),
 ):
     """
     List all plugins in marketplace
@@ -109,8 +121,16 @@ async def list_plugins(
         page_size: Deprecated — items per page; use limit/offset
         category: Filter by category
         pricing_model: Filter by pricing model
-        status: Filter by status (default: approved)
+        status: Filter by status (default: approved). Non-admin/service callers
+            are always clamped to the public catalog regardless of what they
+            pass here — see submissions.py for a developer's own submissions.
     """
+    is_privileged = current_user is not None and current_user.get("role") in (
+        "admin",
+        "service",
+    )
+    if not is_privileged and status not in _PUBLIC_STATUSES:
+        status = "approved"
     eff_limit, eff_offset = _resolve_pagination(limit, offset, page, page_size)
     pool = await get_pool()
 
@@ -206,9 +226,11 @@ async def create_plugin(
                 json.dumps(plugin_data.requires_services),
                 origin,
                 submitted_by,
-                # submitted_at: stamped now for a draft submission; null for the
-                # service auto-register path.
-                None if is_service else datetime.utcnow(),
+                # submitted_at reflects the actual submit action (stamped by
+                # routes/submissions.py's transition to SUBMITTED), not draft
+                # creation -- null here for both the service auto-register
+                # path and a fresh draft that hasn't been submitted yet.
+                None,
             )
 
             return row_to_plugin_response(row)
@@ -230,8 +252,19 @@ async def get_featured_plugins(limit: int = Query(10, ge=1, le=50)):
 
 
 @router.get("/plugins/{plugin_id}", response_model=PluginResponse)
-async def get_plugin(plugin_id: str = Depends(valid_plugin_id)):
-    """Get plugin by ID"""
+async def get_plugin(
+    plugin_id: str = Depends(valid_plugin_id),
+    current_user: Optional[dict] = Depends(get_current_user_optional),
+):
+    """Get plugin by ID.
+
+    A non-public status (draft/submitted/in_review/rejected/archived) is only
+    visible to an admin/service caller or the submission's own developer —
+    otherwise this is the same unauthenticated-leak class of bug as the
+    `status` query param on the list endpoint above (#402 follow-up): the
+    id itself isn't secret (it's returned from the create/submit responses),
+    so hiding it from listings alone isn't enough.
+    """
     pool = await get_pool()
 
     plugin = await get_plugin_by_id(pool, plugin_id)
@@ -239,7 +272,26 @@ async def get_plugin(plugin_id: str = Depends(valid_plugin_id)):
     if not plugin:
         raise HTTPException(status_code=404, detail="Plugin not found")
 
+    if plugin.status not in _PUBLIC_STATUSES:
+        is_privileged = current_user is not None and current_user.get("role") in (
+            "admin",
+            "service",
+        )
+        is_owner = (
+            current_user is not None and current_user.get("sub") == plugin.submitted_by
+        )
+        if not (is_privileged or is_owner):
+            raise HTTPException(status_code=404, detail="Plugin not found")
+
     return plugin
+
+
+# Fields a plugin's own developer may change on their own draft/rejected
+# submission. Deliberately excludes `status` and `featured` — those are
+# admin/review-only (status changes must go through the state machine in
+# routes/submissions.py; featured is curation) and must never be settable by
+# the submission's own author (that would be self-approval).
+_OWNER_UPDATABLE = _PLUGIN_UPDATABLE - {"status", "featured"}
 
 
 @router.put("/plugins/{plugin_id}", response_model=PluginResponse)
@@ -252,6 +304,11 @@ async def update_plugin(
 
     Only the fields present in the body are changed (the `PluginUpdate` model existed
     but had no route — #147). 404 if the plugin is unknown, 422 if the body is empty.
+
+    Non-admin/non-service callers (a submission's own developer) may only edit
+    their own `draft`/`rejected` submission, and never `status`/`featured` —
+    otherwise a developer could self-approve their own listing or edit anyone
+    else's, bypassing the entire review workflow (#402 follow-up).
     """
     # mode="json" serialises the PricingModel/PluginStatus enums to their string values
     # for the SQL params.
@@ -262,6 +319,8 @@ async def update_plugin(
     }
     if not updates:
         raise HTTPException(status_code=422, detail="No updatable fields provided")
+
+    is_privileged = current_user.get("role") in ("admin", "service")
 
     for col in _JSONB_UPDATABLE:
         if col in updates:
@@ -300,6 +359,37 @@ async def update_plugin(
                         detail=(
                             "Refusing to overwrite a developer submission "
                             "(origin='submitted') from the service sync path"
+                        ),
+                    )
+            elif not is_privileged:
+                existing = await conn.fetchrow(
+                    "SELECT submitted_by, status FROM marketplace_plugins WHERE id = $1",
+                    plugin_id,
+                )
+                if existing is None:
+                    raise HTTPException(status_code=404, detail="Plugin not found")
+                if existing["submitted_by"] != current_user.get("sub"):
+                    # Same message as "unknown id" — no reason to reveal that
+                    # another developer's submission exists.
+                    raise HTTPException(status_code=404, detail="Plugin not found")
+                if not (set(updates) <= _OWNER_UPDATABLE):
+                    raise HTTPException(
+                        status_code=403,
+                        detail=(
+                            "status/featured can only be changed by an admin "
+                            "(status moves through /v1/marketplace/submissions/*)"
+                        ),
+                    )
+                if existing["status"] not in (
+                    PluginStatus.DRAFT.value,
+                    PluginStatus.REJECTED.value,
+                ):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"Cannot edit a submission with status "
+                            f"'{existing['status']}' — only draft/rejected "
+                            f"submissions may be edited by their developer"
                         ),
                     )
             row = await conn.fetchrow(query, *params, plugin_id)

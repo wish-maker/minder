@@ -143,6 +143,7 @@ async def test_list_plugins_resolves_pagination_and_returns_envelope(monkeypatch
         category="tools",
         pricing_model="free",
         status="approved",
+        current_user=None,
     )
 
     # page=2/page_size=5 (no explicit limit/offset) -> limit=5, offset=5.
@@ -178,9 +179,66 @@ async def test_list_plugins_prefers_explicit_limit_offset_over_page(monkeypatch)
         category=None,
         pricing_model=None,
         status="approved",
+        current_user=None,
     )
 
     assert captured == {"limit": 20, "offset": 40}
+
+
+@pytest.mark.asyncio
+async def test_list_plugins_clamps_non_public_status_for_anonymous_caller(
+    monkeypatch,
+):
+    """#402 follow-up: an unauthenticated caller asking for status=draft must
+    not see other developers' unreviewed submissions — clamp to 'approved'."""
+    captured = {}
+
+    async def fake_list_page(pool, status, category, pricing_model, limit, offset):
+        captured["status"] = status
+        return ([], 0)
+
+    monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_FakePool()))
+    monkeypatch.setattr(marketplace, "list_plugins_page", fake_list_page)
+
+    await marketplace.list_plugins(
+        limit=None,
+        offset=None,
+        page=1,
+        page_size=10,
+        category=None,
+        pricing_model=None,
+        status="draft",
+        current_user=None,
+    )
+
+    assert captured["status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_list_plugins_allows_admin_to_request_a_non_public_status(
+    monkeypatch,
+):
+    captured = {}
+
+    async def fake_list_page(pool, status, category, pricing_model, limit, offset):
+        captured["status"] = status
+        return ([], 0)
+
+    monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_FakePool()))
+    monkeypatch.setattr(marketplace, "list_plugins_page", fake_list_page)
+
+    await marketplace.list_plugins(
+        limit=None,
+        offset=None,
+        page=1,
+        page_size=10,
+        category=None,
+        pricing_model=None,
+        status="draft",
+        current_user={"role": "admin", "sub": "admin-1"},
+    )
+
+    assert captured["status"] == "draft"
 
 
 # --- GET /plugins/search (search_plugins) -----------------------------------
@@ -273,18 +331,90 @@ async def test_get_featured_plugins_returns_envelope(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_plugin_returns_the_plugin_when_found(monkeypatch):
+    class _Plugin:
+        id = "11111111-1111-1111-1111-111111111111"
+        name = "weather"
+        status = "approved"
+        submitted_by = None
+
     async def fake_get_by_id(pool, plugin_id):
         assert plugin_id == "11111111-1111-1111-1111-111111111111"
-        return {"id": plugin_id, "name": "weather"}
+        return _Plugin()
 
     monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_FakePool()))
     monkeypatch.setattr(marketplace, "get_plugin_by_id", fake_get_by_id)
 
     result = await marketplace.get_plugin(
-        plugin_id="11111111-1111-1111-1111-111111111111"
+        plugin_id="11111111-1111-1111-1111-111111111111", current_user=None
     )
 
-    assert result == {"id": "11111111-1111-1111-1111-111111111111", "name": "weather"}
+    assert result.id == "11111111-1111-1111-1111-111111111111"
+    assert result.name == "weather"
+
+
+@pytest.mark.asyncio
+async def test_get_plugin_404s_a_draft_for_an_anonymous_caller(monkeypatch):
+    """The #402 review gate is worthless if the id alone (returned from the
+    create/submit responses) lets anyone read an unapproved submission."""
+
+    class _Draft:
+        id = "22222222-2222-2222-2222-222222222222"
+        status = "draft"
+        submitted_by = "dev-1"
+
+    async def fake_get_by_id(pool, plugin_id):
+        return _Draft()
+
+    monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_FakePool()))
+    monkeypatch.setattr(marketplace, "get_plugin_by_id", fake_get_by_id)
+
+    with pytest.raises(Exception) as exc_info:
+        await marketplace.get_plugin(
+            plugin_id="22222222-2222-2222-2222-222222222222", current_user=None
+        )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_plugin_allows_the_owning_developer_to_see_their_own_draft(
+    monkeypatch,
+):
+    class _Draft:
+        id = "22222222-2222-2222-2222-222222222222"
+        status = "draft"
+        submitted_by = "dev-1"
+
+    async def fake_get_by_id(pool, plugin_id):
+        return _Draft()
+
+    monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_FakePool()))
+    monkeypatch.setattr(marketplace, "get_plugin_by_id", fake_get_by_id)
+
+    result = await marketplace.get_plugin(
+        plugin_id="22222222-2222-2222-2222-222222222222",
+        current_user={"role": "user", "sub": "dev-1"},
+    )
+    assert result.status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_get_plugin_allows_admin_to_see_a_draft(monkeypatch):
+    class _Draft:
+        id = "22222222-2222-2222-2222-222222222222"
+        status = "draft"
+        submitted_by = "dev-1"
+
+    async def fake_get_by_id(pool, plugin_id):
+        return _Draft()
+
+    monkeypatch.setattr(marketplace, "get_pool", AsyncMock(return_value=_FakePool()))
+    monkeypatch.setattr(marketplace, "get_plugin_by_id", fake_get_by_id)
+
+    result = await marketplace.get_plugin(
+        plugin_id="22222222-2222-2222-2222-222222222222",
+        current_user={"role": "admin", "sub": "someone-else"},
+    )
+    assert result.status == "draft"
 
 
 @pytest.mark.asyncio
@@ -434,3 +564,119 @@ async def test_update_plugin_name_collision_is_a_clean_409_not_a_500(monkeypatch
             current_user={"role": "admin", "sub": "admin"},
         )
     assert exc_info.value.status_code == 409
+
+
+# --- PUT /plugins/{plugin_id}: non-admin ownership/self-approval gate (#402
+# follow-up) ------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_404s_for_a_non_owner_non_admin_caller(monkeypatch):
+    conn = _FakeConn()
+    conn.fetchrow = AsyncMock(
+        return_value={"submitted_by": "someone-else", "status": "draft"}
+    )
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+
+    update = marketplace.PluginUpdate(display_name="Hijacked")
+    with pytest.raises(Exception) as exc_info:
+        await marketplace.update_plugin(
+            update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "user", "sub": "attacker"},
+        )
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_rejects_self_approval_of_own_draft(monkeypatch):
+    """The bug this closes: a developer PUTting status='approved' on their own
+    draft, completely bypassing the submit/claim/review workflow."""
+    conn = _FakeConn()
+    conn.fetchrow = AsyncMock(return_value={"submitted_by": "dev-1", "status": "draft"})
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+
+    update = marketplace.PluginUpdate(status=marketplace.PluginStatus.APPROVED)
+    with pytest.raises(Exception) as exc_info:
+        await marketplace.update_plugin(
+            update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "user", "sub": "dev-1"},
+        )
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_rejects_editing_a_submission_under_review(
+    monkeypatch,
+):
+    """Once submitted, the developer can't edit out from under the reviewer --
+    must wait for approve/reject before touching it again."""
+    conn = _FakeConn()
+    conn.fetchrow = AsyncMock(
+        return_value={"submitted_by": "dev-1", "status": "in_review"}
+    )
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+
+    update = marketplace.PluginUpdate(display_name="Sneaky edit mid-review")
+    with pytest.raises(Exception) as exc_info:
+        await marketplace.update_plugin(
+            update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "user", "sub": "dev-1"},
+        )
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_owner_can_edit_own_draft_allowed_field(monkeypatch):
+    ownership_row = {"submitted_by": "dev-1", "status": "draft"}
+    updated_row = {"id": "plugin-1", "display_name": "Better Name"}
+    conn = _FakeConn()
+    conn.fetchrow = AsyncMock(side_effect=[ownership_row, updated_row])
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+    monkeypatch.setattr(
+        marketplace, "row_to_plugin_response", lambda row: {"echo": row}
+    )
+
+    update = marketplace.PluginUpdate(display_name="Better Name")
+    result = await marketplace.update_plugin(
+        update,
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"role": "user", "sub": "dev-1"},
+    )
+
+    assert result == {"echo": updated_row}
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_owner_can_edit_own_rejected_submission(monkeypatch):
+    """REJECTED is editable too -- a developer fixing what a reviewer flagged
+    before resubmitting via POST .../submissions/{id}/submit."""
+    ownership_row = {"submitted_by": "dev-1", "status": "rejected"}
+    updated_row = {"id": "plugin-1", "description": "fixed per review notes"}
+    conn = _FakeConn()
+    conn.fetchrow = AsyncMock(side_effect=[ownership_row, updated_row])
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+    monkeypatch.setattr(
+        marketplace, "row_to_plugin_response", lambda row: {"echo": row}
+    )
+
+    update = marketplace.PluginUpdate(description="fixed per review notes")
+    result = await marketplace.update_plugin(
+        update,
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"role": "user", "sub": "dev-1"},
+    )
+
+    assert result == {"echo": updated_row}
