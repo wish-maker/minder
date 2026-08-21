@@ -19,7 +19,7 @@ Every accepted transition is validated against the state machine in
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from core.database import get_pool
@@ -99,20 +99,41 @@ async def _apply_transition(
                 if notes is not None:
                     params.append(notes)
                     sets.append(f"review_notes = ${len(params)}")
+                # Naive-UTC to match the naive TIMESTAMP columns (asyncpg rejects
+                # aware datetimes on `timestamp`); same convention as core/licensing.py.
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
                 if set_reviewer:
                     params.append(actor_sub)
                     sets.append(f"reviewed_by = ${len(params)}")
-                    params.append(datetime.utcnow())
+                    params.append(now)
                     sets.append(f"reviewed_at = ${len(params)}")
                 if to_status == SUBMITTED:
-                    params.append(datetime.utcnow())
+                    params.append(now)
                     sets.append(f"submitted_at = ${len(params)}")
 
+                # Compare-and-swap on the status we validated (#941): the
+                # SELECT above doesn't lock, so under READ COMMITTED a concurrent
+                # reviewer action could change status between our read and this
+                # write. Guarding the UPDATE with `AND status = from_status`
+                # makes the transition atomic — the loser of a race matches 0
+                # rows and gets a 409 (instead of silently clobbering the other
+                # transition and writing a bogus audit row).
+                params.append(from_status)
+                guard_idx = len(params)
                 updated = await conn.fetchrow(
                     f"UPDATE marketplace_plugins SET {', '.join(sets)} "
-                    f"WHERE id = $1 RETURNING {PLUGIN_COLUMNS}",
+                    f"WHERE id = $1 AND status = ${guard_idx} "
+                    f"RETURNING {PLUGIN_COLUMNS}",
                     *params,
                 )
+                if updated is None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            "Submission status changed concurrently; "
+                            "re-read and retry"
+                        ),
+                    )
                 await record_review(
                     conn,
                     plugin_id=plugin_id,

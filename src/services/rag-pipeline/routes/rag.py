@@ -971,6 +971,11 @@ async def share_conversation(
             status_code=403,
             detail="You can only share a conversation you started yourself",
         )
+    except Exception as e:
+        # A DB failure here is a 503 (backend down) / sanitized 500, matching
+        # every other backend-touching handler in this file (#234), not a raw
+        # unhandled 500.
+        raise backend_http_error(e, "Sharing conversation")
     return {"conversation_id": conversation_id, "shared": True}
 
 
@@ -999,9 +1004,14 @@ async def list_my_conversations(
         raise HTTPException(
             status_code=503, detail="Conversation history is not available"
         )
-    items, total = await state.conversation_repository.list_owned_conversations(
-        owner_user_id=current_user.get("sub", "anonymous"),
-        limit=limit,
-        offset=offset,
-    )
+    try:
+        items, total = await state.conversation_repository.list_owned_conversations(
+            owner_user_id=current_user.get("sub", "anonymous"),
+            limit=limit,
+            offset=offset,
+        )
+    except Exception as e:
+        # DB failure -> 503 / sanitized 500 like the rest of this file (#234),
+        # not a raw unhandled 500.
+        raise backend_http_error(e, "Listing conversations")
     return PaginatedList.from_page(items, total=total, limit=limit, offset=offset)

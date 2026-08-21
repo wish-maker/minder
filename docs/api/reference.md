@@ -103,6 +103,7 @@ misleading 504 well before the backend actually finished.
 | GET | `/v1/bundles` | plugin-registry (list, mirrors the `/v1/plugins` GET/wildcard split) |
 | GET/POST | `/v1/bundles/{path:path}` | plugin-registry's bundle control-plane (enable/disable/reconcile) — writes require JWT |
 | ANY | `/v1/rag/{path:path}` | rag-pipeline (prefix maps to the service root) — **long-timeout** |
+| ANY | `/v1/conversations/{path:path}` | rag-pipeline conversation-history bridge (#935) — a top-level prefix (not nested under `/v1/rag/*` or a pipeline id) since a conversation isn't pipeline-scoped. `GET /v1/conversations/mine` lists the caller's own conversations |
 | GET/POST | `/v1/models` | model-management `/models` (list / pull) — **long-timeout** |
 | ANY | `/v1/models/{path:path}` | model-management `/models/{path}` — the gateway adds the `models/` resource segment, so use `/v1/models/{id}` (not the old `/v1/models/models/{id}`) (#147) — **long-timeout** |
 | ANY | `/v1/marketplace/{path:path}` | marketplace (prefix forwarded as-is, matching plugin-registry) — no proxy route existed here at all until #402 |
@@ -129,7 +130,7 @@ yet (#145) — no UI for those.
 | GET | `/v1/ai/functions/definitions` | Aggregated AI-tool (function) definitions from all plugins, in OpenAI function schema. Deliberately open (no auth) — OpenWebUI's Tool Server integration has no way to attach a Minder JWT |
 | GET | `/v1/ai/tools/openapi.json` | OpenAPI 3.x spec of Minder's read-only (GET-only, #254) plugin tools, consumable directly as an OpenWebUI "Tool Server." Deliberately open, same reason as above — only ever includes GET-method tools, never mutating/admin ones |
 | POST | `/v1/ai/functions/{function_name}` | Execute a named AI tool; proxied to the plugin's endpoint (forwards the caller's JWT, if any), returned in OpenAI function-result format. Not independently auth-gated at this route — the downstream plugin endpoint enforces its own auth, so a mutating tool call without a valid JWT is rejected there |
-| POST | `/v1/ai/chat/completions` | Chat via Ollama. **Requires a valid Minder JWT** ([#613](https://github.com/wish-maker/minder/issues/613) — this endpoint calls Ollama directly with nothing else in the request path to gate it, unlike the tool-discovery/execution routes above). Plugin function-calling is **opt-in** via `"minder_tools": true` (the gateway offers plugin tools, executes the model's `tool_calls` against plugin actions forwarding the caller's JWT, and feeds results back). Without the flag it's a plain Ollama `/api/chat` passthrough |
+| POST | `/v1/ai/chat/completions` | Chat via Ollama. **Requires a valid Minder JWT** ([#613](https://github.com/wish-maker/minder/issues/613) — this endpoint calls Ollama directly with nothing else in the request path to gate it, unlike the tool-discovery/execution routes above). Plugin function-calling is **opt-in** via `"minder_tools": true` (the gateway offers plugin tools **plus one synthesized `ask_<pipeline-name>` tool per RAG pipeline** — the chat↔RAG bridge, #932 — executes the model's `tool_calls` forwarding the caller's JWT, and feeds results back). Without the flag it's a plain Ollama `/api/chat` passthrough |
 
 ### Ops
 
@@ -292,7 +293,7 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 | GET | `/v1/marketplace/plugins/featured` | Featured plugins |
 | GET | `/v1/marketplace/plugins/{plugin_id}` | Plugin details |
 | POST | `/v1/marketplace/plugins` | Create a catalog entry (called by plugin-registry) |
-| PUT | `/v1/marketplace/plugins/{plugin_id}` | Update catalog metadata (partial; display_name/description/pricing_model/base_tier/status/featured). 404 if unknown, 422 if empty |
+| PUT | `/v1/marketplace/plugins/{plugin_id}` | Update catalog metadata (partial; name/display_name/description/author/pricing_model/base_tier/featured/requires_services). 404 if unknown, 422 if empty. `status` is **not** updatable here (#939 — **422**, pointing at `/submissions/*`); a developer editing their own listing is limited to `draft`/`rejected` and cannot set `featured` |
 
 ### Installation management (`/v1/marketplace/plugins`)
 
@@ -308,6 +309,27 @@ PostgreSQL; the dependency/conflict graph is backed by **Neo4j**.
 > **Install used to 500 for every real user (#402, fixed)**: three independent bugs, found live on hantal, all in the install path. (1) `marketplace_installations.user_id` had a live FK to `marketplace_users`, a table nothing ever populated except one seed row (`user_id='admin'`) — any other user's install threw an unhandled `ForeignKeyViolationError`; fixed by dropping the constraint (`schema.sql`) — `user_id` here is just an opaque JWT-derived identifier, not a real relationship to a marketplace-specific user directory that was never wired up. (2) `InstallationResponse.user_id` had a UUID-only regex pattern rejecting real non-UUID ids. (3) `install_plugin` never `str()`-cast `plugin_id` before building the response — asyncpg returns UUID columns as `uuid.UUID` objects, and pydantic v2 doesn't coerce those into a `str` field. Each bug alone was enough to 500 the whole endpoint; all three had to be fixed before install actually worked.
 
 > **Browser UI**: the `client` service (#421, port 8009) has a `/plugins` page (the "Plugins" nav section's default tab, alongside Plugin Config) covering catalog browsing/search, install/uninstall/enable/disable, "My Installed Plugins," and a lazy dependency/conflict disclosure per plugin (#402).
+
+### Submission / review workflow (`/v1/marketplace/submissions`)
+
+The human side of the catalog (#402): a developer's listing is created as a `draft`
+via `POST /v1/marketplace/plugins`, then moves `draft → submitted → in_review →
+approved` (or `rejected`, and back to `submitted` on resubmit) before it becomes
+publicly visible. First-party auto-synced listings (`origin='first_party'`) skip this —
+they're created already `approved`. Every accepted transition is validated against the
+state machine (**409** on an illegal move) and appends an audit row. Developer actions
+are scoped to the caller's own submissions by the JWT `sub`; reviewer actions are
+admin-only.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/v1/marketplace/submissions/mine` | List the caller's own submissions (any status), newest first — scoped to the JWT `sub` |
+| POST | `/v1/marketplace/submissions/{plugin_id}/submit` | Developer (or admin/service): move an own `draft`/`rejected` submission to `submitted`. A non-owner gets **404** (same as unknown id) |
+| GET | `/v1/marketplace/submissions?status=submitted` | **Admin** review queue for a given status (default `submitted`), oldest-first; `origin='submitted'` only |
+| POST | `/v1/marketplace/submissions/{plugin_id}/claim` | **Admin**: `submitted → in_review` (records the reviewer) |
+| POST | `/v1/marketplace/submissions/{plugin_id}/approve` | **Admin**: `in_review → approved` (publicly visible via the catalog read paths) |
+| POST | `/v1/marketplace/submissions/{plugin_id}/reject` | **Admin**: `submitted`/`in_review` → `rejected`; `notes` **required** (**422** if missing) |
+| POST | `/v1/marketplace/submissions/{plugin_id}/archive` | **Admin/service**: `approved → archived` (delist) |
 
 ### AI-tool catalog (`/v1/marketplace/ai`)
 
@@ -433,6 +455,8 @@ reports what's active on the host. See [rag-methods.md](../rag-methods.md).
 | PATCH | `/pipeline/{pipeline_id}` | Update a pipeline's `name` and/or `knowledge_base_ids` in place (JWT-gated; 404 if the pipeline or a supplied KB is unknown). No more delete + recreate just to rename or re-point it |
 | DELETE | `/pipeline/{pipeline_id}` | Delete a pipeline (referenced KBs are left intact; 404 if unknown) |
 | POST | `/pipeline/{pipeline_id}/query` | Query a pipeline (retrieval + generation) |
+| POST | `/v1/pipeline/{pipeline_id}/conversations/{conversation_id}/share` | Mark a conversation shared so any authenticated user holding the `conversation_id` can continue it (#875). Owner-only (the true first-writer) — a non-owner → **403** |
+| GET | `/v1/conversations/mine` | List the caller's own conversation history — `{items, total, limit, offset}` envelope, newest first, owner-scoped (#934). Reached through the gateway at `/v1/conversations/mine` (#935) |
 | GET | `/health` | Service health |
 | GET | `/metrics` | Prometheus metrics |
 
