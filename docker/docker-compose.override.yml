@@ -14,6 +14,13 @@
 # ============================================================================
 
 services:
+  # Compose requires `services` to be a non-empty mapping — with every real
+  # override below commented out, an empty value here breaks bare
+  # `docker compose up` entirely ("services must be a mapping"). This {} entry
+  # on an always-present infra service is a guaranteed no-op merge that keeps
+  # the file valid; it is not one of the toggleable services below.
+  postgres: {}
+
   # Uncomment a service to re-expose its port on 0.0.0.0 (all interfaces).
   # Loopback (127.0.0.1:<port>) is already published by the main compose (#190).
 
