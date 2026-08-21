@@ -125,7 +125,7 @@ async def list_plugins(
             are always clamped to the public catalog regardless of what they
             pass here — see submissions.py for a developer's own submissions.
     """
-    is_privileged = bool(current_user) and current_user.get("role") in (
+    is_privileged = current_user is not None and current_user.get("role") in (
         "admin",
         "service",
     )
@@ -273,11 +273,13 @@ async def get_plugin(
         raise HTTPException(status_code=404, detail="Plugin not found")
 
     if plugin.status not in _PUBLIC_STATUSES:
-        is_privileged = bool(current_user) and current_user.get("role") in (
+        is_privileged = current_user is not None and current_user.get("role") in (
             "admin",
             "service",
         )
-        is_owner = bool(current_user) and current_user.get("sub") == plugin.submitted_by
+        is_owner = (
+            current_user is not None and current_user.get("sub") == plugin.submitted_by
+        )
         if not (is_privileged or is_owner):
             raise HTTPException(status_code=404, detail="Plugin not found")
 
