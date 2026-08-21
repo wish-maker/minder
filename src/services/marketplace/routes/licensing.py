@@ -1,9 +1,10 @@
 # services/marketplace/routes/licensing.py
 import logging
+from datetime import datetime, timezone
 
 from core.licensing import create_license, get_user_licenses, validate_license
 from core.validation import ensure_valid_plugin_id
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, field_validator
 
 from shared.auth.jwt_middleware import get_current_user, require_role_or_service
@@ -107,3 +108,37 @@ async def list_licenses(current_user: dict = Depends(get_current_user)):
     licenses = await get_user_licenses(current_user["sub"])
 
     return {"licenses": licenses, "count": len(licenses)}
+
+
+@router.get("/lookup")
+async def lookup_user_license(
+    user_id: str = Query(...),
+    plugin_id: str = Query(...),
+    current_user: dict = Depends(require_role_or_service("admin")),
+):
+    """Service/admin-only: the tier of a SPECIFIC user's currently-active
+    license for a SPECIFIC plugin, if any (#919).
+
+    Used by plugin-state-manager's tool-tier enforcement to check a caller's
+    real entitlement instead of the hardcoded "community" it used before this.
+    Gated the same way ``activate_license`` above is -- a regular user must
+    never be able to probe another user's license status by guessing their
+    user_id, so this is admin/service only, not a plain JWT-any-user route.
+    """
+    ensure_valid_plugin_id(plugin_id)
+    licenses = await get_user_licenses(user_id)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    match = next(
+        (
+            lic
+            for lic in licenses
+            if lic["plugin_id"] == plugin_id
+            and lic["active"]
+            and (
+                lic["valid_until"] is None
+                or datetime.fromisoformat(lic["valid_until"]) > now
+            )
+        ),
+        None,
+    )
+    return {"tier": match["tier"] if match else None, "active": match is not None}

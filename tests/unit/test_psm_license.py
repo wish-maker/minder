@@ -80,6 +80,19 @@ class _FakeAsyncClient:
         return _FakeResponse(self._json, self._status_code)
 
 
+def _sequential_client_factory(responses):
+    """validate_tool_access now makes TWO httpx calls (tool catalog, then the
+    #919 license lookup) -- each `async with httpx.AsyncClient(...)` call
+    needs its own canned response, in order."""
+    remaining = list(responses)
+
+    def factory(**_kw):
+        json_data, status_code = remaining.pop(0)
+        return _FakeAsyncClient(json_data=json_data, status_code=status_code)
+
+    return factory
+
+
 class _FakeConn:
     """Routes fetchrow by SQL text, same convention as test_psm_state_transitions.py."""
 
@@ -135,8 +148,18 @@ async def test_validate_tool_access_community_tool_allowed(monkeypatch, license_
     monkeypatch.setattr(
         license_mod.httpx,
         "AsyncClient",
-        lambda **kw: _FakeAsyncClient(
-            json_data={"tools": [{"required_tier": "community"}]}
+        _sequential_client_factory(
+            [
+                (
+                    {
+                        "tools": [
+                            {"required_tier": "community", "plugin_id": "plugin-1"}
+                        ]
+                    },
+                    200,
+                ),
+                ({"tier": None, "active": False}, 200),  # #919: no license, fine
+            ]
         ),
     )
     result = await license_mod.validate_tool_access(None, "user-1", "crypto_price")
@@ -151,12 +174,68 @@ async def test_validate_tool_access_pro_tool_denied_for_community_user(
     monkeypatch.setattr(
         license_mod.httpx,
         "AsyncClient",
-        lambda **kw: _FakeAsyncClient(json_data={"tools": [{"required_tier": "pro"}]}),
+        _sequential_client_factory(
+            [
+                ({"tools": [{"required_tier": "pro", "plugin_id": "plugin-1"}]}, 200),
+                # #919: the lookup succeeds but finds no active license for this
+                # user/plugin -- must still fall back to "community", not crash.
+                ({"tier": None, "active": False}, 200),
+            ]
+        ),
     )
     result = await license_mod.validate_tool_access(None, "user-1", "premium_tool")
     assert result["allowed"] is False
     assert result["tier_required"] == "pro"
+    assert result["user_tier"] == "community"
     assert "pro tier or higher" in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_validate_tool_access_pro_tool_allowed_with_a_real_pro_license(
+    monkeypatch, license_mod
+):
+    """#919: a user with an actual active pro license for this plugin must be
+    granted access to a pro-gated tool -- the bug this closes."""
+    monkeypatch.setattr(
+        license_mod.httpx,
+        "AsyncClient",
+        _sequential_client_factory(
+            [
+                ({"tools": [{"required_tier": "pro", "plugin_id": "plugin-1"}]}, 200),
+                ({"tier": "pro", "active": True}, 200),
+            ]
+        ),
+    )
+    result = await license_mod.validate_tool_access(None, "user-1", "premium_tool")
+    assert result["allowed"] is True
+    assert result["user_tier"] == "pro"
+    assert result["reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_validate_tool_access_license_lookup_failure_fails_closed(
+    monkeypatch, license_mod
+):
+    """A broken/unreachable license lookup must never fail-open a paid tool --
+    falls back to "community" exactly like the no-license-found case."""
+
+    def _raise_client(**_kw):
+        raise license_mod.httpx.ConnectError("marketplace unreachable")
+
+    call_count = {"n": 0}
+
+    def factory(**kw):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return _FakeAsyncClient(
+                json_data={"tools": [{"required_tier": "pro", "plugin_id": "plugin-1"}]}
+            )
+        return _raise_client(**kw)
+
+    monkeypatch.setattr(license_mod.httpx, "AsyncClient", factory)
+    result = await license_mod.validate_tool_access(None, "user-1", "premium_tool")
+    assert result["allowed"] is False
+    assert result["user_tier"] == "community"
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,17 @@ from shared.models.tiers import TIER_RANK, normalize_tier, tier_rank
 
 logger = logging.getLogger(__name__)
 
+# Trusted internal token for the service-to-service license lookup below (#919) --
+# same convention as plugin-registry/core/marketplace_sync.py's SERVICE_SYNC_TOKEN.
+# Sent as X-Service-Token; marketplace's /v1/marketplace/licenses/lookup accepts it
+# via require_role_or_service("admin"). Empty -> no header, the lookup 401s and the
+# caller falls back to "community" (fail-closed, see below).
+SERVICE_SYNC_TOKEN = os.environ.get("SERVICE_SYNC_TOKEN", "")
+
+
+def _service_headers() -> dict:
+    return {"X-Service-Token": SERVICE_SYNC_TOKEN} if SERVICE_SYNC_TOKEN else {}
+
 
 async def validate_tool_access(
     conn: asyncpg.Connection, user_id: str, tool_name: str
@@ -59,13 +70,38 @@ async def validate_tool_access(
 
         tool = tools[0]
         required_tier = tool.get("required_tier", "community")
+        plugin_id = tool.get("plugin_id")
 
-    # Get user's subscription tier.
-    # No user/subscription system exists yet (#47), so every caller is treated as
-    # the lowest real tier ("community"). This is FAIL CLOSED: pro/enterprise
-    # tools are denied to everyone until a real per-user tier lookup is wired in.
-    # `user_id` / `conn` are accepted now for a forward-compatible signature.
+    # Get the user's real license tier for this specific plugin (#919). Previously
+    # hardcoded to "community" for everyone -- no user/subscription system existed
+    # yet (#47). marketplace's marketplace_licenses table is the real per-user
+    # license store now (see routes/licensing.py); ask it directly rather than
+    # duplicating that state here. Any failure (network error, non-200, missing
+    # plugin_id, no active license) falls back to "community" -- this must stay
+    # FAIL CLOSED, never fail-open a paid tool because the lookup itself broke.
     user_tier = "community"
+    if plugin_id:
+        try:
+            async with httpx.AsyncClient(
+                timeout=settings.CATALOG_HTTP_TIMEOUT
+            ) as client:
+                lookup_response = await client.get(
+                    f"{settings.MARKETPLACE_URL}/v1/marketplace/licenses/lookup",
+                    params={"user_id": user_id, "plugin_id": plugin_id},
+                    headers=_service_headers(),
+                )
+            if lookup_response.status_code == 200:
+                looked_up_tier = lookup_response.json().get("tier")
+                if looked_up_tier:
+                    user_tier = looked_up_tier
+        except (httpx.HTTPError, ValueError) as e:
+            logger.warning(
+                "License lookup failed for user %s / plugin %s -- defaulting to "
+                "community (fail closed): %s",
+                user_id,
+                plugin_id,
+                e,
+            )
 
     # Rank comparison via the shared tier vocabulary (#142). normalize_tier maps the
     # legacy "professional" spelling to "pro"; a genuinely unknown required tier now
