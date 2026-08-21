@@ -481,6 +481,13 @@ _ROUTE_CASES = [
         False,
     ),
     ("proxy_to_rag_pipeline", {"path": "query"}, "rag_pipeline", "query", True),
+    (
+        "proxy_to_conversations",
+        {"path": "mine"},
+        "rag_pipeline",
+        "v1/conversations/mine",
+        True,
+    ),
     ("model_management_root", {}, "model_management", "models", True),
     (
         "proxy_to_model_management",

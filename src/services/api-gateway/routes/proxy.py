@@ -308,6 +308,30 @@ async def proxy_to_rag_pipeline(path: str, request: Request):
     )
 
 
+@router.api_route(
+    "/v1/conversations/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"]
+)
+async def proxy_to_conversations(path: str, request: Request):
+    """Proxy /v1/conversations/* to RAG Pipeline.
+
+    The conversation-history endpoints (e.g. GET /v1/conversations/mine, #934)
+    live on rag-pipeline under their own /v1/conversations/* path, not nested
+    under /v1/rag/* -- a conversation isn't scoped to a pipeline (see
+    list_my_conversations' own docstring), so it gets its own top-level proxy
+    route here rather than being folded into proxy_to_rag_pipeline above.
+    Without this, the client's Conversations page 404s at the gateway before
+    ever reaching rag-pipeline -- caught live on hantal, not by unit tests
+    (which mock the client's fetch layer and never exercise real routing)."""
+    _require_jwt_for_writes(request)
+    service_url = SERVICE_REGISTRY["rag_pipeline"]
+    return await proxy_request(
+        service_url,
+        f"v1/conversations/{path}",
+        request,
+        timeout=_LONG_OPERATION_TIMEOUT,
+    )
+
+
 # ============================================================================
 # Model Management
 # ============================================================================
