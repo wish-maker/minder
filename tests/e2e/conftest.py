@@ -65,6 +65,40 @@ NEO4J_PORT = os.environ.get("E2E_NEO4J_PORT", "7687")
 
 JWT_SECRET = "e2e-test-jwt-secret"
 
+
+def approve_plugin(gateway_url: str, plugin_id: str) -> None:
+    """Drive a freshly user-created plugin submission (`draft`) through the real
+    review workflow to `approved` so it becomes installable.
+
+    Install is gated on `status='approved'` (#938) — a user-created listing
+    starts as a `draft`, so an e2e flow that installs one must first take it
+    through submit → claim → approve. Uses an admin JWT minted against the
+    harness JWT_SECRET (same approach as test_bundle_management_functional.py,
+    since a real admin role is only ever granted via Authelia OIDC groups)."""
+    from datetime import datetime, timedelta, timezone
+
+    from jose import jwt
+
+    admin_token = jwt.encode(
+        {
+            "sub": "e2e-admin",
+            "username": "e2e-admin",
+            "role": "admin",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
+        },
+        JWT_SECRET,
+        algorithm="HS256",
+    )
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    for action in ("submit", "claim", "approve"):
+        r = httpx.post(
+            f"{gateway_url}/v1/marketplace/submissions/{plugin_id}/{action}",
+            headers=headers,
+            timeout=15.0,
+        )
+        assert r.status_code == 200, f"approve_plugin {action}: {r.text}"
+
+
 OLLAMA_PORT = 11434
 GATEWAY_PORT = 8000
 REGISTRY_PORT = 8001
