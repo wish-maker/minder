@@ -193,3 +193,146 @@ async def test_activate_license_maps_backend_error(monkeypatch):
 
     assert exc_info.value.status_code == 500
     assert "db unreachable" not in str(exc_info.value.detail)
+
+
+# ── GET /lookup: admin/service-only per-user tier lookup (#919) ─────────────
+
+
+def _lookup_route_dependency():
+    """The dependency callable FastAPI resolves for GET /lookup — the
+    require_role_or_service('admin') gate, same pattern as /activate's."""
+    route = next(
+        r
+        for r in licensing_routes.router.routes
+        if getattr(r, "path", "").endswith("/lookup")
+        and "GET" in (getattr(r, "methods", None) or set())
+    )
+    return route.dependant.dependencies[0].call
+
+
+@pytest.mark.asyncio
+async def test_lookup_gate_rejects_a_plain_user(monkeypatch):
+    """A regular user must not be able to probe another user's license status
+    by guessing their user_id -- admin/service only."""
+    from fastapi import HTTPException
+
+    gate = _lookup_route_dependency()
+    with pytest.raises(HTTPException) as exc:
+        await gate(user={"sub": "normal-user", "role": "user"})
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_lookup_gate_allows_admin_and_service(monkeypatch):
+    gate = _lookup_route_dependency()
+    admin = await gate(user={"sub": "an-admin", "role": "admin"})
+    assert admin["sub"] == "an-admin"
+    svc = await gate(user={"sub": "internal-service", "role": "service"})
+    assert svc["role"] == "service"
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_license_returns_matching_active_license_tier(
+    monkeypatch,
+):
+    get_user_licenses = AsyncMock(
+        return_value=[
+            {
+                "plugin_id": "11111111-1111-1111-1111-111111111111",
+                "tier": "pro",
+                "active": True,
+                "valid_until": None,
+            },
+            {
+                "plugin_id": "22222222-2222-2222-2222-222222222222",
+                "tier": "enterprise",
+                "active": True,
+                "valid_until": None,
+            },
+        ]
+    )
+    monkeypatch.setattr(licensing_routes, "get_user_licenses", get_user_licenses)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    result = await licensing_routes.lookup_user_license(
+        user_id="some-user",
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"sub": "internal-service", "role": "service"},
+    )
+
+    get_user_licenses.assert_awaited_once_with("some-user")
+    assert result == {"tier": "pro", "active": True}
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_license_no_matching_plugin_returns_null_tier(
+    monkeypatch,
+):
+    get_user_licenses = AsyncMock(
+        return_value=[
+            {
+                "plugin_id": "22222222-2222-2222-2222-222222222222",
+                "tier": "pro",
+                "active": True,
+                "valid_until": None,
+            }
+        ]
+    )
+    monkeypatch.setattr(licensing_routes, "get_user_licenses", get_user_licenses)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    result = await licensing_routes.lookup_user_license(
+        user_id="some-user",
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"sub": "internal-service", "role": "service"},
+    )
+
+    assert result == {"tier": None, "active": False}
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_license_ignores_an_inactive_license(monkeypatch):
+    get_user_licenses = AsyncMock(
+        return_value=[
+            {
+                "plugin_id": "11111111-1111-1111-1111-111111111111",
+                "tier": "pro",
+                "active": False,
+                "valid_until": None,
+            }
+        ]
+    )
+    monkeypatch.setattr(licensing_routes, "get_user_licenses", get_user_licenses)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    result = await licensing_routes.lookup_user_license(
+        user_id="some-user",
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"sub": "internal-service", "role": "service"},
+    )
+
+    assert result == {"tier": None, "active": False}
+
+
+@pytest.mark.asyncio
+async def test_lookup_user_license_ignores_an_expired_license(monkeypatch):
+    get_user_licenses = AsyncMock(
+        return_value=[
+            {
+                "plugin_id": "11111111-1111-1111-1111-111111111111",
+                "tier": "pro",
+                "active": True,
+                "valid_until": "2000-01-01T00:00:00",
+            }
+        ]
+    )
+    monkeypatch.setattr(licensing_routes, "get_user_licenses", get_user_licenses)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    result = await licensing_routes.lookup_user_license(
+        user_id="some-user",
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"sub": "internal-service", "role": "service"},
+    )
+
+    assert result == {"tier": None, "active": False}

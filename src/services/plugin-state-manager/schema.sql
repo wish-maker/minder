@@ -1,5 +1,5 @@
 -- plugin-state-manager database schema (issue #17)
--- Plugin state + default-plugin bootstrap + dependency graph + subscriptions.
+-- Plugin state + default-plugin bootstrap + dependency graph.
 
 CREATE TABLE IF NOT EXISTS plugin_states (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -39,14 +39,3 @@ CREATE TABLE IF NOT EXISTS plugin_dependencies (
     UNIQUE(plugin_name, depends_on)
 );
 
-CREATE TABLE IF NOT EXISTS user_subscriptions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id VARCHAR(255) UNIQUE NOT NULL,
-    tier VARCHAR(50) NOT NULL,
-    license_key VARCHAR(255),
-    valid_from TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    valid_until TIMESTAMP,
-    auto_renew BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
