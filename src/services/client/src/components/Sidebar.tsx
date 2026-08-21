@@ -39,6 +39,7 @@ const SECTIONS: NavSection[] = [
       { to: "/plugins/installed", label: "Installed Plugins" },
       { to: "/plugins/submissions", label: "Submit a Plugin" },
       { to: "/plugins/review", label: "Review Queue", adminOnly: true },
+      { to: "/plugins/licenses", label: "My Licenses" },
     ],
   },
   {
