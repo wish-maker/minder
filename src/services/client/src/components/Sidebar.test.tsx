@@ -1,10 +1,20 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
 
+// Mutable per test (like AvailablePluginsPage.test.tsx's mockAuth) so both
+// the non-admin (default) and admin (Review Queue visible) paths are covered.
+let mockAuth = { role: "" };
+vi.mock("../lib/auth", () => ({
+  useAuth: () => mockAuth,
+}));
+
 describe("Sidebar", () => {
+  beforeEach(() => {
+    mockAuth = { role: "" };
+  });
   afterEach(cleanup);
 
   it("links the wordmark to home and every section's nav items to their routes", () => {
@@ -99,5 +109,29 @@ describe("Sidebar", () => {
     expect(screen.getByText("Knowledge Bases").className).not.toContain(
       "bg-indigo-50",
     );
+  });
+
+  it("shows Submit a Plugin to everyone but hides Review Queue from a non-admin", () => {
+    render(
+      <MemoryRouter>
+        <Sidebar open={false} onNavigate={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Submit a Plugin")).toBeTruthy();
+    expect(screen.queryByText("Review Queue")).toBeNull();
+  });
+
+  it("shows Review Queue to an admin", () => {
+    mockAuth = { role: "admin" };
+    render(
+      <MemoryRouter>
+        <Sidebar open={false} onNavigate={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("Review Queue").closest("a")?.getAttribute("href"),
+    ).toBe("/plugins/review");
   });
 });

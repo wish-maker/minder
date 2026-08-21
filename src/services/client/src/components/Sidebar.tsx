@@ -1,5 +1,6 @@
 import { Link, NavLink } from "react-router-dom";
 
+import { useAuth } from "../lib/auth";
 import { sectionLabelClass } from "../lib/ui";
 
 interface NavItem {
@@ -7,6 +8,10 @@ interface NavItem {
   label: string;
   end?: boolean;
   dividerBefore?: boolean;
+  // Hidden from the nav entirely for a non-admin -- Review Queue's own
+  // GET /v1/marketplace/submissions 403s a non-admin anyway, so there's
+  // nothing behind the link for them to reach.
+  adminOnly?: boolean;
 }
 
 interface NavSection {
@@ -31,6 +36,8 @@ const SECTIONS: NavSection[] = [
     items: [
       { to: "/plugins/available", label: "Available Plugins" },
       { to: "/plugins/installed", label: "Installed Plugins" },
+      { to: "/plugins/submissions", label: "Submit a Plugin" },
+      { to: "/plugins/review", label: "Review Queue", adminOnly: true },
     ],
   },
   {
@@ -87,6 +94,9 @@ export function Sidebar({
   open: boolean;
   onNavigate: () => void;
 }) {
+  const { role } = useAuth();
+  const isAdmin = role === "admin";
+
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 w-60 flex-shrink-0 transform overflow-y-auto border-r border-gray-200 bg-white p-4 transition-transform duration-200 dark:border-gray-800 dark:bg-gray-950 lg:static lg:translate-x-0 ${
@@ -107,21 +117,23 @@ export function Sidebar({
               <span aria-hidden="true">{section.icon}</span> {section.label}
             </p>
             <div className="flex flex-col gap-0.5">
-              {section.items.map((item) => (
-                <div key={item.to}>
-                  {item.dividerBefore && (
-                    <div className="my-1.5 border-t border-gray-100 dark:border-gray-800" />
-                  )}
-                  <NavLink
-                    to={item.to}
-                    end={item.end}
-                    onClick={onNavigate}
-                    className={linkClass}
-                  >
-                    {item.label}
-                  </NavLink>
-                </div>
-              ))}
+              {section.items
+                .filter((item) => !item.adminOnly || isAdmin)
+                .map((item) => (
+                  <div key={item.to}>
+                    {item.dividerBefore && (
+                      <div className="my-1.5 border-t border-gray-100 dark:border-gray-800" />
+                    )}
+                    <NavLink
+                      to={item.to}
+                      end={item.end}
+                      onClick={onNavigate}
+                      className={linkClass}
+                    >
+                      {item.label}
+                    </NavLink>
+                  </div>
+                ))}
             </div>
           </div>
         ))}

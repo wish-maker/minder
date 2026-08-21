@@ -20,7 +20,9 @@ import { KnowledgeBasesPage } from "./pages/KnowledgeBasesPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ModelManagementPage } from "./pages/ModelManagementPage";
 import { RagPipelinesPage } from "./pages/RagPipelinesPage";
+import { ReviewQueuePage } from "./pages/ReviewQueuePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SubmissionsPage } from "./pages/SubmissionsPage";
 import { StatusPage } from "./pages/StatusPage";
 import { VoicePage } from "./pages/VoicePage";
 
@@ -83,6 +85,11 @@ export function App() {
                   path="/plugins/installed"
                   element={<InstalledPluginsPage />}
                 />
+                <Route
+                  path="/plugins/submissions"
+                  element={<SubmissionsPage />}
+                />
+                <Route path="/plugins/review" element={<ReviewQueuePage />} />
 
                 <Route
                   path="/ai-tools"
