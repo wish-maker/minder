@@ -217,6 +217,31 @@ async def test_illegal_transition_is_409(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_concurrent_transition_loses_the_cas_and_409s(monkeypatch):
+    """#941: the status validated by the SELECT was changed by a concurrent
+    reviewer action before our UPDATE. The compare-and-swap (`AND status =
+    from_status`) matches 0 rows -> None -> 409, and NO audit row is written."""
+    from fastapi import HTTPException
+
+    conn = _Conn(
+        status_row={
+            "status": "submitted",
+            "submitted_by": "alice",
+            "origin": "submitted",
+        },
+        updated_row=None,  # UPDATE ... AND status=from_status matched nothing
+    )
+    _patch_pool(monkeypatch, conn)
+
+    with pytest.raises(HTTPException) as exc:
+        await submissions.claim_review(
+            PID, current_user={"sub": "admin-1", "role": "admin"}
+        )
+    assert exc.value.status_code == 409
+    assert conn.executed == []  # audit row is written only after a successful CAS
+
+
+@pytest.mark.asyncio
 async def test_transition_on_unknown_plugin_is_404(monkeypatch):
     from fastapi import HTTPException
 

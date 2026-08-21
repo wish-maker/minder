@@ -212,6 +212,41 @@ async def test_chat_with_tools_unknown_tool_name_feeds_back_an_error(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_chat_with_tools_caps_tool_calls_per_turn(monkeypatch):
+    """#942: a single model turn returning a huge number of tool_calls must not
+    fan out unboundedly — only MAX_TOOL_CALLS_PER_TURN are honoured."""
+    invoked = {"n": 0}
+
+    async def fake_ollama_chat(body):
+        # First turn: model asks for way more tool calls than the cap.
+        if invoked["n"] == 0:
+            return {
+                "message": {
+                    "tool_calls": [
+                        {"function": {"name": "get_price", "arguments": {}}}
+                        for _ in range(ai.MAX_TOOL_CALLS_PER_TURN + 25)
+                    ]
+                }
+            }
+        return {"message": {"content": "done"}}
+
+    async def fake_call_plugin_tool(meta, json_body, params, auth_header):
+        invoked["n"] += 1
+        return {"ok": True}
+
+    monkeypatch.setattr(ai, "_ollama_chat", fake_ollama_chat)
+    monkeypatch.setattr(ai, "get_tool_definitions", _fake_defs_with_one_tool())
+    monkeypatch.setattr(ai, "_call_plugin_tool", fake_call_plugin_tool)
+
+    result = await ai._chat_with_tools({"messages": []}, None)
+
+    assert result["message"]["content"] == "done"
+    # Exactly the cap ran, not the 33 the model asked for.
+    assert invoked["n"] == ai.MAX_TOOL_CALLS_PER_TURN
+    assert result["minder_tool_calls_made"] == ai.MAX_TOOL_CALLS_PER_TURN
+
+
+@pytest.mark.asyncio
 async def test_chat_with_tools_401_from_tool_appends_auth_hint(monkeypatch):
     calls = {"n": 0}
 

@@ -153,7 +153,11 @@ def _uuid_row(plugin_id, **overrides):
 @pytest.mark.asyncio
 async def test_new_installation_does_not_500_on_uuid_plugin_id(monkeypatch):
     plugin_id = str(uuid.uuid4())
-    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    plugin_row = {
+        "id": uuid.UUID(plugin_id),
+        "name": "test-plugin",
+        "status": "approved",
+    }
     insert_row = _uuid_row(uuid.UUID(plugin_id))
     conn = _FakeConn(plugin_row, existing_row=None, insert_row=insert_row)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
@@ -169,7 +173,11 @@ async def test_new_installation_does_not_500_on_uuid_plugin_id(monkeypatch):
 @pytest.mark.asyncio
 async def test_reinstall_existing_does_not_500_on_uuid_plugin_id(monkeypatch):
     plugin_id = str(uuid.uuid4())
-    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    plugin_row = {
+        "id": uuid.UUID(plugin_id),
+        "name": "test-plugin",
+        "status": "approved",
+    }
     existing_row = _uuid_row(uuid.UUID(plugin_id))
     conn = _FakeConn(plugin_row, existing_row=existing_row, insert_row=None)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
@@ -188,7 +196,11 @@ async def test_install_rejected_once_user_hits_max_plugins_per_user(monkeypatch)
     a single user could install every plugin in the catalog with no limit."""
     monkeypatch.setattr(management.settings, "MAX_PLUGINS_PER_USER", 2)
     plugin_id = str(uuid.uuid4())
-    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    plugin_row = {
+        "id": uuid.UUID(plugin_id),
+        "name": "test-plugin",
+        "status": "approved",
+    }
     conn = _FakeConn(plugin_row, existing_row=None, insert_row=None, install_count=2)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
@@ -207,7 +219,11 @@ async def test_install_rejected_once_user_hits_max_plugins_per_user(monkeypatch)
 async def test_install_allowed_when_under_max_plugins_per_user(monkeypatch):
     monkeypatch.setattr(management.settings, "MAX_PLUGINS_PER_USER", 2)
     plugin_id = str(uuid.uuid4())
-    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    plugin_row = {
+        "id": uuid.UUID(plugin_id),
+        "name": "test-plugin",
+        "status": "approved",
+    }
     insert_row = _uuid_row(uuid.UUID(plugin_id))
     conn = _FakeConn(
         plugin_row, existing_row=None, insert_row=insert_row, install_count=1
@@ -222,6 +238,29 @@ async def test_install_allowed_when_under_max_plugins_per_user(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status", ["draft", "submitted", "in_review", "rejected", "archived"]
+)
+async def test_install_rejects_a_non_approved_plugin_with_404(monkeypatch, status):
+    """#938: only an `approved` listing is installable. A draft/rejected/
+    archived plugin is hidden on read; install must 404 it too (not reveal it
+    exists), rather than let anyone with the id install an unapproved listing."""
+    from fastapi import HTTPException
+
+    plugin_id = str(uuid.uuid4())
+    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin", "status": status}
+    conn = _FakeConn(plugin_row, existing_row=None, insert_row=None)
+    monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
+
+    with pytest.raises(HTTPException) as exc:
+        await management.install_plugin(
+            current_user={"sub": "4"}, plugin_id=plugin_id, neo4j=_FakeNeo4j()
+        )
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_reinstall_of_existing_plugin_is_not_capped_by_max_plugins_per_user(
     monkeypatch,
 ):
@@ -229,7 +268,11 @@ async def test_reinstall_of_existing_plugin_is_not_capped_by_max_plugins_per_use
     be blocked by the cap -- it doesn't add a new installation row."""
     monkeypatch.setattr(management.settings, "MAX_PLUGINS_PER_USER", 1)
     plugin_id = str(uuid.uuid4())
-    plugin_row = {"id": uuid.UUID(plugin_id), "name": "test-plugin"}
+    plugin_row = {
+        "id": uuid.UUID(plugin_id),
+        "name": "test-plugin",
+        "status": "approved",
+    }
     existing_row = _uuid_row(uuid.UUID(plugin_id))
     # install_count would be over the (artificially low) cap if this path
     # incorrectly re-checked it -- proves the existing-row branch returns

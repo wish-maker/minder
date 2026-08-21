@@ -15,6 +15,8 @@ import uuid
 import httpx
 import pytest
 
+from tests.e2e.conftest import approve_plugin
+
 
 @pytest.fixture(scope="module")
 def auth_token(live_stack):
@@ -56,7 +58,11 @@ def plugin_id(live_stack, auth_token):
         timeout=15.0,
     )
     assert r.status_code == 201, r.text
-    return r.json()["id"]
+    pid = r.json()["id"]
+    # A user-created listing is a `draft`; install is gated on `approved` (#938),
+    # so take it through the real review workflow before the install tests run.
+    approve_plugin(live_stack.gateway_url, pid)
+    return pid
 
 
 def test_list_plugins_through_gateway(live_stack):

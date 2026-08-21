@@ -187,7 +187,7 @@ class ConversationRepository:
                     SELECT question, answer, timestamp, metadata
                     FROM conversation_turns
                     WHERE user_id = $1 AND conversation_id = $2
-                    ORDER BY timestamp DESC
+                    ORDER BY timestamp DESC, id DESC
                     LIMIT $3
                     """,
                     user_id,
@@ -275,14 +275,45 @@ class ConversationRepository:
 
         try:
             async with self.db_pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    DELETE FROM conversation_turns
-                    WHERE user_id = $1 AND conversation_id = $2
-                    """,
-                    user_id,
-                    conversation_id,
-                )
+                async with conn.transaction():
+                    await conn.execute(
+                        """
+                        DELETE FROM conversation_turns
+                        WHERE user_id = $1 AND conversation_id = $2
+                        """,
+                        user_id,
+                        conversation_id,
+                    )
+                    # Reclaim the owner/share rows once the conversation_id has
+                    # no turns left at all -- otherwise a cleared conversation
+                    # keeps a stale owner row (inflating /mine's total, #940) and
+                    # a stale share row silently redirects a later fresh turn to
+                    # the old owner's bucket (resolve_storage_user_id). Guarded on
+                    # "no turns remain" so clearing one user's private turns under
+                    # a collided id doesn't drop another user's still-live thread.
+                    # Mirrors cleanup_expired's reclamation, scoped to this id.
+                    await conn.execute(
+                        """
+                        DELETE FROM conversation_shares
+                        WHERE conversation_id = $1
+                          AND NOT EXISTS (
+                              SELECT 1 FROM conversation_turns
+                              WHERE conversation_id = $1
+                          )
+                        """,
+                        conversation_id,
+                    )
+                    await conn.execute(
+                        """
+                        DELETE FROM conversation_owners
+                        WHERE conversation_id = $1
+                          AND NOT EXISTS (
+                              SELECT 1 FROM conversation_turns
+                              WHERE conversation_id = $1
+                          )
+                        """,
+                        conversation_id,
+                    )
 
             logger.info(f"🗑️ Cleared conversation: {user_id}:{conversation_id}")
             return True
@@ -358,10 +389,34 @@ class ConversationRepository:
 
         try:
             async with self.db_pool.acquire() as conn:
+                # `total` must match the reachable item set exactly: count only
+                # owner rows that still have a turn stored under the OWNER's own
+                # id. Without the EXISTS guard, an owner row whose turns were
+                # cleared/expired (or captured under a colliding id by another
+                # user) inflates `total` past what the INNER LATERAL below can
+                # ever return -> a short/empty last page while `total` insists
+                # more exist (#940).
                 total = await conn.fetchval(
-                    "SELECT COUNT(*) FROM conversation_owners WHERE owner_user_id = $1",
+                    """
+                    SELECT COUNT(*)
+                    FROM conversation_owners co
+                    WHERE co.owner_user_id = $1
+                      AND EXISTS (
+                          SELECT 1 FROM conversation_turns ct
+                          WHERE ct.conversation_id = co.conversation_id
+                            AND ct.user_id = co.owner_user_id
+                      )
+                    """,
                     owner_user_id,
                 )
+                # The LATERAL is scoped to `ct.user_id = co.owner_user_id`, NOT
+                # conversation_id alone: conversation_id is client-supplied and
+                # globally-namespaced, so a different user's private turn under
+                # the same id must never surface as this owner's snippet (#937).
+                # A shared conversation's turns are all stored under the owner id
+                # (resolve_storage_user_id), so the owner still sees them.
+                # `ct.id`/`co.conversation_id` tiebreakers make paging
+                # deterministic when timestamps collide.
                 rows = await conn.fetch(
                     """
                     SELECT co.conversation_id AS conversation_id,
@@ -372,11 +427,12 @@ class ConversationRepository:
                         SELECT ct.question, ct.timestamp
                         FROM conversation_turns ct
                         WHERE ct.conversation_id = co.conversation_id
-                        ORDER BY ct.timestamp DESC
+                          AND ct.user_id = co.owner_user_id
+                        ORDER BY ct.timestamp DESC, ct.id DESC
                         LIMIT 1
                     ) latest ON TRUE
                     WHERE co.owner_user_id = $1
-                    ORDER BY latest.timestamp DESC
+                    ORDER BY latest.timestamp DESC, co.conversation_id
                     LIMIT $2 OFFSET $3
                     """,
                     owner_user_id,

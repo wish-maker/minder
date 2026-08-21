@@ -87,12 +87,19 @@ class _FakeConn:
             for conversation_id, owner in self._owners.items():
                 if owner != owner_user_id:
                     continue
+                # Scoped to the owner's OWN turns (ct.user_id = co.owner_user_id),
+                # matching the fixed LATERAL -- a colliding turn stored under the
+                # same conversation_id by a different user must never surface as
+                # this owner's snippet (#937).
                 conv_turns = [
-                    t for t in self._turns if t["conversation_id"] == conversation_id
+                    t
+                    for t in self._turns
+                    if t["conversation_id"] == conversation_id
+                    and t["user_id"] == owner_user_id
                 ]
                 if not conv_turns:
                     continue
-                latest = max(conv_turns, key=lambda t: t["timestamp"])
+                latest = max(conv_turns, key=lambda t: (t["timestamp"], t.get("id", 0)))
                 rows.append(
                     {
                         "conversation_id": conversation_id,
@@ -127,7 +134,18 @@ class _FakeConn:
             raise self._raises
         if "COUNT(*)" in query.upper() and "conversation_owners" in query:
             (owner_user_id,) = params
-            return sum(1 for owner in self._owners.values() if owner == owner_user_id)
+            # Only count owner rows that still have a turn under the owner's own
+            # id -- consistent with the reachable item set (#940).
+            return sum(
+                1
+                for conversation_id, owner in self._owners.items()
+                if owner == owner_user_id
+                and any(
+                    t["conversation_id"] == conversation_id
+                    and t["user_id"] == owner_user_id
+                    for t in self._turns
+                )
+            )
         return None
 
     async def fetchrow(self, query, *params):
@@ -173,6 +191,19 @@ class _FakeConn:
                     "metadata": json.loads(metadata),
                 }
             )
+        elif "DELETE FROM conversation_turns" in query and "user_id" in query:
+            # clear_conversation form: DELETE ... WHERE user_id=$1 AND
+            # conversation_id=$2. (The ttl-based expire delete in
+            # cleanup_expired, WHERE timestamp<..., is deliberately NOT modeled
+            # -- those tests rely on their seeded turns staying put.)
+            user_id, conversation_id = params
+            self._turns = [
+                t
+                for t in self._turns
+                if not (
+                    t["user_id"] == user_id and t["conversation_id"] == conversation_id
+                )
+            ]
         elif "DELETE FROM conversation_shares" in query:
             live = {t["conversation_id"] for t in self._turns}
             self._shares = {k: v for k, v in self._shares.items() if k in live}
@@ -350,9 +381,66 @@ class TestClearConversation:
         repo = ConversationRepository(pool)
         cleared = asyncio.run(repo.clear_conversation("u", "c"))
         assert cleared is True
-        [params] = pool._conn.execute_calls
-        assert params == ("u", "c")
+        # Three statements now: delete the turns, then reclaim the owner/share
+        # rows once the conversation_id has no turns left (#940).
+        turns_delete, *reclaim = pool._conn.execute_calls
+        assert turns_delete == ("u", "c")
+        assert all(p == ("c",) for p in reclaim)
         assert "DELETE" in pool._conn.last_query.upper()
+
+    def test_reclaims_owner_and_share_rows_once_the_conversation_is_emptied(self):
+        """#940: clearing a conversation's last turns must also drop its
+        conversation_owners/conversation_shares rows, else /mine's total is
+        inflated and a stale share row redirects a later fresh turn to the old
+        owner's bucket."""
+        turns = [
+            {
+                "user_id": "u",
+                "conversation_id": "c",
+                "question": "q",
+                "answer": "a",
+                "timestamp": 1,
+                "metadata": {},
+            }
+        ]
+        pool = _FakePool(turns, owners={"c": "u"}, shares={"c": "u"})
+        repo = ConversationRepository(pool)
+
+        asyncio.run(repo.clear_conversation("u", "c"))
+
+        assert pool._conn._owners == {}
+        assert pool._conn._shares == {}
+
+    def test_keeps_owner_row_when_another_users_turn_survives_under_a_collided_id(
+        self,
+    ):
+        """Guard: clearing user u's private turns under a client-supplied id
+        that a different user also used must NOT reclaim the owner/share rows
+        while that other user's thread still has turns."""
+        turns = [
+            {
+                "user_id": "u",
+                "conversation_id": "c",
+                "question": "q",
+                "answer": "a",
+                "timestamp": 1,
+                "metadata": {},
+            },
+            {
+                "user_id": "other",
+                "conversation_id": "c",
+                "question": "q2",
+                "answer": "a2",
+                "timestamp": 2,
+                "metadata": {},
+            },
+        ]
+        pool = _FakePool(turns, owners={"c": "u"}, shares={})
+        repo = ConversationRepository(pool)
+
+        asyncio.run(repo.clear_conversation("u", "c"))
+
+        assert pool._conn._owners == {"c": "u"}
 
     def test_wraps_a_database_failure_as_runtimeerror(self):
         pool = _FakePool(raises=ConnectionError("db down"))
@@ -599,6 +687,59 @@ class TestListOwnedConversations:
         repo = ConversationRepository(pool)
 
         items, total = asyncio.run(repo.list_owned_conversations("bob"))
+        assert items == []
+        assert total == 0
+
+    def test_snippet_never_leaks_another_users_turn_under_a_collided_id(self):
+        """#937: conversation_id is client-supplied/global, so a second user can
+        store a private turn under an id alice already owns. alice's snippet
+        must be HER latest turn, never bob's private one."""
+        turns = [
+            {
+                "user_id": "alice",
+                "conversation_id": "chat-1",
+                "question": "alice's own question",
+                "answer": "a",
+                "timestamp": 1,
+                "metadata": {},
+            },
+            {
+                "user_id": "bob",
+                "conversation_id": "chat-1",
+                "question": "bob's PRIVATE question",
+                "answer": "b",
+                "timestamp": 9,  # more recent than alice's
+                "metadata": {},
+            },
+        ]
+        pool = _FakePool(turns, owners={"chat-1": "alice"})
+        repo = ConversationRepository(pool)
+
+        items, total = asyncio.run(repo.list_owned_conversations("alice"))
+
+        assert total == 1
+        assert items[0]["snippet"] == "alice's own question"
+        assert "bob" not in items[0]["snippet"]
+
+    def test_owner_row_with_only_a_foreign_turn_is_excluded_and_uncounted(self):
+        """If the ONLY turn under an owned id belongs to a different user
+        (collision), the owner sees nothing for it and `total` doesn't count
+        it -- items and total stay consistent (#937/#940)."""
+        turns = [
+            {
+                "user_id": "bob",
+                "conversation_id": "chat-1",
+                "question": "bob's private question",
+                "answer": "b",
+                "timestamp": 1,
+                "metadata": {},
+            },
+        ]
+        pool = _FakePool(turns, owners={"chat-1": "alice"})
+        repo = ConversationRepository(pool)
+
+        items, total = asyncio.run(repo.list_owned_conversations("alice"))
+
         assert items == []
         assert total == 0
 

@@ -379,6 +379,11 @@ async def _ollama_chat(body: Dict) -> Dict:
 
 
 MAX_TOOL_ITERATIONS = 5
+# Cap the tool calls honoured per model turn (#942): MAX_TOOL_ITERATIONS bounds
+# the outer loop, but a single (possibly malformed/adversarial) model response
+# can carry an arbitrary number of tool_calls, each a downstream request with
+# its own timeout — an unbounded fan-out driven by untrusted model output.
+MAX_TOOL_CALLS_PER_TURN = 8
 
 
 def _normalize_tool_args(args: object) -> Dict:
@@ -479,6 +484,12 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
                 return resp
             tool_calls = [synthetic]
         messages.append(message)
+        if len(tool_calls) > MAX_TOOL_CALLS_PER_TURN:
+            logger.warning(
+                f"Model requested {len(tool_calls)} tool calls in one turn; "
+                f"honouring the first {MAX_TOOL_CALLS_PER_TURN} and dropping the rest"
+            )
+            tool_calls = tool_calls[:MAX_TOOL_CALLS_PER_TURN]
         for call in tool_calls:
             tool_call_count += 1
             fn = call.get("function", {})
