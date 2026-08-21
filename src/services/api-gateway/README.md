@@ -53,7 +53,12 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
   (Ollama chat; plugin function-calling is opt-in via `"minder_tools": true` —
   the gateway offers plugin tools, executes the model's `tool_calls` forwarding
   the caller's JWT, and feeds results back), plus `/v1/ai/functions/definitions`
-  and `/v1/ai/functions/{name}`.
+  and `/v1/ai/functions/{name}`. The function-calling tool list is plugin
+  tools **plus** one synthesized `ask_<pipeline-name>` function per RAG
+  pipeline (fetched from rag-pipeline's `GET /v1/pipeline`, same 60s cache) —
+  the chat<->RAG bridge: OpenWebUI's own chat can call `ask_<pipeline-name>`
+  the same way it calls a plugin tool, dispatched to that pipeline's
+  `POST /v1/pipeline/{id}/query` with the caller's JWT forwarded.
 - **Ops** (`routes/health.py`): `/health`, `/v1/status` (fan-out, never 500s
   even if every downstream is down), `/v1/containers/{name}/logs` (JWT-gated,
   allowlisted, via the docker-socket-proxy), `/metrics`.
