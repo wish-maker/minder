@@ -63,6 +63,16 @@ HOSTS = {
         "chain": ";",
         "get_pty": False,
     },
+    # dev2-claude: a Linux dev box on the tailnet (reached by tailnet IP; not
+    # running the Tailscale SSH server, so plain password SSH). Checkout lives at
+    # /opt/workspace/minder, not /root/minder.
+    "dev2": {
+        "prefix": "DEV2",
+        "auth": "password",
+        "shell": "raw",
+        "chain": "&&",
+        "get_pty": True,
+    },
 }
 
 
