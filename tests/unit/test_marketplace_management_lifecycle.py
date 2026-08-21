@@ -226,7 +226,7 @@ async def test_install_plugin_fresh_install_lands_enabled_when_no_dependency(
     monkeypatch,
 ):
     plugin_id = str(uuid.uuid4())
-    conn = _FakeConn(plugin_row={"id": plugin_id}, existing_row=None)
+    conn = _FakeConn(plugin_row={"id": plugin_id, "status": "approved"}, existing_row=None)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
 
     result = await management.install_plugin(
@@ -241,7 +241,7 @@ async def test_install_plugin_fresh_install_lands_enabled_when_no_dependency(
 async def test_install_plugin_rejects_when_dependency_never_installed(monkeypatch):
     plugin_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
-    conn = _FakeConn(plugin_row={"id": plugin_id}, existing_row=None)
+    conn = _FakeConn(plugin_row={"id": plugin_id, "status": "approved"}, existing_row=None)
     monkeypatch.setattr(management, "get_pool", AsyncMock(return_value=_FakePool(conn)))
     neo4j = _FakeNeo4j(dependencies=[{"plugin_id": dep_id, "name": "telegraf"}])
 
@@ -263,7 +263,7 @@ async def test_install_plugin_succeeds_and_auto_enables_installed_dependency(
     plugin_id = str(uuid.uuid4())
     dep_id = str(uuid.uuid4())
     conn = _FakeConn(
-        plugin_row={"id": plugin_id},
+        plugin_row={"id": plugin_id, "status": "approved"},
         existing_row=None,
         dep_rows=[_dep_installation_row(dep_id, enabled=False)],
     )
@@ -293,7 +293,7 @@ async def test_install_plugin_reinstall_rejects_when_dependency_disabled_since(
     dep_id = str(uuid.uuid4())
     existing = _installation_row(plugin_id, status="uninstalled", enabled=False)
     conn = _FakeConn(
-        plugin_row={"id": plugin_id},
+        plugin_row={"id": plugin_id, "status": "approved"},
         existing_row=existing,
         dep_rows=[_dep_installation_row(dep_id, enabled=False)],
     )

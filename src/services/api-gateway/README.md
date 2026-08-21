@@ -39,10 +39,13 @@ DB_PASSWORD=x JWT_SECRET=<32ch> REDIS_PASSWORD=x python -m pytest tests/unit/tes
 - **Proxy** (`routes/proxy.py`): httpx passthrough to the downstreams. Reads
   (GET) are open (Authelia's job at the edge, #15); **writes (POST/PUT/DELETE/
   PATCH) require a valid JWT** (`_require_jwt_for_writes`, #47). Path prefixes:
-  `/v1/rag/*` → rag-pipeline, `/v1/plugins/*` → plugin-registry, `/v1/models/*` →
-  model-management, `/v1/marketplace/*` → marketplace, `/v1/tools/*` +
-  `/v1/licensing/*` → plugin-state-manager, `/v1/bundles/*` + `/v1/containers/*` →
-  plugin-registry, `/v1/tts|stt` → tts-stt, `/v1/graph-rag/*` → graph-rag. A malformed downstream
+  `/v1/rag/*` + `/v1/conversations/*` → rag-pipeline (`/v1/conversations/*` is the
+  conversation-history bridge, #935 — not nested under a pipeline id since a
+  conversation isn't pipeline-scoped), `/v1/plugins/*` → plugin-registry,
+  `/v1/models/*` → model-management, `/v1/marketplace/*` → marketplace,
+  `/v1/tools/*` + `/v1/licensing/*` → plugin-state-manager, `/v1/bundles/*` +
+  `/v1/containers/*` → plugin-registry, `/v1/tts|stt` → tts-stt, `/v1/graph-rag/*`
+  → graph-rag. A malformed downstream
   path 404s cleanly; an unreachable downstream → 503 (never a hang). Every
   proxied request body is capped at `MAX_PROXY_BODY_SIZE_MB` (default 150MB,
   **413** once exceeded) — a gateway-level ceiling above every real downstream

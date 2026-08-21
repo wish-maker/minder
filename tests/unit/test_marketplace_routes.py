@@ -593,7 +593,9 @@ async def test_update_plugin_404s_for_a_non_owner_non_admin_caller(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_plugin_rejects_self_approval_of_own_draft(monkeypatch):
     """The bug this closes: a developer PUTting status='approved' on their own
-    draft, completely bypassing the submit/claim/review workflow."""
+    draft, completely bypassing the submit/claim/review workflow. #939: `status`
+    is now not updatable via PUT by ANYONE (rejected 422 before the ownership
+    check), so this can't reach the raw UPDATE regardless of role."""
     conn = _FakeConn()
     conn.fetchrow = AsyncMock(return_value={"submitted_by": "dev-1", "status": "draft"})
     monkeypatch.setattr(
@@ -607,7 +609,28 @@ async def test_update_plugin_rejects_self_approval_of_own_draft(monkeypatch):
             plugin_id="11111111-1111-1111-1111-111111111111",
             current_user={"role": "user", "sub": "dev-1"},
         )
-    assert exc_info.value.status_code == 403
+    assert exc_info.value.status_code == 422
+    assert "status is not updatable" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_update_plugin_rejects_admin_setting_status_via_put(monkeypatch):
+    """#939: even an admin can't set status via PUT — that bypassed the state
+    machine + audit trail. Admin status moves go through /submissions/*."""
+    conn = _FakeConn()
+    monkeypatch.setattr(
+        marketplace, "get_pool", AsyncMock(return_value=_FakePool(conn))
+    )
+
+    update = marketplace.PluginUpdate(status=marketplace.PluginStatus.APPROVED)
+    with pytest.raises(Exception) as exc_info:
+        await marketplace.update_plugin(
+            update,
+            plugin_id="11111111-1111-1111-1111-111111111111",
+            current_user={"role": "admin", "sub": "admin-1"},
+        )
+    assert exc_info.value.status_code == 422
+    assert "status is not updatable" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

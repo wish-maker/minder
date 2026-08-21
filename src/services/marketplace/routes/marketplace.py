@@ -40,6 +40,14 @@ _PUBLIC_STATUSES = {"approved", "pending"}
 
 # Fields a PUT /plugins/{id} may change (whitelist → safe to interpolate as column
 # names; values always go through bound parameters).
+#
+# `status` is deliberately NOT here (#939): every legal status move has a
+# dedicated endpoint under /v1/marketplace/submissions/* that validates the
+# transition against the state machine and writes an audit row. Letting PUT set
+# `status` directly (an admin fell through to the raw UPDATE) bypassed BOTH —
+# permitting illegal moves (draft→approved, archived→approved) with no audit
+# trail. The registry auto-sync's PUT never sends `status` either, so nothing
+# legitimate relies on it being updatable here.
 _PLUGIN_UPDATABLE = {
     "name",
     "display_name",
@@ -47,7 +55,6 @@ _PLUGIN_UPDATABLE = {
     "author",
     "pricing_model",
     "base_tier",
-    "status",
     "featured",
     "requires_services",
 }
@@ -287,11 +294,11 @@ async def get_plugin(
 
 
 # Fields a plugin's own developer may change on their own draft/rejected
-# submission. Deliberately excludes `status` and `featured` — those are
-# admin/review-only (status changes must go through the state machine in
-# routes/submissions.py; featured is curation) and must never be settable by
-# the submission's own author (that would be self-approval).
-_OWNER_UPDATABLE = _PLUGIN_UPDATABLE - {"status", "featured"}
+# submission. Deliberately excludes `featured` — that's admin-only curation and
+# must never be settable by the submission's own author. (`status` is already
+# not in _PLUGIN_UPDATABLE at all, #939 — no PUT caller may set it; status moves
+# go through the state machine in routes/submissions.py.)
+_OWNER_UPDATABLE = _PLUGIN_UPDATABLE - {"featured"}
 
 
 @router.put("/plugins/{plugin_id}", response_model=PluginResponse)
@@ -305,18 +312,31 @@ async def update_plugin(
     Only the fields present in the body are changed (the `PluginUpdate` model existed
     but had no route — #147). 404 if the plugin is unknown, 422 if the body is empty.
 
+    `status` is not updatable via PUT by anyone (#939) — it moves only through
+    the review state machine at /v1/marketplace/submissions/*.
+
     Non-admin/non-service callers (a submission's own developer) may only edit
-    their own `draft`/`rejected` submission, and never `status`/`featured` —
-    otherwise a developer could self-approve their own listing or edit anyone
-    else's, bypassing the entire review workflow (#402 follow-up).
+    their own `draft`/`rejected` submission, and never `featured` — otherwise a
+    developer could feature their own listing or edit anyone else's, bypassing
+    the review workflow (#402 follow-up).
     """
     # mode="json" serialises the PricingModel/PluginStatus enums to their string values
     # for the SQL params.
-    updates = {
-        k: v
-        for k, v in plugin_update.model_dump(mode="json", exclude_unset=True).items()
-        if k in _PLUGIN_UPDATABLE
-    }
+    raw_updates = plugin_update.model_dump(mode="json", exclude_unset=True)
+    # #939: `status` is not updatable via PUT for anyone (not even admin) —
+    # reject it explicitly (rather than silently dropping it) so the caller is
+    # pointed at the state machine instead of believing the change took. This
+    # runs before the ownership check on purpose: it's a generic API constraint
+    # that reveals nothing about a specific plugin.
+    if "status" in raw_updates:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "status is not updatable via PUT — move it through the review "
+                "workflow at /v1/marketplace/submissions/*"
+            ),
+        )
+    updates = {k: v for k, v in raw_updates.items() if k in _PLUGIN_UPDATABLE}
     if not updates:
         raise HTTPException(status_code=422, detail="No updatable fields provided")
 
@@ -376,7 +396,7 @@ async def update_plugin(
                     raise HTTPException(
                         status_code=403,
                         detail=(
-                            "status/featured can only be changed by an admin "
+                            "featured can only be changed by an admin "
                             "(status moves through /v1/marketplace/submissions/*)"
                         ),
                     )

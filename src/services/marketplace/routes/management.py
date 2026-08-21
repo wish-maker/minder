@@ -6,6 +6,7 @@ from core.neo4j_client import Neo4jClient, get_neo4j_client
 from core.validation import valid_plugin_id
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.installation import InstallationResponse
+from models.plugin import PluginStatus
 
 from config import settings
 from shared.auth.jwt_middleware import get_current_user, require_role
@@ -88,6 +89,15 @@ async def install_plugin(
         )
 
         if not plugin:
+            raise HTTPException(status_code=404, detail="Plugin not found")
+
+        # #402 approval gate: only a publicly-visible (`approved`) listing is
+        # installable. A draft/submitted/in_review/rejected/archived plugin is
+        # hidden on read (get_plugin 404s it for non-owners) but install had no
+        # equivalent guard -- anyone who knew an id could install an unapproved
+        # or delisted plugin, bypassing review. 404 (not 403) to match
+        # get_plugin's "don't reveal a non-public listing exists" behavior.
+        if plugin["status"] != PluginStatus.APPROVED.value:
             raise HTTPException(status_code=404, detail="Plugin not found")
 
         # Check if already installed
