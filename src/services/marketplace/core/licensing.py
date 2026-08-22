@@ -193,7 +193,14 @@ async def get_user_licenses(user_id: str) -> list:
                 {
                     "id": str(row["id"]),
                     "user_id": row["user_id"],
-                    "plugin_id": row["plugin_id"],
+                    # `plugin_id` is a UUID column -> asyncpg returns a uuid.UUID
+                    # (no str codec registered). str() it like `id` above so
+                    # in-Python consumers compare cleanly against a string
+                    # plugin_id -- notably licenses/lookup's `==`, which was
+                    # silently never matching a real license (#948/#919). The
+                    # /list JSON response is unchanged (FastAPI already encodes
+                    # UUID -> str on the way out).
+                    "plugin_id": str(row["plugin_id"]),
                     "plugin_name": row["plugin_name"],
                     "plugin_display_name": row["plugin_display_name"],
                     "tier": row["tier"],

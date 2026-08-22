@@ -66,21 +66,15 @@ async def lifespan(app: FastAPI):
                 f"✅ Loaded {len(loaded_pipelines)} RAG pipelines from PostgreSQL"
             )
 
-            # Initialize ConversationRepository for conversational RAG
-            if state.CONVERSATION_REPO_AVAILABLE and state.pg_client.pg_pool:
-                try:
-                    state.conversation_repository = state.ConversationRepository(
-                        state.pg_client.pg_pool
-                    )
-                    logger.info("✅ ConversationRepository initialized")
-                except Exception as e:
-                    logger.error(f"❌ Failed to initialize ConversationRepository: {e}")
-                    state.conversation_repository = None
-            else:
+            # Initialize ConversationRepository for conversational RAG. Best-effort:
+            # if the pool is not ready yet (PG still in crash-recovery at boot),
+            # ensure_conversation_repository() rebuilds it lazily on first use so
+            # the feature isn't permanently disabled for the container lifetime.
+            if await state.ensure_conversation_repository() is None:
                 logger.warning(
-                    "⚠️  ConversationRepository not available (pg_pool or module missing)"
+                    "⚠️  ConversationRepository not ready at startup (pg_pool or "
+                    "module missing) — will retry lazily on first use"
                 )
-                state.conversation_repository = None
         except Exception as e:
             logger.error(f"❌ Failed to load from PostgreSQL: {e}")
     else:
