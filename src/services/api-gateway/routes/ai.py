@@ -41,7 +41,9 @@ def _slugify_pipeline_name(name: str) -> str:
     return slug or "pipeline"
 
 
-async def _fetch_pipeline_function_defs() -> List[Dict]:
+async def _fetch_pipeline_function_defs(
+    owner_user_id: Optional[str] = None,
+) -> List[Dict]:
     """Synthesize one OpenAI function-calling definition per RAG pipeline,
     each callable as ``ask_<slug>`` and dispatched to that pipeline's own
     ``POST /v1/pipeline/{id}/query`` on rag-pipeline.
@@ -54,15 +56,24 @@ async def _fetch_pipeline_function_defs() -> List[Dict]:
     action, so it stays out of the plugin/marketplace tool-aggregation path
     entirely; only the final list is shared.
 
+    ``owner_user_id`` owner-scopes the offered tools (#943): when set, only the
+    caller's own pipelines (plus legacy null-owner ones) become ``ask_*`` tools,
+    so one user's chat can't even see another user's knowledge base as a tool.
+    rag-pipeline's query endpoint independently enforces ownership, so this is
+    defense-in-depth on the advertising side, not the sole gate.
+
     Failure here (rag-pipeline unreachable, bad response) degrades to no
     pipeline tools offered, exactly like get_tool_definitions()'s own
     fallback -- it must never be the reason /functions/definitions 500s.
     """
+    params: Dict = {"limit": 200}
+    if owner_user_id is not None:
+        params["owner_user_id"] = owner_user_id
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.RAG_PIPELINE_URL}/v1/pipeline",
-                params={"limit": 200},
+                params=params,
                 timeout=5.0,
             )
             response.raise_for_status()
@@ -120,50 +131,57 @@ async def _fetch_pipeline_function_defs() -> List[Dict]:
     return defs
 
 
-async def get_tool_definitions() -> Dict:
-    """
-    Fetch tool definitions from Plugin Registry, merged with a synthesized
-    "ask this RAG pipeline" definition per pipeline (see
-    _fetch_pipeline_function_defs).
-
-    Returns cached definitions if available, otherwise fetches fresh. Both
-    sources share the one cache/TTL below rather than each inventing its
-    own -- a pipeline rename/add/remove becomes visible to OpenWebUI on the
-    same cadence a plugin tool change already does.
-    """
+async def _get_plugin_tools() -> List[Dict]:
+    """Plugin-registry AI tools, cached (they're user-independent). The pipeline
+    defs are fetched separately per-request because they're owner-scoped (#943)
+    and must not be shared across users via this global cache."""
     global _tools_cache, _tools_cache_time
 
     import time
 
     current_time = time.time()
-
-    # Return cached tools if still fresh
     if _tools_cache and _tools_cache_time:
         if current_time - _tools_cache_time < CACHE_TTL:
-            return _tools_cache
+            return _tools_cache.get("tools", [])
 
-    # Fetch fresh tools from Plugin Registry
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/ai/tools", timeout=5.0
+        )
+        response.raise_for_status()
+        plugin_tools = response.json().get("tools", [])
+    _tools_cache = {"tools": plugin_tools}
+    _tools_cache_time = current_time
+    return plugin_tools
+
+
+async def get_tool_definitions(owner_user_id: Optional[str] = None) -> Dict:
+    """
+    Fetch tool definitions from Plugin Registry, merged with a synthesized
+    "ask this RAG pipeline" definition per pipeline (see
+    _fetch_pipeline_function_defs).
+
+    Plugin tools are cached (user-independent); the RAG-pipeline ``ask_*`` tools
+    are fetched fresh per call and owner-scoped to ``owner_user_id`` (#943) so a
+    global cache can never leak one user's pipelines to another. ``owner_user_id
+    is None`` (the discovery/OpenAPI endpoints, which carry no user) lists all
+    pipelines -- harmless, since rag-pipeline enforces ownership on the query
+    itself, not on being listed.
+
+    Degrades gracefully: if the plugin-tools fetch fails, falls back to the last
+    cache (or empty) rather than 500ing /functions/definitions.
+    """
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{settings.PLUGIN_REGISTRY_URL}/v1/plugins/ai/tools", timeout=5.0
-            )
-            response.raise_for_status()
-            plugin_tools = response.json().get("tools", [])
-        pipeline_tools = await _fetch_pipeline_function_defs()
-        _tools_cache = {"tools": plugin_tools + pipeline_tools}
-        _tools_cache_time = current_time
-        return _tools_cache
+        plugin_tools = await _get_plugin_tools()
     except Exception as e:
-        logger.error(f"Failed to fetch tool definitions: {e}")
+        logger.error(f"Failed to fetch plugin tool definitions: {e}")
+        # Best-effort: still offer pipeline tools; fall back to cached plugin tools.
+        plugin_tools = (_tools_cache or {}).get("tools", [])
+        if plugin_tools:
+            logger.warning("Using cached plugin tool definitions due to fetch error")
 
-        # Return cached tools if available (fallback)
-        if _tools_cache:
-            logger.warning("Using cached tool definitions due to fetch error")
-            return _tools_cache
-
-        # Return empty tools if no cache available
-        return {"tools": []}
+    pipeline_tools = await _fetch_pipeline_function_defs(owner_user_id)
+    return {"tools": plugin_tools + pipeline_tools}
 
 
 @router.get("/functions/definitions")
@@ -427,7 +445,9 @@ def _parse_content_tool_call(content: object, meta_by_name: Dict) -> Optional[Di
     return {"function": {"name": name, "arguments": parsed.get("arguments") or {}}}
 
 
-async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
+async def _chat_with_tools(
+    body: Dict, auth_header: Optional[str], owner_user_id: Optional[str] = None
+) -> Dict:
     """Offer plugin tools to the model and run any tool_calls it makes (opt-in path).
 
     Streaming isn't supported with the tool loop, so a streaming request falls back
@@ -446,7 +466,7 @@ async def _chat_with_tools(body: Dict, auth_header: Optional[str]) -> Dict:
         resp["minder_tool_calls_made"] = 0
         return resp
 
-    tools_full = (await get_tool_definitions()).get("tools", [])
+    tools_full = (await get_tool_definitions(owner_user_id)).get("tools", [])
     if not tools_full:
         resp = await _ollama_chat(body)
         resp["minder_tools_offered"] = False
@@ -569,7 +589,11 @@ async def chat_completions(
             raise backend_http_error(e, "Chat completion")
 
     try:
-        return await _chat_with_tools(body, request.headers.get("Authorization"))
+        return await _chat_with_tools(
+            body,
+            request.headers.get("Authorization"),
+            owner_user_id=current_user.get("sub"),
+        )
     except Exception as e:
         # Fall back to a plain passthrough for ANY tool-path failure — incl. a model
         # that doesn't support `tools` (Ollama 400) or a tool bug — so a tool problem

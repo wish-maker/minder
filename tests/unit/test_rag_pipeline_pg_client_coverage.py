@@ -425,6 +425,7 @@ async def test_load_pipelines_parses_json_kb_ids_and_configs(monkeypatch):
         "knowledge_base_ids": '["kb-1", "kb-2"]',
         "retrieval_config": '{"top_k": 5}',
         "generation_config": '{"temp": 0.7}',
+        "owner_user_id": "alice",
         "created_at": _FakeDatetime(),
     }
     _patch_conn(monkeypatch, _FakeConnection(fetch_result=[row]))
@@ -434,6 +435,7 @@ async def test_load_pipelines_parses_json_kb_ids_and_configs(monkeypatch):
     assert result["p-1"]["knowledge_base_ids"] == ["kb-1", "kb-2"]
     assert result["p-1"]["retrieval_config"] == {"top_k": 5}
     assert result["p-1"]["generation_config"] == {"temp": 0.7}
+    assert result["p-1"]["owner_user_id"] == "alice"  # #943
     assert result["p-1"]["created_at"] == "2026-08-18T00:00:00+00:00"
 
 
@@ -445,6 +447,7 @@ async def test_load_pipelines_falls_back_to_array_type_kb_ids(monkeypatch):
         "knowledge_base_ids": ["kb-1", "kb-2"],  # real PG array, not a JSON string
         "retrieval_config": None,
         "generation_config": None,
+        "owner_user_id": None,
         "created_at": None,
     }
     _patch_conn(monkeypatch, _FakeConnection(fetch_result=[row]))
@@ -464,6 +467,7 @@ async def test_load_pipelines_tolerates_malformed_kb_ids_json(monkeypatch):
         "knowledge_base_ids": "not valid json",
         "retrieval_config": None,
         "generation_config": None,
+        "owner_user_id": None,
         "created_at": None,
     }
     _patch_conn(monkeypatch, _FakeConnection(fetch_result=[row]))
@@ -481,6 +485,7 @@ async def test_load_pipelines_empty_kb_ids_is_empty_list(monkeypatch):
         "knowledge_base_ids": None,
         "retrieval_config": None,
         "generation_config": None,
+        "owner_user_id": None,
         "created_at": None,
     }
     _patch_conn(monkeypatch, _FakeConnection(fetch_result=[row]))

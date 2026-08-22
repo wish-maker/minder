@@ -27,6 +27,14 @@ CREATE TABLE IF NOT EXISTS rag_pipelines (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- #943: the JWT `sub` of the user who created the pipeline, so queries and the
+-- OpenWebUI chat-tool synthesis can be owner-scoped (a user must not query, or
+-- see as an `ask_*` tool, a knowledge base someone else created). Nullable:
+-- pipelines created before this migration have no recorded owner and stay
+-- open (legacy/shared) rather than becoming unqueryable.
+ALTER TABLE rag_pipelines
+    ADD COLUMN IF NOT EXISTS owner_user_id VARCHAR(255);
+
 CREATE TABLE IF NOT EXISTS conversation_turns (
     id SERIAL PRIMARY KEY,
     user_id VARCHAR(255) NOT NULL,

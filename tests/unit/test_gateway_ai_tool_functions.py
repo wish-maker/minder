@@ -143,6 +143,52 @@ async def test_fetches_fresh_when_no_cache(ai_mod, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_pipeline_tools_are_owner_scoped_when_owner_given(ai_mod, monkeypatch):
+    """#943: get_tool_definitions(owner_user_id=...) must pass that id to the
+    rag-pipeline list so only the caller's own pipelines become ask_* tools."""
+    fake_client = _FakeAsyncClient(
+        get_responses_by_url_prefix={
+            ai_mod.settings.PLUGIN_REGISTRY_URL: _FakeResponse({"tools": []}),
+            ai_mod.settings.RAG_PIPELINE_URL: _FakeResponse({"items": []}),
+        }
+    )
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    await ai_mod.get_tool_definitions(owner_user_id="alice")
+
+    pipeline_gets = [
+        kwargs
+        for (url, kwargs) in fake_client.get_calls
+        if url.startswith(ai_mod.settings.RAG_PIPELINE_URL)
+    ]
+    assert pipeline_gets, "rag-pipeline list was not fetched"
+    assert pipeline_gets[0]["params"].get("owner_user_id") == "alice"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_tools_unscoped_when_no_owner(ai_mod, monkeypatch):
+    """No owner (the discovery/OpenAPI endpoints) -> no owner_user_id param, so
+    all pipelines are listed (query-time enforcement still protects the data)."""
+    fake_client = _FakeAsyncClient(
+        get_responses_by_url_prefix={
+            ai_mod.settings.PLUGIN_REGISTRY_URL: _FakeResponse({"tools": []}),
+            ai_mod.settings.RAG_PIPELINE_URL: _FakeResponse({"items": []}),
+        }
+    )
+    _patch_httpx(monkeypatch, ai_mod, fake_client)
+
+    await ai_mod.get_tool_definitions()
+
+    pipeline_gets = [
+        kwargs
+        for (url, kwargs) in fake_client.get_calls
+        if url.startswith(ai_mod.settings.RAG_PIPELINE_URL)
+    ]
+    assert pipeline_gets
+    assert "owner_user_id" not in pipeline_gets[0]["params"]
+
+
+@pytest.mark.asyncio
 async def test_returns_cached_value_within_ttl_without_refetching(ai_mod, monkeypatch):
     import time
 
@@ -155,8 +201,14 @@ async def test_returns_cached_value_within_ttl_without_refetching(ai_mod, monkey
 
     result = await ai_mod.get_tool_definitions()
 
+    # Plugin tools come from cache (no plugin-registry refetch), but the
+    # owner-scoped pipeline defs are always fetched fresh (#943) -- they can't
+    # share the global cache without leaking one user's pipelines to another.
+    # The pipeline response here has no "items", so the merged result is just
+    # the cached plugin tools.
     assert result == {"tools": ["cached"]}
-    assert len(fake_client.get_calls) == 0
+    assert len(fake_client.get_calls) == 1
+    assert fake_client.get_calls[0][0].startswith(ai_mod.settings.RAG_PIPELINE_URL)
 
 
 @pytest.mark.asyncio
