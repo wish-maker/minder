@@ -346,8 +346,9 @@ admin-only.
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/v1/marketplace/licenses` | List / inspect licenses |
+| GET | `/v1/marketplace/licenses/lookup` | Admin/service-only: the tier of a specific user's active license for a specific plugin — `?user_id=&plugin_id=` → `{tier, active}` (#919). Backs plugin-state-manager's real tool-tier enforcement |
 | POST | `/v1/marketplace/licenses/validate` | Validate a license against a tier |
-| POST | `/v1/marketplace/licenses/activate` | Activate a license |
+| POST | `/v1/marketplace/licenses/activate` | Activate a license (admin/service-gated, #622) |
 
 > **Activation used to 500 for every real user (same #402 bug class, found in a later
 > audit, fixed)**: `marketplace_licenses.user_id` and

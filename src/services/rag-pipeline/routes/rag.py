@@ -929,7 +929,7 @@ async def query_rag_pipeline(
         corrective_pipeline=state.corrective_pipeline,
         reranker=state.reranker,
         compressor=state.compressor,
-        conversation_repository=state.conversation_repository,
+        conversation_repository=await state.ensure_conversation_repository(),
         gen_timer=state.llm_generation_duration,
     )
     try:
@@ -1002,12 +1002,13 @@ async def share_conversation(
     """
     if pipeline_id not in state.rag_pipelines:
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
-    if state.conversation_repository is None:
+    repo = await state.ensure_conversation_repository()
+    if repo is None:
         raise HTTPException(
             status_code=503, detail="Conversation history is not available"
         )
     try:
-        await state.conversation_repository.share_conversation(
+        await repo.share_conversation(
             user_id=current_user.get("sub", "anonymous"),
             conversation_id=conversation_id,
         )
@@ -1047,12 +1048,13 @@ async def list_my_conversations(
     ``ConversationRepository.list_owned_conversations``) -- a conversation
     shared WITH the caller by someone else is intentionally not listed here.
     """
-    if state.conversation_repository is None:
+    repo = await state.ensure_conversation_repository()
+    if repo is None:
         raise HTTPException(
             status_code=503, detail="Conversation history is not available"
         )
     try:
-        items, total = await state.conversation_repository.list_owned_conversations(
+        items, total = await repo.list_owned_conversations(
             owner_user_id=current_user.get("sub", "anonymous"),
             limit=limit,
             offset=offset,

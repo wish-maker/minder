@@ -91,7 +91,7 @@ async def capabilities():
     return {
         "methods": {
             "standard": True,
-            "conversational": state.conversation_repository is not None,
+            "conversational": await state.ensure_conversation_repository() is not None,
             "hyde": state.hyde_expander is not None,
             "self_rag": state.self_rag_pipeline is not None,
             "auto": state.decision_engine is not None,

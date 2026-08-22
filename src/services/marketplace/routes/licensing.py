@@ -132,7 +132,10 @@ async def lookup_user_license(
         (
             lic
             for lic in licenses
-            if lic["plugin_id"] == plugin_id
+            # str() both sides: a raw asyncpg row carries plugin_id as a
+            # uuid.UUID, and uuid.UUID == str is always False -- comparing
+            # unconverted silently matched nothing (#948).
+            if str(lic["plugin_id"]) == plugin_id
             and lic["active"]
             and (
                 lic["valid_until"] is None
