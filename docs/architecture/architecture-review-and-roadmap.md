@@ -143,7 +143,11 @@ Service census (LOC = routes+core+domain+repositories; 2026-08-22):
 - Prereqs merged this session (foundations the vision builds on): **#943**
   pipeline owner-scoping (PR #951), **#948/#949** (PR #950). **#920** re-scoped
   with a design plan (see tenancy ADR).
-- **Next up:** finish Phase 1 — adopt `shared/tenancy.py` in graph-rag (replace
-  `_owner_id`) and rag-pipeline; add `owner_id` to Qdrant point payloads
-  (`rag-pipeline/core/ingestion.py`) + a `visibility` column to `knowledge_bases`,
-  with the retrieval filter applied in `core/retrieval.py`.
+- **2026-08-22 (cont.)** — Phase-1 adoption slice 1: **graph-rag now uses
+  `shared.tenancy.resolve_owner_id`** (removed the local `_owner_id`; behaviour-
+  identical). One helper is now the owner authority for graph-rag.
+- **Next up:** adopt `shared/tenancy.py` in rag-pipeline (owner_user_id →
+  resolve_owner_id + `is_visible_to`); add `owner_id`+`visibility` to Qdrant point
+  payloads (`rag-pipeline/core/ingestion.py`) + a `visibility`/`owner_id` on
+  `knowledge_bases`, with the retrieval filter applied in `core/retrieval.py`
+  (the highest-priority gap — RAG vectors are currently owner-less).

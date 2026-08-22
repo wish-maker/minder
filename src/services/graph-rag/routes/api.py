@@ -28,21 +28,15 @@ from models.schemas import (
 
 from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
+from shared.tenancy import resolve_owner_id
 
 logger = logging.getLogger(__name__)
 
-
-def _owner_id(current_user: dict) -> str:
-    """The tenant scope for #782 — the authenticated caller's stable identity.
-
-    A user JWT carries ``sub``; the internal service token resolves to
-    ``sub="internal-service"`` (its own scope). Guaranteed present by
-    get_current_user_or_service, but default defensively so a token missing
-    ``sub`` can never silently collapse into another tenant's (empty) scope."""
-    owner = current_user.get("sub")
-    if not owner:
-        raise HTTPException(status_code=401, detail="Token is missing a subject (sub)")
-    return str(owner)
+# The tenant scope for #782 is now the platform-wide canonical helper
+# shared.tenancy.resolve_owner_id (behaviour-identical to the old local _owner_id:
+# sub required, service token -> "internal-service", 401 on a missing subject).
+# Unifies ownership with rag-pipeline/marketplace on one column name + predicate;
+# see docs/architecture/tenancy-and-correlation.md.
 
 
 async def extract_entities_handler(
@@ -365,7 +359,7 @@ def build_graph_router(
         non-GET clients (#147).
         """
         return await construct_knowledge_graph_handler(
-            request, _owner_id(current_user), entity_extractor, graph_constructor
+            request, resolve_owner_id(current_user), entity_extractor, graph_constructor
         )
 
     @router.delete("/v1/graph/document/{document_id}", tags=["Knowledge Graph"])
@@ -388,7 +382,7 @@ def build_graph_router(
         is a no-op, never an error, and never touches their graph.
         """
         return await delete_document_graph_handler(
-            document_id, _owner_id(current_user), graph_constructor
+            document_id, resolve_owner_id(current_user), graph_constructor
         )
 
     @router.get(
@@ -413,7 +407,9 @@ def build_graph_router(
         existence/volume of other tenants' data, so per-tenant scoping requires
         knowing the tenant.
         """
-        return await get_graph_stats_handler(_owner_id(current_user), graph_constructor)
+        return await get_graph_stats_handler(
+            resolve_owner_id(current_user), graph_constructor
+        )
 
     @router.get(
         "/v1/graph/documents",
@@ -434,7 +430,7 @@ def build_graph_router(
         any logged-in user enumerate every tenant's document titles/sources and
         then delete them by id."""
         return await list_graph_documents_handler(
-            _owner_id(current_user), graph_constructor
+            resolve_owner_id(current_user), graph_constructor
         )
 
     @router.post(
@@ -462,7 +458,7 @@ def build_graph_router(
         entities, so retrieval can't surface another tenant's graph.
         """
         return await retrieve_with_graph_handler(
-            request, _owner_id(current_user), entity_extractor, graph_retriever
+            request, resolve_owner_id(current_user), entity_extractor, graph_retriever
         )
 
     @router.post(
@@ -489,7 +485,7 @@ def build_graph_router(
         #782: scoped to the caller — resolves the entity only within their graph.
         """
         return await get_entity_context_handler(
-            request, _owner_id(current_user), graph_retriever
+            request, resolve_owner_id(current_user), graph_retriever
         )
 
     @router.post(
@@ -511,7 +507,7 @@ def build_graph_router(
         matches the query (case-insensitive). Exposes the previously-unwired
         GraphRetriever.graph_search capability. #782: scoped to the caller."""
         return await graph_search_handler(
-            request, _owner_id(current_user), graph_retriever
+            request, resolve_owner_id(current_user), graph_retriever
         )
 
     return router
