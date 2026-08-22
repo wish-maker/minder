@@ -19,6 +19,7 @@ import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
@@ -2663,7 +2664,12 @@ async def test_share_conversation_404_for_unknown_pipeline():
 
 @pytest.mark.asyncio
 async def test_share_conversation_503_without_a_conversation_repository():
-    with _seed_state(rag_pipelines={"p1": {}}, conversation_repository=None):
+    # PG_AVAILABLE=False makes ensure_conversation_repository() return None
+    # deterministically (no lazy pool attempt), i.e. conversational storage
+    # genuinely unavailable -> 503.
+    with _seed_state(
+        rag_pipelines={"p1": {}}, conversation_repository=None, PG_AVAILABLE=False
+    ):
         with pytest.raises(Exception) as exc_info:
             await rag_routes.share_conversation(
                 "p1", "conv1", current_user={"sub": "alice"}
@@ -2704,7 +2710,7 @@ async def test_share_conversation_403_for_a_non_owner():
 @pytest.mark.asyncio
 async def test_capabilities_reports_availability_from_state(monkeypatch):
     fake_state = SimpleNamespace(
-        conversation_repository=object(),
+        ensure_conversation_repository=AsyncMock(return_value=object()),
         hyde_expander=object(),
         self_rag_pipeline=None,
         decision_engine=object(),
@@ -2744,7 +2750,7 @@ async def test_capabilities_reports_llm_rerank_backend_without_sentence_transfor
     monkeypatch,
 ):
     fake_state = SimpleNamespace(
-        conversation_repository=None,
+        ensure_conversation_repository=AsyncMock(return_value=None),
         hyde_expander=None,
         self_rag_pipeline=None,
         decision_engine=None,
@@ -2762,6 +2768,55 @@ async def test_capabilities_reports_llm_rerank_backend_without_sentence_transfor
 
     assert result["enhancers"]["rerank"] == {"available": True, "backend": "llm"}
     assert result["retrievers"]["hybrid"] == {"available": False}
+
+
+# ── ensure_conversation_repository: lazy recovery after a boot where the PG pool
+#    wasn't ready yet (#949). Before this the repo was bound once at startup and,
+#    if PG was still in crash-recovery then, stayed None (503) for the whole
+#    container lifetime while every other PG-backed feature recovered lazily. ──
+
+
+@pytest.mark.asyncio
+async def test_ensure_conversation_repository_lazily_builds_when_pool_recovers(
+    monkeypatch,
+):
+    state = rag_routes.state
+    monkeypatch.setattr(state, "conversation_repository", None)
+    monkeypatch.setattr(state, "CONVERSATION_REPO_AVAILABLE", True)
+    monkeypatch.setattr(state, "PG_AVAILABLE", True)
+    fake_pool = object()
+    monkeypatch.setattr(
+        state.pg_client, "get_pg_connection", AsyncMock(return_value=fake_pool)
+    )
+    built = {}
+
+    class _FakeRepo:
+        def __init__(self, pool):
+            built["pool"] = pool
+
+    monkeypatch.setattr(state, "ConversationRepository", _FakeRepo)
+
+    repo = await state.ensure_conversation_repository()
+    assert isinstance(repo, _FakeRepo)
+    assert built["pool"] is fake_pool
+    # Cached: a second call returns the same instance without rebuilding.
+    assert await state.ensure_conversation_repository() is repo
+
+
+@pytest.mark.asyncio
+async def test_ensure_conversation_repository_stays_none_when_pool_unavailable(
+    monkeypatch,
+):
+    state = rag_routes.state
+    monkeypatch.setattr(state, "conversation_repository", None)
+    monkeypatch.setattr(state, "CONVERSATION_REPO_AVAILABLE", True)
+    monkeypatch.setattr(state, "PG_AVAILABLE", True)
+    monkeypatch.setattr(
+        state.pg_client,
+        "get_pg_connection",
+        AsyncMock(side_effect=RuntimeError("db down")),
+    )
+    assert await state.ensure_conversation_repository() is None
 
 
 # ── GET /health (system_routes.health_check) ────────────────────────────────

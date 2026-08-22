@@ -5,9 +5,10 @@ components, PostgreSQL persistence helpers, the Qdrant client factory, and the
 Prometheus collectors. main.py's lifespan populates these on startup; the route
 modules import them here.
 
-`conversation_repository` is reassigned at runtime (in lifespan), so consumers
-must read it as ``state.conversation_repository`` — importing the name directly
-would bind the initial ``None``.
+`conversation_repository` is reassigned at runtime, so consumers must reach it
+via ``await state.ensure_conversation_repository()`` (which also lazily rebuilds
+it if the PG pool wasn't ready at startup) rather than importing the name
+directly — a direct import would bind the initial ``None``.
 """
 
 import logging
@@ -77,8 +78,41 @@ except ImportError:
 knowledge_bases: Dict[str, Dict[str, Any]] = {}
 rag_pipelines: Dict[str, Dict[str, Any]] = {}
 
-# Reassigned in lifespan — read as state.conversation_repository, never imported by name.
+# Reassigned in lifespan — read via ensure_conversation_repository(), never imported by name.
 conversation_repository: Optional["ConversationRepository"] = None
+
+
+async def ensure_conversation_repository():
+    """Return the conversation repository, lazily (re)building it if it was not
+    wired at startup.
+
+    ``conversation_repository`` is set once during lifespan startup, but the PG
+    pool it needs can legitimately be unavailable at that exact moment: Postgres
+    is still finishing crash-recovery ("the database system is starting up")
+    when rag-pipeline boots, even behind ``depends_on: service_healthy``
+    (``pg_isready`` reports ready during a transient first-boot window). Before
+    this, that single failed attempt left conversation history AND conversational
+    memory permanently 503 for the whole container lifetime, while every other
+    PG-backed feature recovered lazily via ``pg_client.get_pg_connection()``.
+    Mirror that recovery here — build the repo on first use against the
+    now-available pool. Returns None only when conversational storage is
+    genuinely unavailable (module missing, or PG still unreachable)."""
+    global conversation_repository
+    if conversation_repository is not None:
+        return conversation_repository
+    if not (CONVERSATION_REPO_AVAILABLE and PG_AVAILABLE):
+        return None
+    try:
+        pool = await pg_client.get_pg_connection()
+    except Exception as e:  # pool still not creatable (PG down) — stay degraded
+        logger.warning(f"⚠️  Conversation repository unavailable (pg pool): {e}")
+        return None
+    if pool is None:
+        return None
+    conversation_repository = ConversationRepository(pool)
+    logger.info("✅ ConversationRepository initialized (lazy)")
+    return conversation_repository
+
 
 # ============================================================================
 # Ollama manager (OllamaManager lives in rag/ollama_manager.py)
