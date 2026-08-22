@@ -13,6 +13,7 @@ Isolated-import pattern matches test_marketplace_my_installations.py.
 """
 
 import sys
+import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -336,3 +337,28 @@ async def test_lookup_user_license_ignores_an_expired_license(monkeypatch):
     )
 
     assert result == {"tier": None, "active": False}
+
+
+@pytest.mark.asyncio
+async def test_lookup_matches_when_plugin_id_is_a_uuid_object(monkeypatch):
+    """Regression for #948: a raw asyncpg row carries plugin_id as a
+    ``uuid.UUID`` (the column is UUID, no str codec). The route must still
+    match it against the string query param -- previously ``UUID == str`` was
+    always False, so lookup silently returned no license for every real
+    caller, defeating #919's tool-tier enforcement entirely."""
+    pid = uuid.UUID("11111111-1111-1111-1111-111111111111")
+    get_user_licenses = AsyncMock(
+        return_value=[
+            {"plugin_id": pid, "tier": "pro", "active": True, "valid_until": None}
+        ]
+    )
+    monkeypatch.setattr(licensing_routes, "get_user_licenses", get_user_licenses)
+    monkeypatch.setattr(licensing_routes, "ensure_valid_plugin_id", lambda pid: None)
+
+    result = await licensing_routes.lookup_user_license(
+        user_id="some-user",
+        plugin_id="11111111-1111-1111-1111-111111111111",
+        current_user={"sub": "internal-service", "role": "service"},
+    )
+
+    assert result == {"tier": "pro", "active": True}
