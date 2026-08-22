@@ -325,6 +325,8 @@ async def test_load_kbs_shapes_rows_into_dicts(monkeypatch):
         "parent_size": 2000,
         "document_count": 3,
         "vector_count": 10,
+        "owner_id": "alice",
+        "visibility": "private",
         "created_at": _FakeDatetime(),
     }
     _patch_conn(monkeypatch, _FakeConnection(fetch_result=[row]))
@@ -332,6 +334,8 @@ async def test_load_kbs_shapes_rows_into_dicts(monkeypatch):
     result = await pgc.load_kb_from_postgres()
 
     assert result["kb-1"]["name"] == "docs"
+    assert result["kb-1"]["owner_id"] == "alice"
+    assert result["kb-1"]["visibility"] == "private"
     assert result["kb-1"]["persisted"] is True
     assert result["kb-1"]["created_at"] == "2026-08-18T00:00:00+00:00"
 
@@ -350,6 +354,8 @@ async def test_load_kbs_handles_null_created_at(monkeypatch):
         "parent_size": 2000,
         "document_count": 3,
         "vector_count": 10,
+        "owner_id": None,
+        "visibility": "private",
         "created_at": None,
     }
     _patch_conn(monkeypatch, _FakeConnection(fetch_result=[row]))

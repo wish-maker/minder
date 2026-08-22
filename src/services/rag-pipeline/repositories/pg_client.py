@@ -123,8 +123,8 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
                 INSERT INTO knowledge_bases
                 (id, name, description, embedding_model, llm_model,
                  chunk_size, chunk_overlap, chunking_strategy, parent_size,
-                 document_count, vector_count)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 document_count, vector_count, owner_id, visibility)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
                     description = EXCLUDED.description,
@@ -136,6 +136,10 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
                     parent_size = EXCLUDED.parent_size,
                     document_count = EXCLUDED.document_count,
                     vector_count = EXCLUDED.vector_count,
+                    -- Never reassign ownership on a later update (metadata edit /
+                    -- count reconcile); keep the original owner, backfill if NULL.
+                    owner_id = COALESCE(knowledge_bases.owner_id, EXCLUDED.owner_id),
+                    visibility = EXCLUDED.visibility,
                     updated_at = CURRENT_TIMESTAMP
             """,
                 kb_id,
@@ -149,6 +153,8 @@ async def save_kb_to_postgres(kb_id: str, kb_data: Dict[str, Any]) -> bool:
                 kb_data.get("parent_size", 2000),
                 kb_data["document_count"],
                 kb_data["vector_count"],
+                kb_data.get("owner_id"),
+                kb_data.get("visibility", "private"),
             )
 
         logger.info(f"✅ KB saved to PostgreSQL: {kb_id}")
@@ -209,7 +215,8 @@ async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
                 """
                 SELECT id, name, description, embedding_model, llm_model,
                        chunk_size, chunk_overlap, chunking_strategy,
-                       parent_size, document_count, vector_count, created_at
+                       parent_size, document_count, vector_count,
+                       owner_id, visibility, created_at
                 FROM knowledge_bases
                 ORDER BY created_at DESC
             """
@@ -230,6 +237,8 @@ async def load_kb_from_postgres() -> Dict[str, Dict[str, Any]]:
                 "parent_size": row["parent_size"],
                 "document_count": row["document_count"],
                 "vector_count": row["vector_count"],
+                "owner_id": row["owner_id"],
+                "visibility": row["visibility"],
                 "created_at": (
                     row["created_at"].isoformat() if row["created_at"] else None
                 ),

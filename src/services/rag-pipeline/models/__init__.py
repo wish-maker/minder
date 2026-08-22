@@ -69,6 +69,11 @@ class KnowledgeBaseResponse(BaseModel):
     llm_model: str
     document_count: int
     vector_count: int
+    # Tenancy (#943 follow-up): the creator's owner_id + visibility. Optional/None
+    # for KBs created before the migration (legacy/open). See
+    # docs/architecture/tenancy-and-correlation.md.
+    owner_id: Optional[str] = None
+    visibility: Optional[str] = None
     created_at: str
 
 
