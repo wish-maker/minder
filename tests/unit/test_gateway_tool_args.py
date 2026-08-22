@@ -99,7 +99,7 @@ async def test_chat_with_tools_routes_get_tool_args_as_params(ai_mod, monkeypatc
         },
     }
 
-    async def fake_get_tool_definitions():
+    async def fake_get_tool_definitions(owner_user_id=None):
         return {"tools": [tool]}
 
     calls = []
@@ -158,7 +158,7 @@ async def test_chat_with_tools_routes_post_tool_args_as_json_body(ai_mod, monkey
         },
     }
 
-    async def fake_get_tool_definitions():
+    async def fake_get_tool_definitions(owner_user_id=None):
         return {"tools": [tool]}
 
     calls = []
@@ -245,7 +245,7 @@ async def test_chat_with_tools_executes_content_embedded_tool_call(ai_mod, monke
         },
     }
 
-    async def fake_get_tool_definitions():
+    async def fake_get_tool_definitions(owner_user_id=None):
         return {"tools": [tool]}
 
     calls = []
@@ -302,7 +302,7 @@ async def test_chat_with_tools_content_not_matching_any_tool_passes_through(
         "metadata": {"plugin": "crypto", "endpoint": "/x", "method": "GET"},
     }
 
-    async def fake_get_tool_definitions():
+    async def fake_get_tool_definitions(owner_user_id=None):
         return {"tools": [tool]}
 
     call_count = 0

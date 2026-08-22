@@ -605,6 +605,22 @@ async def delete_document(
     return {"message": "Document deleted", "id": document_id}
 
 
+def _caller_owns_pipeline(current_user: dict, pipeline: dict) -> bool:
+    """Whether ``current_user`` may see/query ``pipeline`` under owner-scoping (#943).
+
+    - The internal service principal and admins see everything (service does the
+      cross-user chat-tool dispatch; admins are operators).
+    - A pipeline with no recorded owner (``owner_user_id is None``) predates the
+      #943 migration and stays open (legacy/shared) rather than becoming
+      unqueryable for everyone.
+    - Otherwise only the creator (JWT ``sub`` == ``owner_user_id``) may access it.
+    """
+    if current_user.get("role") in ("service", "admin"):
+        return True
+    owner = pipeline.get("owner_user_id")
+    return owner is None or owner == current_user.get("sub")
+
+
 @router.post("/v1/pipeline", response_model=RAGPipelineResponse, tags=["Pipeline"])
 @router.post(
     "/pipeline",
@@ -636,6 +652,10 @@ async def create_rag_pipeline(
         "knowledge_base_ids": request.knowledge_base_ids,
         "retrieval_config": request.retrieval_config,
         "generation_config": request.generation_config,
+        # #943: record the creator so queries + chat-tool synthesis can be
+        # owner-scoped. `sub` is always present (get_current_user_or_service
+        # 401s otherwise); a service-created pipeline is owned by the service.
+        "owner_user_id": current_user.get("sub"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -673,14 +693,32 @@ async def create_rag_pipeline(
 async def list_rag_pipelines(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    owner_user_id: Optional[str] = Query(
+        None,
+        description=(
+            "Owner-scope the result (#943): return only pipelines this user "
+            "created, plus legacy pipelines with no recorded owner. Omit for "
+            "all. The gateway passes the chat caller's id here so OpenWebUI's "
+            "ask_<pipeline> tools are owner-scoped."
+        ),
+    ),
 ):
     """List RAG pipelines in the shared `{items, total, limit, offset}` envelope
     (#501; paginated via limit/offset, matching /knowledge-bases).
 
     Added in #426 -- before this, a pipeline_id only ever existed in the create
     response, with no way to recover it (clients had to track it themselves).
+
+    ``owner_user_id`` filters to that owner (+ legacy null-owner pipelines) for
+    the chat-tool synthesis (#943); it is a convenience filter, not the security
+    boundary -- query_rag_pipeline enforces real ownership on the actual query.
     """
-    return PaginatedList.paginate(list(state.rag_pipelines.values()), limit, offset)
+    pipelines = list(state.rag_pipelines.values())
+    if owner_user_id is not None:
+        pipelines = [
+            p for p in pipelines if p.get("owner_user_id") in (owner_user_id, None)
+        ]
+    return PaginatedList.paginate(pipelines, limit, offset)
 
 
 @router.get(
@@ -804,6 +842,15 @@ async def query_rag_pipeline(
         raise HTTPException(status_code=404, detail="RAG pipeline not found")
 
     pipeline = state.rag_pipelines[pipeline_id]
+    # #943: a pipeline can only be queried by its creator (or the service/admin
+    # principals). This is the real owner-scoping boundary -- it protects both a
+    # direct call and the OpenWebUI `ask_<pipeline>` chat tool, because the
+    # gateway forwards the end user's JWT on the tool dispatch, so a user cannot
+    # read another user's knowledge base by guessing/enumerating its pipeline id.
+    if not _caller_owns_pipeline(current_user, pipeline):
+        raise HTTPException(
+            status_code=403, detail="You can only query a pipeline you created"
+        )
     # #896: normal KB delete is now blocked while a pipeline still depends on
     # it (see delete_knowledge_base), but this guards any pipeline that was
     # already orphaned before that fix shipped (or by some other race) --

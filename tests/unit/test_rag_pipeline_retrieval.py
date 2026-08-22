@@ -2633,6 +2633,158 @@ async def test_query_pipeline_defaults_user_id_to_anonymous_without_a_sub(
     assert captured["user_id"] == "anonymous"
 
 
+# ── #943: pipeline owner-scoping (query enforcement + list filter) ───────────
+
+
+@pytest.mark.asyncio
+async def test_query_403_for_a_non_owner(monkeypatch):
+    """A user cannot query a pipeline someone else created -- the real
+    owner-scoping boundary that protects both direct calls and the
+    ask_<pipeline> chat tool (#943)."""
+
+    async def fake_run_query(**kwargs):  # must never be reached
+        raise AssertionError("run_query should not run for a rejected caller")
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {"knowledge_base_ids": [], "owner_user_id": "alice"}
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.query_rag_pipeline(
+                "p1",
+                models.QueryRequest(question="hi?"),
+                current_user={"sub": "bob", "role": "user"},
+            )
+    assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_query_allows_the_owner(monkeypatch):
+    captured = {}
+
+    async def fake_run_query(*, user_id, **kwargs):
+        captured["ran"] = True
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {
+        "knowledge_base_ids": [],
+        "generation_config": {},
+        "owner_user_id": "alice",
+    }
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        await rag_routes.query_rag_pipeline(
+            "p1",
+            models.QueryRequest(question="hi?"),
+            current_user={"sub": "alice", "role": "user"},
+        )
+    assert captured.get("ran") is True
+
+
+@pytest.mark.asyncio
+async def test_query_allows_service_and_admin_on_an_owned_pipeline(monkeypatch):
+    async def fake_run_query(**kwargs):
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {
+        "knowledge_base_ids": [],
+        "generation_config": {},
+        "owner_user_id": "alice",
+    }
+    for principal in ({"sub": "svc", "role": "service"}, {"sub": "x", "role": "admin"}):
+        with _seed_state(
+            rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+        ):
+            # No exception == allowed.
+            await rag_routes.query_rag_pipeline(
+                "p1", models.QueryRequest(question="hi?"), current_user=principal
+            )
+
+
+@pytest.mark.asyncio
+async def test_query_allows_a_legacy_null_owner_pipeline(monkeypatch):
+    """Pipelines created before #943 have owner_user_id=None and stay open, so
+    the migration doesn't lock everyone out of existing pipelines."""
+
+    async def fake_run_query(**kwargs):
+        return _fake_run_query_result()
+
+    monkeypatch.setattr(rag_routes.state, "run_query", fake_run_query)
+    pipeline = {
+        "knowledge_base_ids": [],
+        "generation_config": {},
+        "owner_user_id": None,
+    }
+    with _seed_state(
+        rag_pipelines={"p1": pipeline}, knowledge_bases={}, PG_AVAILABLE=False
+    ):
+        await rag_routes.query_rag_pipeline(
+            "p1",
+            models.QueryRequest(question="hi?"),
+            current_user={"sub": "anyone", "role": "user"},
+        )
+
+
+def test_list_pipelines_owner_filter_returns_own_plus_legacy():
+    client = _rag_router_client()
+    pipes = {
+        "a": {
+            "id": "a",
+            "name": "A",
+            "knowledge_base_ids": [],
+            "created_at": "t",
+            "owner_user_id": "alice",
+        },
+        "b": {
+            "id": "b",
+            "name": "B",
+            "knowledge_base_ids": [],
+            "created_at": "t",
+            "owner_user_id": "bob",
+        },
+        "c": {
+            "id": "c",
+            "name": "C",
+            "knowledge_base_ids": [],
+            "created_at": "t",
+            "owner_user_id": None,
+        },
+    }
+    with _seed_state(rag_pipelines=pipes):
+        resp = client.get("/v1/pipeline?owner_user_id=alice")
+    assert resp.status_code == 200
+    ids = {item["id"] for item in resp.json()["items"]}
+    assert ids == {"a", "c"}  # own + legacy null-owner, never bob's
+
+
+def test_list_pipelines_without_owner_filter_returns_all():
+    client = _rag_router_client()
+    pipes = {
+        "a": {
+            "id": "a",
+            "name": "A",
+            "knowledge_base_ids": [],
+            "created_at": "t",
+            "owner_user_id": "alice",
+        },
+        "b": {
+            "id": "b",
+            "name": "B",
+            "knowledge_base_ids": [],
+            "created_at": "t",
+            "owner_user_id": "bob",
+        },
+    }
+    with _seed_state(rag_pipelines=pipes):
+        resp = client.get("/v1/pipeline")
+    assert resp.status_code == 200
+    assert {item["id"] for item in resp.json()["items"]} == {"a", "b"}
+
+
 # ── POST /v1/pipeline/{id}/conversations/{conversation_id}/share ────────────
 # #875's optional half: an explicit opt-in that lets a second user continue a
 # conversation the caller started, instead of each user's history staying
@@ -3071,9 +3223,14 @@ async def test_create_rag_pipeline_success():
         rag_pipelines={}, knowledge_bases={"kb1": _kb("kb1")}, PG_AVAILABLE=False
     ):
         resp = await rag_routes.create_rag_pipeline(
-            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"])
+            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"]),
+            current_user={"sub": "alice", "role": "user"},
         )
         assert resp.pipeline_id in rag_routes.state.rag_pipelines
+        # #943: creator recorded so the pipeline can be owner-scoped later.
+        assert (
+            rag_routes.state.rag_pipelines[resp.pipeline_id]["owner_user_id"] == "alice"
+        )
 
     assert resp.name == "p"
     assert resp.knowledge_base_ids == ["kb1"]
@@ -3101,7 +3258,8 @@ async def test_create_rag_pipeline_saves_to_postgres_when_available(monkeypatch)
     ):
         monkeypatch.setattr(rag_routes.state, "save_pipeline_to_postgres", fake_save)
         resp = await rag_routes.create_rag_pipeline(
-            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"])
+            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"]),
+            current_user={"sub": "alice", "role": "user"},
         )
 
     assert saved["pipeline_id"] == resp.pipeline_id
@@ -3117,7 +3275,8 @@ async def test_create_rag_pipeline_pg_save_failure_is_non_fatal(monkeypatch):
     ):
         monkeypatch.setattr(rag_routes.state, "save_pipeline_to_postgres", boom)
         resp = await rag_routes.create_rag_pipeline(
-            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"])
+            models.RAGPipelineCreate(name="p", knowledge_base_ids=["kb1"]),
+            current_user={"sub": "alice", "role": "user"},
         )
 
     assert resp.name == "p"  # PG failure logged, not raised

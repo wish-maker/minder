@@ -158,7 +158,7 @@ async def test_chat_with_tools_no_tools_available_bypasses_the_tool_loop(monkeyp
     async def fake_ollama_chat(body):
         return {"message": {"content": "no tools"}}
 
-    async def fake_defs():
+    async def fake_defs(owner_user_id=None):
         return {"tools": []}
 
     monkeypatch.setattr(ai, "_ollama_chat", fake_ollama_chat)
@@ -180,7 +180,7 @@ _ONE_TOOL = {
 
 
 def _fake_defs_with_one_tool():
-    async def fake_defs():
+    async def fake_defs(owner_user_id=None):
         return {"tools": [_ONE_TOOL]}
 
     return fake_defs

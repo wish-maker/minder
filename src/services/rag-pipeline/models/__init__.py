@@ -131,6 +131,9 @@ class RAGPipelineInfo(BaseModel):
     name: str
     knowledge_base_ids: List[str]
     created_at: str
+    # #943: the JWT `sub` of the creator; None for pipelines created before
+    # owner-scoping shipped (legacy/shared). Lets a client owner-scope its own UI.
+    owner_user_id: Optional[str] = None
 
 
 class MetadataFilter(BaseModel):

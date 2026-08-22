@@ -265,13 +265,20 @@ async def save_pipeline_to_postgres(
             await connection.execute(
                 """
                 INSERT INTO rag_pipelines
-                (id, name, knowledge_base_ids, retrieval_config, generation_config)
-                VALUES ($1, $2, $3, $4, $5)
+                (id, name, knowledge_base_ids, retrieval_config,
+                 generation_config, owner_user_id)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 ON CONFLICT (id) DO UPDATE SET
                     name = EXCLUDED.name,
                     knowledge_base_ids = EXCLUDED.knowledge_base_ids,
                     retrieval_config = EXCLUDED.retrieval_config,
                     generation_config = EXCLUDED.generation_config,
+                    -- Never reassign ownership on a later update (a rename must
+                    -- not let a non-owner claim the pipeline, #943); keep the
+                    -- original owner, only backfilling when it was NULL.
+                    owner_user_id = COALESCE(
+                        rag_pipelines.owner_user_id, EXCLUDED.owner_user_id
+                    ),
                     updated_at = CURRENT_TIMESTAMP
             """,
                 pipeline_id,
@@ -279,6 +286,7 @@ async def save_pipeline_to_postgres(
                 kb_ids_str,
                 json.dumps(pipeline_data.get("retrieval_config", {})),
                 json.dumps(pipeline_data.get("generation_config", {})),
+                pipeline_data.get("owner_user_id"),
             )
 
         logger.info(f"✅ Pipeline saved to PostgreSQL: {pipeline_id}")
@@ -299,7 +307,8 @@ async def load_pipelines_from_postgres() -> Dict[str, Dict[str, Any]]:
         async with conn.acquire() as connection:
             rows = await connection.fetch(
                 """
-                SELECT id, name, knowledge_base_ids, retrieval_config, generation_config, created_at
+                SELECT id, name, knowledge_base_ids, retrieval_config,
+                       generation_config, owner_user_id, created_at
                 FROM rag_pipelines
                 ORDER BY created_at DESC
             """
@@ -340,6 +349,7 @@ async def load_pipelines_from_postgres() -> Dict[str, Dict[str, Any]]:
                     if row["generation_config"]
                     else {}
                 ),
+                "owner_user_id": row["owner_user_id"],
                 "created_at": (
                     row["created_at"].isoformat() if row["created_at"] else None
                 ),
