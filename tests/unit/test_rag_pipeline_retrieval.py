@@ -210,7 +210,9 @@ async def test_create_knowledge_base_qdrant_failure_does_not_leak_exception_text
     monkeypatch.setattr(rag_routes.state, "PG_AVAILABLE", False)
 
     with pytest.raises(Exception) as exc_info:
-        await rag_routes.create_knowledge_base(_KBCreate())
+        await rag_routes.create_knowledge_base(
+            _KBCreate(), current_user={"sub": "alice", "role": "user"}
+        )
 
     assert exc_info.value.status_code == 503
     assert secret_looking not in str(exc_info.value.detail)
@@ -3056,10 +3058,31 @@ async def test_create_knowledge_base_saves_to_postgres_when_available(monkeypatc
             "get_qdrant_client",
             lambda: SimpleNamespace(create_collection=lambda **kwargs: None),
         )
-        resp = await rag_routes.create_knowledge_base(_KBCreate())
+        resp = await rag_routes.create_knowledge_base(
+            _KBCreate(), current_user={"sub": "alice", "role": "user"}
+        )
 
     assert saved["kb_id"] == resp.id
     assert saved["kb_data"]["name"] == "test-kb"
+    # Tenancy: creator recorded + default private, persisted + returned.
+    assert saved["kb_data"]["owner_id"] == "alice"
+    assert saved["kb_data"]["visibility"] == "private"
+    assert resp.owner_id == "alice"
+    assert resp.visibility == "private"
+
+
+def test_list_knowledge_bases_owner_filter_returns_own_plus_legacy():
+    client = _rag_router_client()
+    kbs = {
+        "a": {**_kb("a"), "owner_id": "alice"},
+        "b": {**_kb("b"), "owner_id": "bob"},
+        "c": {**_kb("c"), "owner_id": None},  # legacy/unowned
+    }
+    with _seed_state(knowledge_bases=kbs):
+        resp = client.get("/v1/knowledge-bases?owner_id=alice")
+    assert resp.status_code == 200
+    ids = {item["id"] for item in resp.json()["items"]}
+    assert ids == {"a", "c"}  # own + legacy null-owner, never bob's
 
 
 @pytest.mark.asyncio
@@ -3074,7 +3097,9 @@ async def test_create_knowledge_base_pg_save_failure_is_non_fatal(monkeypatch):
             "get_qdrant_client",
             lambda: SimpleNamespace(create_collection=lambda **kwargs: None),
         )
-        resp = await rag_routes.create_knowledge_base(_KBCreate())
+        resp = await rag_routes.create_knowledge_base(
+            _KBCreate(), current_user={"sub": "alice", "role": "user"}
+        )
 
     assert resp.name == "test-kb"  # PG failure logged, not raised
 

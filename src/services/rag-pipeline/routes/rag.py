@@ -48,6 +48,7 @@ from config import EMBEDDING_DIMENSIONS, settings
 from shared.auth.jwt_middleware import get_current_user_or_service
 from shared.errors import backend_http_error
 from shared.models import PaginatedList
+from shared.tenancy import Visibility, is_visible_to, resolve_owner_id
 
 logger = logging.getLogger("minder.rag-pipeline")
 
@@ -105,6 +106,11 @@ async def create_knowledge_base(
         "chunk_overlap": request.chunk_overlap,
         "document_count": 0,
         "vector_count": 0,
+        # Tenancy (#943 follow-up): record the creator + default to private, so a
+        # later slice can owner-scope KB reads and stamp chunk vectors. Canonical
+        # owner_id/visibility convention (docs/architecture/tenancy-and-correlation.md).
+        "owner_id": resolve_owner_id(current_user),
+        "visibility": Visibility.PRIVATE,
         "created_at": created_at,
     }
 
@@ -140,6 +146,8 @@ async def create_knowledge_base(
         llm_model=request.llm_model,
         document_count=0,
         vector_count=0,
+        owner_id=state.knowledge_bases[kb_id]["owner_id"],
+        visibility=state.knowledge_bases[kb_id]["visibility"],
         created_at=created_at,
     )
 
@@ -158,14 +166,28 @@ async def create_knowledge_base(
 async def list_knowledge_bases(
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    owner_id: Optional[str] = Query(
+        None,
+        description=(
+            "Owner-scope the result (tenancy): return only KBs this user owns, "
+            "plus legacy KBs with no recorded owner. Omit for all. Mirrors "
+            "/v1/pipeline's owner_user_id filter (#943)."
+        ),
+    ),
 ):
     """List knowledge bases in the shared `{items, total, limit, offset}`
     envelope (#501; paginated via limit/offset, #147/C6).
 
     Served at both /v1/knowledge-bases and the legacy /knowledge-bases directly — not
     a redirect, which would drop the method/body on non-GET clients (#147).
+
+    ``owner_id`` filters to that owner (+ legacy null-owner KBs) — a convenience
+    filter for owner-scoped UIs, not the security boundary (see the tenancy ADR).
     """
-    return PaginatedList.paginate(list(state.knowledge_bases.values()), limit, offset)
+    kbs = list(state.knowledge_bases.values())
+    if owner_id is not None:
+        kbs = [kb for kb in kbs if kb.get("owner_id") in (owner_id, None)]
+    return PaginatedList.paginate(kbs, limit, offset)
 
 
 @router.get(
@@ -608,17 +630,12 @@ async def delete_document(
 def _caller_owns_pipeline(current_user: dict, pipeline: dict) -> bool:
     """Whether ``current_user`` may see/query ``pipeline`` under owner-scoping (#943).
 
-    - The internal service principal and admins see everything (service does the
-      cross-user chat-tool dispatch; admins are operators).
-    - A pipeline with no recorded owner (``owner_user_id is None``) predates the
-      #943 migration and stays open (legacy/shared) rather than becoming
-      unqueryable for everyone.
-    - Otherwise only the creator (JWT ``sub`` == ``owner_user_id``) may access it.
+    Delegates to the canonical ``shared.tenancy.is_visible_to`` predicate
+    (service/admin → all; null owner → legacy/open; else owner-only). Pipelines
+    have no ``visibility`` column yet, so an owned pipeline is private to its
+    owner. See docs/architecture/tenancy-and-correlation.md.
     """
-    if current_user.get("role") in ("service", "admin"):
-        return True
-    owner = pipeline.get("owner_user_id")
-    return owner is None or owner == current_user.get("sub")
+    return is_visible_to(current_user, owner_id=pipeline.get("owner_user_id"))
 
 
 @router.post("/v1/pipeline", response_model=RAGPipelineResponse, tags=["Pipeline"])
@@ -653,9 +670,9 @@ async def create_rag_pipeline(
         "retrieval_config": request.retrieval_config,
         "generation_config": request.generation_config,
         # #943: record the creator so queries + chat-tool synthesis can be
-        # owner-scoped. `sub` is always present (get_current_user_or_service
-        # 401s otherwise); a service-created pipeline is owned by the service.
-        "owner_user_id": current_user.get("sub"),
+        # owner-scoped, via the canonical resolver (sub required → 401, service →
+        # internal-service). See docs/architecture/tenancy-and-correlation.md.
+        "owner_user_id": resolve_owner_id(current_user),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 

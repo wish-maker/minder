@@ -17,6 +17,15 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Tenancy (canonical owner_id/visibility convention, see
+-- docs/architecture/tenancy-and-correlation.md). Nullable owner_id: KBs created
+-- before this migration have no recorded owner and stay legacy/open (a later
+-- backfill assigns owners). visibility defaults to 'private'.
+ALTER TABLE knowledge_bases
+    ADD COLUMN IF NOT EXISTS owner_id VARCHAR(255);
+ALTER TABLE knowledge_bases
+    ADD COLUMN IF NOT EXISTS visibility VARCHAR(20) NOT NULL DEFAULT 'private';
+
 CREATE TABLE IF NOT EXISTS rag_pipelines (
     id VARCHAR(255) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,

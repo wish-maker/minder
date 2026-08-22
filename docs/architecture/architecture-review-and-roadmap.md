@@ -144,10 +144,19 @@ Service census (LOC = routes+core+domain+repositories; 2026-08-22):
   pipeline owner-scoping (PR #951), **#948/#949** (PR #950). **#920** re-scoped
   with a design plan (see tenancy ADR).
 - **2026-08-22 (cont.)** — Phase-1 adoption slice 1: **graph-rag now uses
-  `shared.tenancy.resolve_owner_id`** (removed the local `_owner_id`; behaviour-
-  identical). One helper is now the owner authority for graph-rag.
-- **Next up:** adopt `shared/tenancy.py` in rag-pipeline (owner_user_id →
-  resolve_owner_id + `is_visible_to`); add `owner_id`+`visibility` to Qdrant point
-  payloads (`rag-pipeline/core/ingestion.py`) + a `visibility`/`owner_id` on
-  `knowledge_bases`, with the retrieval filter applied in `core/retrieval.py`
-  (the highest-priority gap — RAG vectors are currently owner-less).
+  `shared.tenancy.resolve_owner_id`** (PR #953, merged). One helper is the owner
+  authority for graph-rag.
+- **2026-08-22 (cont.²)** — Phase-1 slice 2: **rag-pipeline adopts `shared.tenancy`**
+  (`_caller_owns_pipeline` → `is_visible_to`; pipeline create → `resolve_owner_id`)
+  **+ `knowledge_bases` now carry `owner_id`+`visibility`** (canonical column names)
+  — create stamps owner+private, persisted (schema ALTER, pg_client save/load),
+  exposed in `KnowledgeBaseResponse`, `GET /v1/knowledge-bases?owner_id=` filter.
+  Live-verified: KB created as alice → `owner_id=alice,visibility=private`
+  (persisted); owner-scoped list excludes other users'.
+- **Next up (Phase-1 slice 3, deferred to its own PR — behavior change + needs
+  live+client verification):** stamp `owner_id`+`visibility` onto **Qdrant point
+  payloads** at ingestion (`core/ingestion.py`) and enforce the retrieval filter in
+  `core/retrieval.py`; enforce KB-read ownership on the documents/chunks/get/delete
+  endpoints (`is_visible_to`), updating the client to pass its identity. Note: KB
+  content today is already protected at the *pipeline* query level (#943) — this
+  slice hardens it at the vector/KB-read level and enables shared-corpus mixing.
