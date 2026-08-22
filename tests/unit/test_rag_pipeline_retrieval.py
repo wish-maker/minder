@@ -3177,13 +3177,39 @@ async def test_delete_knowledge_base_success_drops_qdrant_collection(monkeypatch
                 )
             ),
         )
-        resp = await rag_routes.delete_knowledge_base("kb1", {"sub": "1"})
+        resp = await rag_routes.delete_knowledge_base("kb1", None, {"sub": "1"})
 
     assert resp == {"message": "Knowledge base deleted", "id": "kb1"}
     assert deleted["collection_name"] == "kb1"
     assert (
         "kb1" not in kbs
     )  # popped from the SAME dict object state.knowledge_bases held
+
+
+@pytest.mark.asyncio
+async def test_delete_knowledge_base_403_for_a_non_owner():
+    kbs = {"kb1": {**_kb("kb1"), "owner_id": "alice"}}
+    with _seed_state(knowledge_bases=kbs, PG_AVAILABLE=False):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.delete_knowledge_base(
+                "kb1", None, {"sub": "bob", "role": "user"}
+            )
+    assert exc_info.value.status_code == 403
+    assert "kb1" in kbs  # not deleted
+
+
+@pytest.mark.asyncio
+async def test_update_knowledge_base_403_for_a_non_owner():
+    kbs = {"kb1": {**_kb("kb1"), "owner_id": "alice"}}
+    with _seed_state(knowledge_bases=kbs, PG_AVAILABLE=False):
+        with pytest.raises(Exception) as exc_info:
+            await rag_routes.update_knowledge_base(
+                "kb1",
+                models.KnowledgeBaseUpdate(name="hijacked"),
+                current_user={"sub": "bob", "role": "user"},
+            )
+    assert exc_info.value.status_code == 403
+    assert kbs["kb1"]["name"] == "kb1"  # unchanged
 
 
 @pytest.mark.asyncio
@@ -3200,7 +3226,7 @@ async def test_delete_knowledge_base_tolerates_qdrant_failure(monkeypatch):
             "get_qdrant_client",
             lambda: SimpleNamespace(delete_collection=boom),
         )
-        resp = await rag_routes.delete_knowledge_base("kb1", {"sub": "1"})
+        resp = await rag_routes.delete_knowledge_base("kb1", None, {"sub": "1"})
 
     assert resp["id"] == "kb1"  # Qdrant failure logged, not raised
     assert "kb1" not in kbs
@@ -3220,7 +3246,7 @@ async def test_delete_knowledge_base_pg_delete_failure_is_non_fatal(monkeypatch)
             lambda: SimpleNamespace(delete_collection=lambda collection_name: None),
         )
         monkeypatch.setattr(rag_routes.state, "delete_kb_from_postgres", boom)
-        resp = await rag_routes.delete_knowledge_base("kb1", {"sub": "1"})
+        resp = await rag_routes.delete_knowledge_base("kb1", None, {"sub": "1"})
 
     assert resp["id"] == "kb1"
     assert "kb1" not in kbs

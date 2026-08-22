@@ -252,6 +252,7 @@ async def update_knowledge_base(
     kb = state.knowledge_bases.get(kb_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
+    _require_kb_access(current_user, kb)
 
     changes = request.model_dump(exclude_unset=True)
     for field in ("name", "description", "llm_model"):
@@ -318,6 +319,7 @@ async def delete_knowledge_base(
     """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
+    _require_kb_access(current_user, state.knowledge_bases[kb_id])
 
     dependents = _dependent_pipelines(kb_id)
     if dependents:
@@ -596,6 +598,7 @@ async def delete_document(
     """
     if kb_id not in state.knowledge_bases:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
+    _require_kb_access(current_user, state.knowledge_bases[kb_id])
 
     filter_ = _document_id_filter(document_id)
 
@@ -625,6 +628,22 @@ async def delete_document(
 
     logger.info(f"✅ Deleted document {document_id} from KB {kb_id}")
     return {"message": "Document deleted", "id": document_id}
+
+
+def _require_kb_access(current_user: dict, kb: dict) -> None:
+    """403 unless ``current_user`` may act on ``kb`` under owner-scoping.
+
+    Applied to the mutating KB endpoints (update/delete KB, delete document) so a
+    user cannot modify or drop a knowledge base someone else created. Legacy KBs
+    with no recorded owner stay open (backward-compat); service/admin bypass. Read
+    endpoints (get/documents/chunks) are not yet enforced here — that's a
+    behavior-changing follow-up needing client coordination (the tenancy ADR).
+    """
+    if not is_visible_to(current_user, owner_id=kb.get("owner_id")):
+        raise HTTPException(
+            status_code=403,
+            detail="You can only modify a knowledge base you created",
+        )
 
 
 def _caller_owns_pipeline(current_user: dict, pipeline: dict) -> bool:
