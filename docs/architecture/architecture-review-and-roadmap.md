@@ -153,10 +153,19 @@ Service census (LOC = routes+core+domain+repositories; 2026-08-22):
   exposed in `KnowledgeBaseResponse`, `GET /v1/knowledge-bases?owner_id=` filter.
   Live-verified: KB created as alice → `owner_id=alice,visibility=private`
   (persisted); owner-scoped list excludes other users'.
-- **Next up (Phase-1 slice 3, deferred to its own PR — behavior change + needs
-  live+client verification):** stamp `owner_id`+`visibility` onto **Qdrant point
-  payloads** at ingestion (`core/ingestion.py`) and enforce the retrieval filter in
-  `core/retrieval.py`; enforce KB-read ownership on the documents/chunks/get/delete
-  endpoints (`is_visible_to`), updating the client to pass its identity. Note: KB
-  content today is already protected at the *pipeline* query level (#943) — this
-  slice hardens it at the vector/KB-read level and enables shared-corpus mixing.
+- **2026-08-22 (cont.³)** — Phase-1 slice 3: **Qdrant point payloads now carry
+  `owner_id`+`visibility`** (stamped from the KB at ingestion — leaf chunks +
+  RAPTOR nodes; `core/ingestion.py`), closing the ADR's #1 named gap for all new
+  data. **Mutating KB endpoints (update/delete KB, delete document) now enforce
+  ownership** via `_require_kb_access` → `is_visible_to` (already-authed endpoints,
+  no new auth surface; legacy null-owner = open). Live-verified: upload as alice →
+  point payload `owner_id=alice,visibility=private`; a non-owner DELETE → 403.
+- **Phase 1 essentially COMPLETE.** Remaining hardening deferred (own PR, needs
+  client coordination): (a) enforce KB-**read** ownership on the GET
+  documents/chunks/get endpoints (adds auth to currently-open GETs → client must
+  pass identity); (b) apply the **retrieval-time** vector filter
+  (`visibility='shared' OR owner_id=self`) in `core/retrieval.py` — only becomes
+  load-bearing once shared corpora mix owners in one collection (Phase 3/4), since
+  today 1 KB = 1 collection reached only via an owned, query-gated pipeline (#943).
+- **Next major step:** Phase 2 (extract the orchestration service from gateway
+  `routes/ai.py`), then Phase 3 (#920), Phase 4 (correlation engine), + cleanup.

@@ -97,6 +97,10 @@ async def _build_and_store_tree(
                 "uploaded_at": uploaded_at,
                 "tree_level": node["level"],
                 "children_ids": node["children_ids"],
+                # Tenancy: RAPTOR summary nodes inherit the KB's owner/visibility
+                # too, so they filter identically to leaf chunks (see below).
+                "owner_id": kb.get("owner_id"),
+                "visibility": kb.get("visibility", "private"),
             },
         )
         for node in nodes
@@ -175,6 +179,12 @@ async def ingest_document(
                     "kb_id": kb_id,
                     "document_id": document_id,
                     "uploaded_at": uploaded_at,
+                    # Tenancy: inherit the KB's owner/visibility onto every point
+                    # so retrieval can filter at the vector level (the ADR's #1
+                    # gap — RAG vectors were owner-less). None owner = legacy/open.
+                    # docs/architecture/tenancy-and-correlation.md.
+                    "owner_id": kb.get("owner_id"),
+                    "visibility": kb.get("visibility", "private"),
                     # RAPTOR (#487): stamped on EVERY leaf chunk, tree-building
                     # requested or not — this is what lets every other retrieval
                     # method exclude tree-summary nodes with a plain tree_level>0
